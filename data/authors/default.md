@@ -17,22 +17,24 @@ Hello, I am Kumar Shivendu. 👨‍💻
 
 ✨ Fun fact: I built my first software product when I was just 13 years old :D
 
-Past Experience :
+Experience :
 
-- Backend Intern @ FamPay (YC 19)
-- Google Summer Of Code Student at Software Heritage
-- Software Engineer Intern at Logy.AI
-- Data Science Intern at IIT Mandi
+- Software Engineer @ [SuperTokens](https://supertokens.com/) (YC 20)
+- Backend Intern @ [FamPay](https://fampay.in/) (YC 19)
+- Google Summer Of Code Student at [Software Heritage](https://softwareheritage.org/)
+- Software Engineer Intern at [Logy.AI](https://logy.ai/)
+- Data Science Intern at [IIT Mandi](https://iitmandi.ac.in/)
 
-🦄 I am actively looking for Software Engineering roles in startups with a cause that I believe in so that we get to mutually accelerate each other's growth. 🚀
-If your startup is based on open source business model or is remote-first, that would be a huge plus ;)
+🦄 I am actively looking for Software Engineering roles in startups with a cause that I believe in so that we get to mutually accelerate each other's growth.
 
-I'm a friendly guy who loves talking to random awesome people on the internet. Feel free to DM me. 🙋🏻‍♂️
+🚀 If your startup is based on open source business model or is remote-first, that would be a huge plus ;)
 
-⚡ Languages: Python, Javascript(Typescript), GoLang, Dart, Java, C++, Bash, PHP
+I'm a friendly guy who loves talking to random awesome people on the internet. Feel free to DM me on Twitter or LinkedIn. 🙋🏻‍♂️
 
-⚡ Frameworks: Django, React, NextJS, Angular, Express, Flutter, React Native, Bulma, Material
+⚡ Languages: Python, Javascript, GoLang, Dart, Java, C++, Bash
 
-⚡ Machine Learning(ML): Keras, PyTorch, Numpy, Tensorflow, Pandas, Plotly, Matplotlib, OpenCV
+⚡ Frameworks: Django, NextJS, Express, Flutter, Bulma, Material
 
-⚡ Cloud, DevOps and others: Docker, Firebase, MySQL, PostgreSQL, ElasticSearch, Celery, AWS, GCP, Figma
+⚡ ML: Keras, Plotly, Pandas, Numpy, Matplotlib, PyTorch, OpenCV
+
+⚡ Misc: Docker, Firebase, Redshift, PostgreSQL, ElasticSearch, Kafka, AWS, Figma
