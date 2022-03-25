@@ -1,7 +1,7 @@
 const siteMetadata = {
   title: 'KShivendu',
   author: 'Kumar Shivendu',
-  headerTitle: 'Kumar Shivendu (KShivendu)',
+  headerTitle: 'KShivendu',
   description: "Kumar Shivendu's blog",
   language: 'en-us',
   theme: 'system', // system, dark or light
