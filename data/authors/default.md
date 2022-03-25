@@ -2,39 +2,35 @@
 name: Kumar Shivendu
 avatar: /static/images/shivendu.jpg
 occupation: Software Engineer
-company: FamPay (YC 19)
-email: hi@kshivendu.dev
+company: SuperTokens (YC 20)
+email: shivendu@iitbhilai.ac.in
 twitter: https://twitter.com/_KShivendu
 linkedin: https://www.linkedin.com/in/KShivendu
 github: https://github.com/KShivendu
 ---
 
-Hello, I am Kumar Shivendu. 👨‍💻
+Hey there. I am Kumar Shivendu. 👨‍💻
 
-👉 A self‑motivated engineer who loves contributing to open source and building products with his Software Development and Machine Learning skills.
+I work as a Software Engineer at [SuperTokens](https://github.com/SuperTokens) (YC 20) and have previously worked at [FamPay](https://fampay.in/) (YC 19). My past experience revolves around backend development, big data, and DevOps. I'm proficient with Python, Go, and JS. I'm deeply passionate about open source, big data, and infrastructure.
 
-👉 I'm interested in building products for the scale of millions and solving unstructured problems with enthusiasm.
+This year, I'm mentoring for Google Summer Of Code as well as Outreachy with [Software Heritage](https://softwareheritage.org/). Last year, I was a GSoC student at Software Heritage and developed a [search engine](https://archive.softwareheritage.org/) and a [query language](https://docs.softwareheritage.org/devel/swh-search/query-language.html) (accessible for beta users only) that searches across 170M+ software repositories!
 
-✨ Fun fact: I built my first software product when I was just 13 years old :D
-
-Experience :
+🚀 Experience:
 
 - Software Engineer @ [SuperTokens](https://supertokens.com/) (YC 20)
-- Backend Intern @ [FamPay](https://fampay.in/) (YC 19)
+- Software Engineer Intern @ [FamPay](https://fampay.in/) (YC 19)
 - Google Summer Of Code Student at [Software Heritage](https://softwareheritage.org/)
 - Software Engineer Intern at [Logy.AI](https://logy.ai/)
 - Data Science Intern at [IIT Mandi](https://iitmandi.ac.in/)
 
-🦄 I am actively looking for Software Engineering roles in startups with a cause that I believe in so that we get to mutually accelerate each other's growth.
+⚡ Languages: Python, Javascript, Golang, Dart
 
-🚀 If your startup is based on open source business model or is remote-first, that would be a huge plus ;)
-
-I'm a friendly guy who loves talking to random awesome people on the internet. Feel free to DM me on Twitter or LinkedIn. 🙋🏻‍♂️
-
-⚡ Languages: Python, Javascript, GoLang, Dart, Java, C++, Bash
-
-⚡ Frameworks: Django, NextJS, Express, Flutter, Bulma, Material
+⚡ Frameworks: Django, NextJS (React), Express, Flutter, Material UI
 
 ⚡ ML: Keras, Plotly, Pandas, Numpy, Matplotlib, PyTorch, OpenCV
 
 ⚡ Misc: Docker, Firebase, Redshift, PostgreSQL, ElasticSearch, Kafka, AWS, Figma
+
+🦄 I am looking for Software Engineering roles at high growth startups having a mission that I truly believe in. If your startup culture is based on open source, that would be a huge plus ;)
+
+I'm a friendly guy who enjoys helping random awesome people on the internet. Feel free to DM me on [Twitter](https://twitter.com/_KShivendu) or [LinkedIn](https://www.linkedin.com/in/kshivendu/). 🙋🏻‍♂️
