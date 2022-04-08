@@ -1,0 +1,266 @@
+---
+title: 'Python testing pro-tips'
+date: '2022-03-16'
+lastmod: '2022-03-16'
+tags: ['internships', 'open-source', 'gsoc']
+draft: false
+summary: ''
+images: ['/static/images/canada/mountains.jpg', '/static/images/canada/toronto.jpg']
+authors: ['default']
+---
+
+![Google Summer Of Code @ Software Heritage](/static/images/blogs/gsoc.png)
+
+## Intro
+
+Tests are extremely powerful. They give you confidence over the code that you've written, give you a larger picture of the codebase, and help you reproduce the bugs. I have been fortunate to learn a lot about testing - mostly from my awesome mentors at Software Heritage. In this article, I'll try to share some my insights about common best practices in unit testing and some powerful features in the python testing ecosystem.
+
+First, let's define some functions that we'll be using throughout this blog:
+
+```python
+# a.py
+from datetime import datetime
+
+def foo():
+  return "foo"
+
+def bar():
+  return "bar"
+
+def add(a, b):
+  return a + b
+
+def add_3_and_4():
+  return add(3, 4)
+
+def get_timestamp():
+  return datetime.utcnow().isoformat()[:-3] + "Z"
+```
+
+## Minimize duplication using parameterized
+
+Instead of writing individual tests like this:
+
+```python
+# test_without_parameterized.py
+from a import add
+
+def test_add_1_and_3():
+  assert add(1, 3) == 4
+
+def test_add_0_and_0():
+  assert add(0, 0) == 0
+
+def test_add_3_and_minus2():
+  assert add(3, -2) == 1
+```
+
+You can use the [parameterized](https://pypi.org/project/parameterized/) library to deduplicate your code:
+
+```python
+# test_with_parameterized.py
+from a import add
+
+@parameterized.expand([
+  (1, 3, 4),
+  (0, 0, 0),
+  (3, -2, 1),
+])
+def test_add(a, b, c):
+  assert add(a, b) == c
+```
+
+## Monkeypatch objects
+
+Python provides an in-built [patch](https://docs.python.org/3/library/unittest.mock.html) function that
+can be used to mock any object. It's extremely powerful and allows you to provide mocked responses
+for any function call or spy on a function for all the passed arguments.
+
+```python
+# b.py
+from a import foo, bar
+
+def foo_bar():
+  return f"{foo()} {bar()}"
+```
+
+```python
+# test_code.py
+from b import foo_bar
+from a import get_timestamp, add
+from unittest.mock import patch
+from datetime import datetime
+
+def test_foo_bar_without_mocking_anything():
+  assert foo_bar() == "foo bar"
+
+@patch('b.foo', return_value="patched_foo")
+def test_foo_bar_with_mocked_foo(mock_foo):
+  # Note that we need to patch b.foo, not a.foo
+  assert foo_bar() == "patched_foo bar"
+
+# If we patch a.foo, b.foo won't be affected.
+# and since b.foo is getting used in b.foo_bar,
+# the output wouldn't have changed at all.
+@patch('a.foo', return_value="patched_foo")
+def test_foo_bar_with_mocked_foo(mock_foo):
+  assert foo_bar() == "foo bar"
+
+@patch('a.datetime')
+def test_get_timestamp_with_mocked_datetime(mock_datetime):
+  mock_datetime.utcnow.return_value = datetime(2000, 1, 1)
+  assert get_timestamp() == "2000-01-01T00:00Z"
+
+@patch('a.add', wraps=add)
+def test_add_3_and_4(mock_add):
+  # passing the same function via wraps param would mean
+  # that the 'add' function will remain as it is
+  # while allowing us to use .assert_* methods just like regular mocks
+  # this is similar to the 'spying' feature in jest
+  assert add_3_and_4() == 7
+  mock_add.assert_called_once_with(3,4)
+```
+
+## Use dictionaries to handle mutliple cases at once
+
+```python
+# Instead of doing this:
+@parameterized.expand([
+  ("ADD", 1, 2, 3),
+  ("MUL", 5, 6, 30),
+  # (...),
+])
+def test_something(operation, n1, n2, out):
+  if operation == "ADD":
+    assert add(n1, n2) == out
+  elif operation == "MUL":
+    assert multiply(n1, n2) == out
+  else:
+    assert False, "Unknown operation"
+
+# Try doing this:
+@parameterized.expand([
+  ("ADD", 1, 2, 3),
+  ("MUL", 5, 6, 30),
+  # (...),
+])
+def test_something(operation, n1, n2, out):
+  operation_to_func = {
+    "ADD": add,
+    "MUL": multiply
+  }
+  assert operation_to_func[operation](n1, n2) == out
+```
+
+## Use doctests
+
+Doc tests are really powerful and are ideal for writing tests for small util functions that need to be used at mutliple places in your code. Because doctests are part of the function documentation, the IDE will display them directly when the developer hovers over the function. So in that way you can provide clear examples of how to use that util function.
+
+```python
+import codecs
+
+def unescape(string):
+    r"""Processes the escaped special characters
+
+    >>> unescape(r'''foo " bar''') == r'''foo " bar'''
+    True
+    >>> unescape(r'''foo \\" bar''') == r'''foo \" bar'''
+    True
+    """
+    return codecs.escape_decode(string.encode())[0].decode()
+```
+
+To run doctests you need to use:
+
+```bash
+pytest --doctest-modules
+```
+
+## Use test suites whenever possible
+
+```python
+from unittest import TestCase
+
+class TestSuite(TestCase):
+  def setUp(self):
+    # Code that's supposed to run only once before running all the tests in the suite
+    pass
+
+  def tearDown(self):
+    # Clean-up work after all the tests in the suite are completed.
+    # It often includes flushing (resetting) the external services once you're done.
+    pass
+
+  def test_something(self):
+    pass
+```
+
+## Use pytest flags to your advantage:
+
+```bash
+# Used to run only specfic test that match the regex pattern:
+pytest -k 'regex_for_test_functions_that_you_want_to_run'
+# Used with pytest-django to avoid re-creating the DB while running the tests
+pytest --reuse-db
+# Used to make pytest fail fast (on the first error or test failure)
+pytest -x
+```
+
+## Naming time related variables
+
+```python
+from datetime import datetime, timedelta
+# Use a variable names like this for datetime objects
+now = datetime.now(tz=timezone.utc)
+now_minus_5_minutes = now - timedelta(minutes=5)
+now_plus_5_minutes = now + timedelta(minutes=5)
+```
+
+## Compare arrays instead of their length
+
+```python
+def test_compare_arrays():
+  arr1 = [1, 2, 3]
+  arr2 = list(range(1, 4))
+  # Wherever possible, avoid doing this:
+  assert len(arr1) = len(arr2)
+  # Instead try using this:
+  assert arr1 == arr2
+  # Reason: Whenever the test will fail
+  # You'll be able to see the elements that were passed in the array.
+```
+
+## Provide conditions for skipping the test
+
+```python
+# test_mymodule.py
+import mymodule
+from pytest import mark
+
+minversion = mark.skipif(
+    mymodule.__versioninfo__ < (1, 1), reason="at least mymodule-1.1 required"
+)
+
+@minversion
+def test_function():
+    ...
+```
+
+## Test unhappy flows and raising exceptions using pytest.raises
+
+```python
+import pytest
+
+def foo(num):
+  if num >= 0:
+    print("All good. Input is not negative.")
+  else:
+    raise Exception("Negative input is not allowed.")
+
+def test_foo():
+  foo(2)
+  foo(0)
+
+  with pytest.raises(Exception):
+    foo(-2)
+```
