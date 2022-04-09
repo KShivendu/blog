@@ -1,19 +1,26 @@
 ---
 title: 'Python testing pro-tips'
-date: '2022-03-16'
-lastmod: '2022-03-16'
-tags: ['internships', 'open-source', 'gsoc']
+date: '2022-04-08'
+lastmod: '2022-04-09'
+tags: ['programming', 'testing', 'python']
 draft: false
 summary: ''
-images: ['/static/images/canada/mountains.jpg', '/static/images/canada/toronto.jpg']
+images: ['/static/images/blogs/pytest.png']
 authors: ['default']
 ---
 
-![Google Summer Of Code @ Software Heritage](/static/images/blogs/gsoc.png)
+![Google Summer Of Code @ Software Heritage](/static/images/blogs/pytest.png)
 
 ## Intro
 
-Tests are extremely powerful. They give you confidence over the code that you've written, give you a larger picture of the codebase, and help you reproduce the bugs. I have been fortunate to learn a lot about testing - mostly from my awesome mentors at Software Heritage. In this article, I'll try to share some my insights about common best practices in unit testing and some powerful features in the python testing ecosystem.
+Tests are extremely powerful. Some of the benefits of having unit tests are:
+
+- Having confidence over the code that you've written
+- New joiners can quickly understand the code and see the larger picture.
+- Being able to detect breaking changes instantly.
+- Reproduce bugs without much hassle.
+
+I have been fortunate to learn a lot about testing - mostly from my awesome mentors at [Software Heritage](https://www.softwareheritage.org/people/). In this article, I'll try to share some my insights about common unit testing best practices in and some powerful features in the python testing ecosystem.
 
 First, let's define some functions that we'll be using throughout this blog:
 
@@ -264,3 +271,7 @@ def test_foo():
   with pytest.raises(Exception):
     foo(-2)
 ```
+
+I hope this will help someone get an idea of how tests can improve your code's robustness. Feel free to reach out to me on [Twitter](https://twitter.com/_KShivendu) or [LinkedIn](https://www.linkedin.com/in/kshivendu/) (Please add a message while sending the connection request)
+
+Happy testing!
