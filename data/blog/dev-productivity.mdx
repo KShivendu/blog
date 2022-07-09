@@ -1,0 +1,130 @@
+---
+title: 'Maximising productivity as a developer'
+date: '2022-03-16'
+lastmod: '2022-03-16'
+tags: ['productivity', 'profession', 'programming']
+draft: false
+summary: ''
+images: ['/static/images/canada/mountains.jpg', '/static/images/canada/toronto.jpg']
+authors: ['default']
+---
+
+![Developer Productivity](https://miro.medium.com/max/1400/0*SHZhejMPJFYc-vzd)
+
+## Intro
+
+I've always been keen on finding out ways to optimise the things that I do. Recently, I've been trying to find ways to optimise my own productivty as an individual developer. I started with desiging some systems (a great lesson from Atomic Habits) that help me complete my tasks at a faster pace. Eventually, I did a lot of research from books, youtube videos, and blog articles on the same. This blog post is a summary of my findings and I hope someone finds this useful. :)
+
+## Finding the bottlenecks
+
+Let's try to find out what are some of the most common patterns that bring down our producitivity as a developer. Imo, they can be categorized into the following types:
+
+1. Context switches
+2. Repetitive work
+3. Slow feedbacks
+4. Procastination
+5. Bugs in code
+
+Let's discuss each one of them in detail.
+
+## Context switches:
+
+### Problems
+
+<p align="center">
+  <img
+    height="100"
+    src="https://cdn.shortpixel.ai/spai/w_627+q_lossless+ret_img+to_webp/https://www.apptio.com/wp-content/uploads/img21.jpg"
+    alt="Context switch diagram"
+  />
+</p>
+
+### Possible solutions:
+
+Like most behavioural problems you need to consciously architect your virtual as well as physical environment in a way that it allows you to be uninterrupted without your will.
+
+- Optimize virtual environment: Disable **all** notifications while working on your tasks. For example, you can install notification blocking apps on your mobile and laptop.
+- Optimize physical environment: Make sure that your co-workers or family members don't interrupt you during your working hours. Having a conversation about this beforehand helps.
+- Realize that multitasking is a myth: If you do some research, you'll find that even Elon Musk doesn't do multiple things at once. He runs multiple companies but spends the whole day (not just several hours) at each one of them and religiously protects his time and avoids unnecessary calls/emails.
+- Prefer keyboard over mouse: Combinations and better use of muscle memory make keyboard much better than the mouse. Create keyboard shortcuts so that you can avoid taking your hand to the mouse/touchpad. If you wanna go extreme, try Vim or Vimium (vim shortcuts for browser)
+
+## Doing repetitive work
+
+### Importance
+
+We developers are paid to automate things. We have the ability to create a never sleeping army of powerful robots. But despite all of this, we often have to do some repetive work in our development workflow. Why not invest some time in customizing and automating it?
+
+<p align="center">
+  <img
+    height="100"
+    src="https://imgs.xkcd.com/comics/is_it_worth_the_time.png"
+    alt="ROI of automating repetitive work"
+  />
+</p>
+
+The above diagram shows that you can save "4 weeks of engineering time" by automating something that takes "5 mins" and you have to do it 5 times of day. If 100 other devs of your company use the same automation, that would save 7.7 years of engineer effort within 5 years!
+
+### Possible solutions
+
+- Master your IDE: Spend a good amount of time in understanding and customising your IDE's functions, shortcuts, and extensions. To stay informed, read release notes, follow blogs/youtube channels, follow folks who use and promote it. Or just observe your teammate who's an expert with his/her IDE!
+- Write small scripts for yourself: Write small scripts for things that take even 5-10 seconds and share it with your team (maybe use the same repo). Learn basic bash scripting and things like: `jq`, `grep`, `cut`, `sort`, `uniq`, `echo`, `for loops`, `paste`, `head`. They add up very quickly and save a lot of time for your org in the long run!
+- Instantly reproducible dev environment: Try using Docker compose, VS code's Dev container feature, or maybe even Gitpod/Codespaces. Make sure that the config installs the tools and does the setup too (example: inserting dummy data in the db. Sometimes you need to wipe out the complete setup, or move to a different device, or help a junior dev with onboarding. All of these become extremely easy.
+- TUI: When you're a newbie, start with GUI based tools, but eventually try to move to terminal based interfaces as they can be automated easily.
+
+## Slow feedback loops
+
+### Importance
+
+<p align="center">
+  <img
+    height="100"
+    src="https://pbs.twimg.com/media/DacW6LVVMAAHI3v?format=jpg&name=small"
+    alt="Code review size matters"
+  />
+</p>
+
+### Possible solutions
+
+- Create smaller PRs: You are more likely to get insightful and quick feedback if you keep the PRs small. If number of lines touched is more than 100, try creating a seperate PR that is to be merged into your base PRs and get it reviewed seperately.
+- Feedback calls: Try to setup feedback calls with your manager as well as folks who regualarly review your code. This is common in big companies but startups often tend to miss this. In such case, be proactive and try to make it happen for all the devs in your org.
+- Use debugger/REPL interfaces: Whenever possible, setup your debugger with a hot-reloader and write code using the REPL interface. Compliations or restarting the application manually is an awesome way to kill your productivity.
+- Speed up CI pipelines: Try to speed up the CI pipelines so that you know if your code actually works against all the tests. You may consider containerizing the complete setup and using caches to achieve faster server setup and restart times for the tests.
+
+## Procastination
+
+### Importance
+
+If you observe yourself for a while, you'll realise that procastination is almost always casused by fear of the unknown.
+It was probably an evolutionary trait that helped us survive in the ancient times but now it's big blocker to for us.
+
+It stops us from diving deep into the software engineering abstractions or touching/testing features that you have no idea about.
+
+### Possible solutions:
+
+- Stand on the shoulder of giants: When exploring something that is completely unknown, sit close to someone who already knows it.
+- Have an accountability buddy: Try pair programming with someone.
+
+## Bugs
+
+### Importance
+
+Having a bug is quite costly because you'll have to go through the complete development cycle once again: read code, fix bug, get code review, and then release it. It's a horrible waste of time!
+
+### Possible solutions:
+
+- Follow TDD: Test driven development allows you to think more clearly and makes sure that the system is easy to test in from the first iteration itself.
+- Write tests as soon as you face a bug: If you tried fixing a bug and after releasing, you find that the fix didn't work, then that becomes quite painful. That's why, whenever you come across a bug, try to write a test that ensures that the fix actually works.
+
+## Conclusion
+
+Software engineering a long term team sport. If you do things right, it will help you, your team, as well as the folks who will join after you're gone. Being an effective developer pays off really well, companies desperately want such folks and there's always a huge shortage of folks who take ownernship of things and improve things for not just themselves but the whole team. Wrong decisions of today can become burden for years to come and this is a very common in large startups and public companies.
+
+### References:
+
+- [Elon Musk's AMA on Reddit](https://www.reddit.com/r/IAmA/comments/2rgsan/i_am_elon_musk_ceocto_of_a_rocket_company_ama/cnfpv7q/)
+- [A day in life of Elon Musk](https://finty.com/us/daily-routines/elon-musk/)
+- https://www.apptio.com/blog/speed-in-software-development/
+
+I hope this will help someone become more productive as a developer. Let me know if this was helpful and feel free to reach out to me on [Twitter](https://twitter.com/_KShivendu) or [LinkedIn](https://www.linkedin.com/in/kshivendu/) (Please add a message while sending the connection request)
+
+All the best!
