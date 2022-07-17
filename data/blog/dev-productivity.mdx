@@ -5,7 +5,7 @@ lastmod: '2022-03-16'
 tags: ['productivity', 'profession', 'programming']
 draft: false
 summary: ''
-images: ['/static/images/canada/mountains.jpg', '/static/images/canada/toronto.jpg']
+images: ['https://miro.medium.com/max/1400/0*SHZhejMPJFYc-vzd']
 authors: ['default']
 ---
 
@@ -21,7 +21,7 @@ Let's try to find out what are some of the most common patterns that bring down 
 
 1. Context switches
 2. Repetitive work
-3. Slow feedbacks
+3. Slow feedback
 4. Procastination
 5. Bugs in code
 
@@ -71,7 +71,7 @@ The above diagram shows that you can save "4 weeks of engineering time" by autom
 - Instantly reproducible dev environment: Try using Docker compose, VS code's Dev container feature, or maybe even Gitpod/Codespaces. Make sure that the config installs the tools and does the setup too (example: inserting dummy data in the db. Sometimes you need to wipe out the complete setup, or move to a different device, or help a junior dev with onboarding. All of these become extremely easy.
 - TUI: When you're a newbie, start with GUI based tools, but eventually try to move to terminal based interfaces as they can be automated easily.
 
-## Slow feedback loops
+## Slow feedback
 
 ### Importance
 
@@ -89,6 +89,7 @@ The above diagram shows that you can save "4 weeks of engineering time" by autom
 - Feedback calls: Try to setup feedback calls with your manager as well as folks who regualarly review your code. This is common in big companies but startups often tend to miss this. In such case, be proactive and try to make it happen for all the devs in your org.
 - Use debugger/REPL interfaces: Whenever possible, setup your debugger with a hot-reloader and write code using the REPL interface. Compliations or restarting the application manually is an awesome way to kill your productivity.
 - Speed up CI pipelines: Try to speed up the CI pipelines so that you know if your code actually works against all the tests. You may consider containerizing the complete setup and using caches to achieve faster server setup and restart times for the tests.
+- Self review your code: Sometimes there are obvious mistakes/bugs that we don't see while writing the code and the reviewer just notices those obvious mistakes and asking you to fix them first. This is a huge waste of time for both of you and can be easily avoided if you do a self-review before asking for a review.
 
 ## Procastination
 
