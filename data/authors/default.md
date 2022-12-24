@@ -4,7 +4,7 @@ avatar: /static/images/shivendu.jpg
 occupation: Software Engineer
 company: SuperTokens (YC 20)
 email: shivendu@iitbhilai.ac.in
-twitter: https://twitter.com/_KShivendu
+twitter: https://twitter.com/KShivendu_
 linkedin: https://www.linkedin.com/in/KShivendu
 github: https://github.com/KShivendu
 ---
