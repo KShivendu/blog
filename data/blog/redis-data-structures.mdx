@@ -185,32 +185,37 @@ To get more performance in Python using multiple threads as well as Redis pipeli
 import redis
 import concurrent.futures
 import time
-from tqdm import tqdm # pip install tqdm
+from tqdm import tqdm  # pip install tqdm
+
 
 def insert_values(r, values):
     with r.pipeline() as pipe:
         for i in values:
-            pipe.sadd('unique_values', i)
+            pipe.sadd("unique_values", i)
         pipe.execute()
+
 
 def insert_values_hll(r, values):
     with r.pipeline() as pipe:
         for i in values:
-            pipe.pfadd('unique_values_hll', i)
+            pipe.pfadd("unique_values_hll", i)
         pipe.execute()
+
 
 def estimate_unique_values(r):
     with r.pipeline() as pipe:
-        pipe.scard('unique_values')
+        pipe.scard("unique_values")
         return pipe.execute()[0]
+
 
 def estimate_unique_values_hll(r):
     with r.pipeline() as pipe:
-        pipe.pfcount('unique_values_hll')
+        pipe.pfcount("unique_values_hll")
         return pipe.execute()[0]
 
+
 def main():
-    r = redis.Redis(host='localhost', port=6379, db=0)
+    r = redis.Redis(host="localhost", port=6379, db=0)
 
     NUM_VALUES = 10_000_000
     CHUNK_SIZE = 10_000
@@ -224,34 +229,51 @@ def main():
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # Insert values without HyperLogLog
         results = [executor.submit(insert_values, r, chunk) for chunk in chunks]
-        for result in tqdm(concurrent.futures.as_completed(results)):
+        for result in tqdm(
+            concurrent.futures.as_completed(results),
+            total=len(results),
+            desc="Inserting values without HyperLogLog",
+        ):
             result.result()
 
     end_time = time.perf_counter()
-    print(f"Time taken to insert values without HyperLogLog: {end_time - start_time:0.2f} seconds")
+    print(
+        f"Time taken to insert values without HyperLogLog: {end_time - start_time:0.2f} seconds"
+    )
 
     start_time = time.perf_counter()
     unique_value_count = estimate_unique_values(r)
     end_time = time.perf_counter()
-    print(f"Time taken to estimate unique values without HyperLogLog: {end_time - start_time} seconds")
+    print(
+        f"Time taken to estimate unique values without HyperLogLog: {end_time - start_time} seconds"
+    )
 
     start_time = time.perf_counter()
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # Insert values with HyperLogLog
         results = [executor.submit(insert_values_hll, r, chunk) for chunk in chunks]
-        for result in tqdm(concurrent.futures.as_completed(results)):
+        for result in tqdm(
+            concurrent.futures.as_completed(results),
+            total=len(results),
+            desc="Inserting values with HyperLogLog",
+        ):
             result.result()
 
     end_time = time.perf_counter()
-    print(f"Time taken to insert values with HyperLogLog: {end_time - start_time:0.2f} seconds")
+    print(
+        f"Time taken to insert values with HyperLogLog: {end_time - start_time:0.2f} seconds"
+    )
 
     start_time = time.perf_counter()
     unique_value_count_hll = estimate_unique_values_hll(r)
     end_time = time.perf_counter()
-    print(f"Time taken to estimate unique values with HyperLogLog: {end_time - start_time} seconds")
+    print(
+        f"Time taken to estimate unique values with HyperLogLog: {end_time - start_time} seconds"
+    )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
 ```
 
