@@ -1,0 +1,389 @@
+---
+title: 'Exploring Data Structures in Redis'
+date: '2023-02-09'
+lastmod: '2023-02-09'
+tags: ['database', 'in-depth', 'programming']
+draft: false
+summary: ''
+images: []
+authors: ['default']
+---
+
+Redis is an open-source, in-memory data structure store used as a database, cache, and message broker. One of the key features that sets Redis apart from other databases is its support for multiple data structures, including strings, hashes, lists, sets, and sorted sets.
+
+In this article, we'll dive into each of these data structures, discussing their use cases and how to work with them in Redis. Buckle up and let's get started!
+
+## Setting up Redis in docker container
+
+```bash
+docker run --name redis -d -p 6379:6379 redis
+docker exec -it redis redis-cli # To access redis cli (Optional)
+```
+
+## Strings
+
+Strings are the most basic data structure in Redis, and they're pretty much what they sound like: a sequence of characters. In Redis, strings are used to store values with an associated key. Here's an example of setting and retrieving a string value in Redis:
+
+```bash
+127.0.0.1:6379> SET my_key "hello world"
+OK
+127.0.0.1:6379> SET my_int 30
+OK
+127.0.0.1:6379> GET my_key
+"hello world"
+127.0.0.1:6379> GET my_int
+"30" # Note that the value is returned as a string
+```
+
+In addition to simple string values, Redis strings also have several useful commands for working with string values, such as `APPEND` to concatenate two strings and `INCR` to increment a numerical value stored as a string.
+
+## Hashes
+
+Redis hashes are similar to dictionaries in other programming languages. Hashes allow you to store multiple key-value pairs within a single Redis key. Here's an example of setting and retrieving values from a Redis hash:
+
+```bash
+127.0.0.1:6379> HSET my_hash name "John Doe" email "john.doe@example.com"
+(integer) 1
+127.0.0.1:6379> HSET my_hash age 30
+(integer) 1
+127.0.0.1:6379> HGET my_hash name
+"John Doe"
+```
+
+Hashes are incredibly useful for storing structured data, such as user profiles, product information, and more. Redis hashes also provide several commands for working with hash values, such as `HGETALL` to retrieve all key-value pairs within a hash and `HINCRBY` to increment a numerical value stored within a hash (I hear you. No you can't use `INCR` on a hash value)
+
+## Lists
+
+Redis lists are ordered collections of strings, similar to arrays in other programming languages. You can think of a Redis list as a series of values, where each value has a unique index. Here's an example of using a Redis list:
+
+```bash
+127.0.0.1:6379> LPUSH my_list "apple"
+(integer) 1
+127.0.0.1:6379> LPUSH my_list "banana"
+(integer) 2
+127.0.0.1:6379> LPUSH my_list "cherry"
+(integer) 3
+127.0.0.1:6379> LRANGE my_list 0 -1 # 0 is the first index, -1 is the last index
+1) "cherry"
+2) "banana"
+3) "apple"
+```
+
+Redis lists are commonly used for tasks such as message queues and task management. Redis provides several commands for working with lists, such as `LPOP` to remove the first value in a list and `RPOP` to remove the last value in a list. You can also use `LINDEX` to retrieve a value at a specific index in a list.
+
+## Sets
+
+Redis sets are unordered collections of unique strings. Sets are similar to arrays, but with the added constraint that all values in a set must be unique. Here's an example of using a Redis set:
+
+```bash
+127.0.0.1:6379> SADD my_set "apple"
+(integer) 1
+127.0.0.1:6379> SADD my_set "banana"
+(integer) 1
+127.0.0.1:6379> SADD my_set "cherry"
+(integer) 1
+127.0.0.1:6379> SADD my_set "apple"
+(integer) 0
+127.0.0.1:6379> SMEMBERS my_set
+1) "banana"
+2) "apple"
+3) "cherry"
+```
+
+As you can see, even though we tried to add the value "apple" twice to the set, Redis only stored it once since sets only allow unique values.
+
+Redis sets are incredibly useful for tasks such as membership testing, set intersection, and set union operations. Some of the popular commands for sets include `SISMEMBER` to check if a value is in the set, `SINTER` to find the intersection of two or more sets, and `SUNION` to find the union of two or more sets.
+
+## Sorted Sets
+
+Redis sorted sets are similar to sets, but each value in a sorted set is associated with a score. This score is used to sort the values in the set, with the highest score appearing first. Here's an example of using a Redis sorted set:
+
+```bash
+127.0.0.1:6379> ZADD my_sorted_set 100 "apple"
+(integer) 1
+127.0.0.1:6379> ZADD my_sorted_set 200 "banana"
+(integer) 1
+127.0.0.1:6379> ZADD my_sorted_set 150 "cherry"
+(integer) 1
+127.0.0.1:6379> ZRANGE my_sorted_set 0 -1
+1) "banana"
+2) "cherry"
+3) "apple"
+```
+
+Reason why sorted set has command `ZADD` has `Z` in the beginning is because it represents Z-Score.
+
+As you can see, the values in the sorted set are sorted based on their scores, with the highest score appearing first.
+
+Redis sorted sets are incredibly useful for tasks such as leaderboards, real-time analytics, and more. Some of the popular commands for sorted sets:
+
+- `ZRANGEBYSCORE` to retrieve values within a specific score range.
+- `ZREVRANGE` to retrieve values in reverse order (get top N).
+- `ZINCRBY` to increment the score of a value in a sorted set.
+- `ZCARD` to retrieve the number of values in a sorted set.
+- `ZSCORE` to retrieve the score of a value in a sorted set.
+
+Here's how you can use it in real-time analytics
+
+1. Use `ZREVRANGE` to retrieve the top N pages with the highest number of page views.
+2. Use `ZINCRBY` to increment the page view count for a page when a user visits the page.
+3. Use `ZSCORE` to retrieve the page view count for a page.
+4. Use `ZCARD` to retrieve the total number of pages in the sorted set.
+
+## HyperLogLog
+
+HyperLogLog is a probabilistic data structure in Redis that is used for estimating the number of unique elements in a large data set. Unlike traditional counting methods, HyperLogLog uses a small amount of memory and can estimate the number of unique elements with a high degree of accuracy.
+
+```bash
+127.0.0.1:6379> PFADD my_hyperloglog "apple"
+(integer) 1
+127.0.0.1:6379> PFADD my_hyperloglog "banana"
+(integer) 1
+127.0.0.1:6379> PFADD my_hyperloglog "cherry"
+(integer) 1
+127.0.0.1:6379> PFCOUNT my_hyperloglog
+(integer) 3
+```
+
+As you can see, we were able to use the PFADD command to add values to the HyperLogLog, and the PFCOUNT command to retrieve the estimated count of unique values in the set.
+
+Here is an example of using the HyperLogLog in python to insert millions of values and estimate the number of unique values with and without HyperLogLog:
+
+```python
+import redis
+import timeit
+
+print("Connecting to Redis server...")
+
+r = redis.Redis(host='localhost', port=6379, db=0)
+
+def million_times(func):
+    for i in range(10_00_000):
+        if i % 10_000 == 0:
+            print(f'Inserted {i} values')
+        func(i)
+
+if __name__ == '__main__':
+    print("Connected. Inserting values...")
+
+    time = timeit.timeit(million_times(lambda i: r.sadd('unique_values', i)), number=1)
+    print(f'Time taken to insert values without HyperLogLog: {time})
+
+    time = timeit.timeit(r.scard('unique_values'), number=1)
+    print(f'Time taken to estimate unique values without HyperLogLog: {time})
+
+    time = timeit.timeit(million_times(lambda i: r.pfadd('unique_values_hll', i)), number=1)
+    print(f'Time taken to insert values with HyperLogLog: {time})
+
+    time = timeit.timeit(r.pfcount('unique_values_hll'), number=1)
+    print(f'Time taken to estimate unique values with HyperLogLog: {time})
+```
+
+To get more performance in Python using multiple threads as well as Redis pipelines:
+
+```python
+import redis
+import concurrent.futures
+import time
+from tqdm import tqdm # pip install tqdm
+
+def insert_values(r, values):
+    with r.pipeline() as pipe:
+        for i in values:
+            pipe.sadd('unique_values', i)
+        pipe.execute()
+
+def insert_values_hll(r, values):
+    with r.pipeline() as pipe:
+        for i in values:
+            pipe.pfadd('unique_values_hll', i)
+        pipe.execute()
+
+def estimate_unique_values(r):
+    with r.pipeline() as pipe:
+        pipe.scard('unique_values')
+        return pipe.execute()[0]
+
+def estimate_unique_values_hll(r):
+    with r.pipeline() as pipe:
+        pipe.pfcount('unique_values_hll')
+        return pipe.execute()[0]
+
+def main():
+    r = redis.Redis(host='localhost', port=6379, db=0)
+
+    NUM_VALUES = 10_000_000
+    CHUNK_SIZE = 10_000
+    num_chunks = NUM_VALUES // CHUNK_SIZE
+    chunks = [range(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE) for i in range(num_chunks)]
+
+    print("Connected. Inserting values...")
+
+    start_time = time.perf_counter()
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Insert values without HyperLogLog
+        results = [executor.submit(insert_values, r, chunk) for chunk in chunks]
+        for result in tqdm(concurrent.futures.as_completed(results)):
+            result.result()
+
+    end_time = time.perf_counter()
+    print(f"Time taken to insert values without HyperLogLog: {end_time - start_time:0.2f} seconds")
+
+    start_time = time.perf_counter()
+    unique_value_count = estimate_unique_values(r)
+    end_time = time.perf_counter()
+    print(f"Time taken to estimate unique values without HyperLogLog: {end_time - start_time} seconds")
+
+    start_time = time.perf_counter()
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Insert values with HyperLogLog
+        results = [executor.submit(insert_values_hll, r, chunk) for chunk in chunks]
+        for result in tqdm(concurrent.futures.as_completed(results)):
+            result.result()
+
+    end_time = time.perf_counter()
+    print(f"Time taken to insert values with HyperLogLog: {end_time - start_time:0.2f} seconds")
+
+    start_time = time.perf_counter()
+    unique_value_count_hll = estimate_unique_values_hll(r)
+    end_time = time.perf_counter()
+    print(f"Time taken to estimate unique values with HyperLogLog: {end_time - start_time} seconds")
+
+if __name__ == '__main__':
+    main()
+```
+
+You can run `htop` to see different threads as well montior the CPU/memory usage. Once the data has been inserted you may want to run `redis-cli` and run `MEMORY USAGE unique_values` and `MEMORY USAGE unique_values_hll` to see the memory usage of the two sets. You can also shut down the docker container using `docker restart redis` and then ru `docker stats redis` to see the memory usage of the Redis container. You'll notice that it rises over time (reaches 500MB+) as Redis loads the data into memory. This demonstrates persistence in Redis :)
+
+[//]: <> (One cool thing about HyperLogLog is that it can be used to estimate the cardinality of sets that are too large to fit in memory. For example, if you have a set of 1 billion values, you can use HyperLogLog to estimate the cardinality of this set by splitting it into multiple smaller sets and using HyperLogLog to estimate the cardinality of each set. Then, you can use the HyperLogLog merge algorithm to merge the estimates of the cardinality of each set into a single estimate of the cardinality of the original set.)
+
+## Bloom filters in Redis:
+
+Redis also supports Bloom filters, which are probabilistic data structures that can be used to test whether an element is a member of a set. Bloom filters are memory-efficient and can be used to test whether an element is a member of a set that is too large to fit in memory. Some real world use cases for Bloom filters include: checking whether a URL has been visited/crawled before, checking whether an username/email has been registered before, checking whether a credit card number is valid, checking whether a transaction has been processed before.
+
+Here is an example of using Bloom filters in Redis:
+
+[//]: <> (TODO: Add example of using Bloom filters in Redis)
+
+```bash
+127.0.0.1:6379> BF.ADD my_bloom_filter 1
+(integer) 1
+127.0.0.1:6379> BF.EXISTS my_bloom_filter 1
+(integer) 1
+```
+
+In this example, we used the BF.ADD command to add the value 1 to the Bloom filter, and the BF.EXISTS command to test whether the value 1 is a member of the Bloom filter. The BF.EXISTS command returns 1 because the value 1 is a member of the Bloom filter. If we had used the BF.EXISTS command to test whether the value 2 is a member of the Bloom filter, it would have returned 0 because the value 2 is not a member of the Bloom filter. The BF.EXISTS command returns 0 with a probability of false positives, which is configurable when the Bloom filter is created.
+
+## Bitmaps
+
+Redis also supports bitmaps, which are arrays of bits that can be used to represent simple binary values (e.g. true/false or on/off). Bitmaps are a memory-efficient way to store large amounts of binary data and can be used for tasks such as real-time analytics, A/B testing, and more.
+
+Here is an example of using bitmaps in Redis:
+
+```bash
+127.0.0.1:6379> SETBIT my_bitmap 1 1
+(integer) 0
+127.0.0.1:6379> SETBIT my_bitmap 0 1
+(integer) 0
+127.0.0.1:6379> GETBIT my_bitmap 0
+(integer) 0
+127.0.0.1:6379> GETBIT my_bitmap 1
+(integer) 1
+```
+
+In this example, we used the `SETBIT` command to set the value of two bits in the bitmap, and the `GETBIT` command to retrieve the values of these bits.
+
+For A/B testing at scale, you can use the `BITOP` command to count the number of users who have seen the A variant of an A/B test, the number of users who have seen the B variant of an A/B test, and the number of users who have seen both variants of an A/B test.
+
+For analytics, you can use the `BITOP` command to count the number of users who have visited a certain page, the number of users who have visited a certain page and then visited another page, and the number of users who have visited a certain page and then visited another page and then visited a third page.
+
+## Streams
+
+Finally, Redis also supports streams, which are a new data structure in Redis that allow for storing ordered collections of data (e.g. logs, events, and more). Streams provide a scalable way to handle real-time data streams and can be used for tasks such as real-time analytics, event-driven architectures, and more.
+
+Here's an example of using streams in Redis:
+
+```bash
+127.0.0.1:6379> XADD my_stream * name "John" age 30
+1550373738452-0
+127.0.0.1:6379> XADD my_stream * name "Jane" age 25
+1550373738453-0
+127.0.0.1:6379> XRANGE my_stream - +
+1) 1) "1550373738452-0"
+   2) 1) "name"
+      2) "John"
+      3) "age"
+      4) "30"
+2) 1) "1550373738453-0"
+   2) 1) "name"
+      2) "Jane"
+      3) "age"
+      4) "25"
+```
+
+[//]: <TODO. Improve this>
+
+Here `XRANGE` is used to read all the data from the stream. The `-` and `+` arguments specify that we want to read all the data from the stream. The `XADD` command is used to add data to the stream. The `*` argument specifies that we want to add data to the stream without specifying an ID. The `name` and `age` fields are added to the stream.
+
+For real-time analytics or event-driven architectures, you can use the `XREAD` command to read data from a stream in real-time. For example, you can use the `XREAD` command to read data from a stream that contains logs from a web server and then use the logs to perform real-time analytics.
+
+## Geospatial Indexes
+
+Redis supports geospatial indexes, which can be used to store and query data based on its geographic location. This makes it possible to perform operations such as finding the nearest neighbor, checking if a point is within a given area, and more.
+
+Here's an example of using geospatial indexes in Redis:
+
+```bash
+127.0.0.1:6379> GEOADD my_geoindex 13.3613 89.3522 "Bangkok"
+(integer) 1
+127.0.0.1:6379> GEOADD my_geoindex 37.7749 -122.4194 "San Francisco"
+(integer) 1
+127.0.0.1:6379> GEOPOS my_geoindex "Bangkok" "San Francisco"
+1) 1) "13.3613" "89.3522"
+2) 1) "37.7749" "-122.4194"
+```
+
+[//]: <TODO. Improve this>
+
+In this example, we used the GEOADD command to add two cities to the geospatial index, and the GEOPOS command to retrieve their geographic locations.
+
+## Pub/Sub
+
+Redis also supports a publish/subscribe (pub/sub) messaging system, which allows clients to publish messages to channels and subscribe to messages from these channels. This makes it possible to implement real-time, event-driven systems and enables decoupled communication between different parts of an application.
+
+[//]: <> (TODO: Pub/Sub VS Queues VS Streams)
+
+Here's an example of using the pub/sub system in Redis:
+
+```bash
+# First client
+127.0.0.1:6379> SUBSCRIBE my_channel
+Reading messages... (press Ctrl-C to quit)
+1) "subscribe"
+2) "my_channel"
+3) (integer) 1
+
+# Second client
+127.0.0.1:6379> PUBLISH my_channel "Hello, World!"
+(integer) 1
+
+# First client
+1) "message"
+2) "my_channel"
+3) "Hello, World!"
+```
+
+In this example, the first client subscribes to the channel my_channel, and the second client publishes a message to this channel. The first client receives the message and prints it to the console.
+
+## Extra Commands
+
+- `redis-cli monitor`: see the commands being executed by Redis.
+- `redis-cli info`: see information about the Redis server.
+- `redis-cli config get *`: see the configuration settings of the Redis server.
+- `redis-cli slowlog get`: see the slowest commands executed by Redis.
+
+## Conclusion
+
+As you can see, Redis has a rich set of data structures that can be used to solve a wide range of problems. From strings, hashes, and lists, to more advanced structures such as HyperLogLog, bitmaps, streams, geospatial indexes, and pub/sub, Redis provides a flexible and powerful toolkit for building high-performance, scalable applications. I hope this blog post has helped you understand the different data structures that Redis supports and how they can be used to solve real-world problems.
