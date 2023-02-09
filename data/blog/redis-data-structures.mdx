@@ -194,24 +194,11 @@ def insert_values(r, values):
             pipe.sadd("unique_values", i)
         pipe.execute()
 
-
 def insert_values_hll(r, values):
     with r.pipeline() as pipe:
         for i in values:
             pipe.pfadd("unique_values_hll", i)
         pipe.execute()
-
-
-def estimate_unique_values(r):
-    with r.pipeline() as pipe:
-        pipe.scard("unique_values")
-        return pipe.execute()[0]
-
-
-def estimate_unique_values_hll(r):
-    with r.pipeline() as pipe:
-        pipe.pfcount("unique_values_hll")
-        return pipe.execute()[0]
 
 
 def main():
@@ -242,7 +229,7 @@ def main():
     )
 
     start_time = time.perf_counter()
-    unique_value_count = estimate_unique_values(r)
+    unique_value_count = r.scard('unique_values')
     end_time = time.perf_counter()
     print(
         f"Time taken to estimate unique values without HyperLogLog: {end_time - start_time} seconds"
@@ -266,7 +253,7 @@ def main():
     )
 
     start_time = time.perf_counter()
-    unique_value_count_hll = estimate_unique_values_hll(r)
+    unique_value_count_hll = pipe.pfcount("unique_values_hll")
     end_time = time.perf_counter()
     print(
         f"Time taken to estimate unique values with HyperLogLog: {end_time - start_time} seconds"
@@ -280,23 +267,6 @@ if __name__ == "__main__":
 You can run `htop` to see different threads as well montior the CPU/memory usage. Once the data has been inserted you may want to run `redis-cli` and run `MEMORY USAGE unique_values` and `MEMORY USAGE unique_values_hll` to see the memory usage of the two sets. You can also shut down the docker container using `docker restart redis` and then ru `docker stats redis` to see the memory usage of the Redis container. You'll notice that it rises over time (reaches 500MB+) as Redis loads the data into memory. This demonstrates persistence in Redis :)
 
 [//]: <> (One cool thing about HyperLogLog is that it can be used to estimate the cardinality of sets that are too large to fit in memory. For example, if you have a set of 1 billion values, you can use HyperLogLog to estimate the cardinality of this set by splitting it into multiple smaller sets and using HyperLogLog to estimate the cardinality of each set. Then, you can use the HyperLogLog merge algorithm to merge the estimates of the cardinality of each set into a single estimate of the cardinality of the original set.)
-
-## Bloom filters in Redis:
-
-Redis also supports Bloom filters, which are probabilistic data structures that can be used to test whether an element is a member of a set. Bloom filters are memory-efficient and can be used to test whether an element is a member of a set that is too large to fit in memory. Some real world use cases for Bloom filters include: checking whether a URL has been visited/crawled before, checking whether an username/email has been registered before, checking whether a credit card number is valid, checking whether a transaction has been processed before.
-
-Here is an example of using Bloom filters in Redis:
-
-[//]: <> (TODO: Add example of using Bloom filters in Redis)
-
-```bash
-127.0.0.1:6379> BF.ADD my_bloom_filter 1
-(integer) 1
-127.0.0.1:6379> BF.EXISTS my_bloom_filter 1
-(integer) 1
-```
-
-In this example, we used the BF.ADD command to add the value 1 to the Bloom filter, and the BF.EXISTS command to test whether the value 1 is a member of the Bloom filter. The BF.EXISTS command returns 1 because the value 1 is a member of the Bloom filter. If we had used the BF.EXISTS command to test whether the value 2 is a member of the Bloom filter, it would have returned 0 because the value 2 is not a member of the Bloom filter. The BF.EXISTS command returns 0 with a probability of false positives, which is configurable when the Bloom filter is created.
 
 ## Bitmaps
 
