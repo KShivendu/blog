@@ -5,18 +5,22 @@ lastmod: '2023-02-09'
 tags: ['database', 'in-depth', 'programming']
 draft: false
 summary: ''
-images: []
+images: ['https://www.logo.wine/a/logo/Redis/Redis-Logo.wine.svg']
 authors: ['default']
 ---
 
-Redis is an open-source, in-memory data structure store used as a database, cache, and message broker. One of the key features that sets Redis apart from other databases is its support for multiple data structures, including strings, hashes, lists, sets, and sorted sets.
+![Redis](https://www.logo.wine/a/logo/Redis/Redis-Logo.wine.svg)
+
+Redis is an open-source, in-memory data structure store used as a database, cache, and message broker. One of the key features that sets Redis apart from other databases is its support for multiple data structures from simple ones like strings, hashes, lists, sorted sets to more complicated ones like Hyperloglog, Bitmaps, and Streams.
 
 In this article, we'll dive into each of these data structures, discussing their use cases and how to work with them in Redis. Buckle up and let's get started!
 
 ## Setting up Redis in docker container
 
+Install docker. You may refer [this](https://www.digitalocean.com/community/tutorials/how-to-install-and-use-docker-on-ubuntu-20-04) or [this](https://docs.docker.com/get-docker/) for the same.
+
 ```bash
-docker run --name redis -d -p 6379:6379 redis
+docker run --name redis -d -p 6379:6379 redis # To run redis in docker container
 docker exec -it redis redis-cli # To access redis cli (Optional)
 ```
 
