@@ -151,20 +151,20 @@ Durability is the property that ensures that the changes made by a transaction a
 
 Postgres keeps a lot of data in memory and regularly flushes it to the disk. This is done to improve performance and reduce the number of disk reads and writes since they are very very costly. However, this can lead to data loss in the event of a system failure. That's why, in postgres, durability is achieved through the use of write-ahead logging (WAL). WAL works by writing the changes made by a transaction to a log file before the changes are applied to the data. This log file is then used to recover the data in the event of a system failure.
 
-Postgres takes durability one step further by using `fsync` to write the WAL logs directly to the disk and bypass the operating system's cache which could otherwise have tricked the database into thinking that the changes were written to disk when they were not.
+Postgres takes durability one step further by using `fsync` to write the WAL directly to the disk and bypass the operating system's cache which could otherwise have tricked the database into thinking that the changes were written to disk when they were not.
 This ensures that the changes made by a transaction are persisted to disk and are not lost in the event of a system failure.
 
-Here's how you can see the contents of the WAL log files:
+Here's how you can see the contents of the WAL files:
 
 ```bash
 cd $PGDATA/pg_wal # $PGDATA is generally /var/lib/postgresql/data
 ls -l
 # You'll find a bunch of files that look like this: 000000010000000000000001
-# Each one of these files represents different segments of the WAL log
+# Each one of these files represents different segments of the WAL
 # Select one of the files and run the following command to see the contents of the file:
 pg_waldump 000000010000000000000001 >> before.log
 
-# You may run some queries to see the changes made by the queries in the WAL log
+# You may run some queries to see the changes made by the queries in the WAL
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
@@ -173,7 +173,7 @@ CREATE TABLE users (
 
 INSERT INTO users (name, age) VALUES ('John Doe', 22), ('Jane Doe', 21);
 
-# Now run the following command to see the contents of the WAL log after the queries:
+# Now run the following command to see the contents of the WAL after the queries:
 pg_waldump 000000010000000000000001 >> after.log
 
 # Now get a diff:

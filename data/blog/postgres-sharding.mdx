@@ -1,0 +1,67 @@
+---
+title: 'In-depth look at ACID properties of Postgres'
+date: '2022-12-24'
+lastmod: '2022-12-24'
+tags: ['database', 'in-depth', 'programming']
+draft: true
+summary: ''
+images: ['/static/images/blogs/postgres.jpg']
+authors: ['default']
+---
+
+### Sharding in postgres:
+
+PostgreSQL does not natively support sharding, but there are several third-party extensions that provide sharding capabilities, such as pgpool-II, pg_shard, and Citus.
+
+Here's an example of how you can perform sharding using the pg_shard extension in Python:
+
+```python
+import psycopg2
+
+# Connect to PostgreSQL
+conn = psycopg2.connect(host="hostname", database="dbname", user="user", password="password")
+cur = conn.cursor()
+
+# Create a sharded table
+cur.execute("CREATE TABLE sharded_table (id INT, name TEXT)")
+cur.execute("SELECT shard_by_hash_column(table_name := 'sharded_table', column_name := 'id')")
+
+# Insert data into the sharded table
+cur.execute("INSERT INTO sharded_table (id, name) VALUES (1, 'John Doe')")
+cur.execute("INSERT INTO sharded_table (id, name) VALUES (2, 'Jane Doe')")
+
+# Query data from the sharded table
+cur.execute("SELECT * FROM sharded_table")
+rows = cur.fetchall()
+
+# Print the results
+for row in rows:
+    print(row)
+
+cur.execute("SELECT * FROM sharded_table WHERE shard_id = 2")
+rows = cur.fetchall()
+
+# Print the results
+for row in rows:
+    print(row)
+
+# Close the connection
+conn.close()
+```
+
+### Tips:
+
+- If your database TCP connections are maxed out because of heavy load, you should be able to still connect to the database using a root user. This is because root users are exempt from the connection limit. So you can use `sudo -u postgres psql` to connect to the database as the postgres user.
+
+### Useful Postgres queries:
+
+- `SELECT * FROM pg_stat_activity;` to see all the active connections to the database. It's very useful to see what queries are running and how long they've been running for. You can also use this to kill a query that's taking too long. For example, `SELECT pg_cancel_backend(pid)` to cancel a query with a specific pid. You can also use `pg_terminate_backend(pid)` to terminate a query with a specific pid. Note that terminating a query will cause it to rollback any changes it made. So use this with caution.
+- `SELECT * FROM pg_locks;` to see all the locks that are currently held by the database.
+- `SELECT * FROM pg_stat_replication;` to see the status of the replication slots.
+- `SELECT * FROM pg_stat_database;` to see the status of the database.
+
+### Useful Postgres tools:
+
+- [pgcli](https://www.pgcli.com/) - A command line interface for postgres with auto-completion and syntax highlighting.
+- [pgadmin](https://www.pgadmin.org/) - A web-based database browser for postgres.
+- [pg_dump](https://www.postgresql.org/docs/9.1/app-pgdump.html) - A utility for creating backups of postgres databases.
