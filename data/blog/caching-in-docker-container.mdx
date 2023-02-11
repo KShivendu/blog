@@ -1,0 +1,18 @@
+---
+title: 'Caching dependencies in Docker container'
+date: '2023-02-09'
+lastmod: '2023-02-09'
+tags: ['docker', 'tricks', 'programming']
+draft: true
+summary: ''
+images: ['/static/images/blogs/docker.svg']
+authors: ['default']
+---
+
+# Ways to do caching dependencies in Docker container:
+
+1. Use a volume to cache dependencies: This is the most common way to cache dependencies in Docker containers. It works by mounting a volume to the container and storing the dependencies in the volume. This way, the dependencies are only downloaded once and are cached for subsequent builds. This is a good solution for most use cases, but it can lead to issues if the dependencies are not properly cached. For example, if the dependencies are not cached properly, the container will need to download the dependencies every time it is built, which can lead to increased build times and decreased performance. This is especially true if the dependencies are large and take a long time to download. Another issue with this approach is that the dependencies are not cached in the image, which means that the image will need to be rebuilt every time the dependencies are updated. This can lead to increased build times and decreased performance if the dependencies are updated frequently. This is especially true if the dependencies are large and take a long time to download.
+
+2. Use multi-stage builds: Multi-stage builds are a new feature in Docker that allows for building images in multiple stages. This allows for the dependencies to be cached in the first stage and then copied to the final image in the second stage. This is a good solution for most use cases, but it can lead to issues if the dependencies are not properly cached. For example, if the dependencies are not cached properly, the container will need to download the dependencies every time it is built, which can lead to increased build times and decreased performance. This is especially true if the dependencies are large and take a long time to download. Another issue with this approach is that the dependencies are not cached in the image, which means that the image will need to be rebuilt every time the dependencies are updated. This can lead to increased build times and decreased performance if the dependencies are updated frequently. This is especially true if the dependencies are large and take a long time to download.
+
+3. Use a proxy server like Artifactory (Wtf is that?)
