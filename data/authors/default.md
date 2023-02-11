@@ -13,7 +13,7 @@ Hey there. I am Kumar Shivendu. 👨‍💻 Here's a [PDF version of my Resume](
 
 I work as a Software Engineer at [SuperTokens](https://github.com/SuperTokens) (YC 20) and have previously worked at [FamPay](https://fampay.in/) (YC 19). My past experience revolves around backend development, big data, DevOps, and Data science. I'm proficient with Python, Go, and JS. I'm deeply passionate about open source, big data, infrastructure.
 
-This year, I'm mentoring for Google Summer Of Code as well as Outreachy with [Software Heritage](https://softwareheritage.org/). Last year, I was a GSoC student at Software Heritage and developed a [search engine](https://archive.softwareheritage.org/) and a [query language](https://docs.softwareheritage.org/devel/swh-search/query-language.html) (accessible for beta users only) can search across metadata from 170M+ software repositories!
+This year, I'm mentoring for Google Summer Of Code as well as Outreachy with [Software Heritage](https://softwareheritage.org/). Last year, I was a GSoC student at Software Heritage and developed a [search engine](https://archive.softwareheritage.org/) and a [query language](https://docs.softwareheritage.org/devel/swh-search/query-language.html) can search across metadata from 200M+ software repositories!
 
 🚀 Experience:
 
