@@ -128,6 +128,30 @@ def test_add_3_and_4(mock_add):
   mock_add.assert_called_once_with(3,4)
 ```
 
+## Dynamic fixtures
+
+This is something that I invented on my own and I haven't found anyone using this trick. Fixtures have access to other powerful fixtures and you might want to call them with different arguments.
+
+```python
+@pytest.fixture
+def dynamic_fixture(datadir):
+    # datadir is a fixture that returns the path to the test data directory
+    # there are other powerful fixtures like `mocker` (from pytest-mock)
+    # you can reuse some code by returning a function from the fixture
+    def get_page(page_id: int):
+        text = Path(datadir, "https_example.com", f"page{page_id}.json").read_text()
+        page = json.loads(text)
+        book_names = [book["name"] for book in page]
+        return book_names, page
+
+    return get_page
+
+def test_foo(dynamic_fixture):
+  p1_books, p1 = dynamic_fixture(1)
+  p2_books, p2 = dynamic_fixture(2)
+  ...
+```
+
 ## Use dictionaries to handle mutliple cases at once
 
 ```python
@@ -211,6 +235,10 @@ pytest -k 'regex_for_test_functions_that_you_want_to_run'
 pytest --reuse-db
 # Used to make pytest fail fast (on the first error or test failure)
 pytest -x
+# Used to rerun only failed tests (you must have used it in the last run to make it work)
+pytest --lf # or --last-failed
+# Used to run failed tests first (you must have used it in the last run to make it work)
+pytest --ff # or --failed-first
 ```
 
 ## Naming time related variables
