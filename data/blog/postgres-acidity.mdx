@@ -79,6 +79,13 @@ BEGIN
 END;
 ```
 
+Note: Differences between primary key and UNIQUE constraints:
+
+- When you define a PRIMARY KEY constraint on a table, it not only enforces uniqueness but also implies that the column or combination of columns is the main identifier of the table.
+- This means that the primary key uniquely identifies each row in the table and is used as a foreign key in other tables to establish relationships. A table can have only one primary key, and it cannot contain null values.
+- Hwoever `UNIQUE` does not imply that they are the main identifier of the table. A table can have multiple unique constraints. A column with a unique constraint can contain null values, but only one null value is allowed.
+- Both primary key and unique constraints automatically create an index on the specified columns, which can improve the performance of queries that involve those columns. However, a primary key constraint creates a clustered index, which determines the physical order of the data in the table, while a unique constraint creates a non-clustered index.
+
 ### Isolation
 
 Isolation is the property that ensures that the changes made by a transaction are not visible to other transactions until the transaction is committed (or wants to do so). This is important because it prevents other transactions from reading data that may be in an inconsistent state.
@@ -179,6 +186,13 @@ pg_waldump 000000010000000000000001 >> after.log
 # Now get a diff:
 diff before.log after.log
 ```
+
+## Getting an approx sum in postgres:
+
+- https://www.youtube.com/watch?v=eI_EQNTxF6U => This is one apporoach but many people commented that it's not good in practical cases
+- Some mentioned that they just maintain a count seperately and keep increasing/decreasing it..
+- Someone mentioned that "Visibility Map (VM) clean with frequent vacuum and then use index-only counts, which are fast"
+-
 
 ## Conclusion:
 
