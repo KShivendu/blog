@@ -95,6 +95,7 @@ module.exports = {
             },
             strong: { color: theme('colors.gray.600') },
             blockquote: {
+              fontStyle: 'normal !important',
               color: theme('colors.gray.900'),
               borderLeftColor: theme('colors.gray.200'),
             },
@@ -156,7 +157,8 @@ module.exports = {
               },
             },
             blockquote: {
-              color: theme('colors.gray.100'),
+              fontStyle: 'normal !important',
+              color: theme('colors.gray.50'),
               borderLeftColor: theme('colors.gray.700'),
             },
           },
