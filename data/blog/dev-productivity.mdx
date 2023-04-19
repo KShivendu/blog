@@ -48,6 +48,8 @@ Like most behavioural problems you need to consciously architect your virtual as
 - Realize that multitasking is a myth: If you do some research, you'll find that even Elon Musk doesn't do multiple things at once. He runs multiple companies but spends the whole day (not just several hours) at each one of them and religiously protects his time and avoids unnecessary calls/emails.
 - Prefer keyboard over mouse: Combinations and better use of muscle memory make keyboard much better than the mouse. Create keyboard shortcuts so that you can avoid taking your hand to the mouse/touchpad. If you wanna go extreme, try Vim or Vimium (vim shortcuts for browser)
 
+> I do something extreme. I put my phone in a locker during my working hours. It massively decreases context switches as well as information overload.
+
 ## Doing repetitive work
 
 ### Importance
@@ -67,9 +69,10 @@ The above diagram shows that you can save "4 weeks of engineering time" by autom
 ### Possible solutions
 
 - Master your IDE: Spend a good amount of time in understanding and customising your IDE's functions, shortcuts, and extensions. To stay informed, read release notes, follow blogs/youtube channels, follow folks who use and promote it. Or just observe your teammate who's an expert with his/her IDE!
+- Always tools that help with writing better code: Use linters, formatters, and LSP to make sure that your code is consistent and follows the best practices. This will save you a lot of time in code reviews and will also help you write better code.
 - Write small scripts for yourself: Write small scripts for things that take even 5-10 seconds and share it with your team (maybe use the same repo). Learn basic bash scripting and things like: `jq`, `grep`, `cut`, `sort`, `uniq`, `echo`, `for loops`, `paste`, `head`. They add up very quickly and save a lot of time for your org in the long run!
 - Instantly reproducible dev environment: Try using Docker compose, VS code's Dev container feature, or maybe even Gitpod/Codespaces. Make sure that the config installs the tools and does the setup too (example: inserting dummy data in the db. Sometimes you need to wipe out the complete setup, or move to a different device, or help a junior dev with onboarding. All of these become extremely easy.
-- TUI: When you're a newbie, start with GUI based tools, but eventually try to move to terminal based interfaces as they can be automated easily.
+- Terminal over GUI: When you're a newbie, it's okay to start with GUI based tools, but eventually try to move to terminal based tools as they can be automated easily.
 
 ## Slow feedback
 
@@ -102,10 +105,22 @@ It stops us from diving deep into the software engineering abstractions or touch
 
 ### Possible solutions:
 
-- Stand on the shoulder of giants: When exploring something that is completely unknown, sit close to someone who already knows it.
+- Use the 2 minute rule: Most of the times, the hardest part is just getting started on the task. Instead of telling yourself that "you need to complete this task in X days", just tell to yourself that "you need to spend 2 minutes on this task at Y'o clock". Once you start, you'll be able to get into the flow and make progress on the task. Do this enough times and you can complete any task in no time. Note that you should actually leave the task if you don't feel like doing it. Don't force yourself.
+- Stand on the shoulder of giants: When exploring something that is completely unknown, sit close to someone who already knows it. But please don't overdo this. You should respect other's and try to learn how to dive deep on your own.
+- Have small goals: Break down the big task into small tasks and try to complete them one by one.
 - Have an accountability buddy: Try pair programming with someone.
 
 ## Bugs
+
+<p align="center">
+  <a href="https://www.freepik.com/free-vector/qa-engineer-flat-concept-with-software-developer-symbols-flat-vector-illustration_37366036.htm">
+    <img
+      height="100"
+      src="https://img.freepik.com/free-vector/qa-engineer-flat-concept-with-software-developer-symbols-flat-vector-illustration_1284-78162.jpg"
+      alt="Computer Bugs: Image by macrovector on Freepik"
+    />
+  </a>
+</p>
 
 ### Importance
 
@@ -113,18 +128,18 @@ Having a bug is quite costly because you'll have to go through the complete deve
 
 ### Possible solutions:
 
-- Follow TDD: Test driven development allows you to think more clearly and makes sure that the system is easy to test in from the first iteration itself.
+- Strongly type your code: Even in dynamic languages like python, you can use type hints to make sure that you don't pass wrong types to functions.
+- Follow TDD: Test driven development allows you to think more clearly and makes sure that the system is easy to test in from the first iteration itself. Setup tools like [testmon](https://pypi.org/project/pytest-testmon/) that run only the tests that are affected by the changes you made.
 - Write tests as soon as you face a bug: If you tried fixing a bug and after releasing, you find that the fix didn't work, then that becomes quite painful. That's why, whenever you come across a bug, try to write a test that ensures that the fix actually works.
 
 ## Conclusion
 
 Software engineering a long term team sport. If you do things right, it will help you, your team, as well as the folks who will join after you're gone. Being an effective developer pays off really well, companies desperately want such folks and there's always a huge shortage of folks who take ownernship of things and improve things for not just themselves but the whole team. Wrong decisions of today can become burden for years to come and this is a very common in large startups and public companies.
 
-### References:
+### Credits and References:
 
-- [Elon Musk's AMA on Reddit](https://www.reddit.com/r/IAmA/comments/2rgsan/i_am_elon_musk_ceocto_of_a_rocket_company_ama/cnfpv7q/)
-- [A day in life of Elon Musk](https://finty.com/us/daily-routines/elon-musk/)
-- https://www.apptio.com/blog/speed-in-software-development/
+- [The effective engineer by Edmond Lau](https://www.effectiveengineer.com/)
+- [Ways to crank up speed in software development](https://www.apptio.com/blog/speed-in-software-development/)
 
 I hope this will help someone become more productive as a developer. Let me know if this was helpful and feel free to reach out to me on [Twitter](https://twitter.com/_KShivendu) or [LinkedIn](https://www.linkedin.com/in/kshivendu/) (Please add a message while sending the connection request)
 
