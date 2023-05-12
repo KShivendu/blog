@@ -302,7 +302,7 @@ def test_foo():
 
 ## Bonus: Script to run tests from a list
 
-I encountered a situation where test A was failing when running with other tests but not when running in isolation. So I wanted to do a binary search against the list of tests to find the culprit. I wrote a small script to do that. I think it's worth sharing:
+I encountered a situation where test A was failing when running with other tests but not when running in isolation. So I wanted run it against subsets of tests to find the culprit. I wrote a small script to do that. I think it's worth sharing:
 
 ```python
 # collect_tests.py
@@ -350,7 +350,10 @@ def run_tests(test_file: str):
 run_tests("test_cases.txt")
 ```
 
-This was super helpful in finding the culprit which helped in catching a disastrous but small bug in the code.
+Then I manually did a binary search on the list of test cases, commenting the ones that I didn't want to run in the current iteration. (Set VSCode language as Python for the file so you can do this easily)
+This was super helpful in finding the culprit test which helped in catching a small but fatal bug in the code. It would have been a nightware without this script :p
+
+### Conclusion
 
 I hope this will help someone get an idea of how tests can improve your code's robustness. Feel free to reach out to me on [Twitter](https://twitter.com/_KShivendu) or [LinkedIn](https://www.linkedin.com/in/kshivendu/) (Please add a message while sending the connection request)
 
