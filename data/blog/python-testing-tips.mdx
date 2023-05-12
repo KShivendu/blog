@@ -300,7 +300,7 @@ def test_foo():
     foo(-2)
 ```
 
-### Bonus: Script to run tests from a list
+## Bonus: Script to run tests from a list
 
 I encountered a situation where test A was failing when running with other tests but not when running in isolation. So I wanted to do a binary search against the list of tests to find the culprit. I wrote a small script to do that. I think it's worth sharing:
 
@@ -308,6 +308,7 @@ I encountered a situation where test A was failing when running with other tests
 # collect_tests.py
 import subprocess
 import re
+
 def collect_tests():
     # Run pytest with --collect-only and capture the output
     command = ["pytest", "--collect-only"]
@@ -331,11 +332,9 @@ with open("test_cases.txt", "w") as f:
 ```
 
 ```python
-# Run tests
-
+# run_tests.py
 from typing import List
 import pytest
-
 
 def run_tests(test_file: str):
     with open(test_file, "r") as file:
