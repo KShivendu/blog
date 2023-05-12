@@ -300,6 +300,59 @@ def test_foo():
     foo(-2)
 ```
 
+### Bonus: Script to run tests from a list
+
+I encountered a situation where test A was failing when running with other tests but not when running in isolation. So I wanted to do a binary search against the list of tests to find the culprit. I wrote a small script to do that. I think it's worth sharing:
+
+```python
+# collect_tests.py
+import subprocess
+import re
+def collect_tests():
+    # Run pytest with --collect-only and capture the output
+    command = ["pytest", "--collect-only"]
+    output = subprocess.check_output(command, universal_newlines=True)
+
+    # Extract test names from the output using regular expressions
+    test_names = re.findall(r"<Function (.*?)>", output)
+
+    # Clean parametrized tests:
+    # Input: test_same_site_cookie_values[https://foo.com/-https://bar.com/-none]
+    # Output: test_same_site_cookie_values
+    test_names = [re.sub(r"\[.*\]", "", test_name) for test_name in test_names]
+
+    return set(test_names)
+
+discovered_tests = collect_tests()
+print(discovered_tests)
+
+with open("test_cases.txt", "w") as f:
+    f.write("\n".join(discovered_tests))
+```
+
+```python
+# Run tests
+
+from typing import List
+import pytest
+
+
+def run_tests(test_file: str):
+    with open(test_file, "r") as file:
+        tests: List[str] = []
+        for line in file:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                tests.append(line)
+        if tests:
+            pytest.main(["-k", " or ".join(tests)])
+
+
+run_tests("test_cases.txt")
+```
+
+This was super helpful in finding the culprit which helped in catching a disastrous but small bug in the code.
+
 I hope this will help someone get an idea of how tests can improve your code's robustness. Feel free to reach out to me on [Twitter](https://twitter.com/_KShivendu) or [LinkedIn](https://www.linkedin.com/in/kshivendu/) (Please add a message while sending the connection request)
 
 Happy testing!
