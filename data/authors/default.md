@@ -18,8 +18,6 @@ Some of the coolest things I've built so far:
 - Advanced search engine for Software Heritage: Advanced search with custom query language that I designed that works on top of a corpus of 200M+ repositories containing 14B+ files! This is the largest software archive in the world and hence is larger than Github itself.
 - Multi Factor Authentication for SuperTokens: Architected a customizable MFA recipe (with step up auth) that allows you to add multi factor authentication to your app in minutes along with the ability to dynamically decide which factors to use for each user. This was our one of our most demanded enterprise features. No equivalent product exists in the market right now.
 
-{/_ - Graph database for package metadata for Software Heritage: We extracted and indexed metadata of 6M+ unique libraries from 200M+ repositories and ingested all of that in a graph database. _/}
-
 - Semantic search browser extension (side project): A semantic search browser extension that extends existing search features of any website. Allowing you to go beyond all traditional filters and sorting approaches so that you can just ask questions like "Show me all the products that are on sale and have a rating of 4 or more stars", "I'm feeling sad, show me some food that can make me feel better". It is powered by very smart heuristics for scraping the right data and then it uses vector embeddings to match against the right items.
 
 🚀 Experience:
