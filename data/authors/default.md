@@ -16,7 +16,7 @@ I work as a Software Engineer at [SuperTokens](https://github.com/SuperTokens) (
 Some of the coolest things I've built so far:
 
 - Advanced search engine for Software Heritage: Advanced search with custom query language that I designed that works on top of a corpus of 200M+ repositories containing 14B+ files! This is the largest software archive in the world and hence is larger than Github itself.
-- Multi Factor Authentication for SuperTokens: Architected a customizable MFA recipe (with step up auth) that allows you to add multi factor authentication to your app in minutes along with the ability to dynamically decide which factors to use for each user. This was our one of our most demanded enterprise feature. No equivalent product exists in the market right now.
+- Multi Factor Authentication for SuperTokens: Architected a customizable MFA recipe (with step up auth) that allows you to add multi factor authentication to your app in minutes along with the ability to dynamically decide which factors to use for each user. This was our one of our most demanded enterprise features. No equivalent product exists in the market right now.
 
 {/_ - Graph database for package metadata for Software Heritage: We extracted and indexed metadata of 6M+ unique libraries from 200M+ repositories and ingested all of that in a graph database. _/}
 
