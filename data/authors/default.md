@@ -11,7 +11,7 @@ github: https://github.com/KShivendu
 
 Hey there. I am Kumar Shivendu. 👨‍💻 Here's a [PDF version of my Resume](/static/KumarShivendu_CV.pdf)
 
-I work as a Software Engineer at [SuperTokens](https://github.com/SuperTokens) (YC 20) and have previously worked at [FamPay](https://fampay.in/) (YC 19). I'm proficient in Python and JS and have a good understanding of Java and Go. I'm deeply passionate about open source, information retrieval (search engines, query languages, and databases), and building dev tools, and I have tons of experience with each of them.
+I work as a Software Engineer at [SuperTokens](https://github.com/SuperTokens) (YC 20) and have previously worked at [FamPay](https://fampay.in/) (YC 19). I'm proficient in Python and JS and have a good understanding of Java and Go. I'm deeply passionate about open source, information retrieval (search engines, query languages, and databases), and building dev tools, and I have good experience with each of them.
 
 Some of the coolest things I've built so far:
 
