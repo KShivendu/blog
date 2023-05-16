@@ -11,14 +11,15 @@ github: https://github.com/KShivendu
 
 Hey there. I am Kumar Shivendu. 👨‍💻 Here's a [PDF version of my Resume](/static/KumarShivendu_CV.pdf)
 
-I work as a Software Engineer at [SuperTokens](https://github.com/SuperTokens) (YC 20) and have previously worked at [FamPay](https://fampay.in/) (YC 19). I'm proficient with Python and JS and have a good understanding of Java and Go. I'm deeply passionate about open source, information retrieval (search engines, query languages, & databases), and building dev tools and I have a tons of experience with each of them.
+I work as a Software Engineer at [SuperTokens](https://github.com/SuperTokens) (YC 20) and have previously worked at [FamPay](https://fampay.in/) (YC 19). I'm proficient in Python and JS and have a good understanding of Java and Go. I'm deeply passionate about open source, information retrieval (search engines, query languages, and databases), and building dev tools, and I have tons of experience with each of them.
 
 Some of the coolest things I've built so far:
 
-- Advanced search engine for Software Heritage: Advanced search with custom query language that I designed that works on top of a corpus of 200M+ repositories containing 14B+ files! This is the largest software archive in the world and hence is larger than Github itself.
-- Multi Factor Authentication for SuperTokens: Architected a customizable MFA recipe (with step up auth) that allows you to add multi factor authentication to your app in minutes along with the ability to dynamically decide which factors to use for each user. This was our one of our most demanded enterprise features. No equivalent product exists in the market right now.
+Advanced search engine for Software Heritage: I designed an advanced search engine with a custom query language that operates on a corpus of over 200 million repositories containing more than 14 billion files. This archive is the largest software archive globally, surpassing even Github itself.
 
-- Semantic search browser extension (side project): A semantic search browser extension that extends existing search features of any website. Allowing you to go beyond all traditional filters and sorting approaches so that you can just ask questions like "Show me all the products that are on sale and have a rating of 4 or more stars", "I'm feeling sad, show me some food that can make me feel better". It is powered by very smart heuristics for scraping the right data and then it uses vector embeddings to match against the right items.
+Multi-Factor Authentication for SuperTokens: I architected a customizable MFA recipe (with step-up authentication) that enables the addition of multi-factor authentication to any app in just minutes. It also provides the flexibility to dynamically determine which factors to use for each user. This enterprise feature was highly demanded and has no equivalent product in the current market.
+
+Semantic search browser extension (side project): I developed a browser extension that enhances the existing search capabilities of any website. It allows users to go beyond traditional filters and sorting methods, enabling them to ask questions like "Show me all mobile phones on sale with a rating of 4 stars and atleast 100 reviews" or "I'm feeling sad, show me some food that can improve my mood." The extension utilizes intelligent heuristics for data scraping and employs vector embeddings for finding relevant items.
 
 🚀 Experience:
 
