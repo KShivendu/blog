@@ -12,7 +12,7 @@ const siteMetadata = {
   socialBanner: '/static/images/twitter-card.png',
   email: 'hi@kshivendu.dev',
   github: 'https://github.com/KShivendu',
-  twitter: 'https://twitter.com/_KShivendu',
+  twitter: 'https://twitter.com/KShivendu_',
   // facebook: 'https://facebook.com',
   // youtube: 'https://youtube.com',
   linkedin: 'https://www.linkedin.com/in/KShivendu',
