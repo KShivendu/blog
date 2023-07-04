@@ -13,13 +13,13 @@ Hey there. I am Kumar Shivendu. 👨‍💻 Here's a [PDF version of my Resume](
 
 I work as a Software Engineer at [SuperTokens](https://github.com/SuperTokens) (YC 20) and have previously worked at [FamPay](https://fampay.in/) (YC 19). I'm proficient in Python and JS and have dabbled in production grade Java and Go as well. I'm deeply passionate about open source, information retrieval (search engines, query languages, and databases), and building dev tools, and I have good experience with each of them.
 
-Some of the coolest things I've built recently:
+Some of the coolest things I built recently:
 
-Advanced search engine for Software Heritage: I designed an advanced search engine with a custom query language that operates on a corpus of over 250 million repositories containing more than 15 billion files. This archive is the largest software archive globally, surpassing even Github.
+- Advanced search engine for Software Heritage: I designed an advanced search engine with a custom query language that operates on a corpus of over 250 million repositories containing more than 15 billion files. This archive is the largest software archive globally, surpassing even Github.
 
-Multi-Factor Authentication for SuperTokens: I architected customizable MFA features that enable the addition of multi-factor authentication to any application in minutes. It also provides the flexibility to dynamically determine which factors to use for each user. This was our one of our most requested enterprise features and there's no other provider at the moment that offers this level of customizability.
+- Multi-Factor Authentication for SuperTokens: I architected customizable MFA features that enable the addition of multi-factor authentication to any application in minutes. It also provides the flexibility to dynamically determine which factors to use for each user. This was our one of our most requested enterprise features and there's no other provider at the moment that offers this level of customizability.
 
-Semantic search browser extension (side project): I developed a browser extension that enhances the existing search capabilities of any website. It allows users to go beyond traditional filters and sorting methods, enabling them to ask questions like "Show me all mobile phones on sale with a rating of 4 stars and atleast 100 reviews" or "I'm feeling sad, show me some food to make me feel better" The extension utilizes intelligent heuristics for data scraping on the fly and employs vector embeddings for finding relevant items.
+- Semantic search browser extension (side project): I developed a browser extension that enhances the existing search capabilities of any website. It allows users to go beyond traditional filters and sorting methods, enabling them to ask questions like "Show me all mobile phones on sale with a rating of 4 stars and atleast 100 reviews" or "I'm feeling sad, show me some food to make me feel better" The extension utilizes intelligent heuristics for data scraping on the fly and employs vector embeddings for finding relevant items.
 
 🚀 Experience:
 
