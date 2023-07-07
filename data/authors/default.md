@@ -27,7 +27,7 @@ These days I'm exploring the Generative AI space (especially semantic search and
 - ML + SDE Intern @ [Logy.AI](https://logy.ai/)
 - ML Research Intern @ [IIT Mandi](https://iitmandi.ac.in/)
 
-🦄 I am looking for Software Engineering roles at high growth startups having a mission that I truly believe in. If your startup culture is based on open source and believes in transparency, that would be a huge plus ;)
+🦄 I am looking for Software Engineering and DevRel roles at high growth startups having a mission that I truly believe in. If your startup culture is based on open source and believes in transparency, that would be a huge plus ;)
 
 Some of the coolest things I shipped recently:
 
