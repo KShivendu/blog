@@ -3,7 +3,7 @@ name: Kumar Shivendu
 avatar: /static/images/shivendu.jpg
 occupation: Software Engineer
 company: SuperTokens (YC 20)
-email: shivendu@iitbhilai.ac.in
+email: hello@kshivendu.dev
 twitter: https://twitter.com/KShivendu_
 linkedin: https://www.linkedin.com/in/KShivendu
 github: https://github.com/KShivendu
