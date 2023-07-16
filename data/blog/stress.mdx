@@ -1,0 +1,64 @@
+---
+title: 'Stress testing your machine'
+date: '2023-06-16'
+lastmod: '2023-06-16'
+tags: ['snippets', 'tricks', 'programming']
+draft: true
+summary: ''
+images: ['/static/images/blogs/docker.svg']
+authors: ['default']
+---
+
+## Introduction
+
+I recently discovered the `stress` command in linux. This powerful Linux utility is designed to impose a configurable amount of load on a system, allowing you to test its stability and performance under heavy load.
+
+It can simulate different types of loads, including CPU, memory, I/O, and network loads. By running stress tests under different scenarios, you can measure the performance of the system and identify any areas that may need improvement. This can be useful for optimizing the performance of a system or comparing different systems to see which one performs better :)
+
+Plus if you're like me, the stress command can also be a fun tool to play with. You can use it to push your computer to its limits and see how it performs under extreme conditions. Just be careful not to push it too hard, as running stress tests for too long can cause your system to become unstable or even crash.
+
+## Setup
+
+### Installing stress
+
+```bash
+sudo apt install stress
+```
+
+## Examples
+
+> Remember to run `htop` in another terminal to see the effects of the `stress` command.
+
+### Testing CPU Stability
+
+To test the stability of the CPU, you can use the --cpu option. The following command will create four CPU workers that perform sqrt() operations infinitely:
+
+```bash
+stress --cpu 4
+```
+
+### Testing Memory Stability
+
+To test the stability of the memory, you can use the --vm option. The following command will create two virtual memory workers that run malloc() and free() operations till 1G each:
+
+```bash
+stress --vm 2 --vm-bytes 1G
+```
+
+### Benchmarking I/O Performance
+
+To benchmark the I/O performance of a disk, you can use the --io option. The following command will create four I/O workers that run `sync()` (i.e. flush file system buffers) operations:
+
+```bash
+stress --io 4 --timeout 30s
+```
+
+### Combining Multiple Loads
+
+You can also combine multiple types of loads to create a more realistic stress test. For example, the following command will create four CPU workers, two memory workers, and four I/O workers, all running for 1 minute:
+
+```bash
+stress --cpu 4 --vm 2 --vm-bytes 1G --io 4 --timeout 1m
+```
+
+I hope you found this article helpful. If you enjoyed this article, try checking out [k6](https://k6.io/) as well :)
