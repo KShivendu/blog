@@ -45,7 +45,16 @@ export default function Blog({ post, authorDetails, prev, next }) {
 
   return (
     <>
-      {frontMatter.draft !== true ? (
+      <MDXLayoutRenderer
+        layout={frontMatter.layout || DEFAULT_LAYOUT}
+        toc={toc}
+        mdxSource={mdxSource}
+        frontMatter={frontMatter}
+        authorDetails={authorDetails}
+        prev={prev}
+        next={next}
+      />
+      {/* {frontMatter.draft !== true ? (
         <MDXLayoutRenderer
           layout={frontMatter.layout || DEFAULT_LAYOUT}
           toc={toc}
@@ -64,7 +73,7 @@ export default function Blog({ post, authorDetails, prev, next }) {
             </span>
           </PageTitle>
         </div>
-      )}
+      )} */}
     </>
   )
 }
