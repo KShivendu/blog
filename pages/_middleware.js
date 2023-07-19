@@ -8,5 +8,15 @@ export async function middleware(req, ev) {
   if (pathname == '/bio' || pathname == '/me') {
     return NextResponse.redirect('/about')
   }
+  if (pathname == '/twitter') {
+    return NextResponse.redirect('https://twitter.com/KShivendu_')
+  }
+  if (pathname == '/github') {
+    return NextResponse.redirect('https://github.com/KShivendu')
+  }
+  if (pathname == '/linkedin') {
+    return NextResponse.redirect('https://www.linkedin.com/in/kshivendu/')
+  }
+
   return NextResponse.next()
 }
