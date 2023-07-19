@@ -11,7 +11,7 @@ export async function middleware(req, ev) {
   if (pathname == '/twitter') {
     return NextResponse.redirect('https://twitter.com/KShivendu_')
   }
-  if (pathname == '/github') {
+  if (pathname == '/github' || pathname == '/gh') {
     return NextResponse.redirect('https://github.com/KShivendu')
   }
   if (pathname == '/linkedin') {
