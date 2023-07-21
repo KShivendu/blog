@@ -182,12 +182,14 @@ Now we know how isolated transactions are initialized and how they work. But, if
 
 Here's a table to summarize the different isolation levels and the read phenomena handled by at each level in Postgres.
 
-| Isolation Level  | Dirty Reads | Non-repeatable Reads | Phantom Reads | Remarks       |
-| ---------------- | ----------- | -------------------- | ------------- | ------------- |
-| Read uncommitted | No          | No                   | No            |               |
-| Read committed   | Yes         | No                   | No            | Default level |
-| Repeatable read  | Yes         | Yes                  | Yes           |               |
-| Serializable     | Yes         | Yes                  | Yes           |               |
+| Isolation Level  | Dirty Reads | Non-repeatable Reads | Phantom Reads |
+| ---------------- | ----------- | -------------------- | ------------- |
+| Read uncommitted | No          | No                   | No            |
+| Read committed   | Yes         | No                   | No            |
+| Repeatable read  | Yes         | Yes                  | Yes           |
+| Serializable     | Yes         | Yes                  | Yes           |
+
+> Read committed is the default isolation level in Postgres.
 
 Note: Most databases aren't able to prevent phantom reads at the repeatable read isolation level. Postgres is one of the few databases that can do this because of its MVCC implementation. (because it essentially creates a snapshot of the data at the start of the transaction)
 
