@@ -180,18 +180,6 @@ Now we know how isolated transactions are initialized and how they work. But, if
   />
 </p>
 
-{/\*
-There are four isolation levels in Postgres:
-
-1. Read uncommitted: This is the lowest isolation level and allows transactions to read data that is still in progress by other transactions. This can lead to dirty reads, where a transaction reads data that has been modified but not yet committed by another transaction.
-
-2. Read committed (Default): This isolation level prevents dirty reads by only allowing transactions to read data that has been committed by other transactions. However, it does not prevent non-repeatable reads, where a transaction reads the same data multiple times and the data changes in-between those reads.
-
-3. Repeatable read: This isolation level prevents dirty reads, non-repeatable reads. Non-repeatable reads occur when a transaction reads the same data multiple times and the data changes between reads.
-
-4. Serializable: This is the highest isolation level and prevents dirty reads, non-repeatable reads, and phantom reads. Phantom reads occur when a transaction reads a set of rows that satisfy a certain condition, and meanwhile another transaction inserts or deletes rows that would also satisfy that condition.
-   \*/}
-
 Here's a table to summarize the different isolation levels and the read phenomena handled by at each level in Postgres.
 
 | Isolation Level  | Dirty Reads | Non-repeatable Reads | Phantom Reads | Remarks       |
