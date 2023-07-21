@@ -19,24 +19,27 @@ In the world of database systems, ACID (Atomicity, Consistency, Isolation, Durab
 
 Atomicity is the property that ensures that a transaction is either completed in its entirety or not at all. This means that if a transaction fails for any reason, the database will roll back the changes made by the transaction, leaving the data in its previous state.
 
-In Postgres, atomicity is achieved through the use of savepoints. A savepoint is a point in the transaction where the database can roll back to if the transaction fails. When a transaction starts, Postgres creates a savepoint and assigns it a unique identifier. As the transaction progresses, any changes made to the data are recorded in the transaction log. If the transaction is successful, the changes are committed and the savepoint is released. If the transaction fails, the database will roll back to the savepoint and discard any changes made after the savepoint was created. In case of database restart, the transaction log is used to recover the database to its previous state. It's important to note that database will not accept new transactions until it has recovered to a consistent state.
+When a transaction is initiated in PostgreSQL, it is assigned a unique transaction ID (XID). The XID is used to identify the transaction throughout its lifecycle. When a statement is executed within a transaction, PostgreSQL writes the changes made by the statement to a transaction log (also known as the write-ahead log or WAL). The WAL contains a record of all changes made to the database by a transaction. This log is used to ensure that the transaction can be rolled back (undone) if it fails or is aborted.
 
-Let's demonstrate this with some code. We will create a table called `users` and insert a row into it. We will then create a savepoint and update the row. If the update is successful, we will commit the transaction and release the savepoint. If the update fails, we will roll back to the savepoint and release it.
+The WAL works by writing a log record for every change made to the database, along with the XID of the transaction that made the change. The log record contains enough information to recreate the change, including the old and new values of any affected rows. If a transaction encounters an error or is aborted, PostgreSQL uses the information in the WAL to undo any changes made by the transaction. In case of database restart, the WAL log is used to recover the database to its previous state. Lastly, it's important to note that database will not accept new transactions until it has recovered to a consistent state.
+
+Let's demonstrate this with some code.
 
 ```sql
+-- Note: Every statement is a transaction (i.e. it is atomic)
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   age INT NOT NULL
 );
 
-SELECT * FROM users; -- Before transaction
+SELECT * FROM users; -- Before inserting data
 
-INSERT INTO users (name, age) VALUES ('John Doe', 22); -- Single statements are also atomic (i.e. they are treated as a transaction)
+INSERT INTO users (name, age) VALUES ('John Doe', 22);
 
-SELECT * FROM users; -- After inserting a row
+SELECT * FROM users; -- After inserting data
 
-BEGIN; -- Start a transaction
+BEGIN; -- Start a transaction (or use `BEGIN TRANSACTION`)
 UPDATE users SET name = 'Tony Stark' WHERE age = 22;
 -- Next statement will fail because of missing value so the the database will ignore the whole tranasaction
 INSERT INTO users (name) VALUES ('Foo Bar');
@@ -45,13 +48,16 @@ INSERT INTO users (name, age) VALUES ('Bar Baz', 33);
 COMMIT; -- End the transaction. Note that postgres will reply with "ROLLBACK" because the transaction failed
 
 SELECT * FROM users; -- After a failed transaction we can see that nothing has changed
+
+-- Bonus: You can use `SAVEPOINT` to create a savepoint in a transaction
+-- This allows you to roll back to a specific point in the transaction
 ```
 
 ### Consistency
 
 Consistency is the property that ensures that a transaction leaves the database in a valid state. This means that the transaction must follow all rules and constraints defined on the data, such as foreign key constraints, unique indexes, and check constraints.
 
-In Postgres, consistency is maintained through the use of constraints and triggers. Constraints are rules that are defined on the data and are enforced by the database. Triggers are functions that are executed by the database when certain events occur, such as the insertion of a row or the update of a column. Both constraints and triggers can be used to ensure that the data remains consistent and follows all rules and constraints defined on it.
+In Postgres, consistency is maintained through the use of constraints and triggers. Constraints are rules that are defined on the data and are enforced by the database. Triggers are functions that are executed by the database when certain events occur, such as the upserting data to a table. Both constraints and triggers can be used to ensure that the data remains consistent and follows all rules and constraints defined on it.
 
 ```sql
 CREATE TABLE users (
@@ -63,13 +69,19 @@ CREATE TABLE users (
 CREATE TABLE comments (
   id SERIAL PRIMARY KEY,
   user_id INT NOT NULL,
-  comment TEXT NOT NULL
+  comment TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
--- create a foreign key constraint to ensure data consistency
+-- Foreign key constraint to ensure data consistency
 ALTER TABLE comments ADD FOREIGN KEY (user_id) REFERENCES users(id);
+-- Unique constraint to ensure that each user has a unique name
+ALTER TABLE users ADD CONSTRAINT unique_name UNIQUE (name);
+-- Check constraint to ensure that the age is at least 18
+ALTER TABLE users ADD CONSTRAINT check_age CHECK (age >= 18);
 
--- create a trigger to enforce a business rule on the data
+-- You can also use a trigger to check the age of the user
 CREATE TRIGGER check_age
 AFTER INSERT OR UPDATE ON users
 FOR EACH ROW
@@ -77,80 +89,162 @@ WHEN (NEW.age < 18)
 BEGIN
   RAISE EXCEPTION 'Age must be at least 18';
 END;
+
+-- Create a function + trigger to update the updated_at column of the comments table
+CREAATE OR REPLACE FUNCTION update_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+
+CREATE TRIGGER update_updated_at
+BEFORE UPDATE ON comments
+FOR EACH ROW
+EXECUTE PROCEDURE update_updated_at();
+
+-- Now let's try to upsert some data that violates the constraints
+INSERT INTO users (name, age) VALUES ('John Doe', 17); -- This will fail because of the check constraint
+UPDATE users SET age = 17 WHERE id = 1; -- This will fail because of the trigger/exception
+INSERT INTO comments (user_id, comment) VALUES (1, 'Hello World'); -- This will fail because of the foreign key constraint
+
+-- Create a user with a valid age, create a comment, and update the comment
+INSERT INTO users (name, age) VALUES ('John Doe', 22);
+INSERT INTO comments (user_id, comment) VALUES (1, 'Hello World');
+SELECT * FROM comments;
+
+-- Now update the comment and see the updated_at column change
+UPDATE comments SET comment = 'Hello World!' WHERE id = 1;
+SELECT * FROM comments;
+
+-- Bonus tip: Try using trigger to call pg_notify when a row is modified
+-- You can then use LISTEN to listen for notifications and build real-time applications!
 ```
 
-Interesting side note: Differences between primary key and UNIQUE constraints:
+Side note: Differences between primary key and UNIQUE constraints:
 
-- When you define a PRIMARY KEY constraint on a table, it not only enforces uniqueness but also implies that the column or combination of columns is the main identifier of the table.
-- This means that the primary key uniquely identifies each row in the table and is used as a foreign key in other tables to establish relationships. A table can have only one primary key, and it cannot contain null values.
-- Howoever `UNIQUE` does not imply that they are the main identifier of the table. A table can have multiple unique constraints. A column with a unique constraint can contain null values, but only one null value is allowed.
 - Both primary key and unique constraints automatically create an index on the specified columns, which can improve the performance of queries that involve those columns. However, a primary key constraint creates a clustered index, which determines the physical order of the data in the table, while a unique constraint creates a non-clustered index.
+- A table can have only one primary key, and it cannot contain null values.
+- A table can have multiple unique constraints, and they can contain null values.
 
 ### Isolation
 
-Isolation is the property that ensures that the changes made by a transaction are not visible to other transactions until the transaction is committed (or wants to do so). This is important because it prevents other transactions from reading data that may be in an inconsistent state.
+Isolation is the property that ensures that the changes made by a transaction are not visible to other transactions until the transaction is committed (or wants to do so based on isolation level). This is important because it prevents other transactions from reading data that may be in an inconsistent state.
 
 In Postgres, isolation is achieved through the use of MVCC (Multi-Version Concurrency Control). MVCC works by maintaining multiple versions of each row in the database, with each version representing a snapshot of the data at a particular point in time. When a transaction starts, it reads the current version of the data and makes its changes to a new version. These changes are not visible to other transactions until the transaction is committed, at which point the new version becomes the current version.
 
+It's important to understand that here MVCC snapshots aren't huge backups. Postgres does it very efficiently. It maintains `xmin` and `xmax` column values for each row. `xmin` represents the transaction id of the transaction that created the row, and `xmax` represents the transaction id of the transaction that deleted the row. If `xmax` is not null, it means that the row has been deleted and is no longer visible to other transactions. If `xmax` is null, it means that the row is visible to other transactions.
+
+You can use `SELECT *, xmin, xmax FROM table` to take a look at the `xmin` and `xmax` values for the currently visible rows in a table (for your transaction). I'm yet to figure out how to see past versions of all rows at the same time. Reach out to to me if you figured out how to do this :)
+
+```sql
+| column1 | column2 | column3 | ... | columnN | xmin | xmax |
+-------------------------------------------------------------
+| value1  | value2  | value3 | ... | valueN  | 100  | 200   |
+| value4  | value5  | value6 | ... | valueN  | 50   | 300   |
+| value7  | value8  | value9 | ... | valueN  | 200  | 400   |
+| ...     | ...     | ...    | ... | ...     | ...  | ...   |
+```
+
+Btw, if you're wondering that so many 'useless' rows due to MVCC will bloat the database, don't worry. Postgres has a process called vacuuming that cleans up the old versions of the rows. It's a bit complicated so I'll leave it for another blog post :)
+
+Now we know how isolated transactions are initialized and how they work. But, if you have written any concurrent program, you'd be expecting some edge cases that need to be handled. Databases are no different - they face faces 3 edge cases (read phenomena) when implementing isolation:
+
+1. Dirty reads: This occurs when a transaction reads data that has been modified but not yet committed by another transaction. This can lead to inconsistent data if the transaction that made the changes is rolled back or aborted.
+
+<p align="center">
+  <img
+    src="/static/images/blogs/dirty-reads.png"
+    alt="Dirty Reads architecturenotes.co"
+    width="500"
+  />
+</p>
+
+2. Non-repeatable reads: This occurs when a transaction reads the same data multiple times and the data changes in-between those reads. This can lead to inconsistent data if the transaction that made the changes is rolled back or aborted.
+
+<p align="center">
+  <img
+    src="/static/images/blogs/non-repeatable-reads.jpg"
+    alt="Non-repeatable reads from architecturenotes.co"
+    width="500"
+  />
+</p>
+
+3. Phantom reads: This occurs when a transaction reads a set of rows that satisfy a certain condition, and meanwhile another transaction inserts or deletes rows that would also satisfy that condition. This can lead to inconsistent data if the transaction that made the changes is rolled back or aborted.
+
+<p align="center">
+  <img
+    src="/static/images/blogs/phantom-reads.jpg"
+    alt="Phantom reads architecturenotes.co"
+    width="500"
+  />
+</p>
+
+{/\*
 There are four isolation levels in Postgres:
 
 1. Read uncommitted: This is the lowest isolation level and allows transactions to read data that is still in progress by other transactions. This can lead to dirty reads, where a transaction reads data that has been modified but not yet committed by another transaction.
 
-2. Read committed (default): This isolation level prevents dirty reads by only allowing transactions to read data that has been committed by other transactions. However, it does not prevent non-repeatable reads, where a transaction reads the same data multiple times and the data changes between reads.
+2. Read committed (Default): This isolation level prevents dirty reads by only allowing transactions to read data that has been committed by other transactions. However, it does not prevent non-repeatable reads, where a transaction reads the same data multiple times and the data changes in-between those reads.
 
 3. Repeatable read: This isolation level prevents dirty reads, non-repeatable reads. Non-repeatable reads occur when a transaction reads the same data multiple times and the data changes between reads.
 
 4. Serializable: This is the highest isolation level and prevents dirty reads, non-repeatable reads, and phantom reads. Phantom reads occur when a transaction reads a set of rows that satisfy a certain condition, and meanwhile another transaction inserts or deletes rows that would also satisfy that condition.
+   \*/}
 
-Here's a table to summarize the different isolation levels and the read phenomena that can occur at each level:
+Here's a table to summarize the different isolation levels and the read phenomena handled by at each level in Postgres.
 
-| Isolation Level  | Dirty Reads | Non-repeatable Reads | Phantom Reads |
-| ---------------- | ----------- | -------------------- | ------------- |
-| Read uncommitted | Yes         | Yes                  | Yes           |
-| Read committed   | No          | Yes                  | Yes           |
-| Repeatable read  | No          | No                   | Yes           |
-| Serializable     | No          | No                   | No            |
+| Isolation Level  | Dirty Reads | Non-repeatable Reads | Phantom Reads | Remarks       |
+| ---------------- | ----------- | -------------------- | ------------- | ------------- |
+| Read uncommitted | No          | No                   | No            |               |
+| Read committed   | Yes         | No                   | No            | Default level |
+| Repeatable read  | Yes         | Yes                  | Yes           |               |
+| Serializable     | Yes         | Yes                  | Yes           |               |
 
-Note, that most databases aren't able to prevent phantom reads at the repeatable read isolation level. Postgres is one of the few databases that can do this because of its MVCC implementation. (because it essentially creates a snapshot of the data at the start of the transaction)
-
-To implement MVCC, postgres maintains `xmin` and `xmax` column values for each row. `xmin` represents the transaction id of the transaction that created the row, and `xmax` represents the transaction id of the transaction that deleted the row. If `xmax` is not null, it means that the row has been deleted and is no longer visible to other transactions. If `xmax` is null, it means that the row is visible to other transactions.
-
-You can use `SELECT *, xmin, xmax FROM table` to take a look at the `xmin` and `xmax` values for the currently visible rows in a table (for your transaction). I'm yet to figure out how to see past versions of all rows at the same time. Reach out to to me if you figured out how to do this :)
+Note: Most databases aren't able to prevent phantom reads at the repeatable read isolation level. Postgres is one of the few databases that can do this because of its MVCC implementation. (because it essentially creates a snapshot of the data at the start of the transaction)
 
 Let's dive into an example to see how isolation works in postgres:
 
 ```sql
--- create a table to test isolation
+-- Create a table first
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   age INT NOT NULL
 );
 
--- insert some initial data
+-- Insert some dummy data
 INSERT INTO users (name, age) VALUES ('John Doe', 22), ('Jane Doe', 21);
 
 -- start a transaction (T1) and read the data
+-- T1:
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; -- This is the default isolation level so you may just use `BEGIN;`
 SELECT * FROM users;
 
 -- Open a different terminal and start a second transaction (T2)
+-- T2:
 BEGIN;
-UPDATE users SET name = 'Altered John Doe' WHERE id = 1;
+UPDATE users SET name = 'New John Doe' WHERE id = 1;
 SELECT * FROM users; -- Changes are visible to T2
 
 -- Read the data again in the first transaction (T1)
-SELECT * FROM users; -- But changes are not visible to T1 (yet)
+-- T1:
+SELECT * FROM users; -- Note that changes are not visible to T1 (yet)
 
--- Essentially, the second transaction's updates are not visible until the first transaction is committed
--- So now we commit T2
+-- Essentially, the second transaction's updates are not visible until the
+-- first transaction is committed. So now we commit T2
+-- T2:
 COMMIT;
 
 -- Now run this in T1 and you'll see that the changes are visible
+-- T1:
 SELECT * FROM users;
 ```
 
-It is important to choose the appropriate isolation level for your transactions based on your needs. For example, if you need to ensure that your transactions are isolated from each other and that the data they read is consistent, you should use a higher isolation level such as repeatable read or serializable. On the other hand, if you need to maximize concurrency and are willing to trade off some isolation, you can use a lower isolation level such as read committed.
+There are always trade-offs. So choose according to your needs:
+
+- If you need to ensure that your transactions are isolated from each other and that the data they read is consistent, you should use a higher isolation level such as repeatable reads or serializable.
+- If you need to maximize concurrency (and hence performance) and are willing to trade off some isolation, you can use a lower isolation level such as read committed. Higher isolation levels means a txn might have to wait for other txns.
 
 ### Durability
 
@@ -189,4 +283,9 @@ diff before.log after.log
 
 ## Conclusion:
 
-In conclusion, the ACID properties of Postgres are essential for ensuring the reliability and consistency of data transactions. Atomicity ensures that transactions are completed in their entirety or not at all, consistency ensures that the data follows all rules and constraints, isolation ensures that the changes made by a transaction are not visible to other transactions unless required, and durability ensures that the changes made by a transaction are permanent and will not be lost in the event of a system failure. Together, these properties provide the foundation for building robust and reliable database systems.
+In conclusion, the ACID properties of Postgres are essential for ensuring the reliability and consistency of data transactions. Atomicity ensures that transactions are completed in their entirety or not at all, consistency ensures that the data follows all rules and constraints, isolation ensures that the changes made by a transaction are not visible to other transactions unless required, and durability ensures that the changes made by a transaction are permanent and will not be lost in the event of a system failure. Together, these properties provide the foundation for building robust and reliable database systems that power all kinds of applications!
+
+## Credits:
+
+- [Architecture Notes](https://architecturenotes.co/things-you-should-know-about-databases/) for the isolatation level images
+- [Hussein Nasser](https://www.youtube.com/@hnasr) and [Arpit Bhayani](https://www.youtube.com/@AsliEngineering) for inspiring me to dive deeper into databases! Check out their channels on YouTube.
