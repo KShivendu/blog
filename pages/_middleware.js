@@ -8,7 +8,7 @@ export async function middleware(req, ev) {
   if (pathname == '/bio' || pathname == '/me') {
     return NextResponse.redirect('/about')
   }
-  if (pathname == '/twitter') {
+  if (pathname == '/twitter' || pathname == '/x') {
     return NextResponse.redirect('https://twitter.com/KShivendu_')
   }
   if (pathname == '/github' || pathname == '/gh') {
