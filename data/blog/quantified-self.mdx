@@ -25,7 +25,7 @@ Last weekend, I learnt about Grafana and Prometheus out of curiousity. I used to
 
 So the data in the first dashboard that I've shared above comes from [ActivityWatch](https://github.com/ActivityWatch/activitywatch/)
 
-ActivityWatch stores all the data in a SQLite DB and I tried using it when I started. Grafana has a plugin for SQLite and I could mount the file in grafana container and make it work. But I was curious about time series databases like InfluxDB and was hoping that it provide better util functions to make querying my (time-series) data easier. So I wrote an InfluxDB adapter for ActivityWatch that I've shared on Github https://github.com/KShivendu/aw-core-influxdb. And then I created the charts using InfluxDB queries as shown in the above dashboard.
+ActivityWatch stores all the data in a SQLite DB and I tried using it when I started. Grafana has a plugin for SQLite and I could mount the file in grafana container and make it work. But I was curious about time series databases like InfluxDB and was hoping that it provide better util functions to make querying my (time-series) data easier. So I wrote an InfluxDB adapter for ActivityWatch that I've shared on Github [KShivendu/aw-core-influxdb](https://github.com/KShivendu/aw-core-influxdb/tree/feat/influxdb-datastore). And then I created the charts using InfluxDB queries as shown in the above dashboard.
 
 ### Wakatime dashboard
 
