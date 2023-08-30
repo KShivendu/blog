@@ -1,0 +1,43 @@
+---
+title: 'Draft: Tracking my Life with Grafana, Prometheus, and InfluxDB'
+date: '2023-09-30'
+lastmod: '2023-09-30'
+tags: ['side-project', 'monitoring', 'quantified-self']
+draft: false
+summary: ''
+images: ['/static/images/blogs/quantified-self.png']
+authors: ['default']
+---
+
+![Grafana Dashboard for ActivityWatch](https://grafana.com/media/grafana/images/grafana-dashboard-english.png)
+
+## Story
+
+I'm a data nerd and love to collect data and optimize stuff based on that. I have been using tools like ActivityWatch, Wakatime, and Smartwatches to monitor myself. But so far all that data was scattered across different places and it was hard to get a holistic view. And this made it really hard to understand patterns and optimize.
+
+Last weekend, I learnt about Grafana and Prometheus out of curiousity. I used to love Metabase + PostgreSQL combination but Grafana + Prometheus + InfluxDB combination is a different beast altogether! It's very powerful and extensible.
+
+## The Setup
+
+### ActivityWatch dashboard
+
+![Grafana Dashboard for ActivityWatch](/static/images/blogs/quantified-self.png)
+
+So the data in the first dashboard that I've shared above comes from [ActivityWatch](https://github.com/ActivityWatch/activitywatch/)
+
+ActivityWatch stores all the data in a SQLite DB and I tried using it when I started. Grafana has a plugin for SQLite and I could mount the file in grafana container and make it work. But I was curious about time series databases like InfluxDB and was hoping that it provide better util functions to make querying my (time-series) data easier. So I wrote an InfluxDB adapter for ActivityWatch that I've shared on Github https://github.com/KShivendu/aw-core-influxdb. And then I added
+
+### Wakatime dashboard
+
+![Grafana Dashboard for Wakatime](/static/images/blogs/wakatime-grafana.png)
+
+I configured my Wakatime API keys in [Wakatime Prometheus Exporter](https://github.com/MacroPower/wakatime_exporter) and configured my prometheus instance to scrape the data from it every day. Then I directly downloaded this [Grafana dashboard](https://grafana.com/grafana/dashboards/12790-wakatime-coding-stats/) that shows me all the stats.
+
+## Future:
+
+I'll be adding more details and probably try to share the code if people are interested.
+
+- Adding my health related metrics thanks to Health Connect APIs from Android.
+- Adding time spent on Android mobile apps
+
+Note that like most of my blogs, I'll keep updating this one as my knowledge grows.
