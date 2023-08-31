@@ -27,6 +27,12 @@ So the data in the first dashboard that I've shared above comes from [ActivityWa
 
 ActivityWatch stores all the data in a SQLite DB and I tried using it when I started. Grafana has a plugin for SQLite and I could mount the file in grafana container and make it work. But I was curious about time series databases like InfluxDB and was hoping that it provide better util functions to make querying my (time-series) data easier. So I wrote an InfluxDB adapter for ActivityWatch that I've shared on Github [KShivendu/aw-core-influxdb](https://github.com/KShivendu/aw-core-influxdb/tree/feat/influxdb-datastore). And then I created the charts using InfluxDB queries as shown in the above dashboard.
 
+### Health dashboard
+
+![Grafana Dashboard based on Android Health Connect data](/static/images/blogs/health-connect-grafana.png)
+
+Health data has always been scattered and hard to access but thanks to the new [Android Health Connect APIs](https://developer.android.com/guide/health-and-fitness/health-connect) and its [react native library](https://github.com/matinzd/react-native-health-connect), I was able to pull all the health data given by Google Fit and Samsung Health. I wrote a small Flask server to sync the data. The flask server extracts the metric values (sleep duration, steps, heart rate, etc) and pushes all the data to my InfluxDB instance. Then I created custom dashboards in Grafana using InfluxDB queries.
+
 ### Wakatime dashboard
 
 ![Grafana Dashboard for Wakatime](/static/images/blogs/wakatime-grafana.png)
@@ -37,7 +43,7 @@ I configured my Wakatime API keys in [Wakatime Prometheus Exporter](https://gith
 
 I'll be adding more details and probably try to share the code if people are interested.
 
-- Adding my health related metrics thanks to Health Connect APIs from Android.
 - Adding time spent on Android mobile apps
+- Adding location data from Android
 
 Note that like most of my blogs, I'll keep updating this one as my knowledge grows.
