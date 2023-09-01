@@ -31,6 +31,7 @@ These days I'm exploring the Generative AI space (especially semantic search and
 
 Some of the cool things I shipped recently:
 
+- Monitoring my life: I'm collecting my health, time, and productivity data from all of my devices and putting it all together in Grafana dashboards. See [/blog/quantified-self](/blog/quantified-self)
 - Advanced search (Software Heritage): I designed advanced search features with a custom query language that operates on a corpus of over 250 million repositories containing more than 15 billion files. This archive is the largest software archive globally, surpassing even Github.
 - Multi-Factor Authentication (SuperTokens): I architected our APIs and SDK features that enable the addition of multiple login factors to any application in minutes. This was one of our most requested enterprise features and there's no other provider at the moment that offers the same level of flexibility.
 - Search Copilot (Personal project): I developed a browser extension that enhances the existing search capabilities of any website. It allows users to go beyond traditional filters and sorting methods, enabling them to ask questions in natural language. The extension utilizes intelligent heuristics for data scraping on the fly and employs vector embeddings for finding relevant items.
