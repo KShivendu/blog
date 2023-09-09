@@ -17,6 +17,12 @@ export async function middleware(req, ev) {
   if (pathname == '/linkedin') {
     return NextResponse.redirect('https://www.linkedin.com/in/kshivendu/')
   }
+  if (pathname == '/301') {
+    return NextResponse.redirect('/about', 301)
+  }
+  if (pathname == '/302') {
+    return NextResponse.redirect('/about', 302)
+  }
 
   return NextResponse.next()
 }
