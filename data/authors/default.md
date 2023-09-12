@@ -7,6 +7,7 @@ email: hello@kshivendu.dev
 twitter: https://twitter.com/KShivendu_
 linkedin: https://www.linkedin.com/in/KShivendu
 github: https://github.com/KShivendu
+images: ['/static/images/shivendu.jpg']
 ---
 
 Hey there. I am Kumar Shivendu. 👨‍💻 Here's a [PDF version of my Resume](/resume-pdf)
