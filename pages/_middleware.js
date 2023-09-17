@@ -17,11 +17,19 @@ export async function middleware(req, ev) {
   if (pathname == '/linkedin') {
     return NextResponse.redirect('https://www.linkedin.com/in/kshivendu/')
   }
+  if (pathname == '/iitbh-sheet') {
+    return NextResponse.redirect('https://cutt.ly/Xwiam6Vz')
+  }
   if (pathname == '/301') {
+    // 301 is permanent redirect
     return NextResponse.redirect('/about', 301)
   }
   if (pathname == '/302') {
+    // 302 is temporary redirect
     return NextResponse.redirect('/about', 302)
+  }
+  if (pathname.startsWith('/b/')) {
+    return NextResponse.redirect(pathname.replace('/b/', '/blog/'))
   }
 
   return NextResponse.next()
