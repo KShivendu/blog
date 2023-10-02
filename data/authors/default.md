@@ -12,7 +12,7 @@ images: ['/static/images/shivendu.jpg']
 
 Hey there. I am Kumar Shivendu. 👨‍💻 Here's a [PDF version of my Resume](/resume-pdf)
 
-I build vector search engine at Qdrant and have previously worked at [SuperTokens](https://github.com/SuperTokens) (YC 20) and [FamPay](https://fampay.in/) (YC 19).
+I build vector search engine at [Qdrant](https://github.com/qdrant/qdrant) and have previously worked at [SuperTokens](https://github.com/SuperTokens) (YC 20) and [FamPay](https://fampay.in/) (YC 19).
 I'm proficient in Python and JS and have dabbled in production grade Java and Go as well. I'm passionate about devtools, information retrieval (search engines, query languages, LLMs, and databases), and open source.
 
 These days I'm exploring the Generative AI space (especially semantic search and LLMs) by building projects like these on the weekends:
