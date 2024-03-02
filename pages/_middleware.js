@@ -15,7 +15,10 @@ export async function middleware(req, ev) {
     return NextResponse.redirect('https://github.com/KShivendu')
   }
   if (pathname == '/linkedin') {
-    return NextResponse.redirect('https://www.linkedin.com/in/kshivendu/')
+    return NextResponse.redirect('https://www.linkedin.com/in/kshivendu')
+  }
+  if (pathname == '/talks') {
+    return NextResponse.redirect('https://github.com/KShivendu/talks')
   }
   if (pathname == '/iitbh-sheet') {
     return NextResponse.redirect('https://cutt.ly/Xwiam6Vz')
