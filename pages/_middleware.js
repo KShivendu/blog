@@ -8,6 +8,9 @@ export async function middleware(req, ev) {
   if (pathname == '/bio' || pathname == '/me') {
     return NextResponse.redirect('/about')
   }
+  if (pathname == '/dp' || pathname == '/photo') {
+    return NextResponse.redirect('/static/images/shivendu.jpg')
+  }
   if (pathname == '/twitter' || pathname == '/x') {
     return NextResponse.redirect('https://twitter.com/KShivendu_')
   }
