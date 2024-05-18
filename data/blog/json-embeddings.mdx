@@ -1,0 +1,89 @@
+---
+title: 'JSON embeddings'
+date: '2023-02-09'
+lastmod: '2023-02-09'
+tags: ['search', 'tricks', 'vectors']
+draft: true
+summary: ''
+images: ['/static/images/blogs/docker.svg']
+authors: ['default']
+---
+
+<!-- TODO: Change cover image -->
+
+## Story:
+
+I recently gave a [talk about reranking](https://talks.kshivendu.dev/reranking-fusion). After the talk, someone working at a large e-commerce company asked me a very interesting question:
+
+- They have a lot of products and they are trying to extract useful metadata out of the text description for querying and filtering with search engines.
+- The code kinda looks like this:
+
+```py
+s1 = "Title:[SIM-free] Samsung Galaxy S24 Ultra (SM-S9280) 12+ 256GB | Global version | Multi-language | Japanese support | Smartphone body | Gray Titanium Gray [Parallel import product]\nDescription: Model number: SM-S9280 - No eSIM, supported frequencies are:\n■4G FDD LTE B1(2100), B2(1900), B3(1800), B4(AWS), B5(850), B7(2600), B8(900), B12(700), B13(700), B18 (800), B19(800), B20(800), B25(1900), B26(850), B28(700), B66(AWS-3) ■4G TDD LTE B34(2010), B38(2600), B39 (1900), B40(2300), B41(2500) ■5G FDD Sub6 N1(2100), N2(1900), N3(1800), N5(850), N7(2600), N8(900), N12(700) ), N20(800), N25(1900), N28(700), N66(AWS-3) ■5G TDD Sub6 N38(2600), N40(2300), N41(2500), N77(3700), N78(3500) ), N79(4500)\nWallet payment cannot be used for parallel import items. [SIM-free] Samsung Galaxy S24 Ultra (SM-S9280) 12+ 256GB | Global version | Multi-language | Japanese support | Smartphone body | Titanium Gray [Parallel import product]"
+
+s1_attributes = expensive_extraction(s1)
+print(s1_attributes)
+# {
+#     "item_name": "Samsung Galaxy S24 Ultra",
+#     "color": "Titanium Gray",
+#     "model_no": "SM-S9280",
+#     "storage_gb": 256,
+# }
+```
+
+- They now take `s1_attributes` and put in their (vector) search engine to combine user queries with filtering using boolean operations (`storage_gb>128 AND color="Titanium Gray"`).
+- However, this extraction function is expensive (they used OpenAI function calling) and many of the products are actually duplicate in terms of the features to be extracted (say color remains same but there's more discount as per the product description which means it's effectively the same product).
+- So they tried to do something like this:
+  - Whenever a new items comes in, create embeddings for that (cheap) and compare with existing embeddings using vector search
+  - Put a score threshold (say `>.90` cosine similarity) and based on that decide if the product actually needs to be re-indexed.
+- However, to their surprise, it didn't work! Most of the times scores were `.98-.99` and almost impossible to differentiate based on the threshold.
+
+Before I tell you the solution. You need to understand two things:
+
+- Two fundamental limitations of vector search
+- Cross encoder models (and reranking)
+
+First, let's try to understand the limitation of vector search:
+
+- To compare two points (a query and a document), vector search does a simple cosine distance calcuation between the embeddings (generated from text).
+- This is very fast but doesn't do deeper interactions between tokens. This is because in most embedding models, individual token embeddings are been averaged out in the last layer (AKA average pooling layer).
+
+This is exactly where Cross encoder models come into the picture. They use a transformer architecture to compare two different sentences and tell you the similarity. They internally compare tokens from both the sentences and hence they are able to capture deeper interactions between these tokens.
+
+Now let's apply cross encoders to our problem. So now, whenever a new item comes:
+
+- Fetch top 10 matching items from the Vector DB
+- Compare the new item description with the top 10 items in the vector DB using cross encoder model:
+- It will give you 1 score for each of the items.
+
+But, to my surprise, that had some effect but it didn't solve the problem:
+
+- The generated scores were still like:
+
+```py
+0.9697281305754024 # color changed
+0.9879462204837635 # sale 20% OFF
+0.9957187454592983 # I jumbled up the words everywhere
+```
+
+When we changed the color, it dropped the similarity score to .9697 however this is still not very far from .98-.99 range. And it's very hard to put a generic threshold that could working
+
+So I thought about this problem and I realised that maybe there's just too much noise and the embeddings don't know what to compare. And I realised that I can just compare the embeddings of `json.dumps(s1_attributes)` to `new_s_text` (description of new product) and I saw this:
+
+```py
+0.8413048148640399 # Color changed. So huge drop
+0.9568766292846294 # 20% sale. Not much diff
+0.9764007056485348 # Reorder. Very little diff
+```
+
+It worked like magic! The score now drops heavily (`<.85`) when you affect any of its attributes. I didn't stop here, I used different seperators to concatenate the key value pairs like:
+
+```python
+" ".join("{k}: '{v}'" for k, v in s1_attributes.items()) # approach 1
+" | ".join("{k}: {v}" for k, v in s1_attributes.items()) # approach 2
+", ".join("{k}: {v}" for k, v in s1_attributes.items()) # approach 3
+```
+
+To my surprise, none of these worked well.
+
+The lesson from this is that the underlying Roberta language model (not LLM), somehow understands this intent better because of the familiar JSON syntax
