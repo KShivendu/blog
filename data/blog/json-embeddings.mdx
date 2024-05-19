@@ -1,25 +1,12 @@
 ---
-title: 'JSON embeddings'
-date: '2023-02-09'
-lastmod: '2023-02-09'
+title: 'JSON Embeddings'
+date: '2024-05-19'
+lastmod: '2024-05-19'
 tags: ['search', 'tricks', 'vectors']
 draft: true
-summary: ''
+summary: 'Exploring the JSON embeddings to for matching new products with existing ones'
 images: ['/static/images/blogs/docker.svg']
 authors: ['default']
----
-
----
-
-title: 'JSON Embeddings: Enhancing Product Metadata Extraction'
-date: '2023-02-09'
-lastmod: '2023-02-09'
-tags: ['search', 'tricks', 'vectors']
-draft: true
-summary: 'Exploring the use of JSON embeddings to improve product metadata extraction and indexing in large e-commerce databases.'
-images: ['/static/images/blogs/docker.svg']
-authors: ['default']
-
 ---
 
 ## Introduction
@@ -91,6 +78,11 @@ I also experimented with different separators to concatenate key-value pairs:
 ```
 
 None of these worked as well as the JSON format. The underlying Roberta language model seemed to understand the intent better with the familiar JSON syntax.
+
+## Future ideas:
+
+- Finding a dataset to evaluate this approach properly
+- Finetune the cross encoder to show larger drops when the attributes changes
 
 ## Conclusion
 
