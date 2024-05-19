@@ -15,7 +15,9 @@ Hey there. I am Kumar Shivendu. 👨‍💻 Here's a [PDF version of my Resume](
 I build vector search engine [Qdrant](https://github.com/qdrant/qdrant) and have previously worked at [SuperTokens](https://github.com/SuperTokens) (YC 20) and [FamPay](https://fampay.in/) (YC 19).
 In my free time, I try to explore the explainability and limits of vector search, [embeddings](https://www.kshivendu.dev/blog/json-embeddings), and [RAG](https://github.com/kshivendu/rag-cookbook). I'm passionate about software performance, information retrieval (search engines, query languages, databases, and LLMs), and scraping/mining data.
 
-📩 Reach out to me if you need help with RAG — especially vector search, reranking, and evals
+📩 Reach out to me if you need help with RAG
+
+I'm also open to speaking opportunites at reputed conferences and meetups. Some of my previous talks can be found at [talks.kshivendu.dev](https://talks.kshivendu.dev)
 
 Some of my recent side projects:
 
@@ -25,7 +27,7 @@ Some of my recent side projects:
 
 🚀 Experience:
 
-- Software Engineer - Performance and Integrations @ [Qdrant](https://qdrant.tech/)
+- Software Engineer - Performance @ [Qdrant](https://qdrant.tech/)
 - Software Engineer @ [SuperTokens](https://supertokens.com/) (YC 20)
 - Software Engineer Intern @ [FamPay](https://fampay.in/) (YC 19)
 - Google Summer Of Code Student @ [Software Heritage](https://softwareheritage.org/)
