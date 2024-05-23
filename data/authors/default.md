@@ -13,7 +13,7 @@ images: ['/static/images/shivendu.jpg']
 Hey there. I am Kumar Shivendu. 👨‍💻 Here's a [PDF version of my Resume](/resume-pdf)
 
 I build vector search engine [Qdrant](https://github.com/qdrant/qdrant) and have previously worked at [SuperTokens](https://github.com/SuperTokens) (YC 20) and [FamPay](https://fampay.in/) (YC 19).
-In my free time, I try to explore the explainability and limits of vector search, [embeddings](https://www.kshivendu.dev/blog/json-embeddings), and [RAG](https://github.com/kshivendu/rag-cookbook). I'm passionate about software performance, information retrieval (search engines, query languages, databases, and LLMs), and scraping/mining data.
+In my free time, I try to explore the explainability and limits of vector search, embeddings, and [RAG](https://github.com/kshivendu/rag-cookbook). I'm passionate about software performance, information retrieval (search engines, query languages, databases, and LLMs), and scraping/mining data.
 
 📩 Reach out to me if you need help with RAG
 
