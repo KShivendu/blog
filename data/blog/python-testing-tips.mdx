@@ -238,8 +238,8 @@ class TestSuite(TestCase):
 ## Use pytest flags to your advantage:
 
 ```bash
-# Used to run only specfic test that match the regex pattern:
-pytest -k 'regex_for_test_functions_that_you_want_to_run'
+# Used to run only specfic test that match the substring pattern (against full path that contains file name and test name with `::` delimiter):
+pytest -k 'substr_for_test_functions_that_you_want_to_run'
 # Used with pytest-django to avoid re-creating the DB while running the tests
 pytest --reuse-db
 # Used to make pytest fail fast (on the first error or test failure)
