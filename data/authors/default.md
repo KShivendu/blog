@@ -2,7 +2,7 @@
 name: Kumar Shivendu
 avatar: /static/images/shivendu.jpg
 occupation: Software Engineer
-company: Search engines & Performance
+company: Distributed Systems & LLMs
 email: mail@kshivendu.dev
 twitter: https://twitter.com/KShivendu_
 linkedin: https://www.linkedin.com/in/KShivendu
