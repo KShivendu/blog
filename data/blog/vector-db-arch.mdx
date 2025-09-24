@@ -1,0 +1,252 @@
+---
+title: 'Search Internals: Vector DB architectures'
+date: '2022-03-16'
+lastmod: '2022-03-16'
+tags: ['search', 'internals']
+draft: true
+summary: ''
+images: ['/static/images/blogs/gsoc.png']
+authors: ['default']
+---
+
+## Search engine Architectures:
+
+### Qdrant:
+
+- Written in Rust.
+- Exposes REST and gRPC APIs.
+- Uses Raft for consensus. This consensus only stores the collection/shard level config changes. The actual data is synced independently. Writes for consensus layer are forwarded to the leader which triggers writes in all replicas. If a replica/node doesn’t respond to the write, it’s marked Dead, and is later recovered based on snapshots or clocks.
+- Strong use of MMap and RocksDB. Have built more optimized replacements than RocksDB over time like `gridstore`
+- Collection -> Shard -> Segment -> HNSW Index, ID tracker, vector storage, payload storage.
+- Uses consistent hashing ring for sharding. Nature of HNSW index is such that all shards need to be queried (there’s no shard filtering in auto sharding mode). However Qdrant provides custom sharding keys which can be used and Qdrant can only query those nodes.
+- Segment is the fundamental architectural piece. It has ID tracker, payload storage, vector storage, index, etc.
+  - Upserts are written to shard WAL as well as segment vector storage. If node crashes, we recover from shard level WAL log. -> I think RocksDB might also have a WAL file which is on a segment level lol.
+  - Heavy focus on using immutable data structures. This unlocks more optimizations over time -> WHICH OPTIMIZATIONS EXACTLY benefit the most?
+  - Deleting a point only marks it as deleted in immutable segments (to avoid breaking existing HNSW graph connectivity) and inserts it in a mutable segment.
+  - Qdrant also merges segments over time if there are many small ones.
+- Allows you to independently configure where you want to keep your index, raw vectors, quantized vectors, and payload - in RAM or Disk.
+- Filterable HNSW index for high precision and low latency search. However, it’s costly to index.
+  - Note that entry point is always different so results might vary a little.
+  - HNSW needs useful data distribution (example: have multiple clusters), if you generate random vectors, it might perform poorly (since all distances would be roughly the same).
+  - NSW (not a typo) is a good enough algorithm for doing nearest neighbour search. But adding hierarchy to that is great for efficiency since you build multiple NSW graphs and jump larger distances first. The upper NSW layers are built with fewer points and hence every connection on those levels is moving larger distances. Then you enter lower and lower levels to get more granular. This is what is called HNSW.
+- How does it search across multiple segments with different HNSW indices each?
+- Great focus on things beyond nearest neighbour search: discovery, recommendations, anomaly detection.
+- Has support for Sparse vectors based on inverted indices with some optimizations.
+- Eventually consistent, no transactions.
+- Great API design and focus on semantic versioning and strongly adheres to backward compatibility.
+- Strong cloud offering with multiple regions and advanced features like re-sharding, auto-rebalancing, auto-replication, etc.
+
+### Weaviate:
+
+- Written in Golang
+- GraphQL API
+- Collection -> Shards -> HSNW Index + Object Store for k/v pairs (LSM) + Inverted Index (LSM)
+- Uses consistent hashing ring like Qdrant. Queries all shards by default.
+- Need to confirm but weaviate does online indexing because it doesn’t believe in immutability like Qdrant. It has an HNSW index for each shard and immediately inserts data to that shard and creates new edges for the new point.
+  - When something is deleted, it’s marked as deleted in HNSW index as well and it maintains a list of deleted points that’s used before returning results for consistency for the user.
+  - If there are enough deleted points - say 30% edges have dead points, they re-build the whole graph.
+  - They have explored the concept of healing the graph by replacing existing edges with the points to be deleted. This is however expensive and only good if you have few deletes. For more deletes, it’s better to just rebuild the whole graph.
+- Many companies have use cases where there’s insane volume of data but very little RPS requirements - (example is analytical use cases and Turbopuffer customers. CTO also mentioned Analytical vector search is an unexplored domain, Andrey said the same to me). Weaviate CTO mentioned they want to segregate storage and compute so customers don’t pay for idle infrastructure. It’s tough because of massive indices in weaviate (I don’t understand why this makes the segregation difficult?).
+- Started with etcd/bbolt as key-value store (written in Go and uses B+ tree which is great for disk storage, also supports txns but weaviate didn’t need so far) and migrated to custom LSM tree.
+- Weaviate virtual shards are inspired from that of Cassandra. One difference is that the HNSW index spans multiple data points while with Cassandra it’s not the case (huh wtf?). The goal for weaviate is to have fewer shards so they can build large indices. Virtual shards are very small and spread randomly over the ring. This spreads the data uniformly in the actual shards.
+  - If a new shard is introduced, they split existing ranges into half and give that to the new shard. For example, if shard 1 and 2 existed and we added shard 3, shard 3 will take some data from shard 1 & shard 2 respectively. But there has to be no movement between shard 1 & shard 2 (unlike the case with default consistent hashring algorithm for adding new node where it does larger movements). This minimizes data transfers and and fewer rebuild indices. Weaviate expects that customers should find this better than not having resharding (like in Qdrant, which has fixed shard count while building the collection). This also anticipate a better index that’s faster to build, making resharding more feasible and could lead to more optimizations.
+  - Architecture is inspired by Cassandra.
+- They have eventual consistency and don’t allow modifying that for now. However similar to Cassandra (and Qdrant), they can extend existing system to have read/write consistency with request/collection config params.
+- two usecase:
+  - import in bulk every X days: 1 shard per node at import time, the replicate shards so each node can serve everything -> high throughtput at Query tim
+
+    e
+  - write & read simultaneous: replicate from the start -> highly available at any time.
+- They are building dynamic scaling where cluster can be increased or decreased at runtime and Weaviate will handle things like rebalancing, resharding / data transfer with minimal movement, re-indexing, etc.
+- They seems to have an experimental feature to build the HNSW index in a shard manner by multiple nodes having the same replica. That’s very interesting and missing from Qdrant.
+- Imo bad UI and horrible API design. They used to call collections as Classes which was super confusing. They realized it over time and copied SDKs from Qdrant. Collection name must start with a capital letter. Default user can’t even create a collection. What was the point of it. Too much auth and agentic logic baked into DB. Bad versioning with `rc` versions.
+
+### Milvus
+
+- Written in Golang
+- v1.0: Single node architecture
+- Around 2022, they shifted to v2.0: With highly modular architecture that I’ve described next
+- Highly modular architecture that can be run independently on different machines (It’s more than R/W segregation):
+  - Proxy + Data Node -> Both are IO intensive
+  - QueryNode (CPU + RAM intensive) + IndexNode (Super CPU intensive)
+  - Strong focus on streaming architecture: Kafka/Pulsar integration
+  - Also has support for Apache Spark for large scale bulk insertions because when models are updated, data needs to be re-indexed. Spark will write data in parquet like format and milvus Index/Query nodes will pick up that. Also used for vector ETL -> unsolved problem in ML of how do you drift it reliably or inside the engine?
+- Shard: Growing (flat index for data freshness) + Sealed segment (indexing for efficiency)
+- Larger growing segments lead to issues in distributed scheduling (one node becomes too heavy), slower transfers (looks like they have segment level transfers instead of shard like Qdrant), and hence slower recovery. Also slower to query because there’s no index (its brute force linear scan and is 500X slower than HNSW)
+- 3 rounds of reduction/aggregation for a search query: On each QueryNode, each segments return topK results and QueryNode returns fewer points from that. Results from QueryNode are passed to Shard leader which does another round of reduce/aggregation. And then last reduce/aggregation happens at Proxy layer.
+- They thought of using small segments because large segments create problems described above.
+- And they did experiement:
+  - 768 dims: 0.25M, 0.5M, 0.75M, 1M; Search QPS = 9.7k, 10k, 10.9k, 9.9K (very little difference => reason is that with HNSW no matter how big your graph is, search time remains similar because of HNSW -> Isn’t this against what I found when benchmarking Qdrant?. It will just take longer to index your data with HNSW)
+  - Comparing 1 large segment vs multiple small segments with: when you keep constant amount of data and vary number of segments, each additional segment makes search slower.
+    - Each segment needs its own metadata. having too many segments increases pressure on metadata storage.
+  - Note: Small growing segment eventually would eventually lead to small sealed segment.
+  - Solution: Insert data in small unindexed segment, and then merge them async with indexing so you build large indexed segments
+    - Not possible to build small segment with index and merge them together? -> Because no one knows how to do this with HNSW
+    - DataNode merges small segments into bigger ones and requests IndexNode to construct new indices for them. QueryNode then loads these big indices to replace that initial small ones.
+- But what if: IndexNode is busy or fast inserts or CPU resources are limited.
+  - Instead of BruteForce what if we use IVF/SCANN in growing segment. indexing time for SCANN is 1/5 of HNSW but QPS is ~1/2 (~2x latency) of HNSW. It’s also 200X faster search than brute force search.
+  - Uses initial part of the data in growing segment as sample for clustering to use with IVF/SCANN
+  - But will this indexing be fast enough? The experimented and compared insertion/index speed with growing size of segment with 3 different approaches: no index, SCANN, IVF:
+    - There’s a small bump around start of clustering algorithm. Insert speed is not affected signficantly. No insert speed degradations but 200X faster search. Hence good to go!
+- Milvus also has the concept of immutable indices.
+  - Knowing data distribution before indexing allows you to suitable strategies like compression, pruning, etc.
+  - Even with IVF/SCANN indices on sealed segments, rebuilding them can enhance sampling quality.
+- Overall they have described how they solved: Freshness (growing segments), Efficiency (HNSW/), Growing search, and segment size (experiments proved small segments on start but merge them async)
+- ML and Vector DBs are converging. But there are new problems to solve: Cross-modal, Multi-modal, Compression, High dims, sparse vectors, multi modal fusion.
+- Mathematical similarity (L1/L2 distance) != Semantic similarity
+  - Cosine distance is might not be enough to represent the similarity.
+  - It should be possible to add user defined metrics for distance.
+  - Using model as index? -> I think he is referring to cross encoders or ColBeRT.
+- As dims grow with lots of data creates problems because of sparseness -> I don’t understand it fully but Duog has written about it and it’s basically curse of dimensionality
+- Can we go more analysis inside the DB for understanding user queries and making them more understood inside the DB? Query tuning but within the DB.
+
+## ### Elasticsearch:
+
+## ### Solr
+
+### LSM tree:
+
+- In any LSM tree based store: You start in-memory, you make sure that the newly upserts are sorted, once it’s too big. Write to disk. Problem is that you can lose data: So we use a WAL (aka commit log) where you only append to the end (no need to sort your item this time)
+  - Weaviate’s custom LSM tree logic: It creates a new LSM segment from memory every X seconds. Even if nothing happens, in the next turn it creates a new segment. With this even if you have written lot of data already, you’re always starting to write a new file from scratch which is fast because you don’t need to be bothered about sorting the data now. This helps Weaviate achieve constant write speed (B+ tree didn’t give them that constant write speed). One clear downside is that read speed will be affected a bit while upserts are ongoing. –> Although, this is weird, you’ll create too many LSM segment files and will have to merge them? The LSM segments are already sorted so it’s not super painful to merge them normally. But imagine having 1000s of such tiny LSM segment files. Quite some overhead.
+  -
+
+### HNSW:
+
+- HNSW Vector index **kind of** has complexity: O(logN). So 1 segment _ log10(1000) = 3, 100 _ log(10) = 100. Hence it’s better to have few and larger indices for least time taken.
+- HNSW:
+  - Query speed: It’s faster when you have fewer segments.
+  - Cost of merging: Combining HNSW indices effectively is an unsolved problem. If you try to merge by naive logic, the combined graph will be more expensive than the existing two indices.
+- LSM:
+  - Query speed: Lots of segments are fine thanks to Bloom filters which makes it cheap to say if something exists or not. We just read that part from the disk. Worse case it would be wrong and data won’t exist there. But it won’t miss if something exists.
+  - Cost of merging: It’s relatively very cheap to merge those indices since you just need to merge multiple sorted files into a new sorted file (kind of like merge sort algorithm)
+- Weaviate hence avoids multiple segments for HNSW index while accepting segmentation for LSM side and merge them in async manner.
+- Weaviate doesn’t tie vector index to LSM tree segment and hence both grow according to their own requirements.
+- While Lucene/OpenDistroES, ties vector index to LSM storage and often has multiple vector indices in different LSM segments that are either combined (expensive and no optimal algo exists) or accept that they will be slower (multiple HNSW indices are slower as proved previously).
+- Consistent hash ring basically helps you with moving minimal data when a new shard is added to the cluster. However, the problem is that even with small migrations, it’s costly to rebuild the HNSW graph. You’d have to re-build the index in all existing nodes as well as the new one. So it’s expensive to do resharding like that.
+
+### References:
+
+- https://www.youtube.com/watch?v=4sLJapXEPd4 -> Weaviate CTO explained HNSW really well. Kudos!
+- https://www.youtube.com/watch?v=6hdEJdHWXRE -> Weavaite architecture
+- 1536d -> 6KB per embedding -> 1M embeddings = 1e6 embeddings => 6GB (nice trick by weaviate CTO, you can just replace KB with GB)
+- https://www.youtube.com/watch?v=kIj-KKnC-PA&t=4s
+- https://milvus.io/docs/four_layers.mdoesn't respond to the write, it's marked Dead, and is later recovered based on snapshots or clocks.
+- Strong use of MMap and RocksDB. Have built more optimized replacements than RocksDB over time like `gridstore`
+- Collection -> Shard -> Segment -> HNSW Index, ID tracker, vector storage, payload storage.
+- Uses consistent hashing ring for sharding. Nature of HNSW index is such that all shards need to be queried (there's no shard filtering in auto sharding mode). However Qdrant provides custom sharding keys which can be used and Qdrant can only query those nodes.
+- Segment is the fundamental architectural piece. It has ID tracker, payload storage, vector storage, index, etc.
+  - Upserts are written to shard WAL as well as segment vector storage. If node crashes, we recover from shard level WAL log. -> I think RocksDB might also have a WAL file which is on a segment level lol.
+  - Heavy focus on using immutable data structures. This unlocks more optimizations over time -> WHICH OPTIMIZATIONS EXACTLY benefit the most?
+  - Deleting a point only marks it as deleted in immutable segments (to avoid breaking existing HNSW graph connectivity) and inserts it in a mutable segment.
+  - Qdrant also merges segments over time if there are many small ones.
+- Allows you to independently configure where you want to keep your index, raw vectors, quantized vectors, and payload - in RAM or Disk.
+- Filterable HNSW index for high precision and low latency search. However, it's costly to index.
+  - Note that entry point is always different so results might vary a little.
+  - HNSW needs useful data distribution (example: have multiple clusters), if you generate random vectors, it might perform poorly (since all distances would be roughly the same).
+  - NSW (not a typo) is a good enough algorithm for doing nearest neighbour search. But adding hierarchy to that is great for efficiency since you build multiple NSW graphs and jump larger distances first. The upper NSW layers are built with fewer points and hence every connection on those levels is moving larger distances. Then you enter lower and lower levels to get more granular. This is what is called HNSW.
+- How does it search across multiple segments with different HNSW indices each?
+- Great focus on things beyond nearest neighbour search: discovery, recommendations, anomaly detection.
+- Has support for Sparse vectors based on inverted indices with some optimizations.
+- Eventually consistent, no transactions.
+- Great API design and focus on semantic versioning and strongly adheres to backward compatibility.
+- Strong cloud offering with multiple regions and advanced features like re-sharding, auto-rebalancing, auto-replication, etc.
+
+### Weaviates
+
+- Written in Golang
+- GraphQL API
+- Collection -> Shards -> HSNW Index + Object Store for k/v pairs (LSM) + Inverted Index (LSM)
+- Uses consistent hashing ring like Qdrant. Queries all shards by default.
+- Need to confirm but weaviate does online indexing because it doesn't believe in immutability like Qdrant. It has an HNSW index for each shard and immediately inserts data to that shard and creates new edges for the new point.
+  - When something is deleted, it's marked as deleted in HNSW index as well and it maintains a list of deleted points that's used before returning results for consistency for the user.
+  - If there are enough deleted points - say 30% edges have dead points, they re-build the whole graph.
+  - They have explored the concept of healing the graph by replacing existing edges with the points to be deleted. This is however expensive and only good if you have few deletes. For more deletes, it's better to just rebuild the whole graph.
+- Many companies have use cases where there's insane volume of data but very little RPS requirements - (example is analytical use cases and Turbopuffer customers. CTO also mentioned Analytical vector search is an unexplored domain, Andrey said the same to me). Weaviate CTO mentioned they want to segregate storage and compute so customers don't pay for idle infrastructure. It's tough because of massive indices in weaviate (I don't understand why this makes the segregation difficult?).
+- Started with etcd/bbolt as key-value store (written in Go and uses B+ tree which is great for disk storage, also supports txns but weaviate didn't need so far) and migrated to custom LSM tree.
+- Weaviate virtual shards are inspired from that of Cassandra. One difference is that the HNSW index spans multiple data points while with Cassandra it's not the case (huh wtf?). The goal for weaviate is to have fewer shards so they can build large indices. Virtual shards are very small and spread randomly over the ring. This spreads the data uniformly in the actual shards.
+  - If a new shard is introduced, they split existing ranges into half and give that to the new shard. For example, if shard 1 and 2 existed and we added shard 3, shard 3 will take some data from shard 1 & shard 2 respectively. But there has to be no movement between shard 1 & shard 2 (unlike the case with default consistent hashring algorithm for adding new node where it does larger movements). This minimizes data transfers and and fewer rebuild indices. Weaviate expects that customers should find this better than not having resharding (like in Qdrant, which has fixed shard count while building the collection). This also anticipate a better index that's faster to build, making resharding more feasible and could lead to more optimizations.
+  - Architecture is inspired by Cassandra.
+- They have eventual consistency and don't allow modifying that for now. However similar to Cassandra (and Qdrant), they can extend existing system to have read/write consistency with request/collection config params.
+- two usecase:
+  - import in bulk every X days: 1 shard per node at import time, the replicate shards so each node can serve everything -> high throughtput at Query tim
+
+    e
+  - write & read simultaneous: replicate from the start -> highly available at any time.
+- They are building dynamic scaling where cluster can be increased or decreased at runtime and Weaviate will handle things like rebalancing, resharding / data transfer with minimal movement, re-indexing, etc.
+- They seems to have an experimental feature to build the HNSW index in a shard manner by multiple nodes having the same replica. That's very interesting and missing from Qdrant.
+- Imo bad UI and horrible API design. They used to call collections as Classes which was super confusing. They realized it over time and copied SDKs from Qdrant. Collection name must start with a capital letter. Default user can't even create a collection. What was the point of it. Too much auth and agentic logic baked into DB. Bad versioning with `-rc` versions.
+
+### Milvus
+
+- Written in Golang
+- v1.0: Single node architecture
+- Around 2022, they shifted to v2.0: With highly modular architecture that I've described next
+- Highly modular architecture that can be run independently on different machines (It's more than R/W segregation):
+  - Proxy + Data Node -> Both are IO intensive
+  - QueryNode (CPU + RAM intensive) + IndexNode (Super CPU intensive)
+  - Strong focus on streaming architecture: Kafka/Pulsar integration
+  - Also has support for Apache Spark for large scale bulk insertions because when models are updated, data needs to be re-indexed. Spark will write data in parquet like format and milvus Index/Query nodes will pick up that. Also used for vector ETL -> unsolved problem in ML of how do you drift it reliably or inside the engine?
+- Shard: Growing (flat index for data freshness) + Sealed segment (indexing for efficiency)
+- Larger growing segments lead to issues in distributed scheduling (one node becomes too heavy), slower transfers (looks like they have segment level transfers instead of shard like Qdrant), and hence slower recovery. Also slower to query because there's no index (its brute force linear scan and is 500X slower than HNSW)
+- 3 rounds of reduction/aggregation for a search query: On each QueryNode, each segments return topK results and QueryNode returns fewer points from that. Results from QueryNode are passed to Shard leader which does another round of reduce/aggregation. And then last reduce/aggregation happens at Proxy layer.
+- They thought of using small segments because large segments create problems described above.
+- And they did experiement:
+  - 768 dims: 0.25M, 0.5M, 0.75M, 1M; Search QPS = 9.7k, 10k, 10.9k, 9.9K (very little difference => reason is that with HNSW no matter how big your graph is, search time remains similar because of HNSW -> Isn't this against what I found when benchmarking Qdrant?. It will just take longer to index your data with HNSW)
+  - Comparing 1 large segment vs multiple small segments with: when you keep constant amount of data and vary number of segments, each additional segment makes search slower.
+    - Each segment needs its own metadata. having too many segments increases pressure on metadata storage.
+  - Note: Small growing segment eventually would eventually lead to small sealed segment.
+  - Solution: Insert data in small unindexed segment, and then merge them async with indexing so you build large indexed segments
+    - Not possible to build small segment with index and merge them together? -> Because no one knows how to do this with HNSW
+    - DataNode merges small segments into bigger ones and requests IndexNode to construct new indices for them. QueryNode then loads these big indices to replace that initial small ones.
+- But what if: IndexNode is busy or fast inserts or CPU resources are limited.
+  - Instead of BruteForce what if we use IVF/SCANN in growing segment. indexing time for SCANN is 1/5 of HNSW but QPS is ~1/2 (~2x latency) of HNSW. It's also 200X faster search than brute force search.
+  - Uses initial part of the data in growing segment as sample for clustering to use with IVF/SCANN
+  - But will this indexing be fast enough? The experimented and compared insertion/index speed with growing size of segment with 3 different approaches: no index, SCANN, IVF:
+    - There's a small bump around start of clustering algorithm. Insert speed is not affected signficantly. No insert speed degradations but 200X faster search. Hence good to go!
+- Milvus also has the concept of immutable indices.
+  - Knowing data distribution before indexing allows you to suitable strategies like compression, pruning, etc.
+  - Even with IVF/SCANN indices on sealed segments, rebuilding them can enhance sampling quality.
+- Overall they have described how they solved: Freshness (growing segments), Efficiency (HNSW/), Growing search, and segment size (experiments proved small segments on start but merge them async)
+- ML and Vector DBs are converging. But there are new problems to solve: Cross-modal, Multi-modal, Compression, High dims, sparse vectors, multi modal fusion.
+- Mathematical similarity (L1/L2 distance) != Semantic similarity
+  - Cosine distance is might not be enough to represent the similarity.
+  - It should be possible to add user defined metrics for distance.
+  - Using model as index? -> I think he is referring to cross encoders or ColBeRT.
+- As dims grow with lots of data creates problems because of sparseness -> I don't understand it fully but Duog has written about it and it's basically curse of dimensionality
+- Can we go more analysis inside the DB for understanding user queries and making them more understood inside the DB? Query tuning but within the DB.
+
+### Elasticsearch:
+
+-
+
+### Solr
+
+-
+
+#### LSM tree:
+
+- In any LSM tree based store: You start in-memory, you make sure that the newly upserts are sorted, once it's too big. Write to disk. Problem is that you can lose data: So we use a WAL (aka commit log) where you only append to the end (no need to sort your item this time)
+  - Weaviate's custom LSM tree logic: It creates a new LSM segment from memory every X seconds. Even if nothing happens, in the next turn it creates a new segment. With this even if you have written lot of data already, you're always starting to write a new file from scratch which is fast because you don't need to be bothered about sorting the data now. This helps Weaviate achieve constant write speed (B+ tree didn't give them that constant write speed). One clear downside is that read speed will be affected a bit while upserts are ongoing. --> Although, this is weird, you'll create too many LSM segment files and will have to merge them? The LSM segments are already sorted so it's not super painful to merge them normally. But imagine having 1000s of such tiny LSM segment files. Quite some overhead.
+  -
+
+### HNSW:
+
+- HNSW Vector index **kind of** has complexity: O(logN). So 1 segment _ log10(1000) = 3, 100 _ log(10) = 100. Hence it's better to have few and larger indices for least time taken.
+- HNSW:
+  - Query speed: It's faster when you have fewer segments.
+  - Cost of merging: Combining HNSW indices effectively is an unsolved problem. If you try to merge by naive logic, the combined graph will be more expensive than the existing two indices.
+- LSM:
+  - Query speed: Lots of segments are fine thanks to Bloom filters which makes it cheap to say if something exists or not. We just read that part from the disk. Worse case it would be wrong and data won't exist there. But it won't miss if something exists.
+  - Cost of merging: It's relatively very cheap to merge those indices since you just need to merge multiple sorted files into a new sorted file (kind of like merge sort algorithm)
+- Weaviate hence avoids multiple segments for HNSW index while accepting segmentation for LSM side and merge them in async manner.
+- Weaviate doesn't tie vector index to LSM tree segment and hence both grow according to their own requirements.
+- While Lucene/OpenDistroES, ties vector index to LSM storage and often has multiple vector indices in different LSM segments that are either combined (expensive and no optimal algo exists) or accept that they will be slower (multiple HNSW indices are slower as proved previously).
+- Consistent hash ring basically helps you with moving minimal data when a new shard is added to the cluster. However, the problem is that even with small migrations, it's costly to rebuild the HNSW graph. You'd have to re-build the index in all existing nodes as well as the new one. So it's expensive to do resharding like that.
+
+### References:
+
+- https://www.youtube.com/watch?v=4sLJapXEPd4 -> Weaviate CTO explained HNSW really well. Kudos!
+- https://www.youtube.com/watch?v=6hdEJdHWXRE -> Weavaite architecture
+- 1536d -> 6KB per embedding -> 1M embeddings = 1e6 embeddings => 6GB (nice trick by weaviate CTO, you can just replace KB with GB)
+- https://www.youtube.com/watch?v=kIj-KKnC-PA&t=4s
+- https://milvus.io/docs/four_layers.md
