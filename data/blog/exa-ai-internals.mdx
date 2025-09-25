@@ -1,0 +1,44 @@
+---
+title: 'Search Internals: Exa AI'
+date: '2025-09-16'
+lastmod: '2025-09-16'
+tags: ['search', 'internals']
+draft: true
+summary: ''
+authors: ['default']
+---
+
+There are multiple parts of Exa AI architecture that they have described in their blogs. I've compiled them together and added some of my own notes and assumptions.
+
+### Vector search:
+
+- Trained custom Matryoshka embeddings with 4096 dims but only used 256 dims in memory (probably used in index while the original ones are used for re-ranking top K)
+- Used binary quantization
+- Precomputed possible outputs of BQ computations in CPU registers (instead of RAM) for similarity computation.
+- Good use to re-ranking to compensate for all this approximation.
+
+### Text search:
+
+- **BM25 index** costed them 1.8TB RAM (1.8 \* 10^12 bytes) for 1B (10^9) billion vectors initially.
+  - After this post it dropped to 1.2TB (-50%) RAM per 1B vectors
+  - As per [napkin maths](https://github.com/sirupsen/napkin-math), this means 2$ / month / gb \* 1200 GB = 2400 $ / month
+  - Assuming 3B documents (they don't scrape the whole web clearly), monthly bill for just the BM25 index part would be 2400 \* 3 = 7.2k / month => ~30K USD / year
+  - If you compare to vector search with quantization, each vector would take 4096 _ 4 bytes = 16KB by default. This means 1B vectors would take 16 _ 10^3 _ 10^9 bytes = 16 _ 10^12 = 16 TB
+    - By truncating matryoshka it becomes, 16 / (4096 / 256) TB = 16 / 16 TB = 1 TB
+    - With binary quantization, 4 bytes (32 bits) becomes 1 bit. So 1 TB / 32 = 31.25 GB per 1B vectors.
+    - This is even less than what BM25 costed them. I think they can afford to use multiple embeddings.
+
+### Filtering:
+
+- For each filterable value (category, date, etc), they create inverted indexes. These are hashmaps from the filterable value to a list of document IDs that match the filter. If the user specifies a filter, then we only run our search algorithm over the documents that match the filter in the inverted index.
+
+### Evals:
+
+-
+
+References:
+
+- https://exa.ai/blog/building-web-scale-vector-db
+- https://exa.ai/blog/bm25-optimization ->
+- https://exa.ai/blog/scaling-our-highlights-server -> TODO
+- https://exa.ai/blog/evals-at-exa -> TODO
