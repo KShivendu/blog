@@ -2,47 +2,74 @@
 title: 'Search Internals: Exa AI'
 date: '2025-09-16'
 lastmod: '2025-09-16'
-tags: ['search', 'internals']
+tags: ['search', 'internals', 'infra']
 draft: true
 summary: ''
 authors: ['default']
 ---
 
-There are multiple parts of Exa AI architecture that they have described in their blogs. I've compiled them together and added some of my own notes and lots of assumptions for some napkin maths as a fun exercise.
+Exa is a cool search engine company. They recently raised 85M\$ for Series B and have attracted a lot of competition from bigger players because of their fast growth. There are multiple parts of Exa AI architecture that they have described in their blogs. I've compiled them together and added some of my own notes and lots of assumptions for some napkin maths as a fun exercise. Please take my estimates with a grain of salt.
 
 ### Text search:
 
-- **BM25 index** costed them 1.8TB RAM (1.8 \* 10^12 bytes) for 1B (10^9) billion docs initially.
-  - After [this post](https://exa.ai/blog/bm25-optimization) it dropped to 1.2TB (-50%) RAM per 1B docs.
-  - As per [napkin maths](https://github.com/sirupsen/napkin-math), this means 2$ / month / GB \* 1200 GB = 2400 $ / month
-  - I'm gonna assume they have 10B documents, because they clearly don't scrape the whole web while [Google holds 400B+ pages](https://zyppy.com/seo/google-index-size/), [Fineweb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) has 26B docs.
-  - With 10B docs, monthly bill for just the BM25 index part (not accounting for actual documents) would be $2400 \* 10 = 24k / month => ~300K USD / year
+- BM25 index (i.e. postings lists) costed them 1.8TB RAM (1.8 \* 10^12 bytes) for 1B (10^9) billion docs initially.
+  - After optimizations in [this post](https://exa.ai/blog/bm25-optimization) it dropped to 1.2TB (-50%) RAM per 1B docs.
+  - Assuming it's all kept in memory and relying on [napkin maths](https://github.com/sirupsen/napkin-math), this means 2 \$ / month / GB \* 1200 GB = 2400 \$ / month
+  - There must be version of it on disk as well, so 1200 GB \* 0.35 \$ = 420 \$ / month
+  - So total lexical search cost might be around 3000 \$ / month for 1B docs (assuming more things like stopwords and extra info required to run the search)
 
 ### Vector search:
 
-- Trained custom Matryoshka embeddings with 4096 dims but only used 256 dims in memory (i.e. MRL truncation). I'm assuming it might be a fine-tuned version of https://huggingface.co/Qwen/Qwen3-Embedding-8B which fits the description well.
-- Used binary quantization (BQ)
+- Trained custom [Matryoshka embeddings](https://huggingface.co/blog/matryoshka) with 4096 dims but only used 256 dims in memory (i.e. MRL truncation).
+- I think they might be having a fine-tuned version of [Qwen3-Embedding-8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B) which fits the description well.
+- [Qwen3-Embedding-8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B) has a massive context length of 32K tokens. As per this quick [research](https://www.perplexity.ai/search/average-words-per-page-on-the-qjaJmyDVQ823yG.lh.Ba3g#0), most internet pages and even research papers would fit in this context length. So chunking isn't required. 1 document = 1 vector.
+- Used [binary quantization](https://qdrant.tech/articles/binary-quantization/) (BQ)
 - Precomputed possible outputs of BQ computations in CPU registers (instead of RAM) for similarity computation. Very cool trick!
 - Re-ranking with original vectors to compensate for all this approximation.
-- Each uncompressed vector would take 4096 dims _ 4 bytes = 16KB by default. This means 1B vectors would take 16 _ 10^3 bytes _ 10^9 = 16 _ 10^12 = 16 TB of disk storage for 1B original vectors.
+- Each uncompressed vector would take 4096 dims _ 4 bytes (assuming fp32) = 16KB by default. This means 1B vectors would take 16 _ 10^3 bytes _ 10^9 = 16 _ 10^12 = 16 TB of disk storage for 1B original vectors.
   - By truncating matryoshka it becomes, 16 / (4096 / 256) TB = 16 / 16 TB = 1 TB for 1B vectors.
   - With binary quantization, 4 bytes (32 bits) becomes 1 bit. So 1 TB / 32 = ~32 GB per 1B vectors.
-  - With BQ + MRL truncation and assuming their vector index is 1.25x, 32*1.25 = 40GB per 1B vectors. So overall, 40GB * 2$ / month / GB = 80$ / month (Huh, something is wrong)
-  - This is much less than what BM25 costed them.
-  - https://huggingface.co/Qwen/Qwen3-Embedding-8B has massive context length of 32K tokens which is huge. As per this quick [research](https://www.perplexity.ai/search/average-words-per-page-on-the-qjaJmyDVQ823yG.lh.Ba3g#0), most internet pages and even research papers would fit in this context length. So chunking isn't required. 1 document = 1 vector.
-  - I think they build multiple vector indices. For example they might be using,
-    - MRL truncation + re-ranking with original vectors for their "neural search"
-      - Storage cost: 1TB \* $0.35/GB	for [regional SSD](https://github.com/sirupsen/napkin-math) = 350$ / month per 1B => 42k USD / year for 10B docs.
-      - Memory Cost: 1024 GB \* 2$/GB ~= 2000$ / month / 1B vectors => 240K USD / year for 10B docs
-    - BQ + MRL truncation + re-ranking with original vectors for their "fast search" (32x less mem usage & slightly faster)
-      - Storage requirements: 32GB FOR 1B vectors
-      - Memory Cost: 240K / 32 = 7.5K USD / year for 10B docs (yeah, BQ cost savings are insane)
+  - I think they build multiple vector indices. Their vector search might be having:
+    - Original vectors:
+      - If all kept on disk: 16_000 \* 0.35 \$ = 5600 \$ / month for 1B docs
+      - If all kept in memory: 16_000 \* 2 \$ = 32000 \$ / month for 1B docs
+      - The might be caching some of it so actual RAM usage and cost would be in-between. I'd expect something like 10k \$ / month for 1B docs
+    - Vector index with MRL truncation + re-ranking with original vectors for their "neural search"
+      - Assuming the vector index takes 0.5x of vectors to be queried, 0.5 \* 1 TB = 500 GB for 1B vectors.
+      - Index storage cost: 500GB \* \$ 0.35/GB [for regional SSD](https://github.com/sirupsen/napkin-math) = 175 \$ / month per 1B docs
+      - All this must be kept in RAM for lowest latency, so it would cost them 500 GB \* 2 \$ / GB / month = 1000 \$ / month for 1B docs
+    - Vector index with BQ + MRL truncation + re-ranking with original vectors for their "fast search" (todo: rethink if there's a better combination)
+      - Index Storage cost: 175 \$ / 32 = 5.5 \$ / month (damn, BQ cost savings are insane. this is kinda funny)
+      - RAM Cost: 1000 / 32 = 32 \$ / month
+  - Overall, vector search cost for them is like 10k + 1175 + 37.5 = 11.2k \$ / month for 1B vectors. Note how this is ~4x of lexical search and most of it comes from just storing the original vectors for re-ranking. It would be interesting to see what happens if they get rid of original vectors and replace them with just cross encoders.
 
 ## Metadata storage:
 
-- Each original vector is 16KB, but we also need to store metadata like title, url, publishedDate, author, id, image, favicon, text, summary, etc. I'm assuming it's gonna take another 4KB. (Why? because their [get content API example](https://docs.exa.ai/reference/get-contents) returns page with size 3KB). So total metadata storage on disk is 16TB / 16 _ 4KB = 4TB for 1B doc metadata. This means 4000 GB _ 0.35$ / GB = 1.4k USD / month for 1B docs => 170k USD / year for 10B docs metadata.
+- Each original vector is 16KB, but they also need to store metadata like title, url, publishedDate, author, id, image, favicon, text, summary, etc. I'm assuming it's gonna take another 4KB for each doc. Why? because their [get content API example](https://docs.exa.ai/reference/get-contents) returns page with size ~3KB.
+- So total metadata storage on disk is 16TB / 16 _ 4KB = 4TB for 1B doc metadata. This means 4000 GB _ 0.35 \$ / GB = 1.4k \$ / month for 1B docs.
+- Keeping metadata in RAM makes sense and would take, 4000 GB \* 2 \$ / GB = 8k \$ / month for 1B docs.
 
 ### Content storage:
+
+- [Fineweb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) has 26B docs with 108 TB. 1B docs => 4.15TB
+- [Wikipedia](https://www.perplexity.ai/search/number-of-pages-and-size-of-wi-Y8GkQm8hQlKfgm8YcAJxAA#0) has 64M docs with 156GB => 1B docs in 2.4TB (todo: cross check again)
+- [English Wikipedia](https://en.wikipedia.org/wiki/Wikipedia:Statistics#Articles) has 7M docs with 58GB => 1B docs in 8TB (text heavy)
+- So let's assume exa has total of 10B docs and 1B takes 5TB on avg. So total is 50TB of s3 storage
+- S3 cost: 50_000 \* 0.02 \$ = 1000 \$ / month
+- Disk cost: 50_000 \* 0.08 \$ (Ephemeral SSD) = 4k \$ / month
+- Total is 5k \$ / month for 1B docs
+
+## Overall costs:
+
+| Component              | Cost for 1B docs / month | Cost for 10B docs / year |
+| ---------------------- | ------------------------ | ------------------------ |
+| Content storage        | 5k USD                   | 600K USD                 |
+| Metadata storage       | 8k USD                   | 960K USD                 |
+| Vector search storage  | 12k USD                  | 1.44M USD                |
+| Lexical search storage | 3K USD                   | 360K USD                 |
+| TOTAL                  | 28k USD                  | 3.36M USD                |
+
+Damn! The cost of running all this is easily 5M \$ and is probably much higher since I haven't even considered CPU/GPU cost and rest of the infra. Exa charges 5\$ / 1000 request, to make 5M \$ they need to serve 5M / 5 \* 1000 = 1B requests (for reference, Google handles 10B requests per day). So per day Exa needs to handle (1B/365) = 2.7 requests per day to break even which can be handled with 100 peak RPS (11 RPS = 1M request / day, 33 RPS = 3M request / day. Making 3x for peak load)
 
 ## Extra features:
 
@@ -58,16 +85,6 @@ There are multiple parts of Exa AI architecture that they have described in thei
 
 -
 
-## Overall costs:
-
-Component | Storage type | Cost per GB | Cost for 1B docs | Cost for 10B docs |
-Content storage | S3 | x | y | z |
-Vector storage | Disk | x | y | z |
-Metadata storage | Disk | x | y | z |
-Posting lists index for BM25 | RAM | x | y | z |
-Vector index for "neural" search | RAM | x | y | z |
-Vector index for "fast" search | RAM | x | y | z |
-
 In search you have to pick two between cost, quality, and speed. Exa.ai seems to optimize for quality & speed which is great for the use cases they want to serve! They also offer Websets that go deeper into the web and use LLMs to filter out documents, it optimizes mainly for quality because speed and cost and expected to to be high.
 
 References:
@@ -76,3 +93,4 @@ References:
 - https://exa.ai/blog/bm25-optimization ->
 - https://exa.ai/blog/scaling-our-highlights-server -> TODO
 - https://exa.ai/blog/evals-at-exa -> TODO
+- https://www.perplexity.ai/search/what-s-the-cost-of-running-per-9IfuBvj2RnCPwwoTlMGyoA#0
