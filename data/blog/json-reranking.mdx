@@ -38,7 +38,7 @@ To address the cost issue, they tried creating embeddings for new items and comp
 
 ## Understanding the Limitations of Vector Search
 
-Vector search compares two points (a query and a document) using cosine distance between embeddings. While fast, it doesn't capture deeper token interactions because most embedding models average out individual token embeddings in the last layer.
+Vector search compares two points (a query and a document) using cosine distance between embeddings. While fast, it doesn't capture deeper token interactions because most embedding models average out individual token embeddings in the last layer (pooling).
 
 ## Introducing Cross Encoder Models
 
@@ -52,7 +52,7 @@ However, this still didn't solve the problem as the scores remained close:
 ```py
 0.9697281305754024 # color changed
 0.9879462204837635 # sale 20% OFF
-0.9957187454592983 # I jumbled up the words everywhere
+0.9957187454592983 # I reordered the words while keeping the meaning same.
 ```
 
 ## The Breakthrough: JSON Embeddings
@@ -62,7 +62,7 @@ Realizing that the embeddings might not know what to compare due to noise, I dec
 ```py
 0.8413048148640399 # Color changed. So huge drop
 0.9568766292846294 # 20% sale. Not much diff
-0.9764007056485348 # Reorder. Very little diff
+0.9764007056485348 # Reorder words. Very little diff
 ```
 
 The score dropped heavily (`<.85`) when any attribute was affected, indicating a successful differentiation.
