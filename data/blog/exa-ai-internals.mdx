@@ -1,5 +1,5 @@
 ---
-title: 'Search Internals: Exa AI'
+title: 'Search Internals: Exa AI napkin maths'
 date: '2025-09-16'
 lastmod: '2025-09-16'
 tags: ['search', 'internals', 'infra']
@@ -8,7 +8,7 @@ summary: ''
 authors: ['default']
 ---
 
-Exa is a cool search engine company. They recently raised 85M\$ for Series B and have attracted a lot of competition from bigger players because of their fast growth. There are multiple parts of Exa AI architecture that they have described in their blogs. I've compiled them together and added some of my own notes and lots of assumptions for some napkin maths as a fun exercise. Please take my estimates with a grain of salt.
+[Exa](https://exa.ai/) is a cool search engine company. They recently [raised 85M\$ for Series B](https://exa.ai/blog/announcing-series-b) and attracted competition from bigger players because of their fast growth. There are multiple parts of Exa AI architecture that they have described in [their blogs](https://exa.ai/blog). I've compiled them together and added some of my own notes and lots of assumptions for infra cost [napkin maths](https://www.youtube.com/watch?v=IxkSlnrRFqc) as a fun exercise for myself. Please take my estimates with a grain of salt and let me know if I made any wrong/suboptimal assumptions :D
 
 ### Text search:
 
@@ -31,8 +31,8 @@ Exa is a cool search engine company. They recently raised 85M\$ for Series B and
   - With binary quantization, 4 bytes (32 bits) becomes 1 bit. So 1 TB / 32 = ~32 GB per 1B vectors.
   - I think they build multiple vector indices. Their vector search might be having:
     - Original vectors:
-      - If all kept on disk: 16_000 \* 0.35 \$ = 5600 \$ / month for 1B docs
-      - If all kept in memory: 16_000 \* 2 \$ = 32000 \$ / month for 1B docs
+      - If all kept on disk: 16 \* 1e3 \* 0.35 \$ = 5600 \$ / month for 1B docs
+      - If all kept in memory: 16 \* 1e3 \* 2 \$ = 32000 \$ / month for 1B docs
       - The might be caching some of it so actual RAM usage and cost would be in-between. I'd expect something like 10k \$ / month for 1B docs
     - Vector index with MRL truncation + re-ranking with original vectors for their "neural search"
       - Assuming the vector index takes 0.5x of vectors to be queried, 0.5 \* 1 TB = 500 GB for 1B vectors.
@@ -55,8 +55,8 @@ Exa is a cool search engine company. They recently raised 85M\$ for Series B and
 - [Wikipedia](https://www.perplexity.ai/search/number-of-pages-and-size-of-wi-Y8GkQm8hQlKfgm8YcAJxAA#0) has 64M docs with 156GB => 1B docs in 2.4TB (todo: cross check again)
 - [English Wikipedia](https://en.wikipedia.org/wiki/Wikipedia:Statistics#Articles) has 7M docs with 58GB => 1B docs in 8TB (text heavy)
 - So let's assume exa has total of 10B docs and 1B takes 5TB on avg. So total is 50TB of s3 storage
-- S3 cost: 50_000 \* 0.02 \$ = 1000 \$ / month
-- Disk cost: 50_000 \* 0.08 \$ (Ephemeral SSD) = 4k \$ / month
+- S3 cost: 50 \* 1e3 \* 0.02 \$ = 1000 \$ / month
+- Disk cost: 50 \* 1e3 \* 0.08 \$ (Ephemeral SSD) = 4k \$ / month
 - Total is 5k \$ / month for 1B docs
 
 ## Overall costs:
@@ -69,21 +69,9 @@ Exa is a cool search engine company. They recently raised 85M\$ for Series B and
 | Lexical search storage | 3K USD                   | 360K USD                 |
 | TOTAL                  | 28k USD                  | 3.36M USD                |
 
-Damn! The cost of running all this is easily 5M \$ and is probably much higher since I haven't even considered CPU/GPU cost and rest of the infra. Exa charges 5\$ / 1000 request, to make 5M \$ they need to serve 5M / 5 \* 1000 = 1B requests (for reference, Google handles 10B requests per day). So per day Exa needs to handle (1B/365) = 2.7 requests per day to break even which can be handled with 100 peak RPS (11 RPS = 1M request / day, 33 RPS = 3M request / day. Making 3x for peak load)
+Damn! The cost of running all this is easily 5M \$ and is probably much higher since I haven't even considered CPU/GPU cost and rest of the infra. Exa charges 5\$ / 1000 request, to make 5M \$ they need to serve 5M / 5 \* 1000 = 1B requests (for reference, Google handles 10B requests per day). So per day Exa needs to handle (1B/365) = 2.7M requests per day to break even in terms of infra cost which can be handled with just 100 peak RPS (11 RPS = 1M request / day, 33 RPS = 3M request / day. Assume 3x for peak load)
 
-## Extra features:
-
-### Highlights:
-
--
-
-### Filtering:
-
-- For each filterable value (category, date, etc), they create inverted indexes. These are hashmaps from the filterable value to a list of document IDs that match the filter. If the user specifies a filter, then they only run their search algorithm over the documents that match the filter in the inverted index.
-
-### Evals:
-
--
+## Conclusion:
 
 In search you have to pick two between cost, quality, and speed. Exa.ai seems to optimize for quality & speed which is great for the use cases they want to serve! They also offer Websets that go deeper into the web and use LLMs to filter out documents, it optimizes mainly for quality because speed and cost and expected to to be high.
 
