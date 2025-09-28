@@ -28,7 +28,7 @@ authors: ['default']
 - Used [binary quantization](https://qdrant.tech/articles/binary-quantization/) (BQ)
 - Precomputed possible outputs of BQ computations in CPU registers (instead of RAM) for similarity computation. Very cool trick!
 - Re-ranking with original vectors to compensate for all this approximation.
-- Each uncompressed vector would take 4096 dims _ 2 bytes (assuming fp16) = 8KB by default. This means 1B vectors would take 8 _ 10^3 bytes _ 10^9 = 8 _ 10^12 = 8 TB of disk storage for 1B original vectors.
+- Each uncompressed vector would take 4096 dims \* 2 bytes (assuming fp16) = 8KB by default. This means 1B vectors would take 8 \* 10^3 bytes \* 10^9 = 8 \* 10^12 = 8 TB of disk storage for 1B original vectors.
   - By truncating matryoshka it becomes, 8 / (4096 / 256) TB = 8 / 16 TB = 512 GB for 1B vectors.
   - With binary quantization, 16 bits (since we assumed fp16) becomes 1 bit. So 512 GB / 16 = 32 GB per 1B vectors (insane 16\*16=256x reduction)
   - They use something that's like [IVF Index](https://youtu.be/chz74Mtd1AA?si=DvvDE3rO9HvVvox7&t=429) (popularly used in FAISS & pgvector). It basically does k-means clustering and during search time, finds the relevant clusters by comparing distance with respective centroids, and only queries few of those clusters.
@@ -39,7 +39,7 @@ authors: ['default']
       - The must be caching it so actual RAM usage and cost would be in-between. I'd expect something like 4k \$ / month for 1B docs consuming 2TB RAM
     - Vector index with MRL truncation + re-ranking with original vectors for their "neural search"
       - Exa uses IVF Index for search, it needs centroids along with original vectors, assuming they have 10B vectors and they have 100K clusters, each having 100K vectors.
-        - Each cluster will have a centroid which require 100K _ 4096 _ 2 bytes = 820GB for 10B vectors (or 82GB for 1B vectors)
+        - Each cluster will have a centroid which require 100K \* 4096 \* 2 bytes = 820GB for 10B vectors (or 82GB for 1B vectors)
         - Each vector ID needs to stored in the IVF Index, 10B \* 8 bytes = 80 GB (assuming that for point id, they'd have uint64 since uint32 only allows 8B)
         - So total size requirements are like 820GB + 80GB = 900 GB for 10B vectors (or 90GB for 1B vectors) which is 90/8000\*100 = 1.2% of the index (nice!)
       - Index disk storage cost: 90 \* \$ 0.35/GB [for regional SSD](https://github.com/sirupsen/napkin-math) = 32 \$ / month per 1B docs
@@ -53,7 +53,7 @@ authors: ['default']
 ## Metadata storage:
 
 - Each original vector is 8KB, but they also need to store metadata like title, url, publishedDate, author, id, image, favicon, text, summary, etc. I'm assuming it's gonna take another 512bytes (0.5KB) for each doc. Why? because their [search API example](https://docs.exa.ai/reference/search) returns page that can be stored in < 300 bytes without compressing but let's ignore that to keep search fast.
-- So total metadata storage on disk is 8TB / 8 _ 0.5KB = 0.5TB for 1B doc metadata. This means 500 GB _ 0.35 \$ / GB = 175k \$ / month for 1B docs.
+- So total metadata storage on disk is 8TB / 8 \* 0.5KB = 0.5TB for 1B doc metadata. This means 500 GB \* 0.35 \$ / GB = 175k \$ / month for 1B docs.
 - Keeping metadata in RAM makes sense and would take, 512 TB \* 2 \$ / GB = 1k \$ / month for 1B docs.
 
 ### Content storage:
