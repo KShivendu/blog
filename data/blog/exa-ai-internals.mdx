@@ -137,11 +137,23 @@ Damn! The cost of running all this is easily 1M \$ since I haven't even consider
 
 Out of this 420ms, we have 3 types of steps:
 
-- Embedding generation
+- Embedding generation: 100ms assuming 32 batch size
 - Vector search + Text + Re-ranking with uncompressed vectors
 - Re-ranking with cross encoder models
 
 let's assume batch size is 32,
+
+100M vectors, 512 bytes/vector (fp16 256), 1TB/memory bandwidth (must have connected multiple devices??)
+
+50 GB to read, 1 TB / sec
+
+1000 / 50 => 20 times / sec. Or each full memory read takes, 50ms
+
+B >= QPS \* full_scan_latency
+
+100 / 20 = 5
+
+Related to https://www.youtube.com/watch?v=jlMAX2Oaht0
 
 . Compute comes at 10 \$ / month
 
