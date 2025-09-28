@@ -52,7 +52,7 @@ authors: ['default']
 
 ## Metadata storage:
 
-- Each original vector is 8KB, but they also need to store metadata like title, url, publishedDate, author, id, image, favicon, text, summary, etc. I'm assuming it's gonna take another 512bytes (0.5KB) for each doc. Why? because their [search API example](https://docs.exa.ai/reference/search) returns page that can be stored in <300 bytes without compressing but let's ignore that to keep search fast.
+- Each original vector is 8KB, but they also need to store metadata like title, url, publishedDate, author, id, image, favicon, text, summary, etc. I'm assuming it's gonna take another 512bytes (0.5KB) for each doc. Why? because their [search API example](https://docs.exa.ai/reference/search) returns page that can be stored in < 300 bytes without compressing but let's ignore that to keep search fast.
 - So total metadata storage on disk is 8TB / 8 _ 0.5KB = 0.5TB for 1B doc metadata. This means 500 GB _ 0.35 \$ / GB = 175k \$ / month for 1B docs.
 - Keeping metadata in RAM makes sense and would take, 512 TB \* 2 \$ / GB = 1k \$ / month for 1B docs.
 
