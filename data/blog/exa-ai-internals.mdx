@@ -3,7 +3,6 @@ title: 'Search Internals: Exa AI napkin maths'
 date: '2025-09-16'
 lastmod: '2025-09-16'
 tags: ['search', 'internals', 'infra']
-# socialBanner: ???
 draft: true
 summary: ''
 images: ['/static/images/blogs/exa.png']
@@ -12,12 +11,12 @@ authors: ['default']
 
 [Exa](https://exa.ai/) is a cool search engine company. They recently [raised 85M\$ for Series B](https://exa.ai/blog/announcing-series-b) and attracted competition from bigger players because of their fast growth. There are multiple parts of Exa AI architecture that they have described in [their blogs](https://exa.ai/blog). I've compiled them together and added some of my own notes and lots of assumptions for infra cost [napkin maths](https://www.youtube.com/watch?v=IxkSlnrRFqc) as a fun exercise for myself. Please take my estimates with a grain of salt and let me know if I made any wrong/suboptimal assumptions :D
 
-### Text search:
+### Lexical search:
 
 - BM25 index (i.e. postings lists) costed them 1.8TB RAM (1.8 \* 10^12 bytes) for 1B (10^9) billion docs initially.
   - After optimizations in [this post](https://exa.ai/blog/bm25-optimization) it dropped to 1.2TB (-50%) RAM per 1B docs.
   - Assuming it's all kept in memory and relying on [napkin maths](https://github.com/sirupsen/napkin-math), this means 2 \$ / month / GB \* 1200 GB = 2400 \$ / month
-  - There must be version of it on disk as well, so 1200 GB \* 0.35 \$ = 420 \$ / month
+  - There must be a version of it on disk as well, so 1200 GB \* 0.35 \$ = 420 \$ / month
   - So total lexical search cost might be around 3000 \$ / month for 1B docs (assuming more things like stopwords and extra info required to run the search)
 
 ### Vector search:
@@ -53,7 +52,7 @@ authors: ['default']
 ## Metadata storage:
 
 - Each original vector is 8KB, but they also need to store metadata like title, url, publishedDate, author, id, image, favicon, text, summary, etc. I'm assuming it's gonna take another 512bytes (0.5KB) for each doc. Why? because their [search API example](https://docs.exa.ai/reference/search) returns page that can be stored in < 300 bytes without compressing but let's ignore that to keep search fast.
-- So total metadata storage on disk is 8TB / 8 \* 0.5KB = 0.5TB for 1B doc metadata. This means 500 GB \* 0.35 \$ / GB = 175k \$ / month for 1B docs.
+- So total metadata storage on disk is 1B docs \* 0.5KB = 0.5TB for 1B doc metadata. This means 500 GB \* 0.35 \$ / GB = 175 \$ / month for 1B docs.
 - Keeping metadata in RAM makes sense and would take, 512 TB \* 2 \$ / GB = 1k \$ / month for 1B docs.
 
 ### Content storage:
@@ -66,6 +65,59 @@ authors: ['default']
 - Disk cost: 50 \* 1e3 \* 0.08 \$ (Ephemeral SSD) = 4k \$ / month
 - Total is 5k \$ / month for 1B docs
 
+### Network egress costs:
+
+The APIs respond back to the user and will cause significant costs. Let's estimate that.
+
+[Napkin maths](https://github.com/sirupsen/napkin-math) says it's `$0.1` per GB for "internet egress"
+
+I did a basic search and consumed around 3k bytes ~= 3KB. If they serve, 100M requests / month (only 33 RPS required, with peak 100 RPS), it would cost them
+
+3 KB _ 100M => 300 GB of egress => 300 _ 0.1 = 30 \$ / month for 100M requests which is very cheap!
+
+### Replication:
+
+```sh
+for ip in $(dig +short api.exa.ai); do
+  curl ipinfo.io/$ip
+done
+
+# {
+#   "ip": "34.216.236.112",
+#   "hostname": "ec2-34-216-236-112.us-west-2.compute.amazonaws.com",
+#   "city": "Boardman",
+#   "region": "Oregon",
+#   "country": "US",
+#   "loc": "45.8399,-119.7006",
+#   "org": "AS16509 Amazon.com, Inc.",
+#   "postal": "97818",
+#   "timezone": "America/Los_Angeles",
+#   "readme": "https://ipinfo.io/missingauth"
+# }{
+#   "ip": "44.225.245.181",
+#   "hostname": "ec2-44-225-245-181.us-west-2.compute.amazonaws.com",
+#   "city": "Boardman",
+#   "region": "Oregon",
+#   "country": "US",
+#   "loc": "45.8399,-119.7006",
+#   "org": "AS16509 Amazon.com, Inc.",
+#   "postal": "97818",
+#   "timezone": "America/Los_Angeles",
+#   "readme": "https://ipinfo.io/missingauth"
+# }{
+#   "ip": "52.36.132.24",
+#   "hostname": "ec2-52-36-132-24.us-west-2.compute.amazonaws.com",
+#   "city": "Boardman",
+#   "region": "Oregon",
+#   "country": "US",
+#   "loc": "45.8399,-119.7006",
+#   "org": "AS16509 Amazon.com, Inc.",
+#   "postal": "97818",
+#   "timezone": "America/Los_Angeles",
+#   "readme": "https://ipinfo.io/missingauth"
+# }
+```
+
 ## Overall costs:
 
 | Component              | Cost for 1B docs / month | Cost for 10B docs / year |
@@ -74,9 +126,50 @@ authors: ['default']
 | Metadata storage       | 1.2k USD                 | 144k USD                 |
 | Vector search storage  | 4.2k USD                 | 504k USD                 |
 | Lexical search storage | 3k USD                   | 360k USD                 |
+| Egress (API response)  | 30 USD                   | 120 USD                  |
 | TOTAL                  | 28k USD                  | 1.6M USD                 |
 
-Damn! The cost of running all this is easily 3M \$ since I haven't even considered CPU/GPU cost, replication for throughput, and rest of the infra. Exa charges 5\$ / 1000 request, to make 3M \$ they need to serve 3M / 5 \* 1000 = 600k requests (for reference, Google handles 10B requests per day). So per day Exa needs to handle (600k/365) = ~2000 requests per day to break even in terms of infra cost which can be handled with just 100 peak RPS (11 RPS = 1M request / day, 33 RPS = 3M request / day. Assume 3x for peak load)
+Damn! The cost of running all this is easily 1M \$ since I haven't even considered CPU/GPU cost, replication for throughput, and rest of the infra. Exa charges 5\$ / 1000 request, to make 3M \$ they need to serve 3M / 5 \* 1000 = 600k requests (for reference, Google handles 10B requests per day). So per day Exa needs to handle (600k/365) = ~2000 requests per day to break even in terms of infra cost which can be handled with just 100 peak RPS (11 RPS = 1M request / day, 33 RPS = 3M request / day. Assume 3x for peak load)
+
+## Search latency analysis & CPU requirements:
+
+[Exa benchmarks](https://exa.ai/blog/fastest-search-api) say their p50 = 420ms and p95 = 600ms.
+
+Out of this 420ms, we have 3 types of steps:
+
+- Embedding generation
+- Vector search + Text + Re-ranking with uncompressed vectors
+- Re-ranking with cross encoder models
+
+let's assume batch size is 32,
+
+. Compute comes at 10 \$ / month
+
+If you assume 10B vectors, 100k clusters, each with 100k vectors. You search in top `0.01%` of these 100k clusters = 10 clusters. So 2nd step has go parallely search in 10 clusters each of size 100k
+
+100k + 1.2 _ 100k = 2.2 _ 100K. Assuming 100K takes 5ms. This should be finished within 12ms
+
+Then you need to read 1M 8KB (8GB) vectors from disk randomly, each takes 100 us => 1M \* 0.1 ms = 100k ms => 100s (clearly wrong)
+If same thing was sequential, it would have take 1us for each and hence 8GB could be read in 1s (hmm, this contradicts with numbers in napkin maths throghtput side. why?)
+
+Remaining
+
+Search is more IO bound than compute bound, so I'm assuming out of 500ms, only 250ms is spent in embedding & lexical/vector search and we want only 70% CPU utilization and add 1.5x for peak load safety.
+
+```py
+cpu_cores = (RPS * actual_cpu_time_per_req) / (target_cpu_util * 1000ms) * 1.5
+# For 100 RPS (10M request / day)
+(100 * 50) / (0.7 * 1000) * 1.5  = 10.7 cores # nice
+```
+
+Each core costs 10 \$ if you reserve, so cost of CPU should be just 107\$ / month to serve 100 RPS
+
+### What if Exa used HNSW instead of IVF Index? (TODO: Clean up and back with numbers)
+
+- I know HNSW returns 10 results within 3ms with 1M vectors with SQ with 97% recall. The search time complexity of HNSW is `log(N)` while IVF is `log(sqrt(N))`. This means to go from 1M to 10B, IVF grows by `math.sqrt(1e10) / math.sqrt(1e6) = 100x` while HNSW search time grows only by `log(1e10) / log(1e6) = 10/6 = 1.6`. So it should remain within 5ms (Let's take 25ms assuming other parts don't scale equally well) if everything scales while IVF index search could reach 500ms (which is similar to what we see in numbers reported by Exa benchmarks as 420ms is p50).
+- However, the cost of building and storing index will shoot up which makes it tough for Exa since they have regular updates from the web.
+- Something similar is also proven in [this blog by Vespa](https://blog.vespa.ai/billion-scale-knn-part-two/)
+- If HSNW was running at 200B scale (Perplexity), that would be `3 * math.log(200 * 1e9) / math.log(1e6) = 3 * 1.88 ~= 6ms`
 
 ## Conclusion:
 
