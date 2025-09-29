@@ -9,7 +9,7 @@ images: ['/static/images/blogs/exa.png']
 authors: ['default']
 ---
 
-[Exa](https://exa.ai/) is a cool search engine company. They recently [raised 85M\$ for Series B](https://exa.ai/blog/announcing-series-b). There are multiple parts of Exa AI architecture that they have described in their [blogs](https://exa.ai/blog). I've compiled them together and added some of my own notes and lots of assumptions for infra cost [napkin maths](https://www.youtube.com/watch?v=IxkSlnrRFqc) as a fun exercise for myself. Please take my estimates with a grain of salt and let me know if I made any wrong or suboptimal assumptions :D
+[Exa](https://exa.ai/) is a cool search engine company. They recently [raised 85M\$ for Series B](https://exa.ai/blog/announcing-series-b). There are multiple parts of Exa AI architecture that they have described in their [blogs](https://exa.ai/blog). I've compiled them together and added some of my own notes and **lots of assumptions** for infra cost [napkin maths](https://www.youtube.com/watch?v=IxkSlnrRFqc) as a fun exercise for myself. Please take my estimates with a grain of salt and let me know if I made any wrong or suboptimal assumptions :D
 
 ### Lexical search:
 
@@ -60,7 +60,7 @@ authors: ['default']
 - So let's assume exa has curated high quality pages, where 1B pages take 5TB on avg
 - S3 cost: 5 \* 1e3 \* 0.02 \$ = 100 \$ / month
 - Disk cost: 5 \* 1e3 \* 0.08 \$ (Ephemeral SSD) = 400 \$ / month
-- Total is 500 \$ / month for 1B docs
+- Total is 500 \$ / month for 1B docs (nice!)
 
 ### Network egress costs:
 
@@ -74,7 +74,7 @@ I did a basic search API call with Exa and response size was around 3k bytes ~= 
 
 I tried finding how many replicas does Exa AI have at the moment and looks like they have only 1 replica right now. And that's in AWS `us-west-2` region.
 
-This has downsides because it increases latency a lot. The round trip time from India is `600ms`. They will expand as they get more users across the globe.
+This has downsides because it increases latency a lot. The round trip time from India is `600-800ms`. You can find ping times from all over the world [here](https://globalping.io/?measurement=g9UVVPjZD7g3OmqV). But yeah they can expand their regions as they get more users across the globe because each replication is going to be huge jump in their infra cost.
 
 You can use this script to find the details:
 
@@ -108,7 +108,7 @@ There are 86400 seconds in a day, so one client can at max spend 86400 / 200 _ 5
 
 If Exa has 10 such clients, they can make 22k per day or .
 
-Exa just raised 85M$\ and valuation must be around , assuming 10x multiple, they might be making 5M\$ in ARR
+Exa just raised 85M$\ and at a 700M$ valuation, assuming 60-120x multiple (high but possible in a super hot AI sector, perplexity is at 180x, HF is at 90x, Cohere is at 250x), they might be making 5-12M\$ in ARR
 
 5M ARR means 14k\$ / day
 
@@ -122,13 +122,14 @@ Exa AI python SDK downloads are at 30k / day. Assume only 0.01% converts to payi
 
 [Exa benchmarks](https://exa.ai/blog/fastest-search-api) say their p50 = 420ms and p95 = 600ms.
 
-Out of this 420ms, we have 3 types of steps:
+Out of this 420ms, we have 3 types of components:
 
-- Embedding generation: 60ms assuming 32 batch size based on [this](https://github.com/huggingface/text-embeddings-inference)
-- Vector search + Text + Re-ranking with uncompressed vectors. remaining: 420-60-140=220ms
-- Re-ranking with cross encoder models: Takes another 140ms
+- Network latency: They say it's 50ms. So we have 420-50ms = 370ms
+- Embedding generation: I'm assuming 60ms with 32 batch size based on [this](https://github.com/huggingface/text-embeddings-inference)
+- Re-ranking with cross encoder models: Let's assume another 140ms
+- Vector search + Text + Re-ranking with uncompressed vectors. remaining: 370-60-140=170ms
 
-Let's say search finishes in 20ms. How much disk can you read in 200ms? You can read 8KB pages (= one fp16 4096 dim vector) randomly, you can read 1MB in 15ms. This means 1000 / 8 = 125 vectors in 15ms. So when you have 200, you can read 200/15\*125=1600 vectors randomly. This makes sense, we can read 1000 original vectors from disk. Each of the 10 clusters could return 100 items each and then we rerank them. This sounds sensible.
+Let's say search finishes in 20ms. How much disk can you read in 150ms? You can read 8KB pages (= one fp16 4096 dim vector) randomly, you can read 1MB in 15ms. This means 1000 / 8 = 125 vectors in 15ms. So when you have 150, you can read 150/15\*125=1250 vectors randomly. This makes sense, we can read 1000 original vectors from disk. Each of the 10 clusters could return 100 items each and then we rerank them. This sounds reasonable.
 
 So overall vector search must be like:
 
