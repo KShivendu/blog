@@ -48,7 +48,7 @@ authors: ['default']
         - Each cluster will have a centroid and I'm assuming they keep uncompressed centroid vectors for maximizing recall.
         - Centroids will require 100K \* 4096 \* 2 bytes = 820GB for 10B vectors (or 82GB for 1B vectors)
         - Each vector ID needs to stored in the IVF Index, 10B \* 8 bytes = 80 GB (assuming that for point id they'd have uint64 since uint32 only allows 8B point IDs)
-        - Each vector will take 32bytes (256 bits), so 10B \* 32 bytes = 320 GB (yeah it's funny that the ID is taking more than the compressed vector)
+        - Each vector will take 32bytes (256 bits), so 10B \* 32 bytes = 320 GB
         - So total requirements are like 820 + 80 + 320 GB = 1220 GB for 10B vectors (i.e. 122GB for 1B vectors) which is just 122/8000\*100 = 1.6% of the index (nice!)
       - The index must be kept in RAM for fast queries and also should have be kept on disk to (re)load from.
       - Disk cost: 122 GB \* \$ 0.35/GB [for regional SSD](https://github.com/sirupsen/napkin-math) = 43 \$ / month per 1B docs
@@ -69,7 +69,7 @@ authors: ['default']
 - So let's assume exa has curated high quality pages, where 1B pages take 5TB on avg
 - S3 cost: 5 \* 1e3 \* 0.02 \$ = 100 \$ / month
 - Disk cost: 5 \* 1e3 \* 0.08 \$ (Ephemeral SSD) = 400 \$ / month
-- Total is 500 \$ / month for 1B docs (nice!)
+- Total is 500 \$ / month for 1B docs (not bad)
 
 ## 🌐📤 Network egress costs:
 
@@ -109,15 +109,13 @@ So the cost of running all this is easily 2M \$ / year since I haven't even cons
 Out of this 420ms, we have these components:
 
 - Network latency: They say it's 50ms. So we have 420-50ms = 370ms
-- Embedding generation: I'm assuming 60ms with 32 batch size based on [this](https://github.com/huggingface/text-embeddings-inference)
-- Re-ranking with cross encoder models: Let's assume another 140ms
-- Vector search + Text + Re-ranking with uncompressed vectors. remaining: 370-60-140=170ms
+- Embedding generation: I'm assuming 70ms with 32 batch size based on [this](https://github.com/huggingface/text-embeddings-inference)
+- Re-ranking with cross encoder models: Let's assume another 200ms because it has to rank top 100 items against the query.
+- Vector search + Text + Re-ranking with uncompressed vectors. Remaining: 370-70-200=100ms to execute search.
 
-Let's say search finishes in 20ms. How much disk can you read in 150ms? As per [napkin maths](https://github.com/sirupsen/napkin-math?tab=readme-ov-file#numbers), You can read 8KB pages (= one fp16 4096 dim vector) randomly, you can read 1MB in 15ms. This means 1000 / 8 = 125 vectors in 15ms. So when you have 150, you can read 150/15\*125=1250 vectors randomly. This makes sense, we can read 1000 original vectors from disk. Each of the 10 clusters could return 100 items each and then we rerank them. This sounds reasonable.
+Each of the 10 clusters could return 100 items each and then we re-rank them. This sounds reasonable.
 
-100 μs => 1 vector
-
-To read 1k original vectors from disk randomly (i.e. 1k _ 8kb = 8MB of data), it would take 100 μs _ 1k = 100ms which is horrible for search.
+To read 1k original vectors from disk randomly (i.e. 1k \* 8kb = 8MB of data), it would take 100 μs \* 1k = 100ms which is horrible for search.
 
 Assuming a cache hit ratio of 90%, you'll only have to read 100 vectors from disk. Then you can achieve:
 
@@ -126,11 +124,11 @@ Assuming a cache hit ratio of 90%, you'll only have to read 100 vectors from dis
 
 And interestingly, they have a "fast search" mode as well, where I think they just skip the re-ranking with original vectors part because I did a few queries and I found the difference to be around 10ms. It's not a coincidence, fundamentals and napkin maths work ;)
 
-So overall vector search must be like:
+So overall vector search might be like:
 
 - Created IVF Index with 10B BQ + MRL truncated vectors that are split in 100k clusters with 100k points each
 - Convert query into embedding: 30ms
-- Search: 100k centroids comparison + 100k points vector search in 10 clusters in parallel => 10 \* 100 results from each
+- Search: 100k centroids comparison + 100k points vector search in 10 clusters in parallel => 10 \* 100 results = 1k results
 - Rerank 1: Rerank 1000 vectors by original reading vectors from disk (180ms)
 - Rerank 2: Cross encoder models: Probably a cross-encoder model
 
