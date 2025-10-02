@@ -62,7 +62,7 @@ authors: ['default']
 - So total metadata storage on disk is 1B docs \* 0.5KB = 0.5TB for 1B doc metadata. This means 500 GB \* 0.35 \$ / GB = 175 \$ / month for 1B docs.
 - Keeping metadata in RAM makes sense and would take, 512 TB \* 2 \$ / GB = 1k \$ / month for 1B docs.
 
-### 📦 Content storage:
+## 📦 Content storage:
 
 - [Fineweb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) has 26B docs consuming 108 TB. 1B docs => 4.15TB
 - [English Wikipedia Text](https://en.wikipedia.org/wiki/Wikipedia:Statistics#Articles) has 7M docs with 58GB => 1B docs in 8.3TB (Text heavy)
@@ -91,14 +91,14 @@ time curl --head https://api.exa.ai/search
 
 ## 💰📊 Overall costs:
 
-| Component              | Cost for 1B docs / month | Cost for 10B docs / year |
-| ---------------------- | ------------------------ | ------------------------ |
-| Content storage        | 500 USD                  | 60k USD                  |
-| Metadata storage       | 1.2k USD                 | 144k USD                 |
-| Lexical search storage | 2.8k USD                 | 336k USD                 |
-| Vector search storage  | 7k USD                   | 840k USD                 |
-| Egress (API response)  | 30 USD                   | 3.6k USD                 |
-| TOTAL                  | 28k USD                  | 1.38M USD                |
+| Component              | Cost for 1B docs / month | Cost for 10B docs / year (120x) |
+| ---------------------- | ------------------------ | ------------------------------- |
+| Content storage        | 500 USD                  | 60k USD                         |
+| Metadata storage       | 1.2k USD                 | 144k USD                        |
+| Lexical search storage | 2.8k USD                 | 336k USD                        |
+| Vector search storage  | 7k USD                   | 840k USD                        |
+| Egress (API response)  | 30 USD                   | 3.6k USD                        |
+| TOTAL                  | 28k USD                  | 1.38M USD                       |
 
 So the cost of running all this is easily 2M \$ / year since I haven't even considered CPU/GPU cost, crawling, model fine tuning, and rest of the infra.
 
