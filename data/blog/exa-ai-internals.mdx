@@ -11,49 +11,58 @@ authors: ['default']
 
 [Exa](https://exa.ai/) is a cool search engine company. They recently [raised 85M\$ for Series B](https://exa.ai/blog/announcing-series-b). There are multiple parts of Exa AI architecture that they have described in their [blogs](https://exa.ai/blog). I've compiled them together and added some of my own notes and **lots of assumptions** for infra cost [napkin maths](https://www.youtube.com/watch?v=IxkSlnrRFqc) as a fun exercise for myself. Please take my estimates with a grain of salt and let me know if I made any wrong or suboptimal assumptions :D
 
-### Lexical search:
+## 🔍 Lexical/Keyword search (BM25):
 
-- BM25 index (i.e. postings lists + freq stats) costed them 1.8TB RAM for 1B billion docs initially.
-  - After optimizations in [this post](https://exa.ai/blog/bm25-optimization) it dropped to 1.2TB (-50%) RAM per 1B docs.
-  - Assuming it's all kept in memory and relying on [napkin maths](https://github.com/sirupsen/napkin-math), this means 2 \$ / month / GB \* 1200 GB = 2400 \$ / month
-  - There must be a version of it on disk as well, so 1200 GB \* 0.35 \$ = 420 \$ / month
-  - So total lexical search cost might be around 3000 \$ / month for 1B docs
+- They use the standard [BM25 algorithm](https://www.youtube.com/watch?v=ziiF1eFM3_4&t=698s) for lexical search.
+- Initially, this required about 1.8 TB RAM (posting lists + frequency stats) for 1B docs
+- After optimizations in [this post](https://exa.ai/blog/bm25-optimization) it dropped to 1.2TB (-50%) RAM for 1B docs
 
-### Vector search:
+### Napkin maths
 
-- Trained custom [Matryoshka embeddings](https://huggingface.co/blog/matryoshka) with 4096 dims but only used 256 dims in memory (i.e. MRL truncation).
-- They use [binary quantization](https://qdrant.tech/articles/binary-quantization/) (BQ). Precomputed possible outputs of BQ computations in CPU registers (instead of RAM) for similarity computation. Very cool trick!
-- They do re-ranking with original vectors to compensate for all this approximation.
-- I think they might be having a fine-tuned version of [Qwen3-Embedding-8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B) which fits the description well. It has a massive context length of 32K tokens. As per this quick [research](https://www.perplexity.ai/search/average-words-per-page-on-the-qjaJmyDVQ823yG.lh.Ba3g#0), most internet pages and even research papers would fit in this context length. So chunking isn't required. 1 document = 1 vector.
-- Each uncompressed vector would take 4096 dims \* 2 bytes (assuming fp16) = 8KB by default. This means 1B vectors would take 8 \* 10^3 bytes \* 10^9 = 8 \* 10^12 = 8 TB of disk storage for 1B original vectors.
+- I'm assuming the index is also kept in RAM for faster querying and I'm using rates from [this](https://github.com/sirupsen/napkin-math)
+- RAM Cost: 1200 GB × \$ 2 / GB = $2400 / month
+- Disk Cost: 1200 GB × \$ 0.35 / GB = $420 / month
+- Total ~= 2800 \$ / month for 1B docs
+
+## 🧭 Vector search:
+
+- They train [Matryoshka embeddings](https://huggingface.co/blog/matryoshka) with 4096 dims but only keep 256 dims in RAM (i.e. MRL truncation)
+- They use [binary quantization](https://qdrant.tech/articles/binary-quantization) (BQ) and some clever CPU tricks for vector distance calculations ([SIMD](https://en.wikipedia.org/wiki/Single_instruction,_multiple_data) + precomputing possible outputs and keeping them in CPU registers for skipping calculation).
+- They use [IVF Index](https://youtu.be/chz74Mtd1AA?si=DvvDE3rO9HvVvox7&t=429) (also used in FAISS & pgvector) which an Approximate Nearest Neighbours Algorithm. It basically does k-means clustering, and during search time, finds the relevant clusters by comparing distance with respective cluster centroids, and only queries few of those clusters.
+- Lastly, they do re-ranking with original vectors to compensate for all this approximation/compression.
+
+### Napkin maths
+
+- I think their model is a fine-tuned version of [Qwen3-Embedding-8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B) since it fits the description well and it doesn't make sense for such a young startup to start training embeddings from scratch.
+- Qwen3-Embedding-8B has a massive context length of 32K tokens. As per this quick [research](https://www.perplexity.ai/search/average-words-per-page-on-the-qjaJmyDVQ823yG.lh.Ba3g#0), most internet pages and even research papers would fit in this context length. So chunking isn't required. 1 document = 1 vector.
+- Each uncompressed vector would take 4096 dims \* 2 bytes (assuming fp16) = 8KB by default. This means 1B vectors would take 8 \* 10^3 bytes \* 10^9 = 8 \* 10^12 = 8 TB for 1B docs.
   - By truncating matryoshka it becomes, 8 / (4096 / 256) TB = 8 / 16 TB = 512 GB for 1B vectors.
   - With binary quantization, 16 bits (since fp16) becomes 1 bit. So 512 GB / 16 = 32 GB per 1B vectors (i.e. 16\*16=256x reduction)
-  - They use [IVF Index](https://youtu.be/chz74Mtd1AA?si=DvvDE3rO9HvVvox7&t=429) (also used in FAISS & pgvector). It basically does k-means clustering, and during search time, finds the relevant clusters by comparing distance with respective centroids, and only queries few of those clusters.
-  - I think they build multiple vector indices. Their vector search might be having:
+  - Their vector search might be have these components:
     - Original vectors:
-      - To keep vectors on disk: 8 \* 1e3 \* 0.35 \$ = 2800 \$ / month for 1B docs
-      - To keep vectors in memory: 8 \* 1e3 \* 2 \$ = 16000 \$ / month for 1B docs. But that's too costly and it's better to cache, so I'd expect something like 25% in RAM and hence it should consume 2TB RAM and cost 4k \$ / month for 1B docs
-    - Vector index with MRL truncation + re-ranking with original vectors for their "neural search"
-      - Exa uses IVF Index for search, it needs centroids along with original vectors, assuming they have 10B vectors and they have 100K clusters, each having 100K vectors.
-        - Each cluster will have a centroid and I'm assuming they keep original vectors for centroid for max recall
-        - It will require 100K \* 4096 \* 2 bytes = 820GB for 10B vectors (or 82GB for 1B vectors)
+      - Disk cost: 8 \* 1e3 \* 0.35 \$ = 2.8k \$ / month for 1B docs
+      - Memory cost: 8 \* 1e3 \* 2 \$ = 16k \$ / month for 1B docs. But this sounds too costly and Pareto principle says 20% of docs will account for 80% queries so let's cache only 25% in RAM and hence it should consume 2TB RAM and cost 4k \$ / month for 1B docs.
+      - Total: 2.8 + 4k \$ = 6.8k \$
+    - IVF index with BQ + MRL truncation + re-ranking with original vectors for their "neural search"
+      - IVF Index needs centroids along with original vectors, I'm assuming they have 10B vectors and they have 100K clusters, each having 100K vectors.
+        - Each cluster will have a centroid and I'm assuming they keep uncompressed centroid vectors for maximizing recall.
+        - Centroids will require 100K \* 4096 \* 2 bytes = 820GB for 10B vectors (or 82GB for 1B vectors)
         - Each vector ID needs to stored in the IVF Index, 10B \* 8 bytes = 80 GB (assuming that for point id they'd have uint64 since uint32 only allows 8B point IDs)
-        - So total size requirements are like 820GB + 80GB = 900 GB for 10B vectors (or 90GB for 1B vectors) which is 90/8000\*100 = 1.2% of the index (nice!)
-      - Index disk storage cost: 90 \* \$ 0.35/GB [for regional SSD](https://github.com/sirupsen/napkin-math) = 32 \$ / month per 1B docs
-      - All this must be kept in RAM for lowest latency, so it would cost them 90 GB \* 2 \$ / GB / month = 180 \$ / month for 1B docs
-    - Vector index with BQ + MRL truncation + re-ranking with original vectors for their "neural search"
-      - Index Storage cost: 32 \$ / 16 (16 bits => 1 bit) = 2 \$ / month / 1B vectors (damn, BQ cost savings are insane. this is kinda funny)
-      - RAM Cost: 180 / 16 = 11.25 \$ / month
-    - They have a "fast search" mode as well, where I think they just skip the re-ranking with original vectors part. I did some experiments and I didn't find more than 10ms difference between this and neural search. I need to find what's this might be. This step must be very small which can happen only if they are
-  - Overall, vector search cost for them is like 2.8k + 4k + (32+180) + (2+11.25) = 7k \$ / month for 1B vectors. Note how this is ~2.3x of lexical search and most of it comes from just storing the original vectors for re-ranking.
+        - Each vector will take 32bytes (256 bits), so 10B \* 32 bytes = 320 GB (yeah it's funny that the ID is taking more than the compressed vector)
+        - So total requirements are like 820 + 80 + 320 GB = 1220 GB for 10B vectors (i.e. 122GB for 1B vectors) which is just 122/8000\*100 = 1.6% of the index (nice!)
+      - The index must be kept in RAM for fast queries and also should have be kept on disk to (re)load from.
+      - Disk cost: 122 GB \* \$ 0.35/GB [for regional SSD](https://github.com/sirupsen/napkin-math) = 43 \$ / month per 1B docs
+      - RAM cost: 122 GB \* 2 \$ / GB / month = 244 \$ / month for 1B docs
+      - Total cost: 287 \$ / month for 1B docs
+  - Overall, vector search cost for them is like 6.8k + 287 = 7k \$ / month for 1B vectors. Note how this is ~2.5x of lexical search and most of it comes from just storing the original vectors for re-ranking.
 
-## Metadata storage:
+## 🗂️ Metadata storage:
 
 - Each original vector is 8KB, but they also need to store metadata like title, url, publishedDate, author, id, image, favicon, text, summary, etc. I'm assuming it's gonna take another 512bytes (0.5KB) for each doc. Why? because their [search API example](https://docs.exa.ai/reference/search) returns page entries that can be stored in < 300 bytes.
 - So total metadata storage on disk is 1B docs \* 0.5KB = 0.5TB for 1B doc metadata. This means 500 GB \* 0.35 \$ / GB = 175 \$ / month for 1B docs.
 - Keeping metadata in RAM makes sense and would take, 512 TB \* 2 \$ / GB = 1k \$ / month for 1B docs.
 
-### Content storage:
+### 📦 Content storage:
 
 - [Fineweb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) has 26B docs consuming 108 TB. 1B docs => 4.15TB
 - [English Wikipedia Text](https://en.wikipedia.org/wiki/Wikipedia:Statistics#Articles) has 7M docs with 58GB => 1B docs in 8.3TB (Text heavy)
@@ -62,7 +71,7 @@ authors: ['default']
 - Disk cost: 5 \* 1e3 \* 0.08 \$ (Ephemeral SSD) = 400 \$ / month
 - Total is 500 \$ / month for 1B docs (nice!)
 
-### Network egress costs:
+## 🌐📤 Network egress costs:
 
 The APIs respond back to the user and that also costs money. [Napkin maths](https://github.com/sirupsen/napkin-math) says it's `$0.1` per GB for "internet egress"
 
@@ -70,7 +79,7 @@ I did a basic search API call with Exa and response size was around 3k bytes ~= 
 
 3 KB \* 100M => 300 GB of egress => 300 \* 0.1 \$ = 30 \$ / month for 100M requests which is very cheap!
 
-### Replication:
+## 🌍🔁 Replication:
 
 I queried Exa AI DNS records and looks like they are only present in AWS `us-west-2` region. This has downsides because it increases latency a lot. The round trip time from India is `600-800ms`. You can find ping times from all over the world [here](https://globalping.io/?measurement=g9UVVPjZD7g3OmqV). But yeah they can expand their regions as they get more customers across the globe because each replication is going to be huge jump in their infra cost.
 
@@ -80,16 +89,16 @@ You can also use this command to get rough idea of latency from your machine:
 time curl --head https://api.exa.ai/search
 ```
 
-## Overall costs:
+## 💰📊 Overall costs:
 
 | Component              | Cost for 1B docs / month | Cost for 10B docs / year |
 | ---------------------- | ------------------------ | ------------------------ |
 | Content storage        | 500 USD                  | 60k USD                  |
 | Metadata storage       | 1.2k USD                 | 144k USD                 |
+| Lexical search storage | 2.8k USD                 | 336k USD                 |
 | Vector search storage  | 7k USD                   | 840k USD                 |
-| Lexical search storage | 3k USD                   | 360k USD                 |
 | Egress (API response)  | 30 USD                   | 3.6k USD                 |
-| TOTAL                  | 28k USD                  | 1.4M USD                 |
+| TOTAL                  | 28k USD                  | 1.38M USD                |
 
 So the cost of running all this is easily 2M \$ / year since I haven't even considered CPU/GPU cost, crawling, model fine tuning, and rest of the infra.
 
@@ -97,14 +106,25 @@ So the cost of running all this is easily 2M \$ / year since I haven't even cons
 
 [Exa benchmarks](https://exa.ai/blog/fastest-search-api) say their p50 = 420ms and p95 = 600ms.
 
-Out of this 420ms, we have 3 types of components:
+Out of this 420ms, we have these components:
 
 - Network latency: They say it's 50ms. So we have 420-50ms = 370ms
 - Embedding generation: I'm assuming 60ms with 32 batch size based on [this](https://github.com/huggingface/text-embeddings-inference)
 - Re-ranking with cross encoder models: Let's assume another 140ms
 - Vector search + Text + Re-ranking with uncompressed vectors. remaining: 370-60-140=170ms
 
-Let's say search finishes in 20ms. How much disk can you read in 150ms? You can read 8KB pages (= one fp16 4096 dim vector) randomly, you can read 1MB in 15ms. This means 1000 / 8 = 125 vectors in 15ms. So when you have 150, you can read 150/15\*125=1250 vectors randomly. This makes sense, we can read 1000 original vectors from disk. Each of the 10 clusters could return 100 items each and then we rerank them. This sounds reasonable.
+Let's say search finishes in 20ms. How much disk can you read in 150ms? As per [napkin maths](https://github.com/sirupsen/napkin-math?tab=readme-ov-file#numbers), You can read 8KB pages (= one fp16 4096 dim vector) randomly, you can read 1MB in 15ms. This means 1000 / 8 = 125 vectors in 15ms. So when you have 150, you can read 150/15\*125=1250 vectors randomly. This makes sense, we can read 1000 original vectors from disk. Each of the 10 clusters could return 100 items each and then we rerank them. This sounds reasonable.
+
+100 μs => 1 vector
+
+To read 1k original vectors from disk randomly (i.e. 1k _ 8kb = 8MB of data), it would take 100 μs _ 1k = 100ms which is horrible for search.
+
+Assuming a cache hit ratio of 90%, you'll only have to read 100 vectors from disk. Then you can achieve:
+
+- Disk: 100 μs \* 100 = 10ms
+- RAM: 50 ns \* 9.5k = 475 μs
+
+And interestingly, they have a "fast search" mode as well, where I think they just skip the re-ranking with original vectors part because I did a few queries and I found the difference to be around 10ms. It's not a coincidence, fundamentals and napkin maths work ;)
 
 So overall vector search must be like:
 
