@@ -36,25 +36,24 @@ authors: ['default']
 - I think their model is a fine-tuned version of [Qwen3-Embedding-8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B) since it fits the description well and it doesn't make sense for such a young startup to start training embeddings from scratch.
 - Qwen3-Embedding-8B has a massive context length of 32K tokens. As per this quick [research](https://www.perplexity.ai/search/average-words-per-page-on-the-qjaJmyDVQ823yG.lh.Ba3g#0), most internet pages and even research papers would fit in this context length. So chunking isn't required. 1 document = 1 vector.
 - Each uncompressed vector would take 4096 dims \* 2 bytes (assuming fp16) = 8KB by default. This means 1B vectors would take 8 \* 10^3 bytes \* 10^9 = 8 \* 10^12 = 8 TB for 1B docs.
-  - By truncating matryoshka it becomes, 8 / (4096 / 256) TB = 8 / 16 TB = 512 GB for 1B vectors.
-  - With binary quantization, 16 bits (since fp16) becomes 1 bit. So 512 GB / 16 = 32 GB per 1B vectors (i.e. 16\*16=256x reduction)
-  - Their vector search might have these components:
-    - Original vectors:
-      - Disk cost: 8 \* 1e3 \* 0.35 \$ = 2.8k \$ / month for 1B docs
-      - Memory cost: 8 \* 1e3 \* 2 \$ = 16k \$ / month for 1B docs. But this sounds too costly and Pareto principle says 20% of docs will account for 80% queries so let's cache only 25% in RAM and hence it should consume 2TB RAM and cost 4k \$ / month for 1B docs.
-      - Total: 2.8 + 4k \$ = 6.8k \$
-    - IVF index with BQ + MRL truncation + re-ranking with original vectors for their "neural search"
-      - IVF Index needs centroids along with original vectors, I'm assuming they have 10B vectors and they have 100K clusters, each having 100K vectors.
-        - Each cluster will have a centroid and I'm assuming they keep uncompressed centroid vectors for maximizing recall.
-        - Centroids will require 100K \* 4096 \* 2 bytes = 820GB for 10B vectors (or 82GB for 1B vectors)
-        - Each vector ID needs to stored in the IVF Index, 10B \* 8 bytes = 80 GB (assuming that for point id they'd have uint64 since uint32 only allows 8B point IDs)
-        - Each vector will take 32bytes (256 bits), so 10B \* 32 bytes = 320 GB
-        - So total requirements are like 820 + 80 + 320 GB = 1220 GB for 10B vectors (i.e. 122GB for 1B vectors) which is just 122/8000\*100 = 1.6% of the index (nice!)
-      - The index must be kept in RAM for fast queries and also should have be kept on disk to (re)load from.
-      - Disk cost: 122 GB \* \$ 0.35/GB [for regional SSD](https://github.com/sirupsen/napkin-math) = 43 \$ / month per 1B docs
-      - RAM cost: 122 GB \* 2 \$ / GB / month = 244 \$ / month for 1B docs
-      - Total cost: 287 \$ / month for 1B docs
-  - Overall, vector search cost for them should be around 6.8k + 287 = 7k \$ / month for 1B vectors. Note how this is ~2.5x of lexical search and most of it comes from just storing the original vectors for re-ranking.
+- By truncating matryoshka it becomes, 8 / (4096 / 256) TB = 8 / 16 TB = 512 GB for 1B vectors.
+- With binary quantization, 16 bits (since fp16) becomes 1 bit. So 512 GB / 16 = 32 GB per 1B vectors (i.e. 16\*16=256x reduction)
+- For original vectors:
+  - Disk cost: 8 \* 1e3 \* 0.35 \$ = 2.8k \$ / month for 1B docs
+  - Memory cost: 8 \* 1e3 \* 2 \$ = 16k \$ / month for 1B docs. But this sounds too costly and Pareto principle says 20% of docs will account for 80% queries so let's cache only 25% in RAM and hence it should consume 2TB RAM and cost 4k \$ / month for 1B docs.
+  - Total: 2.8 + 4k \$ = 6.8k \$
+- For IVF index with BQ + MRL truncation + re-ranking with original vectors for their "neural search"
+  - IVF Index needs centroids along with original vectors, I'm assuming they have 10B vectors and they have 100K clusters, each having 100K vectors.
+  - Each cluster will have a centroid and I'm assuming they keep uncompressed centroid vectors for maximizing recall.
+  - Centroids will require 100K \* 4096 \* 2 bytes = 820GB for 10B vectors (or 82GB for 1B vectors)
+  - Each vector ID needs to stored in the IVF Index, 10B \* 8 bytes = 80 GB (assuming that for point id they'd have uint64 since uint32 only allows 8B point IDs)
+  - Each vector will take 32bytes (256 bits), so 10B \* 32 bytes = 320 GB
+  - So total requirements are like 820 + 80 + 320 GB = 1220 GB for 10B vectors (i.e. 122GB for 1B vectors) which is just 122/8000\*100 = 1.6% of the index (nice!)
+  - The index must be kept in RAM for fast queries and also should have be kept on disk to (re)load from.
+  - Disk cost: 122 GB \* \$ 0.35/GB [for regional SSD](https://github.com/sirupsen/napkin-math) = 43 \$ / month per 1B docs
+  - RAM cost: 122 GB \* 2 \$ / GB / month = 244 \$ / month for 1B docs
+  - Total cost: 287 \$ / month for 1B docs
+- Overall, vector search cost for them should be around 6.8k + 287 = 7k \$ / month for 1B vectors. Note how this is ~2.5x of lexical search and most of it comes from just storing the original vectors for re-ranking.
 
 ## 🗂️ Metadata storage:
 
