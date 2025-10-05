@@ -155,36 +155,10 @@ Also, since Exa operates with atleast 10B docs (assumed earlier), I can imagine 
 
 ### What if Exa used HNSW instead of IVF Index?
 
-- I know HNSW returns 10 results within 3ms with 1M vectors with SQ with 97% recall. The avg search time complexity of HNSW is `log(N)` while IVF is `log(sqrt(N))`. In theory, this means to go from 1M to 10B, IVF latency balloons by `math.sqrt(1e10) / math.sqrt(1e6) = 100x` while HNSW search time only increases by `log(1e10) / log(1e6) = 10/6 = 1.6x`. So HNSW should remain within 5-10ms even if implemented correctly while IVF index search would reach 300ms (assuming same 3ms at 1M vectors). This is kinda aligned with what we see in numbers reported by Exa benchmarks as 420ms is p50 and p95 is 600ms.
-- Even in [this blog](https://blog.vespa.ai/billion-scale-knn-part-two/), they use 72 vCPUs to hold 1B 100dim vectors that are binary quantized. It does writes at 32k RPS and with 72 cores it means avg write latency is RPS = cores \* 1/latency => latency = cores / RPS = 72 / 32_000 = 2.25ms. While search latency with HNSW with just 4ms with 90% recall.
-- The cost of building and storing index would shoot up because of higher RAM and CPU requirements for HNSW. Perplexity uses HNSW and hence was able to claim lower latency in their recent benchmarks against Exa. imo it makes sense for Exa to also do this and so their machines get more time to spend on re-ranking and LLM based filtering (websets) afterwards.
-- Something similar was also proven in [my previous benchmark blog with Nirant](https://nirantk.com/writing/pgvector-vs-qdrant). Although, I only see my own dumb mistakes now.
-- If HSNW was running at 200B scale (Perplexity), that would be `3 * math.log(200 * 1e9) / math.log(1e6) = 3 * 1.88 ~= 6ms`
-
-### Exa's profitability and margins:
-
-Exa charges 5\$ / 1000 request, to make 2M \$ they need to serve 2M / 5 \* 1000 = 400k requests total (for reference, Google handles 10B requests per day). So per day Exa needs to handle (400k/365) = ~1100 requests per day to break even in terms of infra cost which can be handled with just 100 peak RPS (11 RPS = 1M request / day, 33 RPS = 3M request / day. Assume 3x for peak load)
-
-Each 1000 request costs 5\$
-If you're using Exa at 5 QPS,
-
-If you wanna saturate 5QPS, you'll do 1000 reqeusts in 1000 req / 5req/sec = 200s and it will cost 5 \$.
-
-There are 86400 seconds in a day, so one client can at max spend (86400 / 200) \* 5 = 432 \* 5 = 2160 \$ per day.
-
-5 QPS => 450k requests / day (11 RPS = 1M req / day)
-
-If Exa has 10 such clients, they can make 22k per day or .
-
-Exa just raised 85M$\ and at a 700M$ valuation, assuming 60-120x multiple (high but possible in a super hot AI sector, perplexity is at 180x, HF is at 90x, Cohere is at 250x), they might be making 5-12M\$ in ARR
-
-5M ARR means 14k\$ / day
-
-14k\$ / day means, they serve 31 RPS
-
-To serve 31 RPS with p50 of 420ms, you just need 13 cores (todo: a lot of this is just GPU + IO + network time (they say 50ms), so factor that as well)
-
-Exa AI python SDK downloads are at 30k / day. Assume only 0.01% converts to paying user, that means 3 new users daily (is this a fair assumption?)
+- In this [blog](https://blog.vespa.ai/billion-scale-knn-part-two/), the experiments shows a machine with 72 vCPUs dealing with 1B 100dim vectors that are binary quantized. It shows search latency of HNSW with recall 50% within 2ms and 4ms with 90% recall. It also handles realtime indexing at 15.4k RPS and with 72 cores it means avg write latency is RPS = cores \* 1/latency => latency = cores / RPS = 72 / 32_000 = 4.68ms (just a little higher than search because hnsw mainly needs to search and then it knows where to add new links)
+- Also the avg search time complexity of HNSW is `log(N)` while IVF is `log(sqrt(N))`. In theory, it means that to go from 1M to 10B, IVF latency balloons by `math.sqrt(1e10) / math.sqrt(1e6) = 100x` while HNSW search time only increases by `log(1e10) / log(1e6) = 10/6 = 1.6x`. So even if you asssume they perform similar at 1M scale - say 2ms with single thread. HNSW should remain within 5ms even while IVF index search would reach 100-200ms. This is kinda aligned with what we see in numbers reported by Exa benchmarks as 420ms is p50 and p95 is 600ms.
+- Something similar was also proven in [my previous benchmark blog](https://nirantk.com/writing/pgvector-vs-qdrant) with Nirant that compared Qdrant HNSW and PGVector IVF Index and it led to implementation of HNSW in pgvector.
+- The cost of building and storing index would rise because of higher RAM and CPU requirements for HNSW. Perplexity uses HNSW and hence was able to claim lower latency in their recent benchmarks against Exa. Imo it makes sense for Exa to also do this and so they get more time to spend on re-ranking and LLM based filtering (websets) afterwards.
 
 ## Closing remarks:
 
@@ -198,8 +172,9 @@ We’re entering an era where startups are recreating Google scale search and nu
 
 Thanks to my friend [Nirant](https://in.linkedin.com/in/nirant) for reviewing the blog.
 
+- https://github.com/sirupsen/napkin-math
 - https://exa.ai/blog/building-web-scale-vector-db
-- https://exa.ai/blog/bm25-optimization ->
-- https://exa.ai/blog/scaling-our-highlights-server -> TODO
-- https://exa.ai/blog/evals-at-exa -> TODO
-- https://www.perplexity.ai/search/what-s-the-cost-of-running-per-9IfuBvj2RnCPwwoTlMGyoA#0
+- https://exa.ai/blog/bm25-optimization
+- https://exa.ai/blog/fastest-search-api
+- https://exa.ai/blog/evals-at-exa
+- https://exa.ai/blog/websets-evals
