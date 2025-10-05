@@ -100,7 +100,7 @@ time curl --head https://api.exa.ai/search
 | Egress (API response)  | 30 USD                   | 3.6k USD                        |
 | TOTAL                  | 28k USD                  | 1.38M USD                       |
 
-So the cost of running all this is easily 2M \$ / year since I haven't even considered CPU/GPU cost, crawling, model fine tuning, and rest of the infra.
+So the cost of running all this is easily 2M \$ / year for 10B docs since I haven't even considered CPU/GPU cost, crawling, model fine tuning, and rest of the infra.
 
 ## Search latency analysis:
 
@@ -131,7 +131,7 @@ And assuming a cache hit ratio of 70%, you'll only have to read 300 vectors from
 
 And interestingly, they have a "fast search" mode as well, where I think they just skip the re-ranking with original vectors part because I did a few queries and I found the difference to be around 10-40ms. It's probably not a coincidence :D
 
-This means we have at least 60-90ms for the vector search part. Which sounds doable since we only have to query 1 centroid cluster + 10 clusters of 100k BQ vectors each which can be done in parallel within the specified duration. And I'd argue that you might be able to do more things like RRF (reciprocal ranking fusion) or putting a small language model to rewrite the query and guess the "category" of the query.
+This means we have at least 60-90ms for the vector search part. Which sounds doable since we only have to query 1 centroid cluster + 10 clusters of 100k BQ vectors each which can be done in parallel within the specified duration. And I'd argue that you might be able to do more things like putting a small language model to rewrite the query and guess the "category" of the query or something like RRF (reciprocal ranking fusion)
 
 ### Keyword search latency
 
@@ -153,18 +153,19 @@ You can see how avg latency is similar for both vector search keyword search but
 
 Also, since Exa operates with atleast 10B docs (assumed earlier), I can imagine that they split 10B docs into multiple "BM25 shards" and query them in parallel and combine results afterwards.
 
-### What if Exa used HNSW instead of IVF Index?
+## What if Exa used HNSW instead of IVF Index?
 
-- In this [blog](https://blog.vespa.ai/billion-scale-knn-part-two/), the experiments shows a machine with 72 vCPUs dealing with 1B 100dim vectors that are binary quantized. It shows search latency of HNSW with recall 50% within 2ms and 4ms with 90% recall. It also handles realtime indexing at 15.4k RPS and with 72 cores it means avg write latency is RPS = cores \* 1/latency => latency = cores / RPS = 72 / 32_000 = 4.68ms (just a little higher than search because hnsw mainly needs to search and then it knows where to add new links)
-- Also the avg search time complexity of HNSW is `log(N)` while IVF is `log(sqrt(N))`. In theory, it means that to go from 1M to 10B, IVF latency balloons by `math.sqrt(1e10) / math.sqrt(1e6) = 100x` while HNSW search time only increases by `log(1e10) / log(1e6) = 10/6 = 1.6x`. So even if you asssume they perform similar at 1M scale - say 2ms with single thread. HNSW should remain within 5ms even while IVF index search would reach 100-200ms. This is kinda aligned with what we see in numbers reported by Exa benchmarks as 420ms is p50 and p95 is 600ms.
-- Something similar was also proven in [my previous benchmark blog](https://nirantk.com/writing/pgvector-vs-qdrant) with Nirant that compared Qdrant HNSW and PGVector IVF Index and it led to implementation of HNSW in pgvector.
-- The cost of building and storing index would rise because of higher RAM and CPU requirements for HNSW. Perplexity uses HNSW and hence was able to claim lower latency in their recent benchmarks against Exa. Imo it makes sense for Exa to also do this and so they get more time to spend on re-ranking and LLM based filtering (websets) afterwards.
+- In this [blog](https://blog.vespa.ai/billion-scale-knn-part-two/), the experiment shows a machine with 72 vCPUs dealing with 1B 100dim vectors that are binary quantized. It shows search latency of HNSW with recall 50% within 2ms and 4ms with 90% recall. It also handles realtime indexing at 15.4k RPS and with 72 cores it means avg write latency is RPS = cores \* 1/latency => latency = cores / RPS = 72 / 32_000 = 4.68ms (just a little higher than search because hnsw mainly needs to search and then it knows where to add new links)
+- Also the avg search time complexity of HNSW is `log(N)` while IVF is `log(sqrt(N))`. **In theory**, it means that to go from "shards" of 1M to 1B docs, IVF latency balloons by `math.sqrt(1e9) / math.sqrt(1e6) = 33x` while HNSW search time only increases by `log(1e10) / log(1e6) = 10/6 = 1.5x`. So even if you asssume they perform similar at 1M scale - say 2ms with single thread. HNSW should remain within 5ms even while IVF index search would take 70-100ms. That's why Exa would have to split into 10B docs into smaller 100k clusters and query only 10 of them them in parallel and that will degrade recall.
+- To add, in IVF, the cluster sizes vary and hence like BM25, the query latencies (avg latency vs p999) would vary more depending on the query.
+- Something similar was also proven in [my previous benchmark blog](https://nirantk.com/writing/pgvector-vs-qdrant) with Nirant that compared Qdrant's HNSW and PGVector's IVF Index and it led to implementation of HNSW in pgvector.
+- The cost of building and storing index would rise because of higher RAM and CPU requirements if Exa switched to HNSW. But Perplexity uses HNSW and hence was able to claim lower latency against Exa in their [recent benchmarks](https://www.perplexity.ai/api-platform/resources/architecting-and-evaluating-an-ai-first-search-api#:~:text=community%20as%20well.-,Search%20API%20Latency,-(milliseconds%3B%20requests%20initiated). In my opinion it makes sense for Exa to also do this and so they get more time to spend on re-ranking and LLM based filtering (websets) afterwards.
 
 ## Closing remarks:
 
-Web search started in 1994 with [Yahoo directories](https://en.wikipedia.org/wiki/Yahoo_Directory), then search engines like Alta Vista introduced Keyword search using TF-IDF in late 1990s, and then eventually Google came in 1998 and dominated the game with [Pagerank](https://en.wikipedia.org/wiki/PageRank). Over the next two decades, Google added lots of heuristics and statistics based approaches. Then around 2015 they started integrating ML models such as RankBrain and BERT, enabling semantic understanding and context-aware ranking.
+Web search started in 1994 with [Yahoo directories](https://en.wikipedia.org/wiki/Yahoo_Directory), then search engines like Alta Vista introduced Keyword search using [TF-IDF](https://en.wikipedia.org/wiki/Tf%E2%80%93idf) in late 1990s, and then eventually Google came in 1998 and dominated the game with [Pagerank](https://en.wikipedia.org/wiki/PageRank). Over the next two decades, Google added lots of heuristics and statistics based approaches. Then around 2015 they started integrating ML models such as RankBrain and BERT, enabling semantic understanding and context-aware ranking.
 
-And very recently, we see that even those are being [surpassed](https://exa.ai/blog/evals-at-exa) by more generalizable LLMs. Infact, now you can ask more [complex queries](https://exa.ai/blog/websets-evals) to the web which were impossible with previous techniques. It's literally [Bitter lesson](http://www.incompleteideas.net/IncIdeas/BitterLesson.html) 101 which says compute-driven solutions beat heuristics.
+And very recently, we see that even those are being [surpassed](https://exa.ai/blog/evals-at-exa) by more generalizable LLMs. Infact, now you can ask more [complex queries](https://exa.ai/blog/websets-evals) to the web which were impossible with previous techniques. It's literally [Bitter lesson](http://www.incompleteideas.net/IncIdeas/BitterLesson.html) 101 which says compute-driven solutions beat human designed heuristics.
 
 We’re entering an era where startups are recreating Google scale search and number of searches will rise exponentially because of AI agents driving majority of search request. That's why products like Exa, Parallel, and Perplexity are effectively "caching" the web and serving "reads" in an optimized way. While others like Perplexity Comet, OpenAI Operator, etc want to "write" to the web (i.e. take actions). Web & Search are changing and I'm very excited about their futures!
 
