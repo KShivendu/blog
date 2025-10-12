@@ -40,7 +40,7 @@ Update: Exa recently made improvements across their pipeline to make everything 
 - Qwen3-Embedding-8B has a massive context length of 32K tokens. As per this quick [research](https://www.perplexity.ai/search/average-words-per-page-on-the-qjaJmyDVQ823yG.lh.Ba3g#0), most internet pages and even research papers would fit in this context length. So chunking isn't required. 1 document = 1 vector.
 - Each uncompressed vector would take 4096 dims \* 2 bytes (assuming fp16) = 8KB by default. This means 1B vectors would take 8 \* 10^3 bytes \* 10^9 = 8 \* 10^12 = 8 TB for 1B docs.
 - By truncating matryoshka it becomes, 8 / (4096 / 256) TB = 8 / 16 TB = 512 GB for 1B vectors.
-- With binary quantization, 16 bits (since fp16) becomes 1 bit. So 512 GB / 16 = 32 GB per 1B vectors (i.e. 16\*16=256x reduction)
+- With binary quantization, 16 bits (since fp16) becomes 1 bit. So 512 GB / 16 = 32 GB per 1B vectors (i.e. 16\*16=256x reduction with MRL truncation + BQ)
 - For original vectors:
   - Disk cost: 8 \* 1e3 \* 0.35 \$ = 2.8k \$ / month for 1B docs
   - Memory cost: 8 \* 1e3 \* 2 \$ = 16k \$ / month for 1B docs. But this sounds too costly and Pareto principle says 20% of docs will account for 80% queries so let's cache only 25% in RAM and hence it should consume 2TB RAM and cost 4k \$ / month for 1B docs.
@@ -77,12 +77,24 @@ Update: Exa recently made improvements across their pipeline to make everything 
 
 - FineWeb has 18.5T tokens for 26B docs. i.e. 1B docs => 712B tokens
 - English wikipedia text has 5B words for 7M docs. Assuming 4/3 tokens/words, it's 1B docs => 5/7T words = 5/7 \* 4/3 T tokens = 0.95T = 950B tokens
-- Let's assume Exa docs have 1B docs => 800B tokens (or 1 doc => 0.8 tokens, wtf?)
+- Let's assume Exa docs have 1B docs => 800B tokens (or 1 doc => 800 tokens)
 - If they were to embed it all with OpenAI embedding (yeah ik, it's bad for retrieval)
-  - 800 _ 1000 _ 0.1 \$ / M token = 80_000 \$ for 1B docs
-- Now this is very costly!
+  - 800 \* 1000 \* 0.1 \$ / M token = 80k \$ for 1B docs (insanely costly!)
+- If they were to embed it all with OpenAI embedding (yeah ik, it's bad for retrieval)
+  - 800 \* 1000 \* 0.1 \$ / M token = 80k \$ for 1B docs (insanely costly!)
+- If they were to use something like Qwen be $ 0.0166 / 1 M tokens,
+  - 800 \* 1000 \* 0.0166 \$ / M token = 13.3k $ for 1B docs (better but notice how this surpasses all the other costs)
+- They have Exa cluster and I wouldn't be surprised if the use it for crawling inference as well.
 
-As per [this blog](https://www.tensoreconomics.com/p/why-are-embeddings-so-cheap), longer documents (>4000 words) don't even benefit from embedding generation.
+## Crawling updates
+
+- English Wikipedia has 7M articles and gets 72M updates per year (i.e. 200k page updates per day). So 2.8% of the docs are changed daily. But this is Wikipedia and hence we see a very high update rate. In practice, I'd only expect much lower numbers for other sites.
+- Even if I assume only 2% of this changes every day (in practice each category of the content would change at different rate), 2% \* 1B = 200M docs updated per day.
+  - This also means in a month, it's about 2% \* 30 = 60%.
+- With Wikipedia, new pages are growing at 2.5\% annually, but that number would be higher for general web. Let's assume 12% annually. It would be 1% monthly.
+- 60 + 1 = 61%. This means 1B docs => 610M updates / month and its cost is easily 13.3k \* 0.61 = 8.1k \$
+
+As per [this blog](https://www.tensoreconomics.com/p/why-are-embeddings-so-cheap), longer documents (>4000 words) don't even benefit from embedding batching.
 
 ## 🌐📤 Network egress costs:
 
@@ -110,11 +122,12 @@ time curl --head https://api.exa.ai/search
 | Metadata storage       | 1.2k USD                 | 144k USD                        |
 | Lexical search storage | 2.8k USD                 | 336k USD                        |
 | Vector search storage  | 7k USD                   | 840k USD                        |
+| Embedding generation   | 8.1k USD                 | 972k USD                        |
 | Embedding rate         | 7k USD                   | 840k USD                        |
 | Egress (API response)  | 30 USD                   | 3.6k USD                        |
-| TOTAL                  | 28k USD                  | 1.38M USD                       |
+| TOTAL                  | 28k USD                  | 3.2M USD                        |
 
-So the cost of running all this is easily 2M \$ / year for 10B docs since I haven't even considered CPU/GPU cost, crawling, model fine tuning, and rest of the infra.
+So the cost of running all this is easily 4-5M \$ / year for 10B docs since I haven't even considered CPU cost, crawling, model fine tuning, and rest of the infra.
 
 ## Search latency analysis:
 
