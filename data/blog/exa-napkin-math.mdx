@@ -13,18 +13,57 @@ authors: ['default']
 
 Update: Exa recently made improvements across their pipeline to make everything faster and higher quality. This means some of assumptions might be slightly outdated now, but the fundamentals are still applicable. Also, I did some benchmarks before/after their updates so I can compare if they have improved!
 
+## 📦 Content storage:
+
+Let’s estimate the storage requirements for large-scale text datasets:
+
+- **Fineweb** ([dataset link](https://huggingface.co/datasets/HuggingFaceFW/fineweb))
+
+  - 26B documents occupy **44 TB raw**, meaning **1B docs ≈ 1.69 TB**.
+  - After compression, total size drops to **16 TB**, i.e. **1B docs ≈ 620 GB**.
+
+- **English Wikipedia** ([stats](https://en.wikipedia.org/wiki/Wikipedia:Statistics#Articles))
+
+  - 7M articles total **58 GB uncompressed**, so **1B docs ≈ 8.3 TB**.
+  - Compressed size is **24 GB**, implying **1B docs ≈ 3.42 TB**.
+
+Given these, let’s assume Exa’s crawlers curate and sanitize pages efficiently enough that **1B pages require ~1.2 TB (compressed)**.
+
+> (We can later cross-check this with BM25 token-length derivations and an average of ~900 tokens per document — though there’s a minor mismatch.)
+
+### 💰 Monthly Cost Estimates
+
+| Resource          | Unit Cost  | For 1.2 TB   | Cost/Month |
+| ----------------- | ---------- | ------------ | ---------- |
+| **S3 storage**    | $0.02 / GB | 1.2 × 10³ GB | **$24**    |
+| **Ephemeral SSD** | $0.08 / GB | 1.2 × 10³ GB | **$96**    |
+
+**➡️ Total: $120 / month for 1 B documents** — a neat round figure.
+
 ## 🔍 Lexical/Keyword search (BM25):
 
-- They use the standard [BM25 algorithm](https://www.youtube.com/watch?v=ziiF1eFM3_4&t=698s) for lexical search.
+- They use the standard [BM25 algorithm](https://www.youtube.com/watch?v=ziiF1eFM3_4&t=698s) for lexical search
 - Initially, this required about 1.8 TB RAM (posting lists + frequency stats) for 1B docs
-- After optimizations in [this post](https://exa.ai/blog/bm25-optimization) it dropped to 1.2TB (-50%) RAM for 1B docs
+- After optimizations in [this post](https://exa.ai/blog/bm25-optimization) it dropped to 900GB (-50%) RAM for 1B docs
 
 ### Napkin math
 
-- I'm assuming the index is also kept in RAM for faster querying and I'm using rates from [this](https://github.com/sirupsen/napkin-math)
-- RAM Cost: 1200 GB × \$ 2 / GB = $2400 / month
-- Disk Cost: 1200 GB × \$ 0.35 / GB = $420 / month
-- Total ~= 2800 \$ / month for 1B docs
+- FineWeb has 18.5T tokens for 26B docs. i.e. 1B docs => 712B tokens
+- English wikipedia text has 5B words for 7M docs. Assuming 4/3 tokens/words, it's 1B docs => 5/7T words = 5/7 \* 4/3 T tokens = 0.95T = 950B tokens
+- Let's assume Exa crawlers curate high quality pages and clean them so they have 900 tokens per doc (commoncrawl has 1.2k avg, a high quality variant has 2k).
+- Most of storage overhead in BM25 comes from the postings lists. Other data structures have relatively negligible impact.
+- Each posting list entry: doc ID (uint32, 4 byte) + term freq (fp8, 1 byte) = 5 bytes (mentioned by Exa)
+- This means 1.8 TB / 5 bytes = 360 tokens (unique) in a doc. It's 37% of the 900 tokens per doc that we assumed.
+- This is aligned with the Wikipedia stats which has 30-45% unique terms in a doc.
+- There will be a tiny overhead of vocab size, since even if you assume 10M unique vocab terms across a 1B corpus with each word being of 5 letters ([source](https://www.wyliecomm.com/whats-the-best-length-of-a-word-online/)), it would be just 5 _ 10M _ 1 byte / char = 50MB
+  - And note that most of this comes from unique terms accounting for misspellings, languages, domain specific terms, etc.
+- Total postings: 1B docs \* 300 unique terms/doc = 100B posting lists
+- Size: 100B \* 10 bytes = 1 TB
+- Note that Exa mentioned they used uint32 that means they must be having fewer than 4.2B docs (2^32) when they wrote the blog. They have used delta encoding so it will scale smoothly when they switch to uint64 for holding 10B+ docs (probably happened in Exa 2.0 launch).
+- I'm assuming the 100% index is kept in RAM for faster iteration on posting lists (~2-5x lower latency compared to sequential reads in SSD) and I'm using rates from [this](https://github.com/sirupsen/napkin-math)
+- RAM Cost: 900 GB × \$ 2 / GB = $1800 / month
+- Disk Cost: 900 GB × \$ 0.35 / GB = $315 / month
+- Total ~= 2115 \$ / month for 1B docs
 
 ## 🧭 Vector search:
 
@@ -64,15 +103,6 @@ Update: Exa recently made improvements across their pipeline to make everything 
 - So total metadata storage on disk is 1B docs \* 0.5KB = 0.5TB for 1B doc metadata. This means 500 GB \* 0.35 \$ / GB = 175 \$ / month for 1B docs.
 - Keeping metadata in RAM makes sense and would take, 512 TB \* 2 \$ / GB = 1k \$ / month for 1B docs.
 
-## 📦 Content storage:
-
-- [Fineweb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) has 26B docs consuming 108 TB. 1B docs => 4.15TB
-- [English Wikipedia Text](https://en.wikipedia.org/wiki/Wikipedia:Statistics#Articles) has 7M docs with 58GB => 1B docs in 8.3TB (Text heavy)
-- So let's assume tha Exa crawlers curate pages where 1B pages take 5TB on avg
-- S3 cost: 5 \* 1e3 \* 0.02 \$ = 100 \$ / month
-- Disk cost: 5 \* 1e3 \* 0.08 \$ (Ephemeral SSD) = 400 \$ / month
-- Total is 500 \$ / month for 1B docs (not bad)
-
 ### Embedding generation:
 
 - FineWeb has 18.5T tokens for 26B docs. i.e. 1B docs => 712B tokens
@@ -104,9 +134,14 @@ I did a basic search API call with Exa and response size was around 3k bytes ~= 
 
 3 KB \* 100M => 300 GB of egress => 300 \* 0.1 \$ = 30 \$ / month for 100M requests which is very cheap!
 
-## 🌍🔁 Global replication:
+## 🌍🔁 Global latency:
 
-I queried Exa AI DNS records and looks like they are only present in AWS `us-west-2` region. This has downsides because it increases latency a lot. The round trip time from India is `600-800ms`. You can find ping times from all over the world [here](https://globalping.io/?measurement=g9UVVPjZD7g3OmqV). But yeah they can expand their regions as they get more customers across the globe because each replication is going to be huge jump in their infra cost.
+I queried Exa AI DNS records and looks like they are only present in AWS `us-west-2` region. This has downsides because it increases latency a lot. The round trip time from India is `600-800ms`. You can find ping times from all over the world [here](https://globalping.io/?measurement=g9UVVPjZD7g3OmqV). There are two solutions to this:
+
+- Expand into new regions. But it's very costly to replicate whole infra in different region.
+- Use something like Cloudflare Edge network. It basically proxies the requests through Cloudflare edge network which is faster and more stable than traditional internet route. It's not zero overhead, but is definitely a big improvement. Perplexity knew this gap existed and used it in their benchmark.
+
+Update: Looks like Exa has switched to Cloudflare Edge like Perplexity with Exa 2.0. This means the latency across the globe has decreased. I see that now the latency from India is at `300-400ms`. Well done Exa team!
 
 You can also use this command to get rough idea of latency from your machine:
 
@@ -118,14 +153,14 @@ time curl --head https://api.exa.ai/search
 
 | Component              | Cost for 1B docs / month | Cost for 10B docs / year (120x) |
 | ---------------------- | ------------------------ | ------------------------------- |
-| Content storage        | 500 USD                  | 60k USD                         |
+| Content storage        | 0.5k USD                 | 60k USD                         |
 | Metadata storage       | 1.2k USD                 | 144k USD                        |
-| Lexical search storage | 2.8k USD                 | 336k USD                        |
+| Lexical search storage | 2.12k USD                | 254.4k USD                      |
 | Vector search storage  | 7k USD                   | 840k USD                        |
 | Embedding generation   | 8.1k USD                 | 972k USD                        |
 | Embedding rate         | 7k USD                   | 840k USD                        |
-| Egress (API response)  | 30 USD                   | 3.6k USD                        |
-| TOTAL                  | 28k USD                  | 3.2M USD                        |
+| Egress (API response)  | 0.030k USD               | 3.6k USD                        |
+| TOTAL                  | 26k USD                  | 3.2M USD                        |
 
 So the cost of running all this is easily 4-5M \$ / year for 10B docs since I haven't even considered CPU cost, crawling, model fine tuning, and rest of the infra.
 
