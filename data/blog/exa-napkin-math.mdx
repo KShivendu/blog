@@ -11,59 +11,63 @@ authors: ['default']
 
 [Exa](https://exa.ai/) is a cool search engine company. They recently [raised 85M\$ for Series B](https://exa.ai/blog/announcing-series-b). There are multiple parts of Exa AI architecture that they have described in their [blogs](https://exa.ai/blog). I've compiled them together and added some of my own notes and **lots of assumptions** for infra cost [napkin math](https://www.youtube.com/watch?v=IxkSlnrRFqc) as a fun exercise for myself. Please take my estimates with a grain of salt and let me know if I made any wrong or suboptimal assumptions :D
 
-Update: Exa recently made improvements across their pipeline to make everything faster and higher quality. This means some of assumptions might be slightly outdated now, but the fundamentals are still applicable. Also, I did some benchmarks before/after their updates so I can compare if they have improved!
+Update: Exa recently did [improvements](https://exa.ai/blog/exa-api-2-0) across their pipeline to make search faster and more relevant. This means some of assumptions might be slightly outdated now, but the fundamentals are still applicable. Also, I did some benchmarks before/after their updates so I can compare if they have improved!
 
-## 📦 Content storage:
+## 📦 Content Storage
 
 Let’s estimate the storage requirements for large-scale text datasets:
 
-- **Fineweb** ([dataset link](https://huggingface.co/datasets/HuggingFaceFW/fineweb))
+- [Fineweb](https://huggingface.co/datasets/HuggingFaceFW/fineweb)
+  - 26B documents occupy 44 TB (compressed), meaning 1B docs ≈ 1.69 TB (compressed)
+  - It has 18.5T tokens and used GPT-2 tokenizer. Assuming the standard rule of 1 word = 1.3 tokens, this means 26B docs ~= 14T words.
+    - 1 doc ~= 711 tokens ~= 538 words.
+    - English words on avg have 5 chars and each char takes 1 byte, So 538 \* 5 bytes ~= 2.7KB / doc
+    - 1B docs ~= 2.7TB (estimated uncompressed). This means a compression of 38% which is expected when using gzip/zstd
+- [English Wikipedia](https://en.wikipedia.org/wiki/Wikipedia:Statistics#Articles)
+  - 7M docs occupy 24 GB (compressed), 1B docs ~= 3.42 TB (compressed)
+  - It has 708 words / doc on avg. Assuming the standard rule of 1 word = 1.3 tokens, this means 920 tokens / doc on avg.
+    - 1 doc ~= 920 tokens ~= 708 words
+    - 708 \* 6 bytes ([reason](https://en.wikipedia.org/wiki/Wikipedia:Size_of_Wikipedia#Number_of_words)) = 4248 bytes
+    - 1B docs => 4.2TB (estimated uncompressed)
 
-  - 26B documents occupy **44 TB raw**, meaning **1B docs ≈ 1.69 TB**.
-  - After compression, total size drops to **16 TB**, i.e. **1B docs ≈ 620 GB**.
+Given these, let’s assume Exa’s crawlers curate and sanitize pages efficiently enough such that :
 
-- **English Wikipedia** ([stats](https://en.wikipedia.org/wiki/Wikipedia:Statistics#Articles))
+- 1B docs require 3TB (uncompressed) and 1.9TB (compressed)
+- Have 600 words on average. i.e. 780 tokens on average.
 
-  - 7M articles total **58 GB uncompressed**, so **1B docs ≈ 8.3 TB**.
-  - Compressed size is **24 GB**, implying **1B docs ≈ 3.42 TB**.
-
-Given these, let’s assume Exa’s crawlers curate and sanitize pages efficiently enough that **1B pages require ~1.2 TB (compressed)**.
-
-> (We can later cross-check this with BM25 token-length derivations and an average of ~900 tokens per document — though there’s a minor mismatch.)
-
-### 💰 Monthly Cost Estimates
-
-| Resource          | Unit Cost  | For 1.2 TB   | Cost/Month |
-| ----------------- | ---------- | ------------ | ---------- |
-| **S3 storage**    | $0.02 / GB | 1.2 × 10³ GB | **$24**    |
-| **Ephemeral SSD** | $0.08 / GB | 1.2 × 10³ GB | **$96**    |
-
-**➡️ Total: $120 / month for 1 B documents** — a neat round figure.
+| Resource          | Rate       | Volume     | Cost/Month |
+| ----------------- | ---------- | ---------- | ---------- |
+| **S3 storage**    | $0.02 / GB | 2 × 10³ GB | $40        |
+| **Ephemeral SSD** | $0.08 / GB | 2 × 10³ GB | $160       |
+| Total             |            |            | $200       |
 
 ## 🔍 Lexical/Keyword search (BM25):
 
 - They use the standard [BM25 algorithm](https://www.youtube.com/watch?v=ziiF1eFM3_4&t=698s) for lexical search
-- Initially, this required about 1.8 TB RAM (posting lists + frequency stats) for 1B docs
+- Initially, this required about 1.8 TB RAM for 1B docs
 - After optimizations in [this post](https://exa.ai/blog/bm25-optimization) it dropped to 900GB (-50%) RAM for 1B docs
 
 ### Napkin math
 
-- FineWeb has 18.5T tokens for 26B docs. i.e. 1B docs => 712B tokens
-- English wikipedia text has 5B words for 7M docs. Assuming 4/3 tokens/words, it's 1B docs => 5/7T words = 5/7 \* 4/3 T tokens = 0.95T = 950B tokens
-- Let's assume Exa crawlers curate high quality pages and clean them so they have 900 tokens per doc (commoncrawl has 1.2k avg, a high quality variant has 2k).
 - Most of storage overhead in BM25 comes from the postings lists. Other data structures have relatively negligible impact.
-- Each posting list entry: doc ID (uint32, 4 byte) + term freq (fp8, 1 byte) = 5 bytes (mentioned by Exa)
-- This means 1.8 TB / 5 bytes = 360 tokens (unique) in a doc. It's 37% of the 900 tokens per doc that we assumed.
-- This is aligned with the Wikipedia stats which has 30-45% unique terms in a doc.
-- There will be a tiny overhead of vocab size, since even if you assume 10M unique vocab terms across a 1B corpus with each word being of 5 letters ([source](https://www.wyliecomm.com/whats-the-best-length-of-a-word-online/)), it would be just 5 _ 10M _ 1 byte / char = 50MB
+- As per [this](https://exa.ai/blog/bm25-optimization#:~:text=a%20single%20byte.-,Assuming%20the), for Exa, each posting list entry takes:
+  - doc_id → 4 bytes (uint32)
+  - term_freq → 1 byte (fp8)
+  - 5 bytes total
+- This means 1.8 TB / 5 bytes = 360 tokens are unique in a doc on avg.
+  - It's 44% of the 780 tokens per doc that we assumed.
+  - This percent is kinda close to the standard [type-to-token ratio](https://www.sketchengine.eu/glossary/type-token-ratio-ttr/) in high quality pages.
+- There might have bene a tiny overhead of vocab size
+  - Even if we assume 10M unique vocab terms across a 1B corpus with each word being of 5 letters ([source](https://www.wyliecomm.com/whats-the-best-length-of-a-word-online/)), it would be just 5 _ 10M _ 1 byte / char = 50MB
   - And note that most of this comes from unique terms accounting for misspellings, languages, domain specific terms, etc.
-- Total postings: 1B docs \* 300 unique terms/doc = 100B posting lists
-- Size: 100B \* 10 bytes = 1 TB
-- Note that Exa mentioned they used uint32 that means they must be having fewer than 4.2B docs (2^32) when they wrote the blog. They have used delta encoding so it will scale smoothly when they switch to uint64 for holding 10B+ docs (probably happened in Exa 2.0 launch).
-- I'm assuming the 100% index is kept in RAM for faster iteration on posting lists (~2-5x lower latency compared to sequential reads in SSD) and I'm using rates from [this](https://github.com/sirupsen/napkin-math)
-- RAM Cost: 900 GB × \$ 2 / GB = $1800 / month
-- Disk Cost: 900 GB × \$ 0.35 / GB = $315 / month
-- Total ~= 2115 \$ / month for 1B docs
+- Note that Exa mentioned they used `uint32` for doc ID that means they must be having fewer than 4.2B docs (2^32) when they wrote the blog. They started used delta encoding so it will scale smoothly when they switch to uint64 for holding 10B docs (probably happened in Exa 2.0 [launch](https://exa.ai/blog/exa-api-2-0)).
+- I'm assuming the 100% index is kept in RAM for faster iteration on posting lists (~2-5x faster compared to sequential reads in SSD) and I'm using rates from [this](https://github.com/sirupsen/napkin-math)
+
+| Resource     | Rate       | Volume | Cost/Month for 1B docs |
+| ------------ | ---------- | ------ | ---------------------- |
+| RAM          | $2 / GB    | 900GB  | $1800                  |
+| Regional SSD | $0.35 / GB | 900GB  | $315                   |
+| Total        |            |        | $2115                  |
 
 ## 🧭 Vector search:
 
@@ -74,57 +78,97 @@ Given these, let’s assume Exa’s crawlers curate and sanitize pages efficient
 
 ### Napkin math
 
-- I think their model is a fine-tuned version of [Qwen3-Embedding-8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B) since it fits the description well.
-  - Update: With Exa 2.0, they have pre-trained and finetuned an embedding model. However, I don't expect the architecture to be wildly different from state-of-the-art OSS models like Qwen.
-- Qwen3-Embedding-8B has a massive context length of 32K tokens. As per this quick [research](https://www.perplexity.ai/search/average-words-per-page-on-the-qjaJmyDVQ823yG.lh.Ba3g#0), most internet pages and even research papers would fit in this context length. So chunking isn't required. 1 document = 1 vector.
+- I think their model is a fine-tuned version of [Qwen3-Embedding-8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B) since it fits the description well and is popular.
+  - Qwen3-Embedding-8B has a massive context length of 32K tokens. As per this quick [research](https://www.perplexity.ai/search/average-words-per-page-on-the-qjaJmyDVQ823yG.lh.Ba3g#0), most internet pages and even research papers would fit in this context length. So chunking isn't required. 1 document = 1 vector.
+  - Update: With Exa 2.0 [launch](https://exa.ai/blog/exa-api-2-0), they have pre-trained and finetuned an embedding model and claim to have found new embedding techniques. However, I don't expect the architecture to be wildly different from state-of-the-art OSS models like Qwen.
 - Each uncompressed vector would take 4096 dims \* 2 bytes (assuming fp16) = 8KB by default. This means 1B vectors would take 8 \* 10^3 bytes \* 10^9 = 8 \* 10^12 = 8 TB for 1B docs.
 - By truncating matryoshka it becomes, 8 / (4096 / 256) TB = 8 / 16 TB = 512 GB for 1B vectors.
-- With binary quantization, 16 bits (since fp16) becomes 1 bit. So 512 GB / 16 = 32 GB per 1B vectors (i.e. 16\*16=256x reduction with MRL truncation + BQ)
+- With binary quantization, 16 bits (since fp16) becomes 1 bit. So 512 GB / 16 = 32 GB per 1B vectors or 32 bytes (256 bits) per vector
+  - Note how MRL truncation + BQ led to 16\*16=256x reduction
 - For original vectors:
   - Disk cost: 8 \* 1e3 \* 0.35 \$ = 2.8k \$ / month for 1B docs
   - Memory cost: 8 \* 1e3 \* 2 \$ = 16k \$ / month for 1B docs. But this sounds too costly and Pareto principle says 20% of docs will account for 80% queries so let's cache only 25% in RAM and hence it should consume 2TB RAM and cost 4k \$ / month for 1B docs.
   - Total: 2.8 + 4k \$ = 6.8k \$
-- For IVF index with BQ + MRL truncation + re-ranking with original vectors for their "neural search"
-  - IVF Index needs centroids along with original vectors, I'm assuming they have 10B vectors and they have 100K clusters, each having 100K vectors.
-  - Each cluster will have a centroid and I'm assuming they keep uncompressed centroid vectors for maximizing recall.
-  - Centroids will require 100K \* 4096 \* 2 bytes = 820GB for 10B vectors (or 82GB for 1B vectors)
-  - Each vector ID needs to stored in the IVF Index, 10B \* 8 bytes = 80 GB (assuming that for point id they'd have uint64 since uint32 only allows 8B point IDs)
-  - Each vector will take 32bytes (256 bits), so 10B \* 32 bytes = 320 GB
-  - So total requirements are like 820 + 80 + 320 GB = 1220 GB for 10B vectors (i.e. 122GB for 1B vectors) which is just 122/8000\*100 = 1.6% of the index (nice!)
+- For IVF index with BQ + MRL truncation + re-ranking with original vectors for their "neural search" on 10B vectors (i.e. Exa 2.0)
+  - IVF Index needs centroids along with original vectors, I'm assuming they have 10B vectors and they have 100k clusters, each having 100K vectors.
+  - Each cluster will have a centroid and I'm assuming they compare with uncompressed centroid vectors for maximizing recall.
+  - Centroids will require 100k \* 4096 \* 2 bytes ~= 0.82 GB
+  - Each vector ID needs to be stored in the IVF Index, 10B \* 8 bytes = 80 GB (must be `uint64` to store 4.2B+ docs)
+  - Each truncated + BQ compressed vector will take 32bytes (256 bits), so 10B \* 32 bytes = 320 GB
+  - So total requirements are like 0.82 + 80 + 320 GB = 400 GB for 10B vectors
+    - This is 40GB for 1B vectors
+    - It's just 40/8000\*100 = 0.5% of the full vectors (nice!)
   - The index must be kept in RAM for fast queries and also should have be kept on disk to (re)load from.
-  - Disk cost: 122 GB \* \$ 0.35/GB [for regional SSD](https://github.com/sirupsen/napkin-math) = 43 \$ / month per 1B docs
-  - RAM cost: 122 GB \* 2 \$ / GB / month = 244 \$ / month for 1B docs
-  - Total cost: 287 \$ / month for 1B docs
-- Overall, vector search cost for them should be around 6.8k + 287 = 7k \$ / month for 1B vectors. Note how this is ~2.5x of lexical search and most of it comes from just storing the original vectors for re-ranking.
+
+| Component            | Rate       | Volume | Cost/Month for 1B docs |
+| -------------------- | ---------- | ------ | ---------------------- |
+| Index RAM            | $2 / GB    | 40GB   | $80                    |
+| Index Regional SSD   | $0.35 / GB | 40GB   | $14                    |
+| Vector RAM           | $2 / GB    | 2000GB | $4000                  |
+| Vectors Regional SSD | $0.35 / GB | 8000GB | $2800                  |
+| Total                |            |        | $6894                  |
+
+Note how this is ~3.3x (6.9k / 2.1k) of lexical search and most of it comes from just storing the original vectors for re-ranking.
 
 ## 🗂️ Metadata storage:
 
-- For each web page, they also need to store metadata like title, url, publishedDate, author, id, image, favicon, text, summary, etc. I'm assuming it's gonna take another 512bytes (0.5KB) for each doc. Why? because their [search API example](https://docs.exa.ai/reference/search) returns page attributes that can be stored in < 300 bytes.
-- So total metadata storage on disk is 1B docs \* 0.5KB = 0.5TB for 1B doc metadata. This means 500 GB \* 0.35 \$ / GB = 175 \$ / month for 1B docs.
-- Keeping metadata in RAM makes sense and would take, 512 TB \* 2 \$ / GB = 1k \$ / month for 1B docs.
+- For each web page, they also need to store metadata like title, url, publishedDate, author, id, image, favicon, text, summary, etc.
+- I'm assuming it's gonna take another 512bytes (0.5KB) for each doc. Why? because their [search API example](https://docs.exa.ai/reference/search) returns page attributes that can be stored in < 300 bytes.
+- So total metadata storage on disk is 1B docs \* 0.5KB = 0.5TB for 1B doc metadata
+- Assuming that metadata for the same 25% points are cached, we need 125GB of RAM
 
-### Embedding generation:
-
-- FineWeb has 18.5T tokens for 26B docs. i.e. 1B docs => 712B tokens
-- English wikipedia text has 5B words for 7M docs. Assuming 4/3 tokens/words, it's 1B docs => 5/7T words = 5/7 \* 4/3 T tokens = 0.95T = 950B tokens
-- Let's assume Exa docs have 1B docs => 800B tokens (or 1 doc => 800 tokens)
-- If they were to embed it all with OpenAI embedding (yeah ik, it's bad for retrieval)
-  - 800 \* 1000 \* 0.1 \$ / M token = 80k \$ for 1B docs (insanely costly!)
-- If they were to embed it all with OpenAI embedding (yeah ik, it's bad for retrieval)
-  - 800 \* 1000 \* 0.1 \$ / M token = 80k \$ for 1B docs (insanely costly!)
-- If they were to use something like Qwen be $ 0.0166 / 1 M tokens,
-  - 800 \* 1000 \* 0.0166 \$ / M token = 13.3k $ for 1B docs (better but notice how this surpasses all the other costs)
-- They have Exa cluster and I wouldn't be surprised if the use it for crawling inference as well.
+| Component             | Rate       | Volume | Cost/Month for 1B docs |
+| --------------------- | ---------- | ------ | ---------------------- |
+| Metadata RAM          | $2 / GB    | 125GB  | $250                   |
+| Metadata Regional SSD | $0.35 / GB | 40GB   | $14                    |
+| Total                 |            |        | $264                   |
 
 ## Crawling updates
 
-- English Wikipedia has 7M articles and gets 72M updates per year (i.e. 200k page updates per day). So 2.8% of the docs are changed daily. But this is Wikipedia and hence we see a very high update rate. In practice, I'd only expect much lower numbers for other sites.
-- Even if I assume only 2% of this changes every day (in practice each category of the content would change at different rate), 2% \* 1B = 200M docs updated per day.
-  - This also means in a month, it's about 2% \* 30 = 60%.
-- With Wikipedia, new pages are growing at 2.5\% annually, but that number would be higher for general web. Let's assume 12% annually. It would be 1% monthly.
-- 60 + 1 = 61%. This means 1B docs => 610M updates / month and its cost is easily 13.3k \* 0.61 = 8.1k \$
+- English Wikipedia has 7M articles and gets 72M updates per year (i.e. 200k page updates per day). So 2.8% of the docs are changed daily. But this is Wikipedia and hence we see a very high update rate. In practice, we should expect much lower numbers for other sites.
 
-As per [this blog](https://www.tensoreconomics.com/p/why-are-embeddings-so-cheap), longer documents (>4000 words) don't even benefit from embedding batching.
+```
+Tier 1 (News, high-value): 1% of pages, crawled daily
+Tier 2 (Active sites): 10% of pages, crawled weekly
+Tier 3 (Normal sites): 30% of pages, crawled bi-weekly
+Tier 4 (Low priority): 40% of pages, crawled monthly
+Tier 5 (Archive): 19% of pages, crawled quarterly or less
+```
+
+For 1B pages:
+
+- Tier 1: 10M pages × 30 crawls/month = 300M crawls
+- Tier 2: 100M pages × 4 crawls/month = 400M crawls
+- Tier 3: 300M pages × 2 crawls/month = 600M crawls
+- Tier 4: 400M pages × 1 crawl/month = 400M crawls
+- Tier 5: 190M pages × 0.33 crawls/month = 63M crawls
+
+Total: ~1.76B page fetches/month (i.e. +176% overhead for refreshing index)
+Daily fetches: 58M fetches/day (i.e. 5.8% per daily)
+
+This means 1B docs => 1.76B updates / month
+
+## 🔢 Embedding generation:
+
+- As we [previously](#-content-storage) derived/assumed, let's say each Exa doc has 780 tokens. But because of crawling updates, it becomes 1372 tokens contributed by each page every month on avg.
+- If they were to embed 1B docs with OpenAI `text-embedding-3-large	` embedding (see [pricing](https://platform.openai.com/docs/pricing#embeddings))
+  - 1372 \* 1B \* 0.13 \$ / M token = 178k \$ for 1B docs (insane!)
+  - Note that OpenAI models aren't great for retrieval and clearly are very costly
+- As per [this blog](https://www.tensoreconomics.com/p/why-are-embeddings-so-cheap#:~:text=a%20million%20tokens.-,In%20Tab.%202), assuming 100% utilization with H100 GPUs rented at \$ 2 / hr, the cost is $ 0.0166 / 1 M tokens.
+  - 1372 \* 1000 \* 0.0166 \$ / M token ~= 22.8k $ for 1B docs.
+  - This is much better! However, notice how this still surpasses all the costs.
+  - Exa realised this early and that's why they bought/built their [Exacluster](https://exa.ai/blog/meet-the-exacluster) to save massively on costs. Rented GPUs are too costly. Exacluster is clearly used for:
+    - One of the cheapest H100 is [offered](https://vast.ai/pricing) at 1.87\$ / hr. But general pricing is 2-4\$ / hr.
+    - Assuming a worse case margin for 20% for the above rate, Exacluster costs 1.5\$ / hr. This means embedding price is 0.0166 \* 0.8 = 0.0133 \$ / 1M tokens
+    - Note that the same cluster is also used for training embedding model and re-ranker so there's more value to be derived from Exacluster.
+
+| Embedding model               | Rate             | Tokens     | Cost/Month for 1B docs |
+| ----------------------------- | ---------------- | ---------- | ---------------------- |
+| OpenAI `text-embedding-small` | $0.1300 / 1M tok | 1372 \* 1B | $178k                  |
+| Qwen on Rented H100 GPUs      | $0.0166 / 1M tok | 1372 \* 1B | $22.8k                 |
+| Qwen on Exacluster            | $0.0133 / 1M tok | 1372 \* 1B | $18.2k                 |
+
+Clearly savings of 4.6k$ / month / 1B docs which is great!
 
 ## 🌐📤 Network egress costs:
 
@@ -139,9 +183,9 @@ I did a basic search API call with Exa and response size was around 3k bytes ~= 
 I queried Exa AI DNS records and looks like they are only present in AWS `us-west-2` region. This has downsides because it increases latency a lot. The round trip time from India is `600-800ms`. You can find ping times from all over the world [here](https://globalping.io/?measurement=g9UVVPjZD7g3OmqV). There are two solutions to this:
 
 - Expand into new regions. But it's very costly to replicate whole infra in different region.
-- Use something like Cloudflare Edge network. It basically proxies the requests through Cloudflare edge network which is faster and more stable than traditional internet route. It's not zero overhead, but is definitely a big improvement. Perplexity knew this gap existed and used it in their benchmark.
+- Use something like Cloudflare Edge network. It basically proxies the requests through Cloudflare edge network which is faster and more stable than traditional internet route. It's not zero overhead, but is definitely a big improvement.
 
-Update: Looks like Exa has switched to Cloudflare Edge like Perplexity with Exa 2.0. This means the latency across the globe has decreased. I see that now the latency from India is at `300-400ms`. Well done Exa team!
+Update: Looks like Exa has switched to Cloudflare Edge like Perplexity with Exa 2.0. This means the latency across the globe has decreased. I see that now the round trip latency for empty request from India is at `300-400ms`. Well done Exa team!
 
 You can also use this command to get rough idea of latency from your machine:
 
@@ -153,56 +197,52 @@ time curl --head https://api.exa.ai/search
 
 | Component              | Cost for 1B docs / month | Cost for 10B docs / year (120x) |
 | ---------------------- | ------------------------ | ------------------------------- |
-| Content storage        | 0.5k USD                 | 60k USD                         |
+| Content storage        | 0.2k USD                 | 24k USD                         |
+| Lexical search storage | 2.12k USD                | 254k USD                        |
+| Vector search storage  | 6.9k USD                 | 828k USD                        |
+| Embedding generation   | 18.2k USD                | 2.18M USD                       |
 | Metadata storage       | 1.2k USD                 | 144k USD                        |
-| Lexical search storage | 2.12k USD                | 254.4k USD                      |
-| Vector search storage  | 7k USD                   | 840k USD                        |
-| Embedding generation   | 8.1k USD                 | 972k USD                        |
-| Embedding rate         | 7k USD                   | 840k USD                        |
 | Egress (API response)  | 0.030k USD               | 3.6k USD                        |
-| TOTAL                  | 26k USD                  | 3.2M USD                        |
+| TOTAL                  | 26k USD                  | 3.4M USD                        |
 
-So the cost of running all this is easily 4-5M \$ / year for 10B docs since I haven't even considered CPU cost, crawling, model fine tuning, and rest of the infra.
+So the cost of running all this is easily 5-6M \$ / year for 10B docs since I haven't even considered CPU cost, query embedding/re-ranker GPU cost, expansion of storage requirements by 1.76x due to crawling updates, model fine tuning, observability, and maybe even replication for availability.
 
 ## Search latency analysis:
 
-[Exa benchmarks](https://exa.ai/blog/fastest-search-api) say their p50 = 420ms and p95 = 600ms.
+[Previosuly](https://exa.ai/blog/fastest-search-api) Exa fast search had p50 = 425ms and p95 = 604ms.
+[Now](https://exa.ai/blog/exa-api-2-0) they improved it to p50 = 346ms and p95 = 462ms.
+The difference is p50 diff = 79ms, p95 diff = 142ms
 
-Out of this 420ms, they probably have these components:
+Out of this 425ms, they probably had these components:
 
 ![Exa Search Pipeline](/static/images/blogs/exa-search-pipeline.png)
 
 ### Neural search latency
 
-- Network latency: They say it's 50ms. So we have 420-50ms = 370ms remaining.
-- Embedding generation: I'm assuming 70ms with 32 batch size based on [this](https://github.com/huggingface/text-embeddings-inference)
-- Re-ranking with cross encoder models: Let's assume another 200ms because it has to rank top 200 (100 from each of lexical and vector search) items against the query.
-- Vector search + Re-ranking with uncompressed vectors. Remaining: 370-70-200=100ms.
+- Network latency: They say it's 50ms. So we have 425ms-50ms ~= 375ms remaining.
+- For simplicity, let's assume all of this latency is achieved under 1 QPS. This means it's the best possible for this query.
+- Embedding generation with as per [this](https://www.tensoreconomics.com/p/why-are-embeddings-so-cheap#:~:text=despite%20batch%20size%20increasing) with batch size = 1:
+  - As per the blog, there's very little benefit from batching in embedding models.
+  - 260 tokens with batch size = 1 => 37RPS => 27ms
+  - 260 tokens with batch size = 8 => 64RPS => 15ms
+  - Let's assume with 10 tokens (7 word query), we get 70RPS and hence 14ms latency. Assume 15ms for cleaner numbers. Remaining: 375ms-15ms = 360ms
+- Re-ranking queries-docs with cross encoder models: Let's assume another 200ms because it has to rank top 200 (100 from each of lexical and vector search) items against the query. Remaining: 360-200=160ms.
+- Vector search + Re-ranking with uncompressed vectors.
 
-After the vector search step, each of the 10 clusters could return 100 items each and then we re-rank them with original vectors. It sounds reasonable. But to read 1k original vectors from disk randomly (i.e. 1k \* 8kb = 8MB of data), it would take 100 μs \* 1k = 100ms which is horrible.
+After the vector search step, each of the 10 clusters could return 100 items each and then we re-rank them with original vectors.
 
-However, assuming a cache hit ratio of 90%, you'll only have to read 100 vectors from disk. Then it takes:
+Note that the vector search + re-ranking stage gets 160ms which feels too much or maybe their previous search was slow and maybe the improved it with Exa 2.0 because other parts are very hard to improve on. The p50 diff of 79ms means, now vector search + re-ranking with original vectors takes 81ms (160-79ms). This sounds doable since we only have to query 1 centroid cluster + 10 clusters of 100k MRL + BQ vectors each which can be queried in parallel.
 
-- Disk: 100 μs \* 100 = 10ms
-- RAM: 50 ns \* 900 = 47 μs
-
-And assuming a cache hit ratio of 70%, you'll only have to read 300 vectors from disk. Then it takes:
-
-- Disk: 100 μs \* 300 = 30ms
-- RAM: 50 ns \* 700 = 35 μs
-
-And interestingly, they have a "fast search" mode as well, where I think they just skip the re-ranking with original vectors part because I did a few queries and I found the difference to be around 10-40ms. It's probably not a coincidence :D
-
-This means we have at least 60-90ms for the vector search part. Which sounds doable since we only have to query 1 centroid cluster + 10 clusters of 100k BQ vectors each which can be done in parallel within the specified duration. And I'd argue that you might be able to do more things like putting a small language model to rewrite the query and guess the "category" of the query or something like RRF (reciprocal ranking fusion)
+But the question is what did they improve? One possibility is that they might have improved on the quality of clusters because of pre-training/fine-tuning and hence could query fewer clusters (say 5 instead of 10) while maintaining similar recall.
 
 ### Keyword search latency
 
 The [Exa blog](https://exa.ai/blog/bm25-optimization) clearly says they get sub 500ms latency for retrieving top 1000 docs. Even if they retrieve top 10 or 100, it would just slightly faster because you need to rank the same documents.
 
-However it's a known fact that BM25 latency degrades faster than vector search with
+However it's a known fact that BM25 latency degrades faster than vector search with:
 
 - Longer queries (More posting lists to scan)
-- More data (especially if you have common term will have more docs to compare)
+- More data (less pronounced. But this happens especially if you get common but non-stopword terms)
 
 For example effect of longer queries part can be seen in [this benchmark](https://blog.vespa.ai/pretrained-transformer-language-models-for-search-part-4/#:~:text=Benchmarking%20Results):
 
@@ -211,17 +251,28 @@ For example effect of longer queries part can be seen in [this benchmark](https:
 | Keyword (WAND) | 16                   | 209               |
 | Vector (HNSW)  | 18                   | 28                |
 
-You can see how avg latency is similar for both vector search keyword search but p999 is 7.5x more for keyword search. (Yes, Exa uses IVF Index not HNSW so it would also degrade faster with scale but I think BM25 would degrade more)
+You can see how avg latency is similar for both vector search keyword search but p999 is 7.5x more for keyword search. Exa uses IVF Index not HNSW so it would also degrade faster with scale but I expect BM25 latency to degrade more.
 
-Also, since Exa operates with atleast 10B docs (assumed earlier), I can imagine that they split 10B docs into multiple "BM25 shards" and query them in parallel and combine results afterwards.
+Also, if Exa operates with 10B docs (with Exa 2.0), I can imagine that they split 10B docs into multiple posting list "shards" and query them in parallel and combine results afterwards.
 
-## What if Exa used HNSW instead of IVF Index?
+## What if Exa used HNSW instead of IVF?
 
-- In this [blog](https://blog.vespa.ai/billion-scale-knn-part-two/), the experiment shows a machine with 72 vCPUs dealing with 1B 100dim vectors that are binary quantized. It shows search latency of HNSW with recall 50% within 2ms and 4ms with 90% recall. It also handles realtime indexing at 15.4k RPS and with 72 cores it means avg write latency is RPS = cores \* 1/latency => latency = cores / RPS = 72 / 32_000 = 4.68ms (just a little higher than search because hnsw mainly needs to search and then it knows where to add new links)
-- Also the avg search time complexity of HNSW is `log(N)` while IVF is `log(sqrt(N))`. **In theory**, it means that to go from "shards" of 1M to 1B docs, IVF latency balloons by `math.sqrt(1e9) / math.sqrt(1e6) = 33x` while HNSW search time only increases by `log(1e10) / log(1e6) = 10/6 = 1.5x`. So even if you asssume they perform similar at 1M scale - say 2ms with single thread. HNSW should remain within 5ms even while IVF index search would take 70-100ms. That's why Exa would have to split into 10B docs into smaller 100k clusters and query only 10 of them them in parallel and that will degrade recall.
-- To add, in IVF, the cluster sizes vary and hence like BM25, the query latencies (avg latency vs p999) would vary more depending on the query.
-- Something similar was also proven in [my previous benchmark blog with Nirant](https://nirantk.com/writing/pgvector-vs-qdrant) that compared Qdrant's HNSW and PGVector's IVF Index and it led to implementation of HNSW in pgvector.
-- The cost of building and storing index would rise because of higher RAM and CPU requirements if Exa switched to HNSW. But Perplexity uses HNSW and hence was able to claim lower latency against Exa in their [recent benchmarks](https://www.perplexity.ai/api-platform/resources/architecting-and-evaluating-an-ai-first-search-api#:~:text=community%20as%20well.-,Search%20API%20Latency). In my opinion it makes sense for Exa to also do this and so they get more time to spend on re-ranking and LLM based filtering (websets) afterwards.
+- In [Vespa's billion-scale KNN benchmarks](https://blog.vespa.ai/billion-scale-knn-part-two/), a 72 vCPUs machine handles 1B 100dim binary quantized vectors. The results are impressive:
+
+  - Search latency of HNSW: 2ms with recall 50% and 4ms with 90% recall
+  - Realtime indexing throughput: 15.4k WPS
+  - So avg write latency: 72 / 32_000 = 4.68ms. This is just a little higher than search because HNSW mainly needs to search and then it knows where to add new links
+
+- The avg search time complexity of HNSW is `log(N)` while IVF is `log(sqrt(N))`. In theory, it means that to go from 1M to 1B docs
+  - IVF latency balloons by `math.sqrt(1e9) / math.sqrt(1e6) = 33x`
+  - HNSW search time only increases by `log(1e10) / log(1e6) = 10/6 = 1.5x`
+  - If we assume they perform similar at 1M scale - say 3ms with single thread. HNSW should remain around 5ms while IVF index search would take 80-100ms.
+  - Note that these numbers would become worse when the system has more RPS than the number of threads available because of context switching.
+  - This is why Exa would have to split 10B docs into smaller 100k clusters and query only 10 of them (limited number of threads) in parallel and that will degrade recall.
+  - Furthermore, in IVF, the cluster sizes vary and hence like BM25, the query latencies (avg latency vs p999) would vary more depending on the query.
+- Similar flaws of scaling IVF were also proven in [my previous benchmark blog with Nirant](https://nirantk.com/writing/pgvector-vs-qdrant) that compared Qdrant's HNSW and PGVector's IVF Index and our blog led/accelerated the implementation of HNSW in pgvector.
+- If Exa switched to HNSW, the cost of building and storing index would rise because of higher RAM and CPU requirements. They might have to trade off some of the index freshness because rebuilding HNSW is costly.
+- Perplexity uses HNSW and hence was able to claim lower latency and higher recall against Exa in their [recent benchmarks](https://www.perplexity.ai/api-platform/resources/architecting-and-evaluating-an-ai-first-search-api#:~:text=community%20as%20well.-,Search%20API%20Latency). In my opinion it makes sense for Exa to also do this and so they get more time to spend on re-ranking and LLM based filtering (websets) afterwards.
 
 ## Closing remarks:
 
