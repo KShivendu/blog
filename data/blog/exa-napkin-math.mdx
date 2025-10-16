@@ -1,5 +1,5 @@
 ---
-title: 'Exa: Napkin Math Behind the Search Engine for AI'
+title: 'I Reverse-Engineered Exa.ai's Infrastructure Cost with Napkin Math'
 date: '2025-09-16'
 lastmod: '2025-10-02'
 tags: ['search', 'internals', 'infra']
@@ -9,7 +9,7 @@ images: ['/static/images/blogs/exa.png']
 authors: ['default']
 ---
 
-[Exa](https://exa.ai/) is a cool search engine company. They recently [raised 85M\$ for Series B](https://exa.ai/blog/announcing-series-b). There are multiple parts of Exa AI architecture that they have described in their [blogs](https://exa.ai/blog). I've compiled them together and added some of my own notes and **lots of assumptions** for infra cost [napkin math](https://www.youtube.com/watch?v=IxkSlnrRFqc) as a fun exercise for myself. Please take my estimates with a grain of salt and let me know if I made any wrong or suboptimal assumptions :D
+[Exa](https://exa.ai/) is a cool web search engine company. They recently [raised 85M\$ for Series B](https://exa.ai/blog/announcing-series-b). There are multiple parts of Exa AI architecture that they have described in their [blogs](https://exa.ai/blog). I've compiled them together and added some of my own notes and **lots of assumptions** for infra cost [napkin math](https://www.youtube.com/watch?v=IxkSlnrRFqc) as a fun exercise for myself. Please take my estimates with a grain of salt and let me know if I made any wrong or suboptimal assumptions :D
 
 Update: Exa recently did [improvements](https://exa.ai/blog/exa-api-2-0) across their pipeline to make search faster and more relevant. This means some of assumptions might be slightly outdated now, but the fundamentals are still applicable. Also, I did some benchmarks before/after their updates so I can compare if they have improved!
 
@@ -209,7 +209,7 @@ So the cost of running all this is easily 5-6M \$ / year for 10B docs since I ha
 
 ## Search latency analysis:
 
-[Previosuly](https://exa.ai/blog/fastest-search-api) Exa fast search had p50 = 425ms and p95 = 604ms.
+[Previously](https://exa.ai/blog/fastest-search-api) Exa fast search had p50 = 425ms and p95 = 604ms.
 [Now](https://exa.ai/blog/exa-api-2-0) they improved it to p50 = 346ms and p95 = 462ms.
 The difference is p50 diff = 79ms, p95 diff = 142ms
 
@@ -233,11 +233,11 @@ After the vector search step, each of the 10 clusters could return 100 items eac
 
 Note that the vector search + re-ranking stage gets 160ms which feels too much or maybe their previous search was slow and maybe the improved it with Exa 2.0 because other parts are very hard to improve on. The p50 diff of 79ms means, now vector search + re-ranking with original vectors takes 81ms (160-79ms). This sounds doable since we only have to query 1 centroid cluster + 10 clusters of 100k MRL + BQ vectors each which can be queried in parallel.
 
-But the question is what did they improve? One possibility is that they might have improved on the quality of clusters because of pre-training/fine-tuning and hence could query fewer clusters (say 5 instead of 10) while maintaining similar recall.
+But the question is what did they improve? It might be a combination of many things: - I think they added [Hierarchical K-Means](https://www.elastic.co/search-labs/blog/k-means-for-vector-indices) for IVF. - They must have improved on the quality of clusters because of pre-training/fine-tuning and hence they could query fewer clusters (say 5 instead of 10) while maintaining similar recall. This means fewer points to compare and lower latency under high QPS.
 
 ### Keyword search latency
 
-The [Exa blog](https://exa.ai/blog/bm25-optimization) clearly says they get sub 500ms latency for retrieving top 1000 docs. Even if they retrieve top 10 or 100, it would just slightly faster because you need to rank the same documents.
+The [Exa blog](https://exa.ai/blog/bm25-optimization) clearly says they get sub 500ms latency (p50/median) for retrieving top 1000 docs. Even if they retrieve top 10 or 100, it would just slightly faster because you need to rank the same documents.
 
 However it's a known fact that BM25 latency degrades faster than vector search with:
 
@@ -257,7 +257,7 @@ Also, if Exa operates with 10B docs (with Exa 2.0), I can imagine that they spli
 
 ## What if Exa used HNSW instead of IVF?
 
-- In [Vespa's billion-scale KNN benchmarks](https://blog.vespa.ai/billion-scale-knn-part-two/), a 72 vCPUs machine handles 1B 100dim binary quantized vectors. The results are impressive:
+- In [this billion-scale KNN benchmarks](https://blog.vespa.ai/billion-scale-knn-part-two/), a 72 vCPUs machine handles 1B 100dim binary quantized vectors. The results are impressive:
 
   - Search latency of HNSW: 2ms with recall 50% and 4ms with 90% recall
   - Realtime indexing throughput: 15.4k WPS
