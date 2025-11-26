@@ -293,7 +293,7 @@ Out of this 425ms, they **probably** had these components:
 - If Exa switched to HNSW, the cost of building and storing index would rise because of higher RAM and CPU requirements. But the recall and latency of HSNW will be much better. Perplexity uses HNSW and this is part of the reason why they were able to claim lower latency and higher recall against Exa 1.0 in their [recent benchmarks](https://www.perplexity.ai/api-platform/resources/architecting-and-evaluating-an-ai-first-search-api#:~:text=community%20as%20well.-,Search%20API%20Latency).
 - Update: Exa has scaled to [tens of billions](https://exa.ai/blog/exa-api-2-0) of records (assumed 20B) with Exa 2.0 launch and seems to be doing better or similar to Perplexity without doing HNSW because they probably did optimizations in re-ranking layers as I [highlighted above](https://kshivendu.dev/blog/exa-napkin-math#:~:text=they%20claim%20a-,p50%20diff%20of%2079ms,-and%20p95%20diff).
 
-### Key takeaways:
+## Key takeaways:
 
 - Exa applies heavy compression through matryoshka embeddings and binary quantization, then offsets the loss with uncompressed vectors and re-ranking.
 - In the query pipeline, vector search requires careful planning but takes less time and cost while re-ranking causes more cost and latency.
