@@ -40,11 +40,11 @@ Given these, let’s assume Exa’s crawlers curate, sanitize, and create summar
 - 1B docs require 3TB (uncompressed) and 1.9TB (compressed)
 - On avg **1 page ~= 600 words ~= 780 tokens ~= 3KB (uncompressed) ~= 1.9KB**
 
-| Resource          | Rate       | Volume        | Cost/Month |
-| ----------------- | ---------- | ------------- | ---------- |
-| **S3 storage**    | $0.02 / GB | 1.9 \* 1e3 GB | $38        |
-| **Ephemeral SSD** | $0.08 / GB | 1.9 \* 1e3 GB | $152       |
-| Total             |            |               | $190       |
+| Resource          | Rate       | Volume for 1B docs | Cost/Month |
+| ----------------- | ---------- | ------------------ | ---------- |
+| **S3 storage**    | $0.02 / GB | 1.9 \* 1e3 GB      | $38        |
+| **Ephemeral SSD** | $0.08 / GB | 1.9 \* 1e3 GB      | $152       |
+| Total             |            |                    | $190       |
 
 ## 🔍 Lexical/Keyword search (BM25):
 
@@ -298,7 +298,7 @@ Out of this 425ms, they **probably** had these components:
 - Exa applies heavy compression through matryoshka embeddings and binary quantization, then offsets the loss with uncompressed vectors and re-ranking.
 - In the query pipeline, vector search requires careful planning but takes less time and cost while re-ranking causes more cost and latency.
 - Documents on the web change over time and cost of re-indexing (document embedding generation + k-means clustering) is high. To mitigate this, Exa built their ExaCluster.
-- Creating a good web scale index (20B docs) is relatively cheap, 300K \$ one-time bare minimum setup cost + 1.1M \$ \/ year for maintaining it.
+- Creating a large web scale index (with 200B docs) is not so cheap, 3M \$ one-time bare minimum setup cost + ~15-20M \$ \/ year for maintaining it.
 
 ## Closing remarks:
 
