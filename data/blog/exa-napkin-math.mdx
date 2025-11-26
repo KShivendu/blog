@@ -298,7 +298,7 @@ Out of this 425ms, they **probably** had these components:
 - Exa applies heavy compression through matryoshka embeddings and binary quantization, then offsets the loss with uncompressed vectors and re-ranking.
 - In the query pipeline, vector search requires careful planning but takes less time and cost while re-ranking causes more cost and latency.
 - Documents on the web change over time and cost of re-indexing (document embedding generation + k-means clustering) is high. To mitigate this, Exa built their ExaCluster.
-- Creating a good web scale index (20B docs) is relatively cheap, 300K \$ one-time setup cost + 1.3M \$ \/ year for maintaining it.
+- Creating a good web scale index (20B docs) is relatively cheap, 300K \$ one-time bare minimum setup cost + 1.1M \$ \/ year for maintaining it.
 
 ## Closing remarks:
 
