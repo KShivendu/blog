@@ -172,16 +172,18 @@ They are **saving at least 3.25k$ / 1B docs / month** by building Exacluster whi
 
 ## Re-ranker:
 
-- They might be using something like `Qwen3-Reranker-0.6B`
-- Public [providers](https://deepinfra.com/Qwen/Qwen3-Reranker-0.6B) charge \$ 0.010 \/ 1M tokens. Let's assume the same rates.
-- We have to compare 1 query (10 tokens) against 100 documents (assume avg of 780 tokens). Total tokens: 78k
-- Note: This is purely a **search time cost** unlike document embeddings generation which have to be maintained.
+- They might be using something like the [Qwen Rerankers](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B#qwen3-embedding-series-model-list)
+- Public [providers](https://deepinfra.com/Qwen/Qwen3-Reranker-0.6B) charge \$ 0.010 \/ 1M tokens for the 0.6B model. Let's assume the same rates.
+- It compares 1 query (same 10 tokens) against 100 documents (each with 780 tokens avg). Total tokens: 100 \* (780 + 10) = 79k
+- Note: This is purely a **search time cost** unlike document embeddings which have to be stored/maintained beforehand.
 
-| Re-ranker model       | Rate             | Tokens / query | Cost of 1 query |
-| --------------------- | ---------------- | -------------- | --------------- |
-| `Qwen3-Reranker-0.6B` | $0.0100 / 1M tok | 78k            | 0.00078 \$      |
-| `Qwen3-Reranker-4B`   | $0.0250 / 1M tok | 78k            | 0.00190 \$      |
-| `Qwen3-Reranker-8B`   | $0.0500 / 1M tok | 78k            | 0.00390 \$      |
+| Re-ranker model       | Rate             | Tokens / query | Cost of 1k queries |
+| --------------------- | ---------------- | -------------- | ------------------ |
+| `Qwen3-Reranker-0.6B` | $0.0100 / 1M tok | 79k            | 0.790 \$           |
+| `Qwen3-Reranker-4B`   | $0.0250 / 1M tok | 79k            | 1.975 \$           |
+| `Qwen3-Reranker-8B`   | $0.0500 / 1M tok | 79k            | 3.950 \$           |
+
+Note that Exa charges 5\$ / 1k queries so it makes more sense for them go with something like `Qwen3-Reranker-0.6B` at least in Exa fast mode.
 
 ## 🕷️ Crawling updates
 
