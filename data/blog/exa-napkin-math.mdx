@@ -11,11 +11,11 @@ authors: ['default']
 
 ![Exa Napkin Math Blog Cover Image](/static/images/blogs/exa-clean.jpg)
 
+> Looking for TL;DR (Too Long; Didn’t Read)? Check [key takeaways](/blog/exa-napkin-math#key-takeaways)
+
 [Exa](https://exa.ai/) is a cool web search engine company. They recently [raised 85M\$ for Series B](https://exa.ai/blog/announcing-series-b). There are multiple parts of Exa AI architecture that they have described in their [blogs](https://exa.ai/blog). I've compiled them together and added some of my own notes and lots of assumptions for infra cost [napkin math](https://www.youtube.com/watch?v=IxkSlnrRFqc) as a fun exercise for myself. Please **take my estimates with a grain of salt** since my goal is to just get in the right ballpark. Also feel free to DM me on [X](http://kshivendu.dev/x) or [Linkedin](http://kshivendu.dev/linkedin) if you see any wrong or suboptimal assumptions :)
 
 Update: Exa recently did [improvements](https://exa.ai/blog/exa-api-2-0) across their pipeline to make search faster and more relevant. This means some of my assumptions might be slightly outdated now, but the fundamentals are still applicable. So enjoy!
-
-> Looking for TL;DR (Too Long; Didn’t Read)? Check [key takeaways](/blog/exa-napkin-math#key-takeaways)
 
 ## 📦 Content Storage
 
@@ -92,27 +92,26 @@ Given these, let’s assume Exa’s crawlers curate, sanitize, and create summar
 - I think their model is a fine-tuned version of [Qwen3-Embedding-8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B) since it fits the [description](https://exa.ai/blog/building-web-scale-vector-db#:~:text=4096%20floating%2Dpoint%20numbers) well and is very popular.
   - Qwen3-Embedding-8B has a massive context length of 32K tokens. As per this quick [research](https://www.perplexity.ai/search/average-words-per-page-on-the-qjaJmyDVQ823yG.lh.Ba3g#0), most internet pages and even research papers would fit in this context length. So chunking isn't required. 1 document = 1 vector.
   - Update: With Exa 2.0 [launch](https://exa.ai/blog/exa-api-2-0), they have pre-trained and finetuned the embedding model and claim to have found new embedding techniques. However, I don't expect the architecture to be wildly different from state-of-the-art OSS models like Qwen.
-- Each uncompressed vector would take 4096 dims \* 2 bytes (assuming fp16) = 8KB by default. This means 1B vectors would take 8 \* 10^3 bytes \* 10^9 = 8 \* 10^12 = 8 TB for 1B docs.
-- Their index has MRL truncated BQ vectors
+- Let's estimate the storage requirements of vectors
+  - Each original vector would take 4096 dims \* 2 bytes (assuming fp16) = 8KB by default. This means 1B vectors would take 8 \* 10^3 bytes \* 10^9 = 8 \* 10^12 = 8 TB for 1B docs.
   - By truncating matryoshka to 256 dims it becomes, 8 / (4096 / 256) TB = 8 / 16 TB = 512 GB for 1B vectors.
   - With binary quantization, 16 bits (since fp16) becomes 1 bit. So 512 GB / 16 = 32 GB per 1B vectors or **32 bytes (256 bits) per vector**
   - Note how MRL truncation + BQ led to 16\*16=256x reduction
-- They do **another MRL truncation + BQ variant with 128 bytes (1024 bits) per vector**. This is used for 1st re-ranking stage.
-- For IVF index with BQ + MRL truncation + re-ranking with original vectors for their "neural search"
-  - IVF Index needs centroids generated from k-means clustering algos, If they have 20B vectors, they should have 200k clusters, each having 100K vectors.
+- For IVF index with MRL truncated 256d BQ vectors for their "neural search"
+  - IVF Index needs centroids generated from k-means clustering algos, If they have 20B vectors, they should have **200k clusters, each having 100K vectors** since it becomes very hard to brute-force compare vectors in segments larger than 100k within their latency budget.
   - Each cluster will have a centroid and I'm assuming they compare with uncompressed centroid vectors for maximizing recall.
   - Centroids will require 200k \* 4096 \* 2 bytes (f16) ~= 1.56 GB
-  - Each vector ID needs to be stored in the IVF Index, 20B \* 8 bytes = 160 GB (must be `uint64` to store 4.2B+ docs)
+  - Each vector ID needs to be stored in the IVF Index, 20B \* 8 bytes = 160 GB. Note that I used 8 bytes because it must be `uint64` to store 4.2B+ docs.
   - Each 256d truncated + BQ compressed vector will take 32bytes (256 bits), so 20B \* 32 bytes = 640 GB
   - So total requirements are like 1.56 + 160 + 640 GB ~= 800 GB for 20B vectors
     - This is 40GB for 1B vectors
     - Index size is just 40/8000\*100 = 0.5% of the full vectors (nice!)
 - For 1st stage re-ranking with 1024 dim MRL truncated BQ vectors:
-  - Storage for 1B docs takes 128GB (1024 / 8 \* 1B / 1e9)
+  - Storage for 1B vectors takes 128GB (1024 / 8 \* 1B / 1e9)
 - For 2nd stage re-ranking with 2048 f16 vectors:
   - Storage for 1B docs takes 4000GB (8TB/2). This is okay for disk but storing all of them in RAM would be too costly.
   - However, Pareto principle says 20% of docs will account for 80% queries so let's cache only 25% (1000 GB) in RAM
-- The index must be kept in RAM for fast queries and also should be kept on local (ephemeral) disk to reload quickly. The ultimate source of truth can be S3 which is regularly updated to keep the index, vectors, and content fresh.
+- Some of these components must be cached in RAM for fast queries and all the components must be kept on local (ephemeral) disk for paging in/out of memory quickly and handle a node crash. The ultimate source of truth can be S3 which is regularly updated to keep the index, vectors, and content fresh.
 
 | Component                        | Rate      | Volume | Cost/Month for 1B docs |
 | -------------------------------- | --------- | ------ | ---------------------- |
@@ -168,7 +167,7 @@ I did a basic search API call with Exa and response size was around 3KB. If they
 | Qwen on Rented H100 GPUs      | $0.0166 / 1M tok | 780 \* 1B | $13k             |
 | Qwen on Exacluster            | $0.0125 / 1M tok | 780 \* 1B | $9.75k           |
 
-They are **saving at least 3.25k$ / 1B docs / month** by building Exacluster which is great! And with 10B docs it would **save 390k USD annually**. The savings will increase further with crawling updates.
+They are **saving at least 3.25k$ / 1B docs** by building Exacluster which is great! And with **20B docs it would save 65k USD annually**. The savings will increase further with crawling updates.
 
 ## Re-ranker:
 
@@ -187,31 +186,33 @@ Note that Exa charges 5\$ / 1k queries so it makes more sense for them go with s
 
 ## 🕷️ Crawling updates
 
-- So for simplicity, **let's assume 35% of this is updated / month** when re-crawling
-- There might be a single digit **monthly growth of the dataset - say 1%**.
-- This means effectively **36% monthly overhead** from upserts (update + insert)
+- As per [this research paper](https://snap.stanford.edu/class/cs224w-readings/Fetterfly03PageEvolution.pdf), web content changes meaningfully. 25% of pages show significant textual changes every month.
+- There might be a single digit **monthly growth of the dataset - say 2%** (assuming aggressive crawling)
+- Content disappearance: ~0.5% monthly
+- Overall let's assume **30% monthly overhead** if Exa optimizes aggressively for freshness.
 
 ## 💰📊 Overall costs:
 
 I'm assuming that Exa now has 20B docs with their [Exa 2.0 launch](https://exa.ai/blog/exa-api-2-0#:~:text=now%20crawl%20%2B%20parse-,tens%20of%20billions)
 
-| Component        | Cost for 1B docs (monthly) | Cost for 20B docs (one-time setup) | 36% overhead for 20B docs (monthly) |
+| Component        | Cost for 1B docs (monthly) | Cost for 20B docs (one-time setup) | 30% overhead for 20B docs (monthly) |
 | ---------------- | -------------------------- | ---------------------------------- | ----------------------------------- |
-| Content storage  | 0.19k                      | 3.8k                               | 1.37k                               |
-| Lexical storage  | 1.89k                      | 37.8k                              | 13.61k                              |
-| Vector storage   | 2.75k                      | 55k                                | 19.82k                              |
-| Metadata storage | 0.30k                      | 6k                                 | 2.16k                               |
-| Embedding cost   | 9.75k                      | 195k                               | 70.2k                               |
-| Egress           | 0.09k                      | 1.8k                               | 0.65k                               |
-| **Total**        | 17.37k                     | 300k                               | 108k                                |
+| Content storage  | 0.19k                      | 3.8k                               | 1.14k                               |
+| Lexical storage  | 1.89k                      | 37.8k                              | 11.34k                              |
+| Vector storage   | 2.75k                      | 55k                                | 16.51k                              |
+| Metadata storage | 0.30k                      | 6k                                 | 1.80k                               |
+| Embedding cost   | 9.75k                      | 195k                               | 58.50k                              |
+| Egress           | 0.09k                      | 1.8k                               | 0.54k                               |
+| **Total**        | 17.37k                     | 300k                               | 90k                                 |
 
 Notes:
 
-- One-time **setup cost for 20B docs is 300K$**
-- **Yearly cost of maintaining Exa 2.0 index ~= 108k \* 12 = 1.3M \$**
-- And I haven't even considered the cost of clustering/indexing, crawling, LLM based parsing. But it should be all done within 1.8M$ / year for 20 B docs.
+- **65% of the cost comes from just embedding generation**.
+- One-time **bare minimum setup cost for 20B docs is 300K$**
+- **Yearly cost of maintaining Exa 2.0 index with 20B+ docs ~= 90k \* 12 ~= 1.1M \$**
+- And I haven't even considered the cost of clustering/indexing, crawling, LLM based parsing. But it should be all done within 1.5-2M$ / year for 20 B docs.
 - Furthermore, there's will be more cost of running Exacluster, runtime CPU + GPU (query embedding/re-ranking), LLMs for websets, observability, and rest of the infra.
-- Perplexity operates at **200B scale** and Exa would probably reach this scale soon with their latest funding, so their cost would shoot up to **12-18M\$ / year for search part**. This makes sense given their latest funding of 85M\$, they need lots of capital for few years of runway.
+- Perplexity operates at **200B scale** and Exa would probably reach this scale soon with their latest funding, so their cost would shoot up to **15-20M\$ / year just for search part**. This makes sense given their latest funding of 85M\$, they need lots of capital for few years of runway.
 
 ## ⏱️ Search latency analysis:
 
@@ -295,7 +296,7 @@ Out of this 425ms, they **probably** had these components:
 ### Key takeaways:
 
 - Exa applies heavy compression through matryoshka embeddings and binary quantization, then offsets the loss with uncompressed vectors and re-ranking.
-- In the query pipeline, vector requires careful planning but takes less time and cost while re-ranking causes more cost and latency.
+- In the query pipeline, vector search requires careful planning but takes less time and cost while re-ranking causes more cost and latency.
 - Documents on the web change over time and cost of re-indexing (document embedding generation + k-means clustering) is high. To mitigate this, Exa built their ExaCluster.
 - Creating a good web scale index (20B docs) is relatively cheap, 300K \$ one-time setup cost + 1.3M \$ \/ year for maintaining it.
 
