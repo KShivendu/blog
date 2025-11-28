@@ -270,8 +270,8 @@ Out of this 425ms, they **probably** had these components:
   - 260 tokens with batch size = 8 => 63RPS => 15ms
   - 260 tokens with batch size = 16 => 77RPS => 12ms
   - Assume we have 10 tokens in query (7 words)
-    - If batch size = 8 is possible, it should take <15ms
-    - If batch size = 1, it should take take <27ms
+    - If batch size = 8 is possible, it should take \< 15ms
+    - If batch size = 1, it should take take \< 27ms
   - However, these are numbers for H100s, Exa's query embedding servers might have less powerful GPUs, so let's assume it takes 25ms
   - Remaining latency: 375ms-25ms = 350ms
 - Re-ranking queries-docs with cross encoder models: Let's assume another 150-200ms because it's the standard for ranking 100 items against a query. Remaining: 350-200=150ms.
