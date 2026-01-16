@@ -11,6 +11,9 @@ class MyDocument extends Document {
             sizes="32x32"
             href="/static/favicons/favicon-32x32.png"
           />
+          {/* <!-- Cloudflare Web Analytics: ToDo use React/Nextjs lib instead? --> */}
+          {/* <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "be7b2031ad25466087430ac11fccadff"}'></script> */}
+          {/* <!-- End Cloudflare Web Analytics --> */}
           <link
             rel="icon"
             type="image/png"
