@@ -2,6 +2,7 @@ const headerNavLinks = [
   { href: '/blog', title: 'Blog' },
   // { href: '/tags', title: 'Tags' },
   // { href: '/projects', title: 'Projects' },
+  { href: 'https://talks.kshivendu.dev/', title: 'Talks' },
   { href: '/about', title: 'About' },
 ]
 
