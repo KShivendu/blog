@@ -21,9 +21,9 @@ I'm also open to speaking opportunites at reputed conferences and meetups. Some 
 
 Some of my recent side projects:
 
+- [I Reverse-Engineered Exa.ai Infrastructure Cost with Napkin Math](https://www.kshivendu.dev/blog/exa-napkin-math) I fused my own understanding of search and napkin math with insights from all public Exa.AI blogs/videos to reverse engineer their system and infra cost.
+- [smoldb](https://x.com/KShivendu_/status/1956670518293073987) I'm building a distributed database in Rust to improve my programming taste, intution, and understanding of CS fundamentals.
 - [Monitoring my life with Grafana, Prometheus, and InfluxDB](/blog/quantified-self) I'm collecting my health, time, and productivity data from all of my devices and putting it all together in Grafana dashboards.
-- [Suggest-AI](https://twitter.com/KShivendu_/status/1655603676189437953?s=20) 2k+ people used my side project to search for 10k+ different things. Eventually took it down because it didn't have a monetization strategy.
-- [Cloning voices](https://twitter.com/KShivendu_/status/1650858929558278145) to make popular singers sing different songs, etc.
 
 🚀 Experience:
 
