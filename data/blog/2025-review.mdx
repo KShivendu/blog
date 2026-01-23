@@ -21,48 +21,21 @@ The biggest shift this year was starting to build from scratch. I launched [smol
 
 At Qdrant, I worked on some of our most important features for our 2025 roadmap:
 
-- **Read-write segregation** that will power multi-zone/region cluster sync
-- **[Tiered multi-tenancy](https://www.youtube.com/watch?v=72Ux-Lgx93w)** — one of our biggest milestones this year
-- Major improvements to our distributed systems and storage layer: consensus, shards, replication, and the cluster manager service that I built.
+- **Read-write segregation** the foundational infrastructure powering two powerful features:
+  1. **Multi-zone/region deployments**: Seamless data replication across the globe, enabling low-latency access for users worldwide with eventual consistency and the ability to increase read replicas for higher throughput.`
+  2. **Specialized clusters**: Write clusters leverage high-compute (even GPU) machines for intensive indexing, while read clusters leverage IO-optimized machines for blazing-fast search.
+- **[Tiered multi-tenancy](https://www.youtube.com/watch?v=72Ux-Lgx93w)**: Allows you to isolate and independently scale your biggest customers (tenants) via dedicated shards — One of our biggest milestones this year
+- Major improvements to our distributed systems and storage layer in Qdrant core (consensus, shards, replication), our chaos testing infra, and the cluster manager service that I built.
 
 I also did some AI consulting gigs where I provided strategic guidance to startups. Beyond distributed systems, I dove deep into ML (thanks Karpathy Sensei) and [reinforcement learning](https://github.com/kshivendu/grpo). The outcomes aren't visible yet, but the foundation has been laid.
 
 The most unexpected career moments came when I **received 2 inbound offers from USA companies with O1 (Extraordinary talent) visa sponsorship**. While I didn't pursue them due to personal reasons, it was a huge confidence boost — a signal that I have the option to move to the USA if I ever wanted to. 🚀
 
-<div
-  style={{
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-    gap: '1.5rem',
-    margin: '2rem 0',
-  }}
->
-  <div style={{ width: '100%', overflow: 'hidden', borderRadius: '0.5rem' }}>
-    <img
-      src="/static/images/blogs/smoldb.png"
-      alt="smoldb launch"
-      style={{ width: '100%', height: 'auto', display: 'block' }}
-    />
-  </div>
-  <div style={{ width: '100%', overflow: 'hidden', borderRadius: '0.5rem' }}>
-    <img
-      src="/static/images/blogs/karpathy.png"
-      alt="karpathy"
-      style={{ width: '100%', height: 'auto', display: 'block' }}
-    />
-  </div>
-  <div style={{ width: '100%', overflow: 'hidden', borderRadius: '0.5rem' }}>
-    <img
-      src="/static/images/blogs/tiered-multitenancy.png"
-      alt="tiered-multitenancy"
-      style={{ width: '100%', height: 'auto', display: 'block' }}
-    />
-  </div>
-</div>
+![Career photos collage](/static/images/blogs/career-collage.jpg)
 
 ## Community: Speaking and Sharing Knowledge
 
-I gave talks at several places this year, including Microsoft Bangalore, PES University, and IIT Bhilai (my alma mater), covering internals of search, distributed systems and databases. Each of these opportunities were meaningful and rewarding in their own way.
+I gave talks at several places this year, including Microsoft Bangalore, PlatformCon (Virtual), PES University, and IIT Bhilai (my alma mater), covering internals of search, distributed systems and databases. Each of these opportunities were meaningful and rewarding in their own way.
 
 Delivering my **first international conference talk** at [DjangoConUS in Chicago](https://2025.djangocon.us/talks/beyond-filters-modern-search-and-more-with-vectors-in-django/) was a truly unforgettable experience — the opportunity to engage with a global audience was intimidating but it went smoother than I anticipated.
 
