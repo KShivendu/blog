@@ -5,9 +5,11 @@ lastmod: '2026-04-09'
 tags: ['search', 'philosophy', 'programming']
 draft: true
 summary: 'Why I love building search'
-images: ['/static/images/blogs/docker.svg']
+images: ['/static/images/blogs/why-search.png']
 authors: ['default']
 ---
+
+![Why I Love Search Blog Cover Image](/static/images/blogs/why-search.png)
 
 ## What do I mean by search here?
 
@@ -49,7 +51,7 @@ Given two problems, I've mostly preferred picking the more challenging one, espe
 
 Search sits at the intersection of data structures and algorithms, distributed systems, storage engines, performance, machine learning. These are some of the most fundamental and hardest concepts of computer science.
 
-Search also sits at the top of the user funnel and handles some of the highest query volumes in any product — a place where scale magnifies every mistake. This combination builds deep intuition and taste that generalizes broadly.
+Search also sits at the top of the user funnel and handles some of the highest query volumes in most products — a place where scale magnifies every mistake. This combination builds deep intuition and taste that generalizes broadly.
 
 ## Search queries are a window into collective intent
 
@@ -73,13 +75,15 @@ I find this extremely fascinating. Here's a diagram from Jina.ai that explains w
 
 ![Mona Lisa: search-like fidelity vs generation-like improvisation](/static/images/blogs/mona-lisa-search-vs-generation.png)
 
+You can also try out [lexica.art](https://lexica.art) which has an input box and buttons to both search or generate!
+
 ## Future of search
 
 A few directions I think will be will lead to better search:
 
 - **Agentic search**: Spending more compute to get better results — decomposing a query into sub-searches, evaluating intermediate results, and iterating. Quality improves in exchange for latency. Note that each iteration should be fast but the number of iterations paired with intermediate thinking steps should lead to quality improvement. This has to win in the long run.
 
-- My definition of perfect search. There are 3 things to trade from: latency, quality, and cost. I think quality is the one that matters the most.
+- My definition of perfect search: There are 3 things to trade from: latency, quality, and cost. I think quality is the one that matters the most because if it's fast but not good, then more time will have to be spent by the user (human/ai) to explore more ideas. Same thing applies for cost, if it's cheap but not good, users will be frustrated. Quality is the most important although the hardest to track and impove.
 
 - **Better representations**: Late interaction models that produce tokens based on information density will rise.
 
