@@ -1,0 +1,97 @@
+---
+title: 'Why I Love Search'
+date: '2026-04-09'
+lastmod: '2026-04-09'
+tags: ['search', 'philosophy', 'programming']
+draft: true
+summary: 'Why I love building search'
+images: ['/static/images/blogs/docker.svg']
+authors: ['default']
+---
+
+## What do I mean by search here?
+
+The word "search" gets used loosely, so let me narrow it down. Three things often get lumped together under this label:
+
+- **Optimization**: Any kind of optimization can be called "search," and it's related to what the "Bitter Lesson" talks about. Interesting, but not what I mean here.
+- **Querying**: "which rows match these exact filters?" What databases are built for.
+- **Retrieval**: "for this fuzzy intent, what results are most relevant?" **This is what I mean**.
+
+Querying returns everything that matches; retrieval decides what matters most. That requires **understanding intent and separating signal from noise**.
+
+## Search is everywhere
+
+Search is the most embedded technology in modern life: finding information, ordering food, discovering people and products, writing code. Think Google, YouTube, Amazon, LinkedIn, etc.
+
+It's everywhere, and **its quality shapes what we know and what we believe is possible**. And yet useful information, great products, people worth knowing are often not discovered because search isn't perfect (yet?).
+
+## Search is how curiosity becomes knowledge
+
+<p align="center">
+  <img
+    height="100"
+    src="/static/images/blogs/search-loop.png"
+    alt="curiosity-search-knowledge loop"
+  />
+</p>
+
+I'm naturally very curious and curiosity generates questions. Search provides answers to those questions. Answers lead to knowledge when absorbed well. And eventually that knowledge leads to more questions. Search is the engine for compounding knowledge. The better the feedback loop between question and answer, the faster you learn.
+
+## It's a tool that expands our capability
+
+Humanity has flourished by building tools to overcome its biological limits: planes because we couldn't fly, submarines because we couldn't breathe underwater, photos because memory is fallible. When someone builds a great tool and gives it to the rest of society, the impact compounds.
+
+The human brain is remarkable at pattern recognition (also a kind of search), storage, and compression — but can't store and rank billions of documents within milliseconds. Search is a tool for the mind that makes this possible. It narrows an incomprehensibly large space down to the handful of things actually worth our attention.
+
+## Search is a hard problem worth solving
+
+Given two problems, I've mostly preferred picking the more challenging one, especially given mastering it will make the other one much easier.
+
+Search sits at the intersection of data structures and algorithms, distributed systems, storage engines, performance, machine learning. These are some of the most fundamental and hardest concepts of computer science.
+
+Search also sits at the top of the user funnel and handles some of the highest query volumes in any product — a place where scale magnifies every mistake. This combination builds deep intuition and taste that generalizes broadly.
+
+## Search queries are a window into collective intent
+
+Aggregate search queries are a real-time map of what humanity is curious about. What people search is what they're thinking, feeling, or worried about at any given moment. Understanding those query patterns, search journeys, and how needs evolve over time — and then zooming out to community, country, and global scale — is genuinely one of the most amazing things for me.
+
+I love checking out [trends.google.com](https://trends.google.com) and marveling at the insight that emerges from aggregate search signals. Google, Amazon, Zomato, Perplexity, Pinterest — every search team sits on a window into how the world thinks within their verticals.
+
+<p align="center">
+  <img height="100" src="/static/images/blogs/tony-stark-tech.gif" alt="Tony Stark Tech" />
+</p>
+
+## The Duality of Search & Generation
+
+This is more about nature of the universe and information than just humanity. I always had the abstract thought but [this](https://jina.ai/news/search-is-overfitted-create-create-is-underfitted-search) blog by Han Xiao (Co-founder, Jina AI) gave me the right words.
+
+> Search is Overfitted Generation; Generation is Underfitted Search
+
+At one extreme, search is like an overfitted generator: constrained to what already exists in an index, optimizing for fidelity to known items. At the other extreme, generation is like an underfitted search system: it can improvise and compose new outputs but may drift from grounded truth.
+
+I find this extremely fascinating. Here's a diagram from Jina.ai that explains what I mean. You can swap `???` with either search or generation:
+
+![Mona Lisa: search-like fidelity vs generation-like improvisation](/static/images/blogs/mona-lisa-search-vs-generation.png)
+
+## Future of search
+
+A few directions I think will be will lead to better search:
+
+- **Agentic search**: Spending more compute to get better results — decomposing a query into sub-searches, evaluating intermediate results, and iterating. Quality improves in exchange for latency. Note that each iteration should be fast but the number of iterations paired with intermediate thinking steps should lead to quality improvement. This has to win in the long run.
+
+- My definition of perfect search. There are 3 things to trade from: latency, quality, and cost. I think quality is the one that matters the most.
+
+- **Better representations**: Late interaction models that produce tokens based on information density will rise.
+
+- **Search and generation will become one** The boundary between Generative AI models and search engines/databases will blur. They will fuse into becoming the same thing.
+
+- Continuous finetuning: Similar to what Perplexity achieved with their `pplx-embed`
+
+- How Sparse and Dense vector representations will become interconvertible.
+
+- **Search sessions should be longer**: A search session shouldn't end after one question. It should be possible to provide feedback and adjust. Qdrant's [discovery search API](https://qdrant.tech/articles/discovery-search/), [relevance feedback](https://qdrant.tech/documentation/tutorials-search-engineering/using-relevance-feedback/), and agentic search are interesting bets in that direction.
+
+## Acknowledgements
+
+- https://jina.ai/news/paradigm-shift-towards-multimodal-ai/
+- https://jina.ai/news/search-is-overfitted-create-create-is-underfitted-search
