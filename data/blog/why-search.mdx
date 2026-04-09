@@ -1,5 +1,5 @@
 ---
-title: 'Why I Love Search'
+title: "Why I'm Obsessed With Search"
 date: '2026-04-09'
 lastmod: '2026-04-09'
 tags: ['search', 'philosophy', 'programming']
@@ -15,7 +15,7 @@ authors: ['default']
 
 The word "search" gets used loosely, so let me narrow it down. Three things often get lumped together under this label:
 
-- **Optimization**: Any kind of optimization can be called "search," and it's related to what the "Bitter Lesson" talks about. Interesting, but not what I mean here.
+- **Optimization**: Any kind of optimization can be called "search," and it's related to what the [Bitter Lesson](http://www.incompleteideas.net/IncIdeas/BitterLesson.html) talks about. Interesting, but not what I mean here.
 - **Querying**: "which rows match these exact filters?" What databases are built for.
 - **Retrieval**: "for this fuzzy intent, what results are most relevant?" **This is what I mean**.
 
@@ -85,21 +85,17 @@ You can also try out [lexica.art](https://lexica.art) which has an input box and
 
 ## Future of search
 
-A few directions I think will be will lead to better search:
+Search has three things to trade off: speed, quality, and cost. Quality is the hardest to measure — but it's the one that matters most. **High-speed, low-cost search that returns the wrong thing just wastes the user's time more efficiently.** Yet many companies optimize for cheap and deliver poor experiences as a result.
 
-- **Agentic search**: Spending more compute to get better results — decomposing a query into sub-searches, evaluating intermediate results, and iterating. Quality improves in exchange for latency. Note that each iteration should be fast but the number of iterations paired with intermediate thinking steps should lead to quality improvement. This has to win in the long run.
+What's shifting: **latency tolerance**. Users are increasingly willing to wait a few seconds longer for results that are actually right. That tolerance is quietly unlocking a different design space.
 
-- My definition of perfect search: There are 3 things to trade from: latency, quality, and cost. I think quality is the one that matters the most because if it's fast but not good, then more time will have to be spent by the user (human/ai) to explore more ideas. Same thing applies for cost, if it's cheap but not good, users will be frustrated. Quality is the most important although the hardest to track and impove.
+Here are the directions I think will define the next era of search quality:
 
-- **Better representations**: Late interaction models that produce tokens based on information density will rise.
+- **Agentic search**: Iteratively decomposing queries into sub-searches, evaluating intermediate results, and deciding what to search next based on findings. The real unlock is the number of iterations: it makes quality, cost, and latency tunable tradeoffs on a query level. This is already happening with Perplexity, Cursor, Exa, Parallel, etc and will go beyond web/code search.
 
-- **Search and generation will become one** The boundary between Generative AI models and search engines/databases will blur. They will fuse into becoming the same thing.
+- **Personalization at depth**: Search that knows your history, mental model, and current context will outperform search that treats every query as cold-start. AI agents like Claude and OpenAI now have memory which allows them to perform better search and understand the user better. The gap between "search for anyone" and "search for you" is enormous.
 
-- Continuous finetuning: Similar to what Perplexity achieved with their `pplx-embed`
-
-- How Sparse and Dense vector representations will become interconvertible.
-
-- **Search sessions should be longer**: A search session shouldn't end after one question. It should be possible to provide feedback and adjust. Qdrant's [discovery search API](https://qdrant.tech/articles/discovery-search/), [relevance feedback](https://qdrant.tech/documentation/tutorials-search-engineering/using-relevance-feedback/), and agentic search are interesting bets in that direction.
+- **Unified search and generation**: Retrieval systems pull knowledge from external sources, while generative systems pull knowledge compressed into parameters. They have already gotten very close with the rise of RAG and agents that use search as a tool. But with continual learning, the boundary will dissolve and the system will decide where a given piece of knowledge sits across this spectrum and how to surface it.
 
 ## Acknowledgements
 
