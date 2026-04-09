@@ -3,13 +3,15 @@ title: "Why I'm Obsessed With Search"
 date: '2026-04-09'
 lastmod: '2026-04-09'
 tags: ['search', 'philosophy', 'programming']
-draft: true
+draft: false
 summary: 'Why I love building search'
 images: ['/static/images/blogs/why-search.png']
 authors: ['default']
 ---
 
 ![Why I Love Search Blog Cover Image](/static/images/blogs/why-search.png)
+
+I've been building search systems for a few years now — building search over [420M+ software repositories](https://github.com/KShivendu/GSoC-SoftwareHeritage), building distributed systems to power [billion scale vector search at Qdrant](https://qdrant.tech/), and reverse-engineering [how Exa does web search](https://www.kshivendu.dev/blog/exa-napkin-math). This post is about why I care so much about search.
 
 ## What do I mean by search here?
 
@@ -21,7 +23,7 @@ The word "search" gets used loosely, so let me narrow it down. Three things ofte
 
 Querying returns everything that matches; retrieval decides what matters most. That requires **understanding intent and separating signal from noise**.
 
-## Search is everywhere
+## Search is everywhere and shapes our lives
 
 Search is the most embedded technology in modern life: finding information, ordering food, discovering people and products, writing code. Think Google, YouTube, Amazon, LinkedIn, etc.
 
@@ -39,28 +41,32 @@ It's everywhere, and **its quality shapes what we know and what we believe is po
 
 I'm naturally very curious and curiosity generates questions. Search provides answers to those questions. Answers lead to knowledge when absorbed well. And eventually that knowledge leads to more questions. Search is the engine for compounding knowledge. The better the feedback loop between question and answer, the faster you learn.
 
-## It's a tool that expands our capability
+## Search is a tool that amplifies our cognitive capability
 
 Humanity has flourished by building tools to overcome its biological limits: planes because we couldn't fly, submarines because we couldn't breathe underwater, photos because memory is fallible. When someone builds a great tool and gives it to the rest of society, the impact compounds.
 
-The human brain is remarkable at pattern recognition (also a kind of search), storage, and compression — but can't store and rank billions of documents within milliseconds. Search is a tool for the mind that makes this possible. It narrows an incomprehensibly large space down to the handful of things actually worth our attention.
+The human brain is remarkable at pattern recognition (also a kind of search), storage, and compression — but no human can store and rank billions of documents within milliseconds. Search is a tool for the mind that makes this possible. It narrows an incomprehensibly large space down to the handful of things actually worth our attention.
 
 ## Search is a hard problem worth solving
 
-Given two problems, I've mostly preferred picking the more challenging one, especially given mastering it will make the other one much easier.
+Search sits at the intersection of data structures, distributed systems, performance, and machine learning — some of the hardest areas in computer science. Mastering search forces you to go deep on all of them.
 
-Search sits at the intersection of data structures and algorithms, distributed systems, storage engines, performance, machine learning. These are some of the most fundamental and hardest concepts of computer science.
+What makes search even more unique is the tension between signal and noise. You're not just finding matches — you're ranking them. That means modeling relevance, which means **understanding intent**, which means wrestling with ambiguity. "Apple" could mean the fruit, the company, or the record label — and the system has to figure it out. And ranking isn't purely technical — business decisions like sponsored results and content policies add more complexity.
 
-Search also sits at the top of the user funnel and handles some of the highest query volumes in most products — a place where scale magnifies every mistake. This combination builds deep intuition and taste that generalizes broadly.
+Search also sits at the top of the user funnel with some of the highest query volumes in most products — so scale magnifies every mistake. This combination builds deep intuition and taste that generalizes broadly.
 
 ## Search queries are a window into collective intent
 
 Aggregate search queries are a real-time map of what humanity is curious about. What people search is what they're thinking, feeling, or worried about at any given moment. Understanding those query patterns, search journeys, and how needs evolve over time — and then zooming out to community, country, and global scale — is genuinely one of the most amazing things for me.
 
-I love checking out [trends.google.com](https://trends.google.com) and marveling at the insight that emerges from aggregate search signals. Google, Amazon, Zomato, Perplexity, Pinterest — every search team sits on a window into how the world thinks within their verticals.
+I love checking out [trends.google.com](https://trends.google.com) and marveling at the insight that emerges from aggregate search signals. For example, during COVID-19, searches for "loss of smell" spiked across countries before it was even recognized as a symptom. Aggregate search data has also predicted election outcomes, box office hits, and economic downturns before official indicators caught up. Google, Amazon, Zomato, Perplexity, Pinterest — every search team sits on a window into how the world thinks within their verticals.
 
 <p align="center">
-  <img height="100" src="/static/images/blogs/tony-stark-tech.gif" alt="Tony Stark Tech" />
+  <img
+    height="100"
+    src="/static/images/blogs/tony-stark-tech.gif"
+    alt="Tony Stark Hologram Dashboard AI Tech"
+  />
 </p>
 
 ## The Duality of Search & Generation
@@ -96,6 +102,10 @@ Here are the directions I think will define the next era of search quality:
 - **Personalization at depth**: Search that knows your history, mental model, and current context will outperform search that treats every query as cold-start. AI agents like Claude and OpenAI now have memory which allows them to perform better search and understand the user better. The gap between "search for anyone" and "search for you" is enormous.
 
 - **Unified search and generation**: Retrieval systems pull knowledge from external sources, while generative systems pull knowledge compressed into parameters. They have already gotten very close with the rise of RAG and agents that use search as a tool. But with continual learning, the boundary will dissolve and the system will decide where a given piece of knowledge sits across this spectrum and how to surface it.
+
+## Closing
+
+Search started as curiosity for me, and it still is. Every query is a chance to learn more. If any of this resonates, or if you think I'm wrong, I'd love to hear from you. The feedback loop starts with a single query.
 
 ## Acknowledgements
 
