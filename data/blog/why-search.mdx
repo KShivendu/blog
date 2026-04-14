@@ -11,7 +11,7 @@ authors: ['default']
 
 ![Why I Love Search Blog Cover Image](/static/images/blogs/why-search.jpg)
 
-I've been building search systems for a few years now — building search over [420M+ software repositories](https://github.com/KShivendu/GSoC-SoftwareHeritage), building distributed systems to power [billion scale vector search at Qdrant](https://qdrant.tech/), and reverse-engineering [how Exa does web scale search](https://www.kshivendu.dev/blog/exa-napkin-math).
+I've been building search systems for a few years now — building search over [420M+ software repositories](https://github.com/KShivendu/GSoC-SoftwareHeritage), building distributed systems that power [billion scale vector search at Qdrant](https://qdrant.tech/) and run on hundreds of thousands of machines all over the world, and reverse-engineering [how Exa does web scale search](https://www.kshivendu.dev/blog/exa-napkin-math).
 
 This post will tell you why I care so much about search. My hope is that it **either convinces you to work on search or helps you find your own thing to be obsessed about**.
 
@@ -112,6 +112,8 @@ Here are the directions I think will define the next era of search quality:
 - **Agentic search**: Iteratively decomposing queries into sub-searches, evaluating intermediate results, and deciding what to search next based on findings. The real unlock is the number of iterations: it makes quality, cost, and latency tunable tradeoffs on a query level. This is already happening with Perplexity, Cursor, Exa, Parallel, etc and will go beyond web/code search.
 
 - **Personalization at depth**: Search that knows your history, mental model, and current context will outperform search that treats every query as cold-start. AI agents like Claude and OpenAI now have memory which allows them to perform better search. The gap between "search for anyone" and "search for you" is enormous.
+
+- **Better representations**: We went from sparse BM25 to dense embeddings to late interaction. ColBERT-style models compare query and document at the token level, making it essentially an attention mechanism applied during retrieval. Multi-vector models now allocate vectors based on information density rather than token count.
 
 - **Unified search and generation**: Retrieval systems and generative models are both storing knowledge — just at different compression levels. RAG and agentic search are already blurring this boundary, and with continual learning, the system itself will decide where a piece of knowledge lives on this spectrum and how to surface it.
 
