@@ -25,6 +25,24 @@ The word "search" gets used loosely, so let me narrow it down. Three things ofte
 
 Querying returns everything that matches. Retrieval decides what matters most. That requires **understanding intent and separating signal from noise**.
 
+Let me show you what I mean through my own story.
+
+## How search shaped my own path
+
+I grew up in a small town in India. When we finally got internet on our computer, Google was the first thing the computer guy showed me, and it became my gateway to a whole new world.
+
+Without any books, courses, or mentors, I learnt programming at the age of 13, entirely by searching. I'd type half-formed questions into Google like "add button VB.net" and land on forums like SourceForge, CodeProject, or W3Schools. I'd download source code of applications, do Ctrl+F, and figure out how things worked.
+
+When Chrome launched, it felt like a leap from Internet Explorer: fast, clean, and search built right into the address bar. Then came voice search, and saying "OK Google" felt like having my own Jarvis. I remember spending hours exploring everything it could do.
+
+Looking back, search is the reason I could teach myself to code at an early age. It took me years to realize that "how does Google search actually work?" was one of my earliest curiosities, and looks like I've been thinking about the same recently.
+
+## I'm a data nerd
+
+I collect data I have no immediate use for. It's just the pull of "I wonder what's actually in there." I've scraped Zomato menus, gated societies in India, tech events in Bangalore, docker pull counts for devtool startups, and more. I inspect network traffic (or reverse-engineer) undocumented APIs to see how systems organize their data and what they choose not to expose. One-off scrapes never felt like enough. I wanted the stream, not the snapshot. So I [built pipelines to monitor my own life](https://www.kshivendu.dev/blog/quantified-self): coding time, screen usage, health data. Ps. I deeply care about everyone's privacy so it's always public data or my own.
+
+Once you have data, the natural first move is stats and visualization. **Querying is what actually brings data to life**: it turns a passive artifact into something you can interrogate. Dashboards and filters do that, but only for the questions you thought to ask upfront. **Search is the most accessible and expressive type of querying**, and it captures the fuzzy, semantic questions that no filter or chart could anticipate. Anyone can walk up to a dataset and ask something new, in their own words, and get something meaningful back. That's what makes data feel alive.
+
 ## Search is everywhere and shapes our lives
 
 Search is the most embedded technology in modern life: finding information, ordering food, hunting houses, discovering people and products, writing code. Think Google, YouTube, Amazon, LinkedIn, etc.
@@ -49,16 +67,6 @@ Humanity has flourished by building tools to overcome its biological limits: pla
 
 The human brain is remarkable at pattern recognition (also a kind of search), storage, and compression, but **no human can store and rank billions of documents within milliseconds**. Search is a tool for the mind that makes this possible. It narrows an incomprehensibly large space down to the handful of things actually worth our attention.
 
-## How search shaped my own path
-
-I grew up in a small town in India. When we finally got internet on our computer, Google was the first thing the computer guy showed me, and it became my gateway to a whole new world.
-
-Without any books, courses, or mentors, I learnt programming at the age of 13, entirely by searching. I'd type half-formed questions into Google like "add button VB.net" and land on forums like SourceForge, CodeProject, or W3Schools. I'd download source code of applications, do Ctrl+F, and figure out how things worked.
-
-When Chrome launched, it felt like a leap from Internet Explorer: fast, clean, and search built right into the address bar. Then came voice search, and saying "OK Google" felt like having my own Jarvis. I remember spending hours exploring everything it could do.
-
-Looking back, search is the reason I could teach myself to code at an early age. It took me years to realize that "how does Google search actually work?" was one of my earliest curiosities, and looks like I've been thinking about the same recently.
-
 ## Search is a hard problem worth solving
 
 Search sits at the **intersection of data structures, distributed systems, performance, and machine learning** (some of the hardest areas in computer science). Mastering search forces you to go deep on all of them.
@@ -81,11 +89,7 @@ I love checking out [trends.google.com](https://trends.google.com) and marveling
   />
 </p>
 
-## I'm a data nerd
-
-I collect data I have no immediate use for. It's just the pull of "I wonder what's actually in there." I've scraped Zomato menus, gated societies in India, tech events in Bangalore, docker pull counts for devtool startups, and more. I inspect network traffic (or reverse-engineer) undocumented APIs to see how systems organize their data and what they choose not to expose. One-off scrapes never felt like enough. I wanted the stream, not the snapshot. So I [built pipelines to monitor my own life](https://www.kshivendu.dev/blog/quantified-self): coding time, screen usage, health data. Ps. I deeply care about everyone's privacy so it's always public data or my own.
-
-Once you have data, the natural first move is stats and visualization. **Querying is what actually brings data to life**: it turns a passive artifact into something you can interrogate. Dashboards and filters do that, but only for the questions you thought to ask upfront. **Search is the most accessible and expressive type of querying**, and it captures the fuzzy, semantic questions that no filter or chart could anticipate. Anyone can walk up to a dataset and ask something new, in their own words, and get something meaningful back. That's what makes data feel alive.
+But zoom out further, and search becomes something even more fundamental — a property of information itself.
 
 ## The Duality of Search & Generation
 
@@ -122,6 +126,8 @@ Here are the directions I think will define the next era of search quality:
 - **Better representations**: We went from sparse BM25 to dense embeddings to late interaction. ColBERT-style models compare query and document at the token level, making it essentially an attention mechanism applied during retrieval. Multi-vector models now allocate vectors based on information density rather than token count.
 
 - **Unified search and generation**: Retrieval systems and generative models are both storing knowledge, just at different compression levels. RAG and agentic search are already blurring this boundary, and with continual learning, the system itself will decide where a piece of knowledge lives on this spectrum and how to surface it.
+
+We're still early. But the direction is clear.
 
 ## Closing
 
