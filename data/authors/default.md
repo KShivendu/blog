@@ -12,31 +12,31 @@ images: ['/static/images/shivendu.jpg']
 
 Hey there. I am Kumar Shivendu. 👨‍💻 Here's a [PDF version of my Resume](/resume-pdf)
 
-I ❤️ information retrieval (search engines, LLMs), distributed database systems, observability, and scraping/mining data.
+I ❤️ search (engines and LLMs), distributed databases, observability, and mining data. I'm [particularly obsessed](/blog/why-search) with retrieval as a problem, and I've been building and tinkering with search systems for a while:
 
-I'm particularly [obsessed](/blog/why-search) with information retrieval (i.e. search). I've been building and tinkering with search systems for a while:
+- Search over [420M+ OSS repos at Software Heritage](https://github.com/KShivendu/GSoC-SoftwareHeritage) during college (GSoC).
+- Reverse-engineered the [architecture and cost of Exa](/blog/exa-napkin-math) using napkin math
+- I'm one of the early engineers of **[Qdrant](https://qdrant.tech/)** and I built distributed systems that power search at billion scale for companies like Canva, Perplexity, Meesho, Hubspot, etc., and run on almost a million machines worldwide.
 
-- I built search over [420M+ software repositories](https://github.com/KShivendu/GSoC-SoftwareHeritage) during my college days.
-- I reverse-engineered [how Exa does web scale search](/blog/exa-napkin-math)
-- I'm one of the early engineers of [Qdrant](https://qdrant.tech/) and I built distributed systems that power search at billion scale for companies like Canva, Perplexity, Meesho, Hubspot, etc and run on almost a million machines all over the world!
+I'm **actively researching a new class of embeddings and ways to make agentic search systems faster and learn continually.**
 
-I'm **actively researching on a new class of embeddings and ways to make agentic search systems faster and learn continually**
+🔧 Some of my cool side projects:
 
-I'm open to speaking opportunites at reputed conferences and meetups. Some of my previous talks can be found at [talks.kshivendu.dev](https://talks.kshivendu.dev)
+- **[smoldb](https://x.com/KShivendu_/status/1956670518293073987)**: A distributed database in Rust to improve programming taste, intuition, and CS fundamentals.
+- **[Monitoring my life with Grafana, Prometheus, and InfluxDB](/blog/quantified-self)**: Health, time, and productivity data from my devices in Grafana dashboards.
+- **[I Reverse-Engineered Exa.ai Infrastructure Cost with Napkin Math](/blog/exa-napkin-math)**: From Exa’s public posts and my own search + napkin-math models to a concrete infra-cost picture.
 
-Some of my recent side projects:
+🚀 I've been fortunate to work with top startups and research institutes from all over the world:
 
-- [I Reverse-Engineered Exa.ai Infrastructure Cost with Napkin Math](/blog/exa-napkin-math) I fused my own understanding of search and napkin math with insights from all public Exa.AI blogs/videos to reverse engineer their system and infra cost.
-- [smoldb](https://x.com/KShivendu_/status/1956670518293073987) I'm building a distributed database in Rust to improve my programming taste, intution, and understanding of CS fundamentals.
-- [Monitoring my life with Grafana, Prometheus, and InfluxDB](/blog/quantified-self) I'm collecting my health, time, and productivity data from all of my devices and putting it all together in Grafana dashboards.
+- **Software Engineer, Core (Rust 🦀)**: [Qdrant](https://qdrant.tech/) (Berlin)
+- **Software Engineer**: [SuperTokens](https://supertokens.com/) (YC 20) (San Francisco)
+- **Software Engineer Intern**: [FamPay](https://fampay.in/) (YC 19) (Bangalore)
+- **Google Summer of Code**: [Software Heritage](https://softwareheritage.org/) (Paris)
+- **ML + SDE Intern**: [Logy.AI](https://logy.ai/) (Hyderabad)
+- **ML Research Intern**: [IIT Mandi](https://iitmandi.ac.in/) (Mandi)
 
-🚀 I've been fortunate to work with top startups from different parts of the world:
+**Talks** 🎤
 
-- Software Engineer - Core Team 🦀 @ [Qdrant](https://qdrant.tech/) (Berlin)
-- Software Engineer @ [SuperTokens](https://supertokens.com/) (YC 20) (San Fransisco + Mumbai)
-- Software Engineer Intern @ [FamPay](https://fampay.in/) (YC 19) (Bangalore)
-- Google Summer Of Code Student @ [Software Heritage](https://softwareheritage.org/) (Paris)
-- ML + SDE Intern @ [Logy.AI](https://logy.ai/) (Hyderabad)
-- ML Research Intern @ [IIT Mandi](https://iitmandi.ac.in/) (Mandi)
+I'm open to speaking opportunities at reputed conferences and meetups. Past talks and slides are at [talks.kshivendu.dev](https://talks.kshivendu.dev).
 
-Reach out to me on [Twitter](/twitter), [LinkedIn](/linkedin), or mail [mail@kshivendu.dev](mailto:hello@kshivendu.dev) if you need my help
+For collaboration or a technical question about search and databases, email [mail@kshivendu.dev](mailto:mail@kshivendu.dev). I'm also on [Twitter](/twitter) and [LinkedIn](/linkedin).
