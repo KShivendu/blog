@@ -4,7 +4,7 @@ date: '2026-05-12'
 lastmod: '2026-05-12'
 tags: ['compression', 'vector-databases', 'internals', 'nlp']
 draft: false
-summary: 'Vector databases store raw UTF-8 text payloads with zero compression. BPE tokenization + entropy coding gives you 5x lossless compression using infrastructure already in every ML stack.'
+summary: 'Vector databases compress text payloads with generic codecs like LZ4, but not with token-aware schemes. BPE tokenization + entropy coding gives you 5x lossless compression using infrastructure already in every ML stack.'
 images: ['/static/images/blogs/tokenization-compression.jpg']
 authors: ['default']
 ---
@@ -13,7 +13,7 @@ authors: ['default']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Every vector database has two layers: the vectors (heavily optimized — quantized, compressed, carefully sharded) and the raw text payload (stored verbatim as UTF-8). Nobody talks about the second one.
+Every vector database has two layers: the vectors (heavily optimized — quantized, compressed, carefully sharded) and the text payload (UTF-8 at the API, often LZ4-compressed on disk). Nobody talks about compressing that second layer with anything smarter than generic byte codecs.
 
 I ran some benchmarks and found that the payload layer is a 5x compression opportunity sitting in plain sight. The tool to do it — BPE tokenization — is already in every ML stack. It just needs to be pointed at the right problem.
 
@@ -31,9 +31,9 @@ When you insert a document into Qdrant, Weaviate, or Elasticsearch, you typicall
 }
 ```
 
-The vector gets quantized, compressed, and indexed carefully. The `text` field gets written as-is.
+The vector gets quantized, compressed, and indexed carefully. The `text` field is still plain UTF-8 at the API — compression happens underneath.
 
-Qdrant stores payloads as JSON on RocksDB — no compression by default. Elasticsearch applies LZ4 on stored fields, which is better but still generic byte compression. Neither system knows anything about the structure of natural language text.
+Qdrant stores on-disk payloads in [Gridstore](https://qdrant.tech/articles/gridstore-key-value-storage/) (its custom KV engine, replacing RocksDB since v1.13) with LZ4 compression enabled by default. Elasticsearch applies LZ4 on stored fields too. Both give you generic byte compression — roughly 2× on text in the benchmarks below — but neither exploits the structure of natural language.
 
 That's the gap.
 
@@ -297,13 +297,13 @@ INSERT                           INSERT
   payload: {"text": "..."}         payload: {"text": "..."}
        │                                  │
        ▼                                  ▼
-  JSON → RocksDB (raw)           tokenize → uint16 IDs → ANS
+  JSON → Gridstore (LZ4)         tokenize → uint16 IDs → ANS
                                         │
                                         ▼
-                                  RocksDB (compressed)
+                                  Gridstore (ANS)
 
 READ                             READ
-  fetch raw JSON bytes             fetch compressed bytes
+  fetch LZ4 JSON bytes             fetch ANS-compressed bytes
        │                                  │
        ▼                                  ▼
   return as-is                   ANS decode → token IDs → decode
@@ -316,7 +316,7 @@ The entire round-trip is transparent to the user. Same API, 5x smaller payloads.
 
 ## Key Takeaways
 
-- Vector databases optimize vectors aggressively but store raw text payloads verbatim — a 5x compression opportunity.
+- Vector databases optimize vectors aggressively; text payloads get generic LZ4 at best (~2x). Token-aware compression is a separate ~5x opportunity on top.
 - BPE tokenization (r50k, vocab=50,257) produces uint16 token IDs — 2 bytes each — that already beat gzip on raw text with zero further compression.
 - Adding ANS entropy coding on token IDs brings you to **5x compression** using 30 lines of Python and infrastructure already in every ML stack.
 - r50k is perfectly lossless (0% CER). mxbai WordPiece gives 5.7x but lowercases text — fixable with simple post-processing, but also 5–10× slower to tokenize.
