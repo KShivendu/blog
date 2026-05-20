@@ -314,6 +314,8 @@ READ                             READ
 
 The entire round-trip is transparent to the user. Same API, 5x smaller payloads.
 
+This gets more important, not less, as [search and generation converge toward a single system](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation): retrieval indexes and model weights are both ways of storing knowledge, just at different compression levels. RAG and agentic search already blur that boundary. If your index still holds UTF-8 blobs while the model reasons in tokens, you maintain two representations of the same text — and pay for both on every retrieve-then-generate path. Token-native payload storage aligns the retrieval layer with the generation stack: one vocabulary, one compression story, cheaper handoffs between search and synthesize.
+
 ## Key Takeaways
 
 - Vector databases optimize vectors aggressively; text payloads get generic LZ4 at best (~2x). Token-aware compression is a separate ~5x opportunity on top.
@@ -324,6 +326,7 @@ The entire round-trip is transparent to the user. Same API, 5x smaller payloads.
 - The tokenizer dominates encode latency (132µs), not ANS (30µs). If you tokenize at ingest anyway, the marginal encode cost is just those 30µs.
 - The gap between this (~5x) and the Hutter Prize record (~9x) is conditional token probability — i.e., you need a language model. Getting to 5x doesn't.
 - At English Wikipedia scale (7M docs), this takes payload storage from 31.5 GB to 6.2 GB. The bigger win is I/O: 5x faster bulk reads, indexing, and replication.
+- As [search and generation unify](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation), token-native payloads avoid maintaining UTF-8 and token representations of the same corpus.
 
 ## Acknowledgements
 
