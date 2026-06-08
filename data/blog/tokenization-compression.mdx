@@ -245,9 +245,9 @@ At 1B docs the storage gap is more dramatic:
 | r50k + ANS |    0.88 TB |             ~$18 |               ~$72 |
 | **Saving** | **3.6 TB** |      **~$74/mo** |       **~$296/mo** |
 
-**Disk savings dominate.** Vector databases keep hot payloads on ephemeral SSD for fast reads — that's the $0.08/GB column. At 1B docs you're saving **$296/month** on disk alone, and the I/O win is the same magnitude: 0.88 TB reads 5× faster than 4.5 TB, which directly reduces query latency when payloads are fetched during retrieval.
+**Disk savings dominate.** Vector databases keep hot payloads on ephemeral SSD for fast reads — that's the \$ 0.08/GB column. At 1B docs you're saving **$296/month** on disk alone, and the I/O win is the same magnitude: 0.88 TB reads 5× faster than 4.5 TB, which directly reduces query latency when payloads are fetched during retrieval.
 
-**S3 savings are smaller in dollar terms but still meaningful at scale.** S3 is cheap per GB, so the $74/month looks modest. Where it compounds: S3 is charged for both storage _and_ data transfer. Cross-region replication, bulk re-indexing, and backup/restore all move the full payload corpus over the wire — at $0.09/GB egress, shipping 3.6 TB fewer data per operation saves **~$324 per transfer**. For a system that re-indexes monthly or replicates across regions, that adds up fast.
+**S3 savings are smaller in dollar terms but still meaningful at scale.** S3 is cheap per GB, so the \$74/month looks modest. Where it compounds: S3 is charged for both storage _and_ data transfer. Cross-region replication, bulk re-indexing, and backup/restore all move the full payload corpus over the wire — at \$0.09/GB egress, shipping 3.6 TB fewer data per operation saves **~$324 per transfer**. For a system that re-indexes monthly or replicates across regions, that adds up fast.
 
 ## How This Compares to State of the Art
 
