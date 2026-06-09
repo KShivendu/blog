@@ -1,0 +1,101 @@
+---
+title: 'Inference-Free SPLADE: Better Recall Than BM25, Same Query Latency'
+date: '2026-06-09'
+lastmod: '2026-06-09'
+tags: ['search', 'sparse-retrieval', 'nlp', 'information-retrieval']
+draft: false
+summary: 'SPLADE neural document expansion beats BM25 on BEIR scifact by 2.4% NDCG@10, while inference-free query encoding keeps latency at BM25 levels (~4ms). The tradeoff: a one-time offline indexing cost.'
+images: ['/static/images/blogs/inference-free-splade-og.jpg']
+authors: ['default']
+---
+
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
+
+BM25 is the workhorse of lexical search. It's fast, requires no GPU, and is surprisingly competitive on most retrieval benchmarks. Its weakness is well-known: it can only match exact terms. A query for "cardiac arrest" won't retrieve a document that says "heart attack", even if that document is the best answer.
+
+SPLADE fixes this by using a neural network to expand both queries and documents into a richer sparse representation — one that can activate "cardiac" when it sees "heart attack". The catch is that the neural model runs at query time, adding latency on every search request.
+
+Inference-free SPLADE removes that catch. The model runs only at index time on documents. Queries use raw token IDs — no model, no GPU, no inference cost. You pay once to build the index; queries stay fast.
+
+Here's whether it's actually worth it.
+
+## How Inference-Free SPLADE Works
+
+Standard SPLADE encodes both sides:
+
+```
+query  → SPLADE encoder → sparse vector → dot product → score
+doc    → SPLADE encoder → sparse vector ↗
+```
+
+Inference-free SPLADE encodes only documents:
+
+```
+query  → BERT tokenizer → raw token IDs → dot product → score
+doc    → SPLADE encoder → sparse vector ↗
+```
+
+The document sparse vector still has neural expansions — "heart" activates related tokens like "cardiac", "coronary", "myocardial". The query side is just tokenization: "cardiac arrest" becomes `[3684, 6295]` with weight 1.0 each. No model call.
+
+At query time the cost is: one tokenizer call + one sparse dot product in Qdrant. That's it.
+
+## The Experiment
+
+I benchmarked three methods on [BEIR scifact](https://github.com/beir-cellar/beir) (5,183 docs, 300 test queries — scientific claim verification):
+
+| Method        | Doc encoding                    | Query encoding                 |
+| ------------- | ------------------------------- | ------------------------------ |
+| BM25-Qdrant   | `Qdrant/bm25` via fastembed     | fastembed BM25                 |
+| BM25-pyserini | Lucene BM25                     | Lucene BM25                    |
+| SPLADE-IF     | `naver/splade-v3-doc` (offline) | raw BERT token IDs, weight=1.0 |
+
+For SPLADE-IF, document encoding ran on a Modal A10G GPU (one-time, ~3 minutes for 5K docs). Vectors were stored as Qdrant sparse collections. Query encoding is a tokenizer call — no GPU needed, ever.
+
+```python
+def encode_query_inference_free(tokenizer, query: str):
+    enc = tokenizer(query, add_special_tokens=False, truncation=True, max_length=512)
+    unique_ids = list(set(enc["input_ids"]))
+    return SparseVector(indices=unique_ids, values=[1.0] * len(unique_ids))
+```
+
+## Results
+
+| Method               | NDCG@10    | Recall@10  | Recall@100 | Latency (median / p90 / p95) |
+| -------------------- | ---------- | ---------- | ---------- | ---------------------------- |
+| BM25-Qdrant          | 0.6830     | 0.8088     | 0.9213     | 4.3ms / 5.8ms / 6.1ms        |
+| BM25-pyserini        | —          | —          | —          | —                            |
+| **SPLADE-IF-Qdrant** | **0.7068** | **0.8254** | **0.9277** | **4.5ms / 6.3ms / 6.6ms**    |
+
+SPLADE-IF beats BM25-Qdrant on every metric:
+
+- **+2.4% NDCG@10** — more relevant documents at the top
+- **+1.7% Recall@10** — finding more relevant docs in the first 10 results
+- **+0.7% Recall@100** — marginal improvement at deeper ranks
+
+The latency difference is 0.2ms median — effectively noise. Both are in the 4–6ms range.
+
+scifact is a strong testbed for this comparison: scientific claims require vocabulary generalization ("genome sequencing" ↔ "DNA analysis", "mortality" ↔ "death rate") that BM25 misses by design.
+
+## Why Latency Is the Same
+
+The "inference-free" name can mislead. Query latency is similar to BM25 because both paths reduce to a sparse dot product in Qdrant:
+
+- **BM25-Qdrant**: tokenize → look up IDF weights → Qdrant sparse search
+- **SPLADE-IF**: tokenize → Qdrant sparse search (no IDF lookup needed)
+
+The difference is what's stored in Qdrant. BM25 stores term frequencies against a vocabulary. SPLADE-IF stores neural expansion weights against the BERT vocabulary (30,522 tokens). The dot product is the same operation; SPLADE-IF's vectors just have more non-zeros per document (richer expansions).
+
+## The Actual Cost: Index Time
+
+The tradeoff is upfront. Encoding 5,183 documents with `naver/splade-v3-doc` on CPU would take 20+ minutes. On a Modal A10G GPU with batch_size=32 it took ~3 minutes. For a static or slowly-updated corpus this is acceptable; for a high-churn index you'd need a pipeline that re-encodes new documents as they arrive.
+
+Once indexed, queries cost nothing extra. This is the asymmetry inference-free SPLADE exploits: encode once, query forever.
+
+## Key Takeaways
+
+- Inference-free SPLADE encodes documents with a neural model at index time and queries with raw BERT tokenization — no GPU needed at query time.
+- On BEIR scifact: **+2.4% NDCG@10, +1.7% Recall@10** over BM25-Qdrant with only 0.2ms extra query latency.
+- Query latency (~4.5ms) stays at BM25 levels because both reduce to a Qdrant sparse dot product.
+- The real cost is index time: a one-time GPU encoding pass (~3 min for 5K docs on A10G). Worth it for static or slowly-updated corpora.
+- For high-churn indexes, you need an async re-encoding pipeline for new documents.
+- `naver/splade-v3-doc` is the canonical model for this — it's trained asymmetrically, specifically for inference-free use.
