@@ -225,7 +225,7 @@ The 13× latency gap comes entirely from eliminating the query encoder call — 
   }}
 />
 
-The same numbers grouped by backend — Qdrant edges ahead by 1–2% because pyserini integer-quantizes doc vectors (`weight × 100`, rounded), while Qdrant scores exact floats.
+The same numbers grouped by backend — Qdrant edges ahead by 1–2% because pyserini integer-quantizes doc vectors (`weight × 100`, rounded), while Qdrant scores exact floats. This gap is structural: all Lucene-based backends (pyserini, OpenSearch, Elasticsearch) are inherently approximate for sparse weights — pyserini uses explicit integer quantization, OpenSearch's `rank_features` field uses Lucene's internal 9-bit float encoding (~0.4% relative error). Exact float32 sparse scoring isn't a tunable option in any of them.
 
 <PlotlyChart
   data={[
