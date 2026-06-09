@@ -200,12 +200,6 @@ At 83–98 docs/sec on an A10G, encoding a million-document corpus would take ro
 
 Once indexed, queries cost nothing extra. This is the asymmetry SPLADE-IF exploits: **encode once, query forever.**
 
-## A Note on Naming
-
-You may see this called **asymmetric SPLADE** in papers and the HuggingFace model card — "asymmetric" because the doc and query encoders are fundamentally different (neural vs tokenizer-only). "Inference-free" describes the operational consequence: no neural inference at query time. The full formal name is _Asymmetric Inference-Free SPLADE_, but "inference-free" is the more useful shorthand because it names the benefit that matters for deployment.
-
-"Asymmetric" alone is ambiguous — asymmetric bi-encoders (different query/doc towers) are a common pattern in dense retrieval too. "Inference-free" is the cleaner signal.
-
 ## Limitations
 
 The results on scifact are strong, but inference-free SPLADE has real constraints worth knowing:
