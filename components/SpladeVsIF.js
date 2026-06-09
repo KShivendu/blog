@@ -141,7 +141,7 @@ export default function SpladeVsIF() {
           strokeDasharray="4 3"
         />
         <text x={boxX + boxW / 2} y={r1dCY + 4} textAnchor="middle" fontSize="11" fill={textMuted}>
-          pre-computed SPLADE vecs
+          pre-computed vecs
         </text>
 
         {/* query → encoder */}
