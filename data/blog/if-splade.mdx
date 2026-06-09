@@ -207,6 +207,8 @@ The sparsity numbers confirm this — SPLADE-IF doc vectors are denser (314 avg 
 
 Both methods beat BM25-Qdrant meaningfully: **+3.5% NDCG@10, +2.1% Recall@10, +4.3% MRR@10** for SPLADE-IF, at essentially the same 4ms query latency.
 
+The pattern holds across both backends — Qdrant and pyserini stay within 1–2% of each other on every method.
+
 <PlotlyChart
   data={[
     {
