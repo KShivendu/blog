@@ -207,7 +207,20 @@ Comparing [`naver/splade-v3`](https://huggingface.co/naver/splade-v3) (full) vs 
 
 Why does inference-free work so well? [`naver/splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) is an **asymmetric model** trained knowing that queries will be raw tokens with no weighting. So the doc encoder compensates: it expands aggressively at index time, and the raw query terms land on vocabulary that was prepared for them.
 
-You can see this in the sparsity numbers: naver/splade-v3-doc doc vectors average **325 non-zeros** vs **286** for naver/splade-v3 (full). The doc side carries more because it has to — all the expansion work is front-loaded at index time. Both get to similar quality.
+The sparsity numbers bear this out. The asymmetric IF model is the densest — all expansion work is front-loaded at index time, and it shows:
+
+<div style={{overflowX: 'auto'}}>
+
+| Model                                                                                                    | Training            | Avg doc non-zeros | Median |
+| -------------------------------------------------------------------------------------------------------- | ------------------- | ----------------: | -----: |
+| [naver/splade-v3-doc](https://huggingface.co/naver/splade-v3-doc)                                        | asymmetric (IF)     |           **325** |    321 |
+| [naver/splade-v3](https://huggingface.co/naver/splade-v3)                                                | asymmetric (full)   |               286 |    286 |
+| [opensearch GTE](https://huggingface.co/opensearch-project/opensearch-neural-sparse-encoding-doc-v3-gte) | asymmetric (IF)     |               244 |    244 |
+| [Splade_PP_en_v1](https://huggingface.co/prithivida/Splade_PP_en_v1)                                     | symmetric (full/IF) |               205 |    205 |
+
+</div>
+
+Despite having the densest doc vectors, naver/splade-v3-doc achieves similar quality to full SPLADE at 13× lower query latency.
 
 Both methods beat BM25-Qdrant meaningfully: **+3.5% NDCG@10, +2.1% Recall@10, +4.3% MRR@10** for SPLADE-IF, at essentially the same 4ms query latency.
 
@@ -256,7 +269,7 @@ Once indexed: **encode once, query forever.**
 
 **Domain sensitivity.** IF works best when vocabulary bridging is the core challenge and domain vocabulary is predictable (scientific, medical, legal). On e-commerce, where product titles already closely match query terms, document-side expansion helps less and the quality gap over BM25 narrows significantly.
 
-**Denser index, GPU required at index time.** naver/splade-v3-doc doc vectors average **325 non-zeros** vs **286** for the full naver model — about 14% more per document. Encoding also requires a GPU. Both are one-time costs for static corpora. See the Tradeoff section above.
+**Denser index, GPU required at index time.** The asymmetric IF model produces ~14% more non-zeros per document than the full naver model (325 vs 286, see sparsity table above). Encoding also requires a GPU. Both are one-time costs for static corpora.
 
 ## Key Takeaways
 
