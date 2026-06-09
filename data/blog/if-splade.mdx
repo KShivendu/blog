@@ -181,7 +181,7 @@ The 13× latency gap comes entirely from eliminating the query encoder call — 
   }}
 />
 
-To verify these findings aren't specific to one backend, I replicated all experiments on Lucene/pyserini — a completely independent retrieval stack. The pattern holds; numbers run 1–2% lower due to integer quantization of doc vectors, which is structural to all Lucene-based engines (pyserini, OpenSearch, Elasticsearch).
+To verify these findings aren't specific to one backend, I replicated all experiments on Lucene/pyserini — a completely independent retrieval stack. The pattern holds; numbers run 1–2% lower due to integer-quantized impact scoring, which is structural to all Lucene-based engines (pyserini, OpenSearch, Elasticsearch) — exact float32 sparse scoring isn't a tunable option in any of them.
 
 <details>
 <summary>**Lucene/pyserini results** (integer-quantized impact scoring, `JsonVectorCollection --impact`)</summary>
@@ -210,8 +210,6 @@ The reason inference-free works so well: [`naver/splade-v3-doc`](https://hugging
 The sparsity numbers confirm this — SPLADE-IF doc vectors are denser (314 avg non-zeros) than the naver full model (288 nnz), carrying richer expansions to compensate for sparse queries. SPLADE-Full spreads the work across both sides; both approaches converge to similar quality.
 
 Both methods beat BM25-Qdrant meaningfully: **+3.5% NDCG@10, +2.1% Recall@10, +4.3% MRR@10** for SPLADE-IF, at essentially the same 4ms query latency.
-
-The pyserini numbers run 1–2% lower across the board — a structural consequence of Lucene's integer-quantized impact scoring. All Lucene-based backends (pyserini, OpenSearch, Elasticsearch) are inherently approximate for sparse weights; exact float32 sparse scoring isn't a tunable option in any of them.
 
 ## The Tradeoff: Free Queries, Expensive Index
 
