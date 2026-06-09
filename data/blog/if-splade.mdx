@@ -62,21 +62,7 @@ Here's how it compares across six retrieval setups, with two results that surpri
 
 ## How It Works
 
-Standard SPLADE encodes both sides neurally:
-
-```
-query  → SPLADE encoder → sparse vector
-doc    → SPLADE encoder → sparse vector
-                        → dot product → score
-```
-
-Inference-free SPLADE (SPLADE-IF) encodes only documents:
-
-```
-query  → BERT tokenizer → raw token IDs (weight=1.0)
-doc    → SPLADE encoder → sparse vector
-                        → dot product → score
-```
+<SpladeVsIF />
 
 The document vectors still carry neural expansions — "heart" activates "cardiac", "coronary", "myocardial". The query side is just tokenization: "cardiac arrest" becomes token IDs `[3684, 6295]` each with weight 1.0. No model call, no GPU.
 

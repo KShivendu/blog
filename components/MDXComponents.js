@@ -7,6 +7,7 @@ import TOCInline from './TOCInline'
 import Pre from './Pre'
 import { BlogNewsletterForm } from './NewsletterForm'
 import PlotlyChart from './PlotlyChart'
+import SpladeVsIF from './SpladeVsIF'
 
 export const MDXComponents = {
   Image,
@@ -15,6 +16,7 @@ export const MDXComponents = {
   pre: Pre,
   BlogNewsletterForm: BlogNewsletterForm,
   PlotlyChart,
+  SpladeVsIF,
   wrapper: ({ components, layout, ...rest }) => {
     const Layout = require(`../layouts/${layout}`).default
     return <Layout {...rest} />
