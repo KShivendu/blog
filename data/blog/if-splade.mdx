@@ -94,21 +94,6 @@ I benchmarked a full matrix of configurations on [BEIR scifact](https://github.c
 
 </div>
 
-**Lucene/pyserini** (integer-quantized impact scoring, `JsonVectorCollection --impact`)
-
-<div style={{overflowX: 'auto'}}>
-
-| Method                 | NDCG@10    | Recall@10 | MRR@10     | Total (median/p90) | Query embed | Search    |
-| ---------------------- | ---------- | --------- | ---------- | ------------------ | ----------- | --------- |
-| SPLADE-Full (naver)    | **0.7156** | 0.8272    | **0.6889** | 57.9ms / 82.8ms    | 47.8ms      | 9.8ms     |
-| SPLADE-Full (PP)       | 0.6969     | 0.8056    | 0.6704     | 59.3ms / 87.1ms    | 51.9ms      | 7.4ms     |
-| SPLADE-IF (naver)      | 0.6953     | 0.8039    | 0.6706     | **3.2ms / 4.7ms**  | **0.2ms**   | **3.0ms** |
-| SPLADE-IF (OpenSearch) | 0.6886     | 0.8087    | 0.6593     | 2.5ms / 3.5ms      | 0.2ms       | 2.3ms     |
-| SPLADE-IF (PP, sym)    | 0.6704     | 0.7954    | 0.6367     | 2.4ms / 3.0ms      | 0.2ms       | 2.3ms     |
-| BM25                   | 0.6789     | 0.8038    | 0.6457     | 5.5ms / 8.9ms      | 0.0ms       | 5.5ms     |
-
-</div>
-
 <PlotlyChart
   data={[
     {
@@ -195,6 +180,26 @@ The 13× latency gap comes entirely from eliminating the query encoder call — 
     legend: { orientation: 'h', y: -0.22 },
   }}
 />
+
+To verify these findings aren't specific to one backend, I replicated all experiments on Lucene/pyserini — a completely independent retrieval stack. The pattern holds; numbers run 1–2% lower due to integer quantization of doc vectors, which is structural to all Lucene-based engines (pyserini, OpenSearch, Elasticsearch).
+
+<details>
+<summary>**Lucene/pyserini results** (integer-quantized impact scoring, `JsonVectorCollection --impact`)</summary>
+
+<div style={{overflowX: 'auto'}}>
+
+| Method                 | NDCG@10    | Recall@10 | MRR@10     | Total (median/p90) | Query embed | Search    |
+| ---------------------- | ---------- | --------- | ---------- | ------------------ | ----------- | --------- |
+| SPLADE-Full (naver)    | **0.7156** | 0.8272    | **0.6889** | 57.9ms / 82.8ms    | 47.8ms      | 9.8ms     |
+| SPLADE-Full (PP)       | 0.6969     | 0.8056    | 0.6704     | 59.3ms / 87.1ms    | 51.9ms      | 7.4ms     |
+| SPLADE-IF (naver)      | 0.6953     | 0.8039    | 0.6706     | **3.2ms / 4.7ms**  | **0.2ms**   | **3.0ms** |
+| SPLADE-IF (OpenSearch) | 0.6886     | 0.8087    | 0.6593     | 2.5ms / 3.5ms      | 0.2ms       | 2.3ms     |
+| SPLADE-IF (PP, sym)    | 0.6704     | 0.7954    | 0.6367     | 2.4ms / 3.0ms      | 0.2ms       | 2.3ms     |
+| BM25                   | 0.6789     | 0.8038    | 0.6457     | 5.5ms / 8.9ms      | 0.0ms       | 5.5ms     |
+
+</div>
+
+</details>
 
 ## SPLADE-IF Nearly Matches Full SPLADE at 13× Lower Latency
 
