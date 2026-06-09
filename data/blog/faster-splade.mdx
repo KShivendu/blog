@@ -114,19 +114,41 @@ Three findings stand out.
 <PlotlyChart
   data={[
     {
-      x: [57.2, 57.0, 4.3, 4.0, 5.5, 65.8, 6.6],
-      y: [0.7161, 0.7093, 0.7068, 0.6830, 0.6789, 0.6542, 0.6344],
-      mode: 'markers+text',
-      type: 'scatter',
-      text: ['SPLADE-Full (naver)', 'SPLADE-Full (PP)', 'SPLADE-IF ⭐', 'BM25-Qdrant', 'BM25-pyserini', 'SPLADE-Full-pyserini', 'SPLADE-IF-pyserini'],
-      textposition: ['top left', 'bottom left', 'top right', 'bottom right', 'top right', 'bottom left', 'top right'],
-      marker: {
-        size: [14, 12, 16, 12, 10, 10, 10],
-        color: ['#6366f1', '#818cf8', '#10b981', '#f59e0b', '#fbbf24', '#ef4444', '#f87171'],
-        line: { width: 2, color: 'white' }
-      },
-      textfont: { size: 12 },
-    }
+      name: 'SPLADE-IF (Qdrant)',
+      x: [4.3], y: [0.7068],
+      mode: 'markers+text', type: 'scatter',
+      text: ['SPLADE-IF ⭐'],
+      textposition: ['top right'],
+      marker: { size: 18, color: '#10b981', symbol: 'star', line: { width: 2, color: 'white' } },
+      textfont: { size: 13 },
+    },
+    {
+      name: 'SPLADE-Full (Qdrant)',
+      x: [57.2, 57.0], y: [0.7161, 0.7093],
+      mode: 'markers+text', type: 'scatter',
+      text: ['SPLADE-Full (naver)', 'SPLADE-Full (PP)'],
+      textposition: ['top left', 'bottom left'],
+      marker: { size: 13, color: '#6366f1', line: { width: 2, color: 'white' } },
+      textfont: { size: 11 },
+    },
+    {
+      name: 'BM25',
+      x: [4.0, 5.5], y: [0.6830, 0.6789],
+      mode: 'markers+text', type: 'scatter',
+      text: ['BM25-Qdrant', 'BM25-pyserini'],
+      textposition: ['top right', 'bottom right'],
+      marker: { size: 12, color: '#f59e0b', symbol: 'square', line: { width: 2, color: 'white' } },
+      textfont: { size: 11 },
+    },
+    {
+      name: 'SPLADE (Lucene)',
+      x: [65.8, 6.6], y: [0.6542, 0.6344],
+      mode: 'markers+text', type: 'scatter',
+      text: ['SPLADE-Full-pyserini', 'SPLADE-IF-pyserini'],
+      textposition: ['bottom left', 'top right'],
+      marker: { size: 10, color: '#ef4444', symbol: 'diamond', line: { width: 1, color: 'white' } },
+      textfont: { size: 11 },
+    },
   ]}
   layout={{
     title: { text: 'Quality vs Query Latency — BEIR scifact', font: { size: 15 } },
@@ -139,9 +161,10 @@ Three findings stand out.
       range: [0.55, 2.0],
     },
     yaxis: { title: 'NDCG@10', range: [0.62, 0.735] },
-    height: 440,
-    showlegend: false,
-    margin: { t: 56, r: 32, b: 72, l: 64 },
+    height: 460,
+    showlegend: true,
+    legend: { orientation: 'h', y: -0.2 },
+    margin: { t: 56, r: 32, b: 80, l: 64 },
   }}
 />
 
