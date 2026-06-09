@@ -207,7 +207,7 @@ Comparing [`naver/splade-v3`](https://huggingface.co/naver/splade-v3) (full) vs 
 
 Why does inference-free work so well? [`naver/splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) is an **asymmetric model** trained knowing that queries will be raw tokens with no weighting. So the doc encoder compensates: it expands aggressively at index time, and the raw query terms land on vocabulary that was prepared for them.
 
-You can see this in the sparsity numbers: SPLADE-IF doc vectors average 314 non-zeros vs 288 for the full model. The doc side just carries more. Full SPLADE splits the expansion work between query and doc. Inference-free pushes it all into the doc. Both get to similar quality.
+You can see this in the sparsity numbers: naver/splade-v3-doc doc vectors average **325 non-zeros** vs **286** for naver/splade-v3 (full). The doc side carries more because it has to — all the expansion work is front-loaded at index time. Both get to similar quality.
 
 Both methods beat BM25-Qdrant meaningfully: **+3.5% NDCG@10, +2.1% Recall@10, +4.3% MRR@10** for SPLADE-IF, at essentially the same 4ms query latency.
 
@@ -256,7 +256,7 @@ Once indexed: **encode once, query forever.**
 
 **Domain sensitivity.** IF works best when vocabulary bridging is the core challenge and domain vocabulary is predictable (scientific, medical, legal). On e-commerce, where product titles already closely match query terms, document-side expansion helps less and the quality gap over BM25 narrows significantly.
 
-**Denser index, GPU required at index time.** SPLADE-IF doc vectors are denser than full SPLADE (314 vs 205 avg non-zeros), and encoding requires a GPU. Both are one-time costs for static corpora. See the Tradeoff section above.
+**Denser index, GPU required at index time.** naver/splade-v3-doc doc vectors average **325 non-zeros** vs **286** for the full naver model — about 14% more per document. Encoding also requires a GPU. Both are one-time costs for static corpora. See the Tradeoff section above.
 
 ## Key Takeaways
 
