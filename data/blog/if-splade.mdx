@@ -89,12 +89,12 @@ I benchmarked eight configurations on [BEIR scifact](https://github.com/beir-cel
 | SPLADE-IF-Qdrant (OpenSearch) | 0.7021     | 0.8220     | 0.6717     | 4.3ms / 5.7ms              | 0.3ms       | 4.0ms     |
 | BM25-Qdrant                   | 0.6830     | 0.8088     | 0.6470     | 4.0ms / 5.0ms              | 0.1ms       | 3.8ms     |
 | BM25-pyserini                 | 0.6789     | 0.8038     | 0.6457     | 5.5ms / 8.9ms              | 0.0ms       | 5.5ms     |
-| SPLADE-Full-pyserini (PP)     | 0.6542     | 0.7709     | 0.6261     | 65.8ms / 93.5ms            | 55.8ms      | 10.0ms    |
-| SPLADE-IF-pyserini            | 0.6344     | 0.7566     | 0.6026     | 6.6ms / 10.2ms             | 0.2ms       | 6.4ms     |
+| SPLADE-Full-pyserini (PP)     | 0.6969     | 0.8056     | 0.6704     | 59.3ms / 87.1ms            | 51.9ms      | 7.4ms     |
+| SPLADE-IF-pyserini            | 0.6953     | 0.8039     | 0.6706     | 3.2ms / 4.7ms              | 0.2ms       | 3.0ms     |
 
 </div>
 
-Three findings stand out.
+Three findings stand out — including one that required correcting an initial implementation mistake.
 
 <PlotlyChart
   data={[
@@ -138,12 +138,12 @@ Three findings stand out.
     },
     {
       name: 'SPLADE (Lucene)',
-      x: [65.8, 6.6],
-      y: [0.6542, 0.6344],
+      x: [59.3, 3.2],
+      y: [0.6969, 0.6953],
       mode: 'markers+text',
       type: 'scatter',
       text: ['Full-pyserini', 'IF-pyserini'],
-      textposition: ['bottom left', 'top right'],
+      textposition: ['bottom right', 'bottom left'],
       marker: { size: 10, color: '#ef4444', symbol: 'diamond', line: { width: 1, color: 'white' } },
       textfont: { size: 11 },
     },
@@ -154,9 +154,9 @@ Three findings stand out.
       title: { text: 'Median query latency (ms)', standoff: 12 },
       type: 'log',
       tickmode: 'array',
-      tickvals: [4, 5, 10, 20, 60, 80],
-      ticktext: ['4', '5', '10', '20', '60', '80'],
-      range: [0.55, 2.0],
+      tickvals: [3, 4, 5, 10, 20, 60, 80],
+      ticktext: ['3', '4', '5', '10', '20', '60', '80'],
+      range: [0.42, 2.0],
     },
     yaxis: { title: 'NDCG@10', range: [0.615, 0.74] },
     height: 480,
@@ -176,25 +176,25 @@ The sparsity numbers confirm this — SPLADE-IF doc vectors are denser (314 avg 
 
 Both methods beat BM25-Qdrant meaningfully: **+3.5% NDCG@10, +2.1% Recall@10, +4.3% MRR@10** for SPLADE-IF, at essentially the same 4ms query latency.
 
-## Finding 2: The Retrieval Backend Matters Enormously for SPLADE
+## Finding 2: Lucene Handles SPLADE Weights Natively — Backend Gap is ~1%
 
-BM25 is essentially unchanged across backends (−0.6%). SPLADE loses **8–10% NDCG@10** when moved from Qdrant to Lucene. Why?
+An earlier version of this benchmark showed an 8–10% NDCG@10 gap between Qdrant and Lucene for SPLADE — which led to the claim that Lucene can't represent SPLADE weights properly. That was wrong: the gap came from using the wrong pyserini implementation.
 
-SPLADE assigns **continuous float weights** to each token. Qdrant stores and scores these directly. Lucene is a text search engine — to use SPLADE expansions, you must convert float weights to something Lucene understands:
+The naive approach converts float weights to repeated tokens (weight 3.7 → repeat the token 4 times), then indexes them as plain text and scores with BM25. This loses precision in two ways: coarse rounding, then BM25's IDF/TF normalization scrambles the original scores entirely.
+
+Lucene has had native float-weight storage since 2019 via `FeatureField`, used by both Elasticsearch ELSER and OpenSearch neural sparse search. Pyserini's correct SPLADE approach is impact indexing — write `{token: int_weight}` pairs to `JsonVectorCollection` with `--impact --pretokenized`, and Lucene stores them as integer-quantized impact scores and retrieves via exact dot product (no BM25 normalization applied):
 
 ```python
-def splade_to_text(indices, values, tokenizer) -> str:
-    # weight 3.7 → repeat token 4 times
-    # weight 0.4 → include token once
+def splade_to_impact_dict(indices, values, tokenizer, scale=100) -> dict:
     tokens = tokenizer.convert_ids_to_tokens(indices)
-    parts = [token] * max(1, min(20, round(weight))
-             for token, weight in zip(tokens, values)]
-    return " ".join(parts)
+    return {
+        token.replace("##", ""): max(1, round(weight * scale))
+        for token, weight in zip(tokens, values)
+        if token and not token.startswith("[")
+    }
 ```
 
-This discretization loses precision. Lucene's BM25 then applies its own IDF and TF normalization on top, compounding the distortion. Qdrant's native sparse scoring computes the exact dot product over float weights end-to-end.
-
-**Benchmarks that evaluate SPLADE over Lucene indices are likely underestimating the method's true quality.**
+With that fix, the gap shrinks to **~1% NDCG@10** — explained by integer quantization alone (scale=100 gives ~1% relative precision). BM25 is essentially unchanged (−0.6%), and SPLADE-IF on pyserini now clearly beats BM25-pyserini by **+2.4% NDCG@10** at the same ~3ms query latency.
 
 <PlotlyChart
   data={[
@@ -208,16 +208,16 @@ This discretization loses precision. Lucene's BM25 then applies its own IDF and 
     {
       name: 'Lucene/pyserini',
       x: ['BM25', 'SPLADE-IF', 'SPLADE-Full (PP)'],
-      y: [0.6789, 0.6344, 0.6542],
+      y: [0.6789, 0.6953, 0.6969],
       type: 'bar',
       marker: { color: '#f59e0b' },
     },
   ]}
   layout={{
-    title: { text: 'Qdrant vs Lucene: NDCG@10 by Method', font: { size: 15 } },
+    title: { text: 'Qdrant vs Lucene: NDCG@10 by Method (impact indexing)', font: { size: 15 } },
     barmode: 'group',
     xaxis: { title: '' },
-    yaxis: { title: 'NDCG@10', range: [0.6, 0.74], tickformat: '.2f' },
+    yaxis: { title: 'NDCG@10', range: [0.63, 0.73], tickformat: '.2f' },
     height: 380,
     margin: { t: 56, r: 24, b: 80, l: 64 },
     legend: { orientation: 'h', y: -0.22 },
@@ -274,5 +274,5 @@ Once indexed: **encode once, query forever.**
 ## Key Takeaways
 
 - **SPLADE-IF nearly matches full SPLADE quality** — within the same model family, dropping query-side inference costs only 0.0093 NDCG@10 (under 1.3% relative) while cutting query latency **13×** (57ms → 4.3ms). Both beat BM25 by +3.5% NDCG@10 at the same ~4ms.
-- **Backend matters far more than expected for SPLADE.** Qdrant's native float sparse scoring outperforms Lucene by 8–10% NDCG@10; BM25 barely changes (under 1%). Float precision lost in Lucene's text-repetition conversion accounts for the entire gap.
+- **The backend barely matters once you use the right API.** With proper impact indexing (`JsonVectorCollection --impact --pretokenized`), Lucene/pyserini matches Qdrant to within ~1% NDCG@10 — the residual gap is integer quantization, not a Lucene limitation. Lucene has had native float-weight storage (`FeatureField`) since 2019; both Elasticsearch ELSER and OpenSearch neural sparse use it.
 - **The only real tradeoff is index time.** Queries are free once indexed. The GPU cost at index time (83 docs/sec on A10G) is acceptable for static corpora; high-churn indexes need an async re-encoding pipeline.
