@@ -215,43 +215,16 @@ The 13× latency gap comes entirely from eliminating the query encoder call — 
     },
   ]}
   layout={{
-    title: { text: 'Query Latency Breakdown — Qdrant (median ms)', font: { size: 15 } },
+    title: {
+      text: 'Total Query Latency = Embed + Search — Qdrant (median ms)',
+      font: { size: 15 },
+    },
     barmode: 'stack',
     xaxis: { title: '' },
     yaxis: { title: 'ms', tickformat: '.0f' },
     height: 380,
     margin: { t: 56, r: 24, b: 64, l: 64 },
     legend: { orientation: 'h', y: -0.22 },
-  }}
-/>
-
-The same numbers grouped by backend — Qdrant edges ahead by 1–2% because pyserini integer-quantizes doc vectors (`weight × 100`, rounded), while Qdrant scores exact floats. This gap is structural: all Lucene-based backends (pyserini, OpenSearch, Elasticsearch) are inherently approximate for sparse weights — pyserini uses explicit integer quantization, OpenSearch's `rank_features` field uses Lucene's internal 9-bit float encoding (~0.4% relative error). Exact float32 sparse scoring isn't a tunable option in any of them.
-
-<PlotlyChart
-  data={[
-    {
-      name: 'Qdrant',
-      x: ['BM25', 'IF (naver)', 'IF (GTE)', 'IF (PP-sym)', 'Full (naver)', 'Full (PP)'],
-      y: [0.683, 0.7068, 0.7021, 0.6859, 0.7161, 0.7093],
-      type: 'bar',
-      marker: { color: '#10b981' },
-    },
-    {
-      name: 'pyserini',
-      x: ['BM25', 'IF (naver)', 'IF (GTE)', 'IF (PP-sym)', 'Full (naver)', 'Full (PP)'],
-      y: [0.6789, 0.6953, 0.6886, 0.6704, 0.7156, 0.6969],
-      type: 'bar',
-      marker: { color: '#f59e0b' },
-    },
-  ]}
-  layout={{
-    title: { text: 'Qdrant vs pyserini: NDCG@10 across all methods', font: { size: 15 } },
-    barmode: 'group',
-    xaxis: { title: '' },
-    yaxis: { title: 'NDCG@10', range: [0.63, 0.73], tickformat: '.2f' },
-    height: 400,
-    margin: { t: 56, r: 24, b: 100, l: 64 },
-    legend: { orientation: 'h', y: -0.28 },
   }}
 />
 
@@ -264,6 +237,8 @@ The reason inference-free works so well: [`naver/splade-v3-doc`](https://hugging
 The sparsity numbers confirm this — SPLADE-IF doc vectors are denser (314 avg non-zeros) than the naver full model (288 nnz), carrying richer expansions to compensate for sparse queries. SPLADE-Full spreads the work across both sides; both approaches converge to similar quality.
 
 Both methods beat BM25-Qdrant meaningfully: **+3.5% NDCG@10, +2.1% Recall@10, +4.3% MRR@10** for SPLADE-IF, at essentially the same 4ms query latency.
+
+The pyserini numbers run 1–2% lower across the board — a structural consequence of Lucene's integer-quantized impact scoring. All Lucene-based backends (pyserini, OpenSearch, Elasticsearch) are inherently approximate for sparse weights; exact float32 sparse scoring isn't a tunable option in any of them.
 
 ## The Tradeoff: Free Queries, Expensive Index
 
