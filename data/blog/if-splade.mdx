@@ -148,14 +148,14 @@ I benchmarked a full matrix of configurations on [BEIR scifact](https://github.c
   layout={{
     title: { text: 'Quality vs Query Latency — BEIR scifact', font: { size: 15 } },
     xaxis: {
-      title: { text: 'Median query latency (ms)', standoff: 12 },
+      title: { text: 'Median query latency (ms) — lower is better →', standoff: 12 },
       type: 'log',
       tickmode: 'array',
       tickvals: [2, 3, 4, 5, 10, 20, 60, 80],
       ticktext: ['2', '3', '4', '5', '10', '20', '60', '80'],
       range: [0.3, 2.0],
     },
-    yaxis: { title: 'NDCG@10', range: [0.62, 0.74] },
+    yaxis: { title: 'NDCG@10 ↑ higher is better', range: [0.62, 0.74] },
     height: 460,
     showlegend: true,
     legend: { orientation: 'h', y: -0.18 },
