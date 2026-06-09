@@ -279,13 +279,13 @@ Once indexed: **encode once, query forever.**
 
 ## Limitations
 
-**Asymmetric training matters.** The approach works because `naver/splade-v3-doc` was trained specifically for raw-token queries. We also tested inference-free against [`prithivida/Splade_PP_en_v1`](https://huggingface.co/prithivida/Splade_PP_en_v1) (a symmetric model): NDCG@10 dropped to 0.6859 on Qdrant and 0.6704 on pyserini — still above BM25 on both backends, but well below the asymmetric result. The ~2% gap between symmetric and asymmetric IF holds consistently across both backends. If you already have a symmetric SPLADE index, dropping the query encoder still gives a meaningful free speedup with a moderate quality tradeoff. For best results, use an asymmetric model.
+**Asymmetric training matters.** [`naver/splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) was trained specifically for raw-token queries, baking query-side expansion into document representations. A symmetric model like [`prithivida/Splade_PP_en_v1`](https://huggingface.co/prithivida/Splade_PP_en_v1) still beats BM25 in IF mode, but costs ~2% NDCG@10 — a moderate quality tradeoff for a free speedup.
 
-**No query-time adaptation.** Standard SPLADE can expand "heart attack" → cardiac, coronary, myocardial at query time. Inference-free can't — the doc encoder must anticipate every useful expansion upfront. On truly novel terms (new drug names, recent product launches, breaking-news proper nouns), SPLADE-IF degrades toward BM25 behavior. Full SPLADE handles this better via query-time expansion; dense models handle it differently via subword composition, though dense retrieval trades this for semantic drift on rare terms.
+**No query-time adaptation.** The doc encoder must anticipate every useful expansion upfront. On truly novel terms — new drug names, recent product launches, breaking-news proper nouns — SPLADE-IF degrades toward BM25 behavior. Full SPLADE handles this better via query-time expansion.
 
-**Domain sensitivity.** Inference-free works best when vocabulary bridging is the core challenge and the domain vocabulary is predictable — scientific, medical, legal. On e-commerce, Qdrant's own experiments found a 6× quality drop because product titles are already close to exact-match with query terms. If your queries are short and already literal ("black 42mm apple watch"), document-side expansion helps less.
+**Domain sensitivity.** IF works best when vocabulary bridging is the core challenge and domain vocabulary is predictable — scientific, medical, legal. On e-commerce, where product titles already closely match query terms, document-side expansion helps less and the quality gap over BM25 narrows significantly.
 
-**Denser index and GPU required at index time.** SPLADE-IF doc vectors average 314 non-zeros vs 205 for full SPLADE — more memory and disk. BM25 indexes at 1,439 docs/sec on CPU; SPLADE-IF needs an A10G at 83 docs/sec. Not a query concern, but a real operational cost for high-churn corpora.
+**Denser index, GPU required at index time.** SPLADE-IF doc vectors are denser than full SPLADE (314 vs 205 avg non-zeros), and encoding requires a GPU. Both are one-time costs for static corpora — see the Tradeoff section above.
 
 ## Key Takeaways
 
