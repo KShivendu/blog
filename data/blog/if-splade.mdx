@@ -4,7 +4,7 @@ date: '2026-06-09'
 lastmod: '2026-06-09'
 tags: ['search', 'sparse-retrieval', 'nlp', 'information-retrieval']
 draft: false
-summary: 'A six-way benchmark across SPLADE-IF, full SPLADE, and BM25 on both Qdrant and Lucene/pyserini reveals that inference-free SPLADE nearly matches full SPLADE quality at 13× lower query latency — with no GPU required at query time.'
+summary: 'A six-way benchmark across SPLADE-IF, full SPLADE, and BM25 on both Qdrant and Lucene/pyserini reveals that inference-free SPLADE nearly matches full SPLADE quality at 13× lower query latency, with no GPU required at query time.'
 images: ['/static/images/blogs/if-splade.jpg']
 authors: ['default']
 ---
@@ -52,11 +52,11 @@ SPLADE fixes this by using a neural network to expand documents into a richer sp
   }}
 />
 
-The original tokens score highest, but semantically related terms — `cardiac`, `stroke`, `disease`, `chest`, `death` — are all activated with meaningful weights. A query for "cardiac arrest" hits `cardiac` (weight 0.77) even though the document only mentions "heart attack." BM25 would miss it entirely.
+The original tokens score highest, but semantically related terms like `cardiac`, `stroke`, `disease`, `chest`, `death` are all activated with meaningful weights. A query for "cardiac arrest" hits `cardiac` (weight 0.77) even though the document only mentions "heart attack." BM25 would miss it entirely.
 
 The catch is query latency: running a transformer at search time adds 50–100ms per query.
 
-**Inference-free SPLADE** removes that catch entirely. The model runs only at index time on documents. Queries use raw BERT token IDs — no model, no GPU, no neural inference. You pay once upfront; queries stay fast.
+**Inference-free SPLADE** removes that catch entirely. The model runs only at index time on documents. Queries use raw BERT token IDs: no model, no GPU, no neural inference. You pay once upfront. Queries stay fast.
 
 Here's how it compares across six retrieval setups, with one result that surprised me.
 
@@ -64,7 +64,7 @@ Here's how it compares across six retrieval setups, with one result that surpris
 
 <SpladeVsIF />
 
-The document vectors still carry neural expansions — "heart" activates "cardiac", "coronary", "myocardial". The query side is just tokenization: "cardiac arrest" becomes token IDs `[3684, 6295]` each with weight 1.0. No model call, no GPU.
+The document vectors still carry neural expansions: "heart" activates "cardiac", "coronary", "myocardial". The query side is just tokenization: "cardiac arrest" becomes token IDs `[3684, 6295]` each with weight 1.0. No model call, no GPU.
 
 ```python
 def encode_query_inference_free(tokenizer, query: str):
@@ -77,7 +77,7 @@ At query time: one tokenizer call + one sparse dot product. That's it.
 
 ## Results
 
-I benchmarked a full matrix of configurations on [BEIR scifact](https://github.com/beir-cellar/beir) (5,183 docs, 300 queries, scientific claim verification): three SPLADE models × two backends × full and inference-free mode, plus BM25 on both backends. SPLADE doc encoding ran on a Modal A10G GPU. [`naver/splade-v3`](https://huggingface.co/naver/splade-v3) and [`naver/splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) are the same model family — symmetric vs asymmetric training — giving the cleanest apples-to-apples measure of dropping query-side inference. The third model, [`opensearch-neural-sparse-encoding-doc-v3-gte`](https://huggingface.co/opensearch-project/opensearch-neural-sparse-encoding-doc-v3-gte), is an asymmetric doc-only encoder from OpenSearch.
+I benchmarked a full matrix of configurations on [BEIR scifact](https://github.com/beir-cellar/beir) (5,183 docs, 300 queries, scientific claim verification): three SPLADE models × two backends × full and inference-free mode, plus BM25 on both backends. SPLADE doc encoding ran on a Modal A10G GPU. [`naver/splade-v3`](https://huggingface.co/naver/splade-v3) and [`naver/splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) are the same model family (symmetric vs asymmetric training), giving the cleanest apples-to-apples measure of dropping query-side inference. The third model, [`opensearch-neural-sparse-encoding-doc-v3-gte`](https://huggingface.co/opensearch-project/opensearch-neural-sparse-encoding-doc-v3-gte), is an asymmetric doc-only encoder from OpenSearch.
 
 **Qdrant** (native float sparse scoring)
 
@@ -131,9 +131,9 @@ I benchmarked a full matrix of configurations on [BEIR scifact](https://github.c
     },
   ]}
   layout={{
-    title: { text: 'Quality vs Query Latency — BEIR scifact', font: { size: 15 } },
+    title: { text: 'Quality vs Query Latency (BEIR scifact)', font: { size: 15 } },
     xaxis: {
-      title: { text: 'Median query latency (ms) — lower is better →', standoff: 12 },
+      title: { text: 'Median query latency (ms), lower is better →', standoff: 12 },
       type: 'log',
       tickmode: 'array',
       tickvals: [2, 3, 4, 5, 10, 20, 60, 80],
@@ -148,7 +148,7 @@ I benchmarked a full matrix of configurations on [BEIR scifact](https://github.c
   }}
 />
 
-The 13× latency gap comes entirely from eliminating the query encoder call — search time is unchanged.
+The 13× latency gap comes entirely from eliminating the query encoder call. Search time is unchanged.
 
 <PlotlyChart
   data={[
@@ -181,7 +181,7 @@ The 13× latency gap comes entirely from eliminating the query encoder call — 
   }}
 />
 
-To verify these findings aren't specific to one backend, I replicated all experiments on Lucene/pyserini — a completely independent retrieval stack. The pattern holds; numbers run 1–2% lower due to integer-quantized impact scoring, which is structural to all Lucene-based engines (pyserini, OpenSearch, Elasticsearch) — exact float32 sparse scoring isn't a tunable option in any of them. That said, it's an acceptable tradeoff — integer arithmetic also makes search faster.
+I also ran everything on Lucene/pyserini. Numbers come out 1–2% lower. Lucene stores doc weights as integers, so you lose some float precision. OpenSearch and Elasticsearch have the same constraint. None of them support exact float sparse scoring. The tradeoff is fine: integer arithmetic speeds up search.
 
 <details>
 <summary>**Lucene/pyserini results** (integer-quantized impact scoring, `JsonVectorCollection --impact`)</summary>
@@ -203,19 +203,19 @@ To verify these findings aren't specific to one backend, I replicated all experi
 
 ## SPLADE-IF Nearly Matches Full SPLADE at 13× Lower Latency
 
-The cleanest comparison is within the same model family — [`naver/splade-v3`](https://huggingface.co/naver/splade-v3) (full) vs [`naver/splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) (inference-free). Dropping query-side inference costs only **−0.0093 NDCG@10** (under 1.3% relative). The latency difference is not noise: full SPLADE costs **57ms median** per query vs **4.3ms** for SPLADE-IF — a 13× gap driven entirely by the 50ms query encoder call.
+Comparing [`naver/splade-v3`](https://huggingface.co/naver/splade-v3) (full) vs [`naver/splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) (inference-free) in the same model family: dropping query-side inference costs **−0.0093 NDCG@10** (under 1.3% relative). The latency difference is stark: full SPLADE costs **57ms median** per query vs **4.3ms** for SPLADE-IF, a 13× gap, entirely from the 50ms query encoder call.
 
-The reason inference-free works so well: [`naver/splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) is an **asymmetric model** trained specifically for this regime. Its documents are encoded to be maximally useful when matched against unweighted query tokens. It bakes query-side expansion into document representations at index time, so raw token matching is surprisingly effective.
+Why does inference-free work so well? [`naver/splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) is an **asymmetric model** trained knowing that queries will be raw tokens with no weighting. So the doc encoder compensates: it expands aggressively at index time, and the raw query terms land on vocabulary that was prepared for them.
 
-The sparsity numbers confirm this — SPLADE-IF doc vectors are denser (314 avg non-zeros) than the naver full model (288 nnz), carrying richer expansions to compensate for sparse queries. SPLADE-Full spreads the work across both sides; both approaches converge to similar quality.
+You can see this in the sparsity numbers: SPLADE-IF doc vectors average 314 non-zeros vs 288 for the full model. The doc side just carries more. Full SPLADE splits the expansion work between query and doc. Inference-free pushes it all into the doc. Both get to similar quality.
 
 Both methods beat BM25-Qdrant meaningfully: **+3.5% NDCG@10, +2.1% Recall@10, +4.3% MRR@10** for SPLADE-IF, at essentially the same 4ms query latency.
 
 ## The Tradeoff: Free Queries, Expensive Index
 
-At query time, SPLADE-IF and BM25 are the same operation — a **sparse dot product** in Qdrant. Both take ~4ms. The "inference-free" name can mislead; there's no neural model removed from the query path relative to BM25, just relative to full SPLADE.
+At query time, SPLADE-IF and BM25 are the same operation: a **sparse dot product** in Qdrant. Both take ~4ms. The "inference-free" name can mislead. There's no neural model removed from the query path relative to BM25, just relative to full SPLADE.
 
-The cost is entirely upfront. SPLADE-IF models encode at 58–83 docs/sec on an A10G GPU vs BM25's 1,439 docs/sec on CPU — about 17–25× slower. At that rate, a million-document corpus takes 3–5 hours. For a static or slowly-updated corpus this is a one-time cost. For high-churn indexes you'd need an async re-encoding pipeline — the same problem dense vector search already solves.
+The cost is entirely upfront. SPLADE-IF models encode at 58–83 docs/sec on an A10G GPU vs BM25's 1,439 docs/sec on CPU, about 17–25× slower. At that rate, a million-document corpus takes 3–5 hours. For a static or slowly-updated corpus this is a one-time cost. For high-churn indexes you'd need an async re-encoding pipeline, the same problem dense vector search already solves.
 
 Once indexed: **encode once, query forever.**
 
@@ -250,16 +250,16 @@ Once indexed: **encode once, query forever.**
 
 ## Limitations
 
-**Asymmetric training matters.** [`naver/splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) was trained specifically for raw-token queries, baking query-side expansion into document representations. A symmetric model like [`prithivida/Splade_PP_en_v1`](https://huggingface.co/prithivida/Splade_PP_en_v1) still beats BM25 in IF mode, but costs ~2% NDCG@10 — a moderate quality tradeoff for a free speedup.
+**Model choice matters.** [`naver/splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) was trained for raw-token queries. Its doc encoder compensates for the missing query expansion. A symmetric model like [`prithivida/Splade_PP_en_v1`](https://huggingface.co/prithivida/Splade_PP_en_v1) still beats BM25 in IF mode, but costs ~2% NDCG@10, a real quality hit for a free speedup.
 
-**No query-time adaptation.** The doc encoder must anticipate every useful expansion upfront. On truly novel terms — new drug names, recent product launches, breaking-news proper nouns — SPLADE-IF degrades toward BM25 behavior. Full SPLADE handles this better via query-time expansion.
+**No query-time adaptation.** The doc encoder must anticipate every useful expansion upfront. On truly novel terms (new drug names, recent product launches, breaking-news proper nouns), SPLADE-IF degrades toward BM25 behavior. Full SPLADE handles this better via query-time expansion.
 
-**Domain sensitivity.** IF works best when vocabulary bridging is the core challenge and domain vocabulary is predictable — scientific, medical, legal. On e-commerce, where product titles already closely match query terms, document-side expansion helps less and the quality gap over BM25 narrows significantly.
+**Domain sensitivity.** IF works best when vocabulary bridging is the core challenge and domain vocabulary is predictable (scientific, medical, legal). On e-commerce, where product titles already closely match query terms, document-side expansion helps less and the quality gap over BM25 narrows significantly.
 
-**Denser index, GPU required at index time.** SPLADE-IF doc vectors are denser than full SPLADE (314 vs 205 avg non-zeros), and encoding requires a GPU. Both are one-time costs for static corpora — see the Tradeoff section above.
+**Denser index, GPU required at index time.** SPLADE-IF doc vectors are denser than full SPLADE (314 vs 205 avg non-zeros), and encoding requires a GPU. Both are one-time costs for static corpora. See the Tradeoff section above.
 
 ## Key Takeaways
 
-- **SPLADE-IF nearly matches full SPLADE quality** — within the same model family, dropping query-side inference costs only 0.0093 NDCG@10 (under 1.3% relative) while cutting query latency **13×** (57ms → 4.3ms). Both beat BM25 by +3.5% NDCG@10 at essentially the same latency.
-- **Asymmetric training is the key lever for IF quality.** Using a symmetric model (PP) in inference-free mode costs ~2% NDCG@10 vs the dedicated asymmetric model ([naver/splade-v3-doc](https://huggingface.co/naver/splade-v3-doc)). If you have an existing symmetric index, IF still beats BM25, but use an asymmetric model for best results.
-- **The only real tradeoff is index time.** Queries are free once indexed. The GPU cost at index time (83 docs/sec on A10G) is acceptable for static corpora; high-churn indexes need an async re-encoding pipeline.
+- **SPLADE-IF nearly matches full SPLADE quality.** Within the same model family, dropping query-side inference costs only 0.0093 NDCG@10 (under 1.3% relative) while cutting query latency **13×** (57ms → 4.3ms). Both beat BM25 by +3.5% NDCG@10 at essentially the same latency.
+- **Use an asymmetric model.** A symmetric model in IF mode still beats BM25, but costs ~2% NDCG@10 vs a model trained for it ([naver/splade-v3-doc](https://huggingface.co/naver/splade-v3-doc)). If you're starting fresh, pick the asymmetric one.
+- **The only real tradeoff is index time.** Queries are free once indexed. The GPU cost at index time (83 docs/sec on A10G) is acceptable for static corpora. High-churn indexes need an async re-encoding pipeline.
