@@ -16,13 +16,20 @@ export default function PlotlyChart({ data, layout, config, style }) {
     plot_bgcolor: bgColor,
     font: { family: 'Inter, sans-serif', size: 13, color: fontColor },
     margin: { t: 48, r: 24, b: 64, l: 64 },
-    xaxis: { gridcolor: gridColor, linecolor: gridColor, zerolinecolor: gridColor },
-    yaxis: { gridcolor: gridColor, linecolor: gridColor, zerolinecolor: gridColor },
     legend: { font: { color: fontColor } },
     ...layout,
-    // deep-merge axis overrides so callers can still set range/type/title
-    xaxis: { gridcolor: gridColor, linecolor: gridColor, zerolinecolor: gridColor, ...(layout?.xaxis || {}) },
-    yaxis: { gridcolor: gridColor, linecolor: gridColor, zerolinecolor: gridColor, ...(layout?.yaxis || {}) },
+    xaxis: {
+      gridcolor: gridColor,
+      linecolor: gridColor,
+      zerolinecolor: gridColor,
+      ...(layout?.xaxis || {}),
+    },
+    yaxis: {
+      gridcolor: gridColor,
+      linecolor: gridColor,
+      zerolinecolor: gridColor,
+      ...(layout?.yaxis || {}),
+    },
   }
 
   const defaultConfig = {
