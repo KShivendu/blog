@@ -207,6 +207,34 @@ The sparsity numbers confirm this — SPLADE-IF doc vectors are denser (314 avg 
 
 Both methods beat BM25-Qdrant meaningfully: **+3.5% NDCG@10, +2.1% Recall@10, +4.3% MRR@10** for SPLADE-IF, at essentially the same 4ms query latency.
 
+<PlotlyChart
+  data={[
+    {
+      name: 'Qdrant',
+      x: ['BM25', 'IF (naver)', 'IF (GTE)', 'IF (PP-sym)', 'Full (naver)', 'Full (PP)'],
+      y: [0.683, 0.7068, 0.7021, 0.6859, 0.7161, 0.7093],
+      type: 'bar',
+      marker: { color: '#10b981' },
+    },
+    {
+      name: 'pyserini',
+      x: ['BM25', 'IF (naver)', 'IF (GTE)', 'IF (PP-sym)', 'Full (naver)', 'Full (PP)'],
+      y: [0.6789, 0.6953, 0.6886, 0.6704, 0.7156, 0.6969],
+      type: 'bar',
+      marker: { color: '#f59e0b' },
+    },
+  ]}
+  layout={{
+    title: { text: 'Qdrant vs pyserini: NDCG@10 across all methods', font: { size: 15 } },
+    barmode: 'group',
+    xaxis: { title: '' },
+    yaxis: { title: 'NDCG@10', range: [0.63, 0.73], tickformat: '.2f' },
+    height: 400,
+    margin: { t: 56, r: 24, b: 100, l: 64 },
+    legend: { orientation: 'h', y: -0.28 },
+  }}
+/>
+
 ## The Tradeoff: Free Queries, Expensive Index
 
 At query time, SPLADE-IF and BM25 are the same operation — a **sparse dot product** in Qdrant. Both take ~4ms. The "inference-free" name can mislead; there's no neural model removed from the query path relative to BM25, just relative to full SPLADE.
