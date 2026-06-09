@@ -15,7 +15,46 @@ authors: ['default']
 
 BM25 is the workhorse of lexical search. It's fast, requires no GPU, and is surprisingly competitive on most retrieval benchmarks. Its weakness is well-known: it can only match exact terms. A query for "cardiac arrest" won't retrieve a document that says "heart attack", even if that document is the best answer.
 
-SPLADE fixes this by using a neural network to expand documents into a richer sparse representation — one that activates "cardiac" when it sees "heart attack." The catch is query latency: running a transformer at search time adds 50–100ms per query.
+SPLADE fixes this by using a neural network to expand documents into a richer sparse representation. Here's what `naver/splade-v3-doc` actually activates for "heart attack":
+
+<PlotlyChart
+  data={[
+    {
+      type: 'bar',
+      orientation: 'h',
+      x: [1.599, 1.133, 0.773, 0.767, 0.764, 0.669, 0.589, 0.498, 0.361, 0.273],
+      y: [
+        'heart',
+        'attack',
+        'die',
+        'cardiac',
+        'attacks',
+        'disease',
+        'stroke',
+        'chest',
+        'death',
+        'illness',
+      ],
+      marker: { color: '#10b981' },
+      text: [1.599, 1.133, 0.773, 0.767, 0.764, 0.669, 0.589, 0.498, 0.361, 0.273].map((v) =>
+        v.toFixed(2)
+      ),
+      textposition: 'outside',
+    },
+  ]}
+  layout={{
+    title: { text: 'SPLADE token activations for "heart attack"', font: { size: 14 } },
+    xaxis: { title: 'activation weight', range: [0, 1.9] },
+    yaxis: { autorange: 'reversed' },
+    height: 320,
+    margin: { t: 48, r: 48, b: 48, l: 80 },
+    showlegend: false,
+  }}
+/>
+
+The original tokens score highest, but semantically related terms — `cardiac`, `stroke`, `disease`, `chest`, `death` — are all activated with meaningful weights. A query for "cardiac arrest" hits `cardiac` (weight 0.77) even though the document only mentions "heart attack." BM25 would miss it entirely.
+
+The catch is query latency: running a transformer at search time adds 50–100ms per query.
 
 **Inference-free SPLADE** removes that catch entirely. The model runs only at index time on documents. Queries use raw BERT token IDs — no model, no GPU, no neural inference. You pay once upfront; queries stay fast.
 
