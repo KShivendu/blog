@@ -204,7 +204,16 @@ Once indexed, queries cost nothing extra. This is the asymmetry SPLADE-IF exploi
 
 The results on scifact are strong, but inference-free SPLADE has real constraints worth knowing:
 
-**Requires an asymmetric model.** You can't apply this approach to a symmetric SPLADE model like `prithivida/Splade_PP_en_v1` and expect good results. Symmetric models were trained so that doc representations match against neural query vectors (~65 weighted terms). Drop the query encoder and use 20 raw token IDs instead — the doc representations weren't trained to compensate. This is exactly what the Qdrant miniCOIL paper observed: inference-free SPLADE _with a symmetric model_ underperforms BM25. `naver/splade-v3-doc` was trained from the start knowing that queries would be tokenizer-only, so the doc encoder learned to pre-bake query-side expansion into document vectors.
+**Asymmetric training matters — but symmetric models still beat BM25.** We tested inference-free queries against `prithivida/Splade_PP_en_v1` doc vectors (a symmetric model not designed for this regime):
+
+| Method                                | NDCG@10 | Latency |
+| ------------------------------------- | ------- | ------- |
+| SPLADE-Full prithivida (neural query) | 0.7093  | 60ms    |
+| SPLADE-IF naver (asymmetric model)    | 0.7068  | 4.3ms   |
+| SPLADE-IF-sym prithivida (raw tokens) | 0.6859  | 3.9ms   |
+| BM25                                  | 0.6830  | 4.0ms   |
+
+Even the symmetric model used inference-free beats BM25 (+0.4% NDCG@10) at 15× lower latency. The asymmetric `naver/splade-v3-doc` is significantly better (+3.5% over BM25) because it was trained to compensate for unweighted query tokens — but if you already have a symmetric SPLADE index, dropping the query encoder still gets you a meaningful free speedup with a small quality tradeoff.
 
 **No query-time adaptation.** Standard SPLADE can expand "heart attack" → cardiac, coronary, myocardial at query time. Inference-free can't — the doc encoder must anticipate every useful expansion upfront. If a user query is unusual or out-of-distribution, there's no second chance. On truly novel terms (new drug names, recent product launches, breaking-news proper nouns), SPLADE-IF degrades to roughly BM25 behavior — the doc encoder pre-expanded synonyms but can't bridge to vocabulary it never saw. Full SPLADE handles this better via query-time expansion; dense models handle it differently via subword composition (BPE/WordPiece decomposes unknown strings into known pieces), though dense retrieval trades this for semantic drift on rare terms.
 
