@@ -195,6 +195,36 @@ I benchmarked a full matrix of configurations on [BEIR scifact](https://github.c
   }}
 />
 
+The 13× latency gap comes entirely from eliminating the query encoder call — search time is unchanged.
+
+<PlotlyChart
+  data={[
+    {
+      name: 'Query embed',
+      x: ['BM25', 'IF (naver)', 'IF (GTE)', 'IF (PP-sym)', 'Full (naver)', 'Full (PP)'],
+      y: [0.1, 0.3, 0.3, 0.3, 50.0, 53.2],
+      type: 'bar',
+      marker: { color: '#6366f1' },
+    },
+    {
+      name: 'Search',
+      x: ['BM25', 'IF (naver)', 'IF (GTE)', 'IF (PP-sym)', 'Full (naver)', 'Full (PP)'],
+      y: [3.8, 4.0, 4.0, 3.6, 6.6, 7.1],
+      type: 'bar',
+      marker: { color: '#10b981' },
+    },
+  ]}
+  layout={{
+    title: { text: 'Query Latency Breakdown — Qdrant (median ms)', font: { size: 15 } },
+    barmode: 'stack',
+    xaxis: { title: '' },
+    yaxis: { title: 'ms', tickformat: '.0f' },
+    height: 380,
+    margin: { t: 56, r: 24, b: 64, l: 64 },
+    legend: { orientation: 'h', y: -0.22 },
+  }}
+/>
+
 The same numbers grouped by backend — Qdrant edges ahead by 1–2% because pyserini integer-quantizes doc vectors (`weight × 100`, rounded), while Qdrant scores exact floats.
 
 <PlotlyChart
