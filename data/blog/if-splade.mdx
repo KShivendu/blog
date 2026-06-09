@@ -4,7 +4,7 @@ date: '2026-06-09'
 lastmod: '2026-06-09'
 tags: ['search', 'sparse-retrieval', 'nlp', 'information-retrieval']
 draft: false
-summary: 'A six-way benchmark across SPLADE-IF, full SPLADE, and BM25 on both Qdrant and Lucene/pyserini reveals that inference-free SPLADE nearly matches full SPLADE quality at 13× lower query latency — and that the retrieval backend matters far more than expected for SPLADE.'
+summary: 'A six-way benchmark across SPLADE-IF, full SPLADE, and BM25 on both Qdrant and Lucene/pyserini reveals that inference-free SPLADE nearly matches full SPLADE quality at 13× lower query latency — with no GPU required at query time.'
 images: ['/static/images/blogs/if-splade.jpg']
 authors: ['default']
 ---
@@ -58,7 +58,7 @@ The catch is query latency: running a transformer at search time adds 50–100ms
 
 **Inference-free SPLADE** removes that catch entirely. The model runs only at index time on documents. Queries use raw BERT token IDs — no model, no GPU, no neural inference. You pay once upfront; queries stay fast.
 
-Here's how it compares across six retrieval setups, with two results that surprised me.
+Here's how it compares across six retrieval setups, with one result that surprised me.
 
 ## How It Works
 
@@ -108,8 +108,6 @@ I benchmarked a full matrix of configurations on [BEIR scifact](https://github.c
 | BM25                   | 0.6789     | 0.8038    | 0.6457     | 5.5ms / 8.9ms      | 0.0ms       | 5.5ms     |
 
 </div>
-
-Two findings stand out. Pyserini numbers run 1–2% lower for IF mode because doc floats are integer-quantized at index time (`weight × 100`, rounded); Qdrant scores exact float dot products.
 
 <PlotlyChart
   data={[
@@ -227,7 +225,7 @@ The same numbers grouped by backend — Qdrant edges ahead by 1–2% because pys
   }}
 />
 
-## Finding 1: SPLADE-IF Nearly Matches Full SPLADE at 13× Lower Latency
+## SPLADE-IF Nearly Matches Full SPLADE at 13× Lower Latency
 
 The cleanest comparison is within the same model family — [`naver/splade-v3`](https://huggingface.co/naver/splade-v3) (full) vs [`naver/splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) (inference-free). Dropping query-side inference costs only **−0.0093 NDCG@10** (under 1.3% relative). The latency difference is not noise: full SPLADE costs **57ms median** per query vs **4.3ms** for SPLADE-IF — a 13× gap driven entirely by the 50ms query encoder call.
 
