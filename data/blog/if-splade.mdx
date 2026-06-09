@@ -5,9 +5,11 @@ lastmod: '2026-06-09'
 tags: ['search', 'sparse-retrieval', 'nlp', 'information-retrieval']
 draft: false
 summary: 'A six-way benchmark across SPLADE-IF, full SPLADE, and BM25 on both Qdrant and Lucene/pyserini reveals that inference-free SPLADE nearly matches full SPLADE quality at 13× lower query latency — and that the retrieval backend matters far more than expected for SPLADE.'
-images: ['/static/images/blogs/inference-free-splade-og.jpg']
+images: ['/static/images/blogs/if-splade.jpg']
 authors: ['default']
 ---
+
+![Inference Free SPLADE Blog Cover Image](/static/images/blogs/if-splade.jpg)
 
 > Looking for TL;DR? Skip to [key takeaways](#key-takeaways)
 
@@ -68,8 +70,10 @@ Three findings stand out.
   data={[
     {
       name: 'SPLADE-IF (Qdrant)',
-      x: [4.3], y: [0.7068],
-      mode: 'markers+text', type: 'scatter',
+      x: [4.3],
+      y: [0.7068],
+      mode: 'markers+text',
+      type: 'scatter',
       text: ['SPLADE-IF'],
       textposition: ['top right'],
       marker: { size: 18, color: '#10b981', symbol: 'star', line: { width: 2, color: 'white' } },
@@ -77,8 +81,10 @@ Three findings stand out.
     },
     {
       name: 'SPLADE-Full (Qdrant)',
-      x: [57.2, 57.0], y: [0.7161, 0.7093],
-      mode: 'markers+text', type: 'scatter',
+      x: [57.2, 57.0],
+      y: [0.7161, 0.7093],
+      mode: 'markers+text',
+      type: 'scatter',
       text: ['SPLADE-Full (naver)', 'SPLADE-Full (PP)'],
       textposition: ['top left', 'bottom left'],
       marker: { size: 13, color: '#6366f1', line: { width: 2, color: 'white' } },
@@ -86,8 +92,10 @@ Three findings stand out.
     },
     {
       name: 'BM25',
-      x: [4.0, 5.5], y: [0.6830, 0.6789],
-      mode: 'markers+text', type: 'scatter',
+      x: [4.0, 5.5],
+      y: [0.683, 0.6789],
+      mode: 'markers+text',
+      type: 'scatter',
       text: ['BM25-Qdrant', 'BM25-pyserini'],
       textposition: ['top right', 'bottom right'],
       marker: { size: 12, color: '#f59e0b', symbol: 'square', line: { width: 2, color: 'white' } },
@@ -95,8 +103,10 @@ Three findings stand out.
     },
     {
       name: 'SPLADE (Lucene)',
-      x: [65.8, 6.6], y: [0.6542, 0.6344],
-      mode: 'markers+text', type: 'scatter',
+      x: [65.8, 6.6],
+      y: [0.6542, 0.6344],
+      mode: 'markers+text',
+      type: 'scatter',
       text: ['SPLADE-Full-pyserini', 'SPLADE-IF-pyserini'],
       textposition: ['bottom left', 'top right'],
       marker: { size: 10, color: '#ef4444', symbol: 'diamond', line: { width: 1, color: 'white' } },
@@ -156,7 +166,7 @@ This discretization loses precision. Lucene's BM25 then applies its own IDF and 
     {
       name: 'Qdrant',
       x: ['BM25', 'SPLADE-IF', 'SPLADE-Full (PP)'],
-      y: [0.6830, 0.7068, 0.7093],
+      y: [0.683, 0.7068, 0.7093],
       type: 'bar',
       marker: { color: '#10b981' },
     },
@@ -172,7 +182,7 @@ This discretization loses precision. Lucene's BM25 then applies its own IDF and 
     title: { text: 'Qdrant vs Lucene: NDCG@10 by Method', font: { size: 15 } },
     barmode: 'group',
     xaxis: { title: '' },
-    yaxis: { title: 'NDCG@10', range: [0.60, 0.74], tickformat: '.2f' },
+    yaxis: { title: 'NDCG@10', range: [0.6, 0.74], tickformat: '.2f' },
     height: 380,
     margin: { t: 56, r: 24, b: 80, l: 64 },
     legend: { orientation: 'h', y: -0.22 },
