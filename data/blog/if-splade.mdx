@@ -181,7 +181,7 @@ The 13× latency gap comes entirely from eliminating the query encoder call — 
   }}
 />
 
-To verify these findings aren't specific to one backend, I replicated all experiments on Lucene/pyserini — a completely independent retrieval stack. The pattern holds; numbers run 1–2% lower due to integer-quantized impact scoring, which is structural to all Lucene-based engines (pyserini, OpenSearch, Elasticsearch) — exact float32 sparse scoring isn't a tunable option in any of them.
+To verify these findings aren't specific to one backend, I replicated all experiments on Lucene/pyserini — a completely independent retrieval stack. The pattern holds; numbers run 1–2% lower due to integer-quantized impact scoring, which is structural to all Lucene-based engines (pyserini, OpenSearch, Elasticsearch) — exact float32 sparse scoring isn't a tunable option in any of them. That said, it's an acceptable tradeoff: integer arithmetic makes IF search faster on pyserini (2–3ms) than on Qdrant (4ms).
 
 <details>
 <summary>**Lucene/pyserini results** (integer-quantized impact scoring, `JsonVectorCollection --impact`)</summary>
