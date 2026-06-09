@@ -44,10 +44,10 @@ SPLADE fixes this by using a neural network to expand documents into a richer sp
   ]}
   layout={{
     title: { text: 'SPLADE token activations for "heart attack"', font: { size: 14 } },
-    xaxis: { title: 'activation weight', range: [0, 1.9] },
+    xaxis: { title: 'activation weight', range: [0, 2.1] },
     yaxis: { autorange: 'reversed' },
     height: 320,
-    margin: { t: 48, r: 48, b: 48, l: 80 },
+    margin: { t: 48, r: 64, b: 48, l: 80 },
     showlegend: false,
   }}
 />
@@ -91,17 +91,22 @@ At query time: one tokenizer call + one sparse dot product. That's it.
 
 ## Results
 
-I benchmarked seven configurations on [BEIR scifact](https://github.com/beir-cellar/beir) (5,183 docs, 300 queries, scientific claim verification). SPLADE doc encoding ran on a Modal A10G GPU. `naver/splade-v3` and `naver/splade-v3-doc` are the same model family — symmetric vs asymmetric training — giving the cleanest measure of what dropping query-side inference actually costs.
+I benchmarked eight configurations on [BEIR scifact](https://github.com/beir-cellar/beir) (5,183 docs, 300 queries, scientific claim verification). SPLADE doc encoding ran on a Modal A10G GPU. `naver/splade-v3` and `naver/splade-v3-doc` are the same model family — symmetric vs asymmetric training — giving the cleanest measure of what dropping query-side inference actually costs.
 
-| Method                     | NDCG@10    | Recall@10  | MRR@10     | Total latency (median/p90) | Query embed | Search    |
-| -------------------------- | ---------- | ---------- | ---------- | -------------------------- | ----------- | --------- |
-| SPLADE-Full-Qdrant (naver) | **0.7161** | 0.8289     | **0.6886** | 57.2ms / 79.0ms            | 50.0ms      | 6.6ms     |
-| SPLADE-Full-Qdrant (PP)    | 0.7093     | 0.8240     | 0.6811     | 57.0ms / 80.0ms            | 50.6ms      | 6.1ms     |
-| SPLADE-IF-Qdrant           | 0.7068     | **0.8254** | 0.6748     | **4.3ms / 5.7ms**          | **0.3ms**   | **4.0ms** |
-| BM25-Qdrant                | 0.6830     | 0.8088     | 0.6470     | 4.0ms / 5.0ms              | 0.1ms       | 3.8ms     |
-| BM25-pyserini              | 0.6789     | 0.8038     | 0.6457     | 5.5ms / 8.9ms              | 0.0ms       | 5.5ms     |
-| SPLADE-Full-pyserini (PP)  | 0.6542     | 0.7709     | 0.6261     | 65.8ms / 93.5ms            | 55.8ms      | 10.0ms    |
-| SPLADE-IF-pyserini         | 0.6344     | 0.7566     | 0.6026     | 6.6ms / 10.2ms             | 0.2ms       | 6.4ms     |
+<div style={{overflowX: 'auto'}}>
+
+| Method                        | NDCG@10    | Recall@10  | MRR@10     | Total latency (median/p90) | Query embed | Search    |
+| ----------------------------- | ---------- | ---------- | ---------- | -------------------------- | ----------- | --------- |
+| SPLADE-Full-Qdrant (naver)    | **0.7161** | 0.8289     | **0.6886** | 57.2ms / 79.0ms            | 50.0ms      | 6.6ms     |
+| SPLADE-Full-Qdrant (PP)       | 0.7093     | 0.8240     | 0.6811     | 57.0ms / 80.0ms            | 50.6ms      | 6.1ms     |
+| SPLADE-IF-Qdrant (naver)      | 0.7068     | **0.8254** | 0.6748     | **4.3ms / 5.7ms**          | **0.3ms**   | **4.0ms** |
+| SPLADE-IF-Qdrant (OpenSearch) | 0.7021     | 0.8220     | 0.6717     | 4.3ms / 5.7ms              | 0.3ms       | 4.0ms     |
+| BM25-Qdrant                   | 0.6830     | 0.8088     | 0.6470     | 4.0ms / 5.0ms              | 0.1ms       | 3.8ms     |
+| BM25-pyserini                 | 0.6789     | 0.8038     | 0.6457     | 5.5ms / 8.9ms              | 0.0ms       | 5.5ms     |
+| SPLADE-Full-pyserini (PP)     | 0.6542     | 0.7709     | 0.6261     | 65.8ms / 93.5ms            | 55.8ms      | 10.0ms    |
+| SPLADE-IF-pyserini            | 0.6344     | 0.7566     | 0.6026     | 6.6ms / 10.2ms             | 0.2ms       | 6.4ms     |
+
+</div>
 
 Three findings stand out.
 
@@ -109,14 +114,19 @@ Three findings stand out.
   data={[
     {
       name: 'SPLADE-IF (Qdrant)',
-      x: [4.3],
-      y: [0.7068],
+      x: [4.3, 4.29],
+      y: [0.7068, 0.7021],
       mode: 'markers+text',
       type: 'scatter',
-      text: ['SPLADE-IF'],
-      textposition: ['top right'],
-      marker: { size: 18, color: '#10b981', symbol: 'star', line: { width: 2, color: 'white' } },
-      textfont: { size: 13 },
+      text: ['IF-naver', 'IF-GTE'],
+      textposition: ['top right', 'bottom right'],
+      marker: {
+        size: [17, 13],
+        color: '#10b981',
+        symbol: 'star',
+        line: { width: 2, color: 'white' },
+      },
+      textfont: { size: 11 },
     },
     {
       name: 'SPLADE-Full (Qdrant)',
@@ -124,9 +134,9 @@ Three findings stand out.
       y: [0.7161, 0.7093],
       mode: 'markers+text',
       type: 'scatter',
-      text: ['SPLADE-Full (naver)', 'SPLADE-Full (PP)'],
+      text: ['Full-naver', 'Full-PP'],
       textposition: ['top left', 'bottom left'],
-      marker: { size: 13, color: '#6366f1', line: { width: 2, color: 'white' } },
+      marker: { size: 12, color: '#6366f1', line: { width: 2, color: 'white' } },
       textfont: { size: 11 },
     },
     {
@@ -136,8 +146,8 @@ Three findings stand out.
       mode: 'markers+text',
       type: 'scatter',
       text: ['BM25-Qdrant', 'BM25-pyserini'],
-      textposition: ['top right', 'bottom right'],
-      marker: { size: 12, color: '#f59e0b', symbol: 'square', line: { width: 2, color: 'white' } },
+      textposition: ['top right', 'bottom left'],
+      marker: { size: 11, color: '#f59e0b', symbol: 'square', line: { width: 2, color: 'white' } },
       textfont: { size: 11 },
     },
     {
@@ -146,7 +156,7 @@ Three findings stand out.
       y: [0.6542, 0.6344],
       mode: 'markers+text',
       type: 'scatter',
-      text: ['SPLADE-Full-pyserini', 'SPLADE-IF-pyserini'],
+      text: ['Full-pyserini', 'IF-pyserini'],
       textposition: ['bottom left', 'top right'],
       marker: { size: 10, color: '#ef4444', symbol: 'diamond', line: { width: 1, color: 'white' } },
       textfont: { size: 11 },
@@ -162,11 +172,11 @@ Three findings stand out.
       ticktext: ['4', '5', '10', '20', '60', '80'],
       range: [0.55, 2.0],
     },
-    yaxis: { title: 'NDCG@10', range: [0.62, 0.735] },
-    height: 460,
+    yaxis: { title: 'NDCG@10', range: [0.615, 0.74] },
+    height: 480,
     showlegend: true,
-    legend: { orientation: 'h', y: -0.2 },
-    margin: { t: 56, r: 32, b: 80, l: 64 },
+    legend: { orientation: 'h', y: -0.22 },
+    margin: { t: 56, r: 48, b: 90, l: 64 },
   }}
 />
 
@@ -232,7 +242,7 @@ This discretization loses precision. Lucene's BM25 then applies its own IDF and 
 
 At query time, SPLADE-IF and BM25 are the same operation — a **sparse dot product** in Qdrant. Both take ~4ms. The "inference-free" name can mislead; there's no neural model removed from the query path relative to BM25, just relative to full SPLADE.
 
-The cost is entirely upfront. SPLADE-IF encodes docs at 83 docs/sec on an A10G GPU vs BM25's 1,439 docs/sec on CPU — about 17× slower. At that rate, a million-document corpus takes ~3 hours. For a static or slowly-updated corpus this is a one-time cost. For high-churn indexes you'd need an async re-encoding pipeline — the same problem dense vector search already solves.
+The cost is entirely upfront. SPLADE-IF models encode at 58–83 docs/sec on an A10G GPU vs BM25's 1,439 docs/sec on CPU — about 17–25× slower. At that rate, a million-document corpus takes 3–5 hours. For a static or slowly-updated corpus this is a one-time cost. For high-churn indexes you'd need an async re-encoding pipeline — the same problem dense vector search already solves.
 
 Once indexed: **encode once, query forever.**
 
@@ -240,12 +250,11 @@ Once indexed: **encode once, query forever.**
   data={[
     {
       name: 'Doc encoding throughput (docs/sec)',
-      x: ['BM25', 'SPLADE-Full', 'SPLADE-IF'],
-      y: [1439, 98, 83],
+      x: ['BM25', 'SPLADE-Full', 'IF-naver', 'IF-GTE'],
+      y: [1439, 98, 83, 58],
       type: 'bar',
-      yaxis: 'y',
-      marker: { color: ['#f59e0b', '#6366f1', '#10b981'] },
-      text: ['1,439 (CPU)', '98 (A10G GPU)', '83 (A10G GPU)'],
+      marker: { color: ['#f59e0b', '#6366f1', '#10b981', '#34d399'] },
+      text: ['1,439 (CPU)', '98 (GPU)', '83 (GPU)', '58 (GPU)'],
       textposition: 'outside',
     },
   ]}
