@@ -17,6 +17,7 @@ export default function PlotlyChart({ data, layout, config, style }) {
     font: { family: 'Inter, sans-serif', size: 13, color: fontColor },
     margin: { t: 48, r: 24, b: 64, l: 64 },
     legend: { font: { color: fontColor } },
+    dragmode: false,
     ...layout,
     xaxis: {
       gridcolor: gridColor,
@@ -35,6 +36,7 @@ export default function PlotlyChart({ data, layout, config, style }) {
   const defaultConfig = {
     displayModeBar: false,
     responsive: true,
+    scrollZoom: false,
     ...config,
   }
 
