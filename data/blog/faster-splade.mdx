@@ -111,6 +111,32 @@ SPLADE doc encoding ran on a Modal A10G GPU. Lucene-based methods convert SPLADE
 
 Three findings stand out.
 
+<PlotlyChart
+  data={[
+    {
+      x: [57.2, 57.0, 4.3, 4.0, 5.5, 65.8, 6.6],
+      y: [0.7161, 0.7093, 0.7068, 0.6830, 0.6789, 0.6542, 0.6344],
+      mode: 'markers+text',
+      type: 'scatter',
+      text: ['SPLADE-Full (naver)', 'SPLADE-Full (PP)', 'SPLADE-IF ⭐', 'BM25-Qdrant', 'BM25-pyserini', 'SPLADE-Full-pyserini', 'SPLADE-IF-pyserini'],
+      textposition: ['top right', 'bottom right', 'top left', 'bottom right', 'top right', 'bottom left', 'top right'],
+      marker: {
+        size: [14, 12, 16, 12, 10, 10, 10],
+        color: ['#6366f1', '#818cf8', '#10b981', '#f59e0b', '#fbbf24', '#ef4444', '#f87171'],
+        line: { width: 2, color: 'white' }
+      },
+      textfont: { size: 12 },
+    }
+  ]}
+  layout={{
+    title: 'Quality vs Query Latency (BEIR scifact)',
+    xaxis: { title: 'Median query latency (ms)', type: 'log', tickvals: [4, 5, 10, 20, 60], ticktext: ['4ms', '5ms', '10ms', '20ms', '60ms'] },
+    yaxis: { title: 'NDCG@10', range: [0.62, 0.73] },
+    height: 420,
+    showlegend: false,
+  }}
+/>
+
 ## Finding 1: SPLADE-IF Nearly Matches Full SPLADE at 13× Lower Latency
 
 The cleanest comparison is within the same model family — `naver/splade-v3` (full) vs `naver/splade-v3-doc` (inference-free):
@@ -167,6 +193,33 @@ Qdrant's native sparse scoring computes the exact dot product over float weights
 
 This has an important implication: **benchmarks that evaluate SPLADE over Lucene indices are likely underestimating the method's true quality.** The Qdrant backend is the right substrate for SPLADE vectors.
 
+<PlotlyChart
+  data={[
+    {
+      name: 'Qdrant',
+      x: ['BM25', 'SPLADE-IF', 'SPLADE-Full (PP)'],
+      y: [0.6830, 0.7068, 0.7093],
+      type: 'bar',
+      marker: { color: '#10b981' },
+    },
+    {
+      name: 'Lucene/pyserini',
+      x: ['BM25', 'SPLADE-IF', 'SPLADE-Full (PP)'],
+      y: [0.6789, 0.6344, 0.6542],
+      type: 'bar',
+      marker: { color: '#f59e0b' },
+    },
+  ]}
+  layout={{
+    title: 'Backend Matters for SPLADE, Not for BM25',
+    barmode: 'group',
+    xaxis: { title: '' },
+    yaxis: { title: 'NDCG@10', range: [0.60, 0.73] },
+    height: 360,
+    legend: { orientation: 'h', y: -0.2 },
+  }}
+/>
+
 ## Finding 3: Why SPLADE-IF and BM25 Have the Same Query Latency
 
 The "inference-free" name can mislead — it sounds like SPLADE-IF is doing less work than BM25. In practice both reduce to the same operation: a **sparse dot product** in Qdrant.
@@ -199,6 +252,28 @@ Both SPLADE variants ran on an A10G GPU with batch_size=32 to avoid OOM. BM25 is
 At 83–98 docs/sec on an A10G, encoding a million-document corpus would take roughly 3 hours. For a static or slowly-updated corpus this is a one-time cost. For a high-churn index you'd need an async pipeline that re-encodes new documents as they arrive — the same problem dense vector search already solves with embedding pipelines.
 
 Once indexed, queries cost nothing extra. This is the asymmetry SPLADE-IF exploits: **encode once, query forever.**
+
+<PlotlyChart
+  data={[
+    {
+      name: 'Doc encoding throughput (docs/sec)',
+      x: ['BM25', 'SPLADE-Full', 'SPLADE-IF'],
+      y: [1439, 98, 83],
+      type: 'bar',
+      yaxis: 'y',
+      marker: { color: ['#f59e0b', '#6366f1', '#10b981'] },
+      text: ['1,439/s (CPU)', '98/s (A10G)', '83/s (A10G)'],
+      textposition: 'outside',
+    },
+  ]}
+  layout={{
+    title: 'Index-Time Encoding Throughput',
+    xaxis: { title: '' },
+    yaxis: { title: 'docs / sec (log scale)', type: 'log', range: [1.5, 3.5] },
+    height: 340,
+    showlegend: false,
+  }}
+/>
 
 ## Limitations
 
