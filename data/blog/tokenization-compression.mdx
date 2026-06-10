@@ -108,41 +108,64 @@ packed = struct.pack(f">{len(token_ids)}H", *token_ids)  # uint16 big-endian
 
 Here's what I found:
 
-| Method                       |        Size |    Ratio |     CER |
-| ---------------------------- | ----------: | -------: | ------: |
-| Raw UTF-8                    | 1,853 bytes |     1.0x |      0% |
-| gzip -9                      |   984 bytes |     1.9x |      0% |
-| zstd -22                     |   981 bytes |     1.9x |      0% |
-| r50k BPE uint16 (raw)        |   784 bytes | **2.4x** |      0% |
-| r50k BPE + zstd              |   709 bytes | **2.6x** |      0% |
-| r50k BPE + static ANS        |   648 bytes | **2.9x** |      0% |
-| cl100k BPE + static ANS      |   688 bytes | **2.7x** |      0% |
-| mxbai WordPiece + static ANS |  ~630 bytes |  **~3x** | 20.1%\* |
-| Static entropy lower bound   |   651 bytes |    ~2.8x |       — |
+Single reference doc (1,853 bytes, 272 words of technical RAG content):
+
+| Method                       |        Size |      Ratio |     CER |
+| ---------------------------- | ----------: | ---------: | ------: |
+| Raw UTF-8                    | 1,853 bytes |       1.0x |      0% |
+| gzip -9                      |   984 bytes |       1.9x |      0% |
+| zstd -22                     |   981 bytes |       1.9x |      0% |
+| brotli q=11                  |   711 bytes |       2.6x |      0% |
+| r50k BPE uint16 (raw)        |   784 bytes |   **2.4x** |      0% |
+| r50k BPE + zstd              |   709 bytes |   **2.6x** |      0% |
+| zstd dict 112KB (WikiText)   |   747 bytes |       2.5x |      0% |
+| **r50k BPE + static ANS**    |   648 bytes | **2.9x** ✓ |      0% |
+| mxbai WordPiece + static ANS |  ~630 bytes |    **~3x** | 20.1%\* |
+| Static entropy lower bound   |   651 bytes |      ~2.8x |       — |
 
 \*mxbai CER drops to 0% after simple post-processing — more on this below.
 
-Across 1,773 WikiText-103 test articles the **average** compression is 3.35× for r50k and 3.29× for cl100k — higher than the single reference doc because general encyclopedia text matches the training corpus better than technical RAG content.
+Averaged over 1,773 WikiText-103 test articles (in-distribution):
+
+| Method                     | Avg ratio |
+| -------------------------- | --------: |
+| gzip -9                    |     1.66x |
+| zstd -22                   |     1.68x |
+| brotli q=11                |     2.24x |
+| zstd dict 112KB (WikiText) |     2.58x |
+| **r50k + static ANS**      | **3.35x** |
+
+zstd with a 112KB corpus-trained dictionary reaches 2.58× — a strong result, but still 30% behind static ANS. Brotli's built-in web dictionary gets to 2.24× with no training at all. The remaining advantage of tokenization comes from operating on semantic units: `" embeddings"` is a single token with a known global frequency; byte n-gram models have to learn that from scratch on every corpus.
 
 <PlotlyChart
   data={[
     {
       type: 'bar',
       orientation: 'h',
-      x: [1.0, 1.9, 1.9, 2.4, 2.6, 2.9, 2.7],
+      x: [1.0, 1.9, 1.9, 2.4, 2.5, 2.6, 2.6, 2.9],
       y: [
         'Raw UTF-8 (1,853 B)',
         'gzip -9 (984 B)',
         'zstd -22 (981 B)',
         'r50k uint16 raw (784 B)',
+        'zstd dict 112KB (747 B)',
         'r50k + zstd (709 B)',
+        'brotli q=11 (711 B)',
         'r50k + static ANS (648 B)',
-        'cl100k + static ANS (688 B)',
       ],
       marker: {
-        color: ['#94a3b8', '#94a3b8', '#94a3b8', '#60a5fa', '#60a5fa', '#10b981', '#6366f1'],
+        color: [
+          '#94a3b8',
+          '#94a3b8',
+          '#94a3b8',
+          '#60a5fa',
+          '#f59e0b',
+          '#60a5fa',
+          '#f59e0b',
+          '#10b981',
+        ],
       },
-      text: ['1.0×', '1.9×', '1.9×', '2.4×', '2.6×', '2.9×', '2.7×'],
+      text: ['1.0×', '1.9×', '1.9×', '2.4×', '2.5×', '2.6×', '2.6×', '2.9×'],
       textposition: 'outside',
     },
   ]}
@@ -150,8 +173,8 @@ Across 1,773 WikiText-103 test articles the **average** compression is 3.35× fo
     title: { text: 'Compression ratio by method (1,853-byte doc)', font: { size: 14 } },
     xaxis: { title: 'compression ratio (higher is better)', range: [0, 4.0] },
     yaxis: { autorange: 'reversed' },
-    height: 340,
-    margin: { t: 48, r: 80, b: 48, l: 230 },
+    height: 380,
+    margin: { t: 48, r: 80, b: 48, l: 240 },
     showlegend: false,
   }}
 />
