@@ -45,13 +45,13 @@ The compression angle is underappreciated. Consider English text:
 
 - Average word length: ~5 characters = 5 bytes (ASCII)
 - Add a space: 6 bytes per word
-- Average BPE token spans: ~1.3 words
+- Average BPE token spans: ~3/4 of a word ([OpenAI](https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them))
 - Token ID stored as uint16: 2 bytes
 
 ```
-6 bytes/word × 1 word/token × 1 token = 6 bytes/token (raw)
+6 bytes/word × 0.75 words/token = 4.5 bytes/token (raw)
 2 bytes/token (uint16)
-ratio: 3x
+ratio: ~2.25x
 ```
 
 That's before applying any further compression on the token IDs themselves.
@@ -61,12 +61,14 @@ The catch: this only works if the tokenizer's vocabulary fits in uint16 (max 65,
 <!-- DIAGRAM: show token ID sizes vs vocab sizes for common tokenizers -->
 
 ```
-Tokenizer      Vocab size    ID type    Bytes/token
-─────────────────────────────────────────────────
-cl100k (GPT-4) 100,277       uint32     4 bytes  ← no win
-r50k (GPT-2)    50,257       uint16     2 bytes  ← 3x win
-mxbai WP        30,522       uint16     2 bytes  ← 3x win
+Tokenizer      Vocab size    ID type    Bytes/token (raw)   + ANS
+──────────────────────────────────────────────────────────────────
+cl100k (GPT-4) 100,277       uint32     4 bytes  ← no win   5.4x ✓
+r50k (GPT-2)    50,257       uint16     2 bytes  ← 2.4x     5.1x ✓
+mxbai WP        30,522       uint16     2 bytes  ← 2.4x     5.7x*
 ```
+
+Raw packing is where uint32 hurts. ANS doesn't care about ID size — it encodes by frequency and cl100k's larger vocab produces fewer tokens per document, so cl100k + ANS actually edges out r50k.
 
 ## The Benchmark
 
@@ -90,6 +92,7 @@ Here's what I found:
 | r50k BPE uint16 (raw) |     784 bytes | **2.4x** |      0% |
 | r50k BPE + zstd       |     709 bytes | **2.6x** |      0% |
 | r50k BPE + ANS        |     364 bytes | **5.1x** |      0% |
+| cl100k BPE + ANS      |     344 bytes | **5.4x** |      0% |
 | mxbai WordPiece + ANS |     328 bytes | **5.7x** | 20.1%\* |
 | Entropy lower bound   | 323–358 bytes |    ~5.5x |       — |
 
@@ -99,28 +102,7 @@ The headline: **raw BPE uint16 already beats gzip on raw text, with zero further
 
 ### Latency (2,000 runs, 1,853-byte doc)
 
-Compression ratio is only half the story. Here's every component timed separately:
-
-| Operation         |    Median |   p99 |
-| ----------------- | --------: | ----: |
-| gzip -9 compress  |      29µs |  36µs |
-| gzip decompress   |      18µs |  25µs |
-| zstd -22 compress | **182µs** | 267µs |
-| zstd decompress   |       4µs |   5µs |
-| lz4 compress      |      24µs |  29µs |
-| lz4 decompress    |   **1µs** |   1µs |
-
-| Operation              |    Median |   p99 |
-| ---------------------- | --------: | ----: |
-| r50k tokenize          | **132µs** | 208µs |
-| r50k detokenize        |       6µs |  10µs |
-| r50k pack uint16       |       4µs |   5µs |
-| r50k + zstd compress   |      48µs |  59µs |
-| r50k + zstd decompress |       3µs |   4µs |
-| r50k ANS encode        |      30µs |  42µs |
-| r50k ANS decode        |      32µs |  41µs |
-
-**Full pipelines:**
+Compression ratio is only half the story. Full pipeline numbers:
 
 | Pipeline                              |   Median |     p99 |
 | ------------------------------------- | -------: | ------: |
@@ -129,12 +111,9 @@ Compression ratio is only half the story. Here's every component timed separatel
 | mxbai encode (tokenize + ANS)         |    750µs | 1,270µs |
 | mxbai decode (ANS + detokenize + fix) |    420µs |   603µs |
 
-A few things stand out:
-
-- **The tokenizer dominates encode latency, not ANS.** r50k tokenization is 132µs; ANS on top adds only 30µs. If you already tokenize documents at ingest time (which most embedding pipelines do), the extra encode cost is just those 30µs.
-- **Reads are fast.** r50k decode — ANS + detokenize — takes 41µs total. Fast enough for any real-time serving path.
-- **zstd -22 is slow to compress (182µs)** because `--ultra` levels trade CPU heavily for ratio. At a lower level (say zstd -3), it would be ~15µs but give up some compression.
-- **ANS is symmetric** — encode and decode are nearly identical (~31µs each), unlike zstd where decompress (4µs) is 45× faster than compress.
+- **The tokenizer dominates encode, not ANS.** r50k tokenization is 132µs; ANS adds only 30µs. If you already tokenize at ingest, the marginal encode cost is those 30µs.
+- **Reads are fast.** r50k decode takes 41µs total — negligible on any serving path.
+- **ANS is symmetric** — encode and decode are nearly identical (~31µs each), unlike zstd where decompress is 45× faster than compress.
 
 ## What is ANS and Why Does It Matter
 
@@ -210,16 +189,7 @@ def fix_punct(s):
     return s
 ```
 
-So mxbai is effectively lossless too, with a small detokenizer. Whether that's acceptable depends on your use case — if you need byte-perfect round trips without post-processing, r50k is the clean choice.
-
-The latency picture makes mxbai harder to justify:
-
-| Tokenizer   | Encode | Decode | Compressed size |
-| ----------- | -----: | -----: | --------------: |
-| r50k + ANS  |  156µs |   41µs |       364 bytes |
-| mxbai + ANS |  750µs |  420µs |       328 bytes |
-
-mxbai is **5× slower** on encode and **10× slower** on decode — entirely due to the HuggingFace tokenizer's Python overhead. The 10% smaller output (328 vs 364 bytes) doesn't come close to justifying that. For a storage codec, r50k is the practical choice.
+So mxbai is effectively lossless too, with a small detokenizer — but it's also **5× slower to encode** (750µs vs 156µs) and **10× slower to decode** (420µs vs 41µs), entirely due to HuggingFace tokenizer overhead. The 10% smaller output doesn't justify it. For a storage codec, r50k is the clean choice.
 
 On UNK tokens: WordPiece has a `[UNK]` token that causes **actual** information loss. But for standard English text — including code, URLs, numbers, gibberish ASCII — it never fires. It only fires on emojis (🚀 → `[UNK]`) and some rare Unicode math symbols. So for typical RAG payloads over web or document text, UNK is a non-issue.
 
@@ -245,9 +215,7 @@ At 1B docs the storage gap is more dramatic:
 | r50k + ANS |    0.88 TB |             ~$18 |               ~$72 |
 | **Saving** | **3.6 TB** |      **~$74/mo** |       **~$296/mo** |
 
-**Disk savings dominate.** Vector databases keep hot payloads on ephemeral SSD for fast reads — that's the \$ 0.08/GB column. At 1B docs you're saving **$296/month** on disk alone, and the I/O win is the same magnitude: 0.88 TB reads 5× faster than 4.5 TB, which directly reduces query latency when payloads are fetched during retrieval.
-
-**S3 savings are smaller in dollar terms but still meaningful at scale.** S3 is cheap per GB, so the \$74/month looks modest. Where it compounds: S3 is charged for both storage _and_ data transfer. Cross-region replication, bulk re-indexing, and backup/restore all move the full payload corpus over the wire — at \$0.09/GB egress, shipping 3.6 TB fewer data per operation saves **~$324 per transfer**. For a system that re-indexes monthly or replicates across regions, that adds up fast.
+Disk savings are the bigger line item ($296/month on SSD at 1B docs), and the I/O win is the same magnitude: 0.88 TB reads 5× faster than 4.5 TB, directly reducing query latency when payloads are fetched during retrieval. S3 egress compounds it — at $0.09/GB, shipping 3.6 TB fewer data saves ~$324 per bulk transfer.
 
 ## How This Compares to State of the Art
 
@@ -283,11 +251,6 @@ What would need to change in a vector DB like Qdrant:
 
 The index, vectors, and query pipeline stay identical. This is purely a payload storage optimization.
 
-The latency overhead is acceptable for both paths:
-
-- **Write (encode):** 156µs per doc. Ingest pipelines already spend far more than this on embedding generation (~25ms for a 780-token doc on H100). It's a rounding error.
-- **Read (decode):** 41µs per doc. A typical RAG query returns 10–20 docs — that's 400–800µs of decode overhead on a path that already includes vector search and reranking. Negligible.
-
 <!-- DIAGRAM: side-by-side of current architecture vs proposed architecture showing payload storage layer -->
 
 ```
@@ -314,7 +277,7 @@ READ                             READ
 
 The entire round-trip is transparent to the user. Same API, 5x smaller payloads.
 
-This gets more important, not less, as [search and generation converge toward a single system](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation): retrieval indexes and model weights are both ways of storing knowledge, just at different compression levels. RAG and agentic search already blur that boundary. If your index still holds UTF-8 blobs while the model reasons in tokens, you maintain two representations of the same text — and pay for both on every retrieve-then-generate path. Token-native payload storage aligns the retrieval layer with the generation stack: one vocabulary, one compression story, cheaper handoffs between search and synthesize.
+As [search and generation converge](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation), keeping UTF-8 blobs in your index while the model reasons in tokens means maintaining two representations of the same text. Token-native payload storage collapses that to one.
 
 ## Key Takeaways
 
@@ -322,11 +285,9 @@ This gets more important, not less, as [search and generation converge toward a 
 - BPE tokenization (r50k, vocab=50,257) produces uint16 token IDs — 2 bytes each — that already beat gzip on raw text with zero further compression.
 - Adding ANS entropy coding on token IDs brings you to **5x compression** using 30 lines of Python and infrastructure already in every ML stack.
 - r50k is perfectly lossless (0% CER). mxbai WordPiece gives 5.7x but lowercases text — fixable with simple post-processing, but also 5–10× slower to tokenize.
-- **Latency is not a concern:** encode adds 156µs/doc (vs ~25ms for embedding generation); decode adds 41µs/doc (negligible on a query path that already does vector search + reranking).
-- The tokenizer dominates encode latency (132µs), not ANS (30µs). If you tokenize at ingest anyway, the marginal encode cost is just those 30µs.
+- **Latency is not a concern:** the tokenizer dominates encode (132µs) — ANS adds only 30µs on top. If you already tokenize at ingest, the marginal cost is those 30µs. Decode is 41µs total.
 - The gap between this (~5x) and the Hutter Prize record (~9x) is conditional token probability — i.e., you need a language model. Getting to 5x doesn't.
 - At English Wikipedia scale (7M docs), this takes payload storage from 31.5 GB to 6.2 GB. The bigger win is I/O: 5x faster bulk reads, indexing, and replication.
-- As [search and generation unify](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation), token-native payloads avoid maintaining UTF-8 and token representations of the same corpus.
 
 ## Acknowledgements
 
