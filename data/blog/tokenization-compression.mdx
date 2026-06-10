@@ -43,7 +43,7 @@ That's the gap.
 
 The top path shows what every vector database does today: store text as UTF-8 bytes, then compress with a generic codec. The bottom path is the proposal: tokenize first to get semantically-meaningful chunks, then apply entropy coding on the token IDs.
 
-**Step 1 — BPE tokenization.** BPE (Byte Pair Encoding) merges frequently co-occurring byte sequences into single tokens. " language" becomes one token. " Generation" becomes one token — with the leading space, as the diagram shows. Rarer words split: "Retrieval" is three tokens (`Ret + ri + eval`). OpenAI puts it at [~0.75 words per token](https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them) — common words like " the" or " is" are one token each, rarer words split into subwords, and the average works out to roughly 1.3 tokens per word. Average English word length is ~5 characters, plus a space = 6 bytes in ASCII/UTF-8:
+**Step 1 — BPE tokenization.** BPE (Byte Pair Encoding) merges frequently co-occurring byte sequences into single tokens. " language" becomes one token. " Generation" becomes one token — with the leading space, as the diagram shows. Rarer words split: "Retrieval" is three tokens (`Ret + ri + eval`). On average, one BPE token spans [3/4 of a word](https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them). Average English word length is ~5 characters, plus a space = 6 bytes in ASCII/UTF-8:
 
 ```
 6 bytes/word × 0.75 words/token = 4.5 bytes/token (raw)
