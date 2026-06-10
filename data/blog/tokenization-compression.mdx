@@ -13,7 +13,7 @@ authors: ['default']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Every vector database has two layers: the vectors (heavily optimized — quantized, compressed, carefully sharded) and the text payload (UTF-8 at the API, often LZ4-compressed on disk). Nobody talks about compressing that second layer with anything smarter than generic byte codecs.
+Every vector database has two layers: the vectors (heavily optimized, quantized, compressed) and the text payload (UTF-8 at the API, often LZ4-compressed on disk). Nobody talks about compressing that second layer with anything smarter than generic byte codecs.
 
 I ran some benchmarks and found that the payload layer is a 5x compression opportunity sitting in plain sight. The tool to do it — BPE tokenization — is already in every ML stack. It just needs to be pointed at the right problem.
 
@@ -31,7 +31,7 @@ When you insert a document into Qdrant, Weaviate, or Elasticsearch, you typicall
 }
 ```
 
-The vector gets quantized, compressed, and indexed carefully. The `text` field is still plain UTF-8 at the API — compression happens underneath.
+The vector gets quantized, compressed, and indexed carefully. The `text` field is still plain UTF-8 at the API — compression with LZ4 happens afterwards.
 
 Qdrant stores on-disk payloads in [Gridstore](https://qdrant.tech/articles/gridstore-key-value-storage/) (its custom KV engine, replacing RocksDB since v1.13) with LZ4 compression enabled by default. Elasticsearch applies LZ4 on stored fields too. Both give you generic byte compression — roughly 2× on text in the benchmarks below — but neither exploits the structure of natural language.
 
@@ -56,7 +56,7 @@ ratio: ~2.25x
 
 That's before applying any further compression on the token IDs themselves.
 
-The catch: this only works if the tokenizer's vocabulary fits in uint16 (max 65,535). GPT-4's `cl100k` tokenizer has 100,277 tokens — that needs uint32 (4 bytes), which kills the advantage. GPT-2's `r50k` tokenizer has 50,257 tokens — fits cleanly in uint16.
+The catch: this only works cleanly if the tokenizer's vocabulary fits in uint16 (max 65,535). GPT-4's `cl100k` tokenizer has 100,277 tokens — that needs uint32 (4 bytes), which kills the advantage for **raw packing**. GPT-2's `r50k` tokenizer has 50,257 tokens — fits cleanly in uint16. With ANS the story is different, as the table below shows.
 
 <!-- DIAGRAM: show token ID sizes vs vocab sizes for common tokenizers -->
 
@@ -98,6 +98,47 @@ Here's what I found:
 
 \*mxbai CER drops to 0% after simple post-processing — more on this below.
 
+<PlotlyChart
+  data={[
+    {
+      type: 'bar',
+      orientation: 'h',
+      x: [1.0, 1.9, 1.9, 2.4, 2.6, 5.1, 5.4, 5.7],
+      y: [
+        'Raw UTF-8',
+        'gzip -9',
+        'zstd -22',
+        'r50k uint16 raw',
+        'r50k + zstd',
+        'r50k + ANS',
+        'cl100k + ANS',
+        'mxbai + ANS*',
+      ],
+      marker: {
+        color: [
+          '#94a3b8',
+          '#94a3b8',
+          '#94a3b8',
+          '#60a5fa',
+          '#60a5fa',
+          '#10b981',
+          '#10b981',
+          '#34d399',
+        ],
+      },
+      text: ['1.0×', '1.9×', '1.9×', '2.4×', '2.6×', '5.1×', '5.4×', '5.7×'],
+      textposition: 'outside',
+    },
+  ]}
+  layout={{
+    xaxis: { title: 'compression ratio (higher is better)', range: [0, 7.5] },
+    yaxis: { autorange: 'reversed' },
+    height: 340,
+    margin: { t: 16, r: 80, b: 48, l: 160 },
+    showlegend: false,
+  }}
+/>
+
 The headline: **raw BPE uint16 already beats gzip on raw text, with zero further compression**. That's just tokenization and packing.
 
 ### Latency (2,000 runs, 1,853-byte doc)
@@ -114,6 +155,54 @@ Compression ratio is only half the story. Full pipeline numbers:
 - **The tokenizer dominates encode, not ANS.** r50k tokenization is 132µs; ANS adds only 30µs. If you already tokenize at ingest, the marginal encode cost is those 30µs.
 - **Reads are fast.** r50k decode takes 41µs total — negligible on any serving path.
 - **ANS is symmetric** — encode and decode are nearly identical (~31µs each), unlike zstd where decompress is 45× faster than compress.
+
+### Effect of Document Length
+
+Generic codecs improve with document length — longer text gives more repeated byte patterns to exploit. Token + ANS does the opposite: shorter documents produce fewer unique token types, making the frequency distribution more skewed and ANS more effective. RAG chunks are typically 100–200 words, where the benchmarks show **5.8–6.5x** rather than the 5.1x from the 270-word reference doc.
+
+<PlotlyChart
+  data={[
+    {
+      name: 'gzip -9',
+      x: [50, 100, 150, 200, 270, 400],
+      y: [1.46, 1.68, 1.81, 1.9, 1.94, 2.03],
+      mode: 'lines+markers',
+      line: { color: '#94a3b8', dash: 'dash' },
+      marker: { size: 6, color: '#94a3b8' },
+    },
+    {
+      name: 'zstd -22',
+      x: [50, 100, 150, 200, 270, 400],
+      y: [1.49, 1.7, 1.83, 1.93, 1.96, 2.06],
+      mode: 'lines+markers',
+      line: { color: '#64748b', dash: 'dash' },
+      marker: { size: 6, color: '#64748b' },
+    },
+    {
+      name: 'r50k + ANS',
+      x: [50, 100, 150, 200, 270, 400],
+      y: [7.31, 6.28, 5.8, 5.78, 5.69, 5.49],
+      mode: 'lines+markers',
+      line: { color: '#10b981' },
+      marker: { size: 7, color: '#10b981' },
+    },
+    {
+      name: 'cl100k + ANS',
+      x: [50, 100, 150, 200, 270, 400],
+      y: [7.31, 6.52, 6.08, 5.99, 5.91, 5.77],
+      mode: 'lines+markers',
+      line: { color: '#6366f1' },
+      marker: { size: 7, color: '#6366f1' },
+    },
+  ]}
+  layout={{
+    xaxis: { title: 'document length (words)', tickvals: [50, 100, 150, 200, 270, 400] },
+    yaxis: { title: 'compression ratio', range: [1.0, 9.0] },
+    height: 360,
+    margin: { t: 16, r: 32, b: 64, l: 64 },
+    legend: { orientation: 'h', y: -0.22 },
+  }}
+/>
 
 ## What is ANS and Why Does It Matter
 
@@ -142,7 +231,7 @@ def ans_encode(ids):
 
 The full pipeline:
 
-<!-- DIAGRAM: pipeline showing text → tokenizer → uint16 IDs → ANS encoder → compressed bytes → ANS decoder → uint16 IDs → tokenizer.decode → text -->
+<TokenCompressionPipeline />
 
 ```
 text (UTF-8)
@@ -226,7 +315,7 @@ For context, here's where this sits on the broader compression landscape (benchm
 | Raw UTF-8                                |       8.0 |           1x | —              |
 | gzip -9                                  |      ~2.6 |         3.1x | Yes            |
 | zstd -22                                 |      ~2.0 |           4x | Yes            |
-| **r50k + ANS (this post)**               | **~1.56** |      **~5x** | **Yes**        |
+| **BPE + ANS (this post)**                | **~1.56** |  **~5–5.4x** | **Yes**        |
 | zpaq                                     |      ~1.4 |         5.7x | Slow           |
 | fx2-cmix (Hutter Prize record, Oct 2024) |     0.887 |           9x | Extremely slow |
 | Chinchilla 70B (DeepMind, 2024)          |     0.664 |          12x | Not practical  |
@@ -283,7 +372,7 @@ As [search and generation converge](https://www.kshivendu.dev/blog/why-search#th
 
 - Vector databases optimize vectors aggressively; text payloads get generic LZ4 at best (~2x). Token-aware compression is a separate ~5x opportunity on top.
 - BPE tokenization (r50k, vocab=50,257) produces uint16 token IDs — 2 bytes each — that already beat gzip on raw text with zero further compression.
-- Adding ANS entropy coding on token IDs brings you to **5x compression** using 30 lines of Python and infrastructure already in every ML stack.
+- Adding ANS entropy coding on token IDs brings you to **5–5.4x compression** using 30 lines of Python and infrastructure already in every ML stack. r50k (uint16) gives 5.1x; cl100k (uint32) gives 5.4x — ANS overcomes the raw packing overhead because cl100k produces fewer tokens per document.
 - r50k is perfectly lossless (0% CER). mxbai WordPiece gives 5.7x but lowercases text — fixable with simple post-processing, but also 5–10× slower to tokenize.
 - **Latency is not a concern:** the tokenizer dominates encode (132µs) — ANS adds only 30µs on top. If you already tokenize at ingest, the marginal cost is those 30µs. Decode is 41µs total.
 - The gap between this (~5x) and the Hutter Prize record (~9x) is conditional token probability — i.e., you need a language model. Getting to 5x doesn't.
