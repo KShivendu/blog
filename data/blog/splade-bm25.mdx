@@ -4,13 +4,13 @@ date: '2026-06-10'
 lastmod: '2026-06-10'
 tags: ['search', 'sparse-retrieval', 'nlp', 'information-retrieval']
 draft: false
-summary: 'A friend said they expand SPLADE terms into an OpenSearch BM25 text field and it works. We tested it. It ran fine and produced 0.36 NDCG@10 — worse than plain BM25. Here is why, and how to mostly fix it.'
+summary: 'A friend said they expand SPLADE terms into an OpenSearch BM25 text field and it works. We tested it — 0.36 NDCG@10, worse than plain BM25. Here is why, and how to mostly fix it.'
 authors: ['default']
 ---
 
 > This is a short follow-up to [Inference-Free SPLADE: Full Quality, 13× Faster Queries](/blog/if-splade).
 
-A friend from Parallel AI mentioned they expand SPLADE document vectors into a standard OpenSearch text field and it "just works." No impact indexing, no special sparse vector field — just dump the expanded tokens as a string and let BM25 score them.
+A friend mentioned they expand SPLADE document vectors into a standard OpenSearch text field and it "just works." No impact indexing, no special sparse vector field — just dump the expanded tokens as a string and let BM25 score them.
 
 We already had all the benchmark infrastructure from the IF-SPLADE post, so we tried it.
 
