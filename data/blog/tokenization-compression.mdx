@@ -170,6 +170,7 @@ Compression ratio is only half the story. Full pipeline numbers:
 - **The tokenizer dominates encode, not ANS.** r50k tokenization is 132µs; ANS adds only 30µs. If you already tokenize at ingest, the marginal encode cost is those 30µs.
 - **Reads are fast.** r50k decode takes 41µs total — negligible on any serving path.
 - **ANS is symmetric** — encode and decode are nearly identical (~31µs each), unlike zstd where decompress is 45× faster than compress.
+- **cl100k is faster than r50k** (145µs vs 156µs encode) despite uint32 IDs — fewer tokens per document more than offset any overhead. ANS latency is indifferent to token ID width.
 
 ### Effect of Document Length
 
@@ -221,6 +222,9 @@ Generic codecs improve with document length — longer text gives more repeated 
 
 ## The mxbai Story: Better Compression, Surprising Catch
 
+<details>
+<summary>mxbai WordPiece gives **5.7× compression** — 10% better than r50k — but is 5–10× slower and lowercases text. Expand for details.</summary>
+
 The mixedbread embedding model (`mxbai-embed-large-v1`) uses BERT's WordPiece tokenizer with 30,522 tokens. Smaller vocabulary → more common tokens → lower entropy → better compression.
 
 mxbai + ANS reaches **328 bytes** vs r50k + ANS at **364 bytes** — a 10% compression win. But when I measured latency and recovery, the story got more complicated.
@@ -248,6 +252,8 @@ def fix_punct(s):
 So mxbai is effectively lossless too, with a small detokenizer — but it's also **5× slower to encode** (750µs vs 156µs) and **10× slower to decode** (420µs vs 41µs), entirely due to HuggingFace tokenizer overhead. The 10% smaller output doesn't justify it. For a storage codec, r50k is the clean choice.
 
 On UNK tokens: WordPiece has a `[UNK]` token that causes **actual** information loss. But for standard English text — including code, URLs, numbers, gibberish ASCII — it never fires. It only fires on emojis (🚀 → `[UNK]`) and some rare Unicode math symbols. So for typical RAG payloads over web or document text, UNK is a non-issue.
+
+</details>
 
 ## Real-World Scale: English Wikipedia
 
@@ -341,7 +347,7 @@ As [search and generation converge](https://www.kshivendu.dev/blog/why-search#th
 - BPE tokenization (r50k, vocab=50,257) produces uint16 token IDs — 2 bytes each — that already beat gzip on raw text with zero further compression.
 - Adding ANS entropy coding on token IDs brings you to **5–5.4x compression** using 30 lines of Python and infrastructure already in every ML stack. r50k (uint16) gives 5.1x; cl100k (uint32) gives 5.4x — ANS overcomes the raw packing overhead because cl100k produces fewer tokens per document.
 - r50k is perfectly lossless (0% CER). mxbai WordPiece gives 5.7x but lowercases text — fixable with simple post-processing, but also 5–10× slower to tokenize.
-- **Latency is not a concern:** the tokenizer dominates encode (132µs) — ANS adds only 30µs on top. If you already tokenize at ingest, the marginal cost is those 30µs. Decode is 41µs total.
+- **Latency is not a concern:** r50k and cl100k encode in 145–156µs — the tokenizer dominates, ANS adds only ~30µs. If you already tokenize at ingest, the marginal encode cost is those 30µs. Decode is ~40µs total.
 - The gap between this (~5x) and the Hutter Prize record (~9x) is conditional token probability — i.e., you need a language model. Getting to 5x doesn't.
 - At English Wikipedia scale (7M docs), this takes payload storage from 31.5 GB to 6.2 GB. The bigger win is I/O: 5x faster bulk reads, indexing, and replication.
 
