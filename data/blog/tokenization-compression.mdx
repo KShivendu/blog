@@ -4,7 +4,7 @@ date: '2026-05-12'
 lastmod: '2026-05-12'
 tags: ['compression', 'vector-databases', 'internals', 'nlp']
 draft: false
-summary: 'Vector databases compress text payloads with generic codecs like LZ4, but not with token-aware schemes. BPE tokenization + entropy coding gives you 5x lossless compression using infrastructure already in every ML stack.'
+summary: 'Vector databases compress text payloads with generic codecs like LZ4, but not with token-aware schemes. BPE tokenization + static entropy coding gives you ~3x lossless compression — 2× better than gzip — using infrastructure already in every ML stack.'
 images: ['/static/images/blogs/tokenization-compression-og.jpg']
 authors: ['default']
 ---
@@ -15,7 +15,7 @@ authors: ['default']
 
 Every vector database has two layers: the vectors (heavily optimized, quantized, compressed) and the text payload (UTF-8 at the API, often LZ4-compressed on disk). Nobody talks about compressing that second layer with anything smarter than generic byte codecs.
 
-I ran some benchmarks and found that the payload layer is a 5x compression opportunity sitting in plain sight. The tool to do it — BPE tokenization — is already in every ML stack. It just needs to be pointed at the right problem.
+I ran some benchmarks and found that the payload layer is a real compression opportunity sitting in plain sight. BPE tokenization + a static entropy coder gives **~3× lossless compression** — roughly 2× better than gzip — using infrastructure already in every ML stack. It just needs to be pointed at the right problem.
 
 ## The Forgotten Layer
 
@@ -51,36 +51,48 @@ The top path shows what every vector database does today: store text as UTF-8 by
 ratio: ~2.25x
 ```
 
-**Step 2 — ANS entropy coding.** gzip and LZ4 operate on opaque bytes — they can't see that `[0x01, 0x7F]` is token ID 383. ANS (Asymmetric Numeral Systems), the entropy coder inside zstd, can be applied directly on token IDs. It assigns shorter codes to frequent tokens: token 198 (`" the"`) is 40× more common than token 47291 (`"embeddings"`). The result gets within **6 bytes of the Shannon entropy lower bound** — the theoretical minimum for lossless compression.
+**Step 2 — ANS entropy coding.** gzip and LZ4 operate on opaque bytes — they can't see that `[0x01, 0x7F]` is token ID 383. ANS (Asymmetric Numeral Systems), the entropy coder inside zstd, can be applied directly on token IDs. It assigns shorter bit codes to frequent tokens: token 198 (`" the"`) is 40× more common than token 47291 (`"embeddings"`), so it gets a much shorter code.
+
+The key design choice: **use a static frequency table trained once on a large corpus**, not per-document frequencies. Per-document ANS looks tempting (it gives even shorter codes by exploiting local repetition), but the decoder needs the same frequency table to reconstruct the document — meaning you'd have to store it alongside each compressed payload. For a ~400-token document that overhead (~900 bytes) completely erases the compression gain. A static table is pre-agreed between encoder and decoder; nothing extra is stored per document.
 
 ```python
-import constriction, numpy as np
-from collections import Counter
+import constriction, numpy as np, tiktoken
 
-def ans_encode(ids):
-    counts = Counter(ids)
-    vocab  = sorted(counts.keys())
-    v2i    = {v: i for i, v in enumerate(vocab)}
-    freqs  = np.array([counts[v] for v in vocab], dtype=np.float64)
-    freqs /= freqs.sum()
+enc   = tiktoken.get_encoding("r50k_base")
+VOCAB = 50_257
 
-    model   = constriction.stream.model.Categorical(freqs, perfect=False)
-    encoder = constriction.stream.stack.AnsCoder()
-    encoder.encode_reverse(np.array([v2i[t] for t in ids], dtype=np.int32), model)
-    return encoder.get_compressed().tobytes()
+# ── one-time setup: train on corpus ──────────────────────────────────────────
+corpus_ids = enc.encode(corpus_text)
+counts = np.bincount(corpus_ids, minlength=VOCAB).astype(np.float64) + 1  # Laplace
+probs  = counts / counts.sum()
+model  = constriction.stream.model.Categorical(probs, perfect=False)
+
+# ── per-document encode (store this) ─────────────────────────────────────────
+def compress(text):
+    ids   = enc.encode(text)
+    coder = constriction.stream.stack.AnsCoder()
+    coder.encode_reverse(np.array(ids, dtype=np.int32), model)
+    return len(ids).to_bytes(4, 'big') + coder.get_compressed().tobytes()
+
+# ── per-document decode ───────────────────────────────────────────────────────
+def decompress(data):
+    n   = int.from_bytes(data[:4], 'big')
+    buf = np.frombuffer(data[4:], dtype=np.uint32).copy()
+    ids = constriction.stream.stack.AnsCoder(buf).decode(model, n).tolist()
+    return enc.decode(ids)
 ```
 
 The vocabulary size determines the raw packing tradeoff:
 
 ```
-Tokenizer      Vocab size    ID type    Bytes/token (raw)   + ANS
-──────────────────────────────────────────────────────────────────
-cl100k (GPT-4) 100,277       uint32     4 bytes  ← no win   5.4x ✓
-r50k (GPT-2)    50,257       uint16     2 bytes  ← 2.4x     5.1x ✓
-mxbai WP        30,522       uint16     2 bytes  ← 2.4x     5.7x*
+Tokenizer      Vocab size    ID type    Bytes/token (raw)   + static ANS
+─────────────────────────────────────────────────────────────────────────
+r50k (GPT-2)    50,257       uint16     2 bytes  ← 2.4x     3.35x ✓
+cl100k (GPT-4) 100,277       uint32     4 bytes  ← no win   3.29x ✓
+mxbai WP        30,522       uint16     2 bytes  ← 2.4x     ~3.5x*
 ```
 
-Raw packing is where uint32 hurts. ANS doesn't care about ID size — it encodes by frequency and cl100k's larger vocab produces fewer tokens per document, so cl100k + ANS actually edges out r50k.
+With static ANS, r50k edges out cl100k — cl100k's larger vocabulary means more tokens fall outside the training distribution and get weaker Laplace-smoothed codes.
 
 ## The Benchmark
 
@@ -96,63 +108,55 @@ packed = struct.pack(f">{len(token_ids)}H", *token_ids)  # uint16 big-endian
 
 Here's what I found:
 
-| Method                |          Size |    Ratio |     CER |
-| --------------------- | ------------: | -------: | ------: |
-| Raw UTF-8             |   1,853 bytes |     1.0x |      0% |
-| gzip -9               |     984 bytes |     1.9x |      0% |
-| zstd -22              |     981 bytes |     1.9x |      0% |
-| r50k BPE uint16 (raw) |     784 bytes | **2.4x** |      0% |
-| r50k BPE + zstd       |     709 bytes | **2.6x** |      0% |
-| r50k BPE + ANS        |     364 bytes | **5.1x** |      0% |
-| cl100k BPE + ANS      |     344 bytes | **5.4x** |      0% |
-| mxbai WordPiece + ANS |     328 bytes | **5.7x** | 20.1%\* |
-| Entropy lower bound   | 323–358 bytes |    ~5.5x |       — |
+| Method                       |        Size |    Ratio |     CER |
+| ---------------------------- | ----------: | -------: | ------: |
+| Raw UTF-8                    | 1,853 bytes |     1.0x |      0% |
+| gzip -9                      |   984 bytes |     1.9x |      0% |
+| zstd -22                     |   981 bytes |     1.9x |      0% |
+| r50k BPE uint16 (raw)        |   784 bytes | **2.4x** |      0% |
+| r50k BPE + zstd              |   709 bytes | **2.6x** |      0% |
+| r50k BPE + static ANS        |   648 bytes | **2.9x** |      0% |
+| cl100k BPE + static ANS      |   688 bytes | **2.7x** |      0% |
+| mxbai WordPiece + static ANS |  ~630 bytes |  **~3x** | 20.1%\* |
+| Static entropy lower bound   |   651 bytes |    ~2.8x |       — |
 
 \*mxbai CER drops to 0% after simple post-processing — more on this below.
+
+Across 1,773 WikiText-103 test articles the **average** compression is 3.35× for r50k and 3.29× for cl100k — higher than the single reference doc because general encyclopedia text matches the training corpus better than technical RAG content.
 
 <PlotlyChart
   data={[
     {
       type: 'bar',
       orientation: 'h',
-      x: [1.0, 1.9, 1.9, 2.4, 2.6, 5.1, 5.4, 5.7],
+      x: [1.0, 1.9, 1.9, 2.4, 2.6, 2.9, 2.7],
       y: [
         'Raw UTF-8 (1,853 B)',
         'gzip -9 (984 B)',
         'zstd -22 (981 B)',
         'r50k uint16 raw (784 B)',
         'r50k + zstd (709 B)',
-        'r50k + ANS (364 B)',
-        'cl100k + ANS (344 B)',
-        'mxbai + ANS* (328 B)',
+        'r50k + static ANS (648 B)',
+        'cl100k + static ANS (688 B)',
       ],
       marker: {
-        color: [
-          '#94a3b8',
-          '#94a3b8',
-          '#94a3b8',
-          '#60a5fa',
-          '#60a5fa',
-          '#10b981',
-          '#10b981',
-          '#34d399',
-        ],
+        color: ['#94a3b8', '#94a3b8', '#94a3b8', '#60a5fa', '#60a5fa', '#10b981', '#6366f1'],
       },
-      text: ['1.0×', '1.9×', '1.9×', '2.4×', '2.6×', '5.1×', '5.4×', '5.7×'],
+      text: ['1.0×', '1.9×', '1.9×', '2.4×', '2.6×', '2.9×', '2.7×'],
       textposition: 'outside',
     },
   ]}
   layout={{
     title: { text: 'Compression ratio by method (1,853-byte doc)', font: { size: 14 } },
-    xaxis: { title: 'compression ratio (higher is better)', range: [0, 7.5] },
+    xaxis: { title: 'compression ratio (higher is better)', range: [0, 4.0] },
     yaxis: { autorange: 'reversed' },
-    height: 360,
-    margin: { t: 48, r: 80, b: 48, l: 210 },
+    height: 340,
+    margin: { t: 48, r: 80, b: 48, l: 230 },
     showlegend: false,
   }}
 />
 
-The headline: **raw BPE uint16 already beats gzip on raw text, with zero further compression**. That's just tokenization and packing.
+The headline: **raw BPE uint16 already beats gzip on raw text, with zero further compression**. That's just tokenization and packing. Adding a static ANS coder trained on WikiText-103 pushes the single-doc number to 2.9× and the corpus average to **3.35×** — roughly 2× better than gzip with no domain-specific tuning.
 
 ### Latency (2,000 runs, 1,853-byte doc)
 
@@ -174,46 +178,46 @@ Compression ratio is only half the story. Full pipeline numbers:
 
 ### Effect of Document Length
 
-Generic codecs improve with document length — longer text gives more repeated byte patterns to exploit. Token + ANS does the opposite: shorter documents produce fewer unique token types, making the frequency distribution more skewed and ANS more effective. RAG chunks are typically 100–200 words, where the benchmarks show **5.8–6.5x** rather than the 5.1x from the 270-word reference doc.
+Static ANS and generic codecs behave the same way with document length: longer text compresses better. The gap between them stays wide and consistent — static ANS is roughly 2× better than gzip at every length. Numbers below are mean compression ratios across 1,773 WikiText-103 test articles grouped by word count.
 
 <PlotlyChart
   data={[
     {
       name: 'gzip -9',
-      x: [50, 100, 150, 200, 270, 400],
-      y: [1.46, 1.68, 1.81, 1.9, 1.94, 2.03],
+      x: [37, 100, 150, 212, 300, 475],
+      y: [1.39, 1.62, 1.75, 1.85, 1.93, 2.01],
       mode: 'lines+markers',
       line: { color: '#94a3b8', dash: 'dash' },
       marker: { size: 6, color: '#94a3b8' },
     },
     {
       name: 'zstd -22',
-      x: [50, 100, 150, 200, 270, 400],
-      y: [1.49, 1.7, 1.83, 1.93, 1.96, 2.06],
+      x: [37, 100, 150, 212, 300, 475],
+      y: [1.46, 1.63, 1.76, 1.86, 1.93, 2.03],
       mode: 'lines+markers',
       line: { color: '#64748b', dash: 'dash' },
       marker: { size: 6, color: '#64748b' },
     },
     {
-      name: 'r50k + ANS',
-      x: [50, 100, 150, 200, 270, 400],
-      y: [7.31, 6.28, 5.8, 5.78, 5.69, 5.49],
+      name: 'r50k + static ANS',
+      x: [37, 100, 150, 212, 300, 475],
+      y: [3.22, 3.36, 3.39, 3.41, 3.4, 3.51],
       mode: 'lines+markers',
       line: { color: '#10b981' },
       marker: { size: 7, color: '#10b981' },
     },
     {
-      name: 'cl100k + ANS',
-      x: [50, 100, 150, 200, 270, 400],
-      y: [7.31, 6.52, 6.08, 5.99, 5.91, 5.77],
+      name: 'cl100k + static ANS',
+      x: [37, 100, 150, 212, 300, 475],
+      y: [3.17, 3.3, 3.33, 3.35, 3.34, 3.44],
       mode: 'lines+markers',
       line: { color: '#6366f1' },
       marker: { size: 7, color: '#6366f1' },
     },
   ]}
   layout={{
-    xaxis: { title: 'document length (words)', tickvals: [50, 100, 150, 200, 270, 400] },
-    yaxis: { title: 'compression ratio', range: [1.0, 9.0] },
+    xaxis: { title: 'document length (words)', tickvals: [37, 100, 150, 212, 300, 475] },
+    yaxis: { title: 'compression ratio', range: [1.0, 4.5] },
     height: 360,
     margin: { t: 16, r: 32, b: 64, l: 64 },
     legend: { orientation: 'h', y: -0.22 },
@@ -227,7 +231,7 @@ Generic codecs improve with document length — longer text gives more repeated 
 
 The mixedbread embedding model (`mxbai-embed-large-v1`) uses BERT's WordPiece tokenizer with 30,522 tokens. Smaller vocabulary → more common tokens → lower entropy → better compression.
 
-mxbai + ANS reaches **328 bytes** vs r50k + ANS at **364 bytes** — a 10% compression win. But when I measured latency and recovery, the story got more complicated.
+mxbai + static ANS reaches roughly **630 bytes** vs r50k + static ANS at **648 bytes** — a small compression win. But when I measured latency and recovery, the story got more complicated.
 
 | Tokenizer       |   CER | CER (ignore case+whitespace) | CER (+ fix punct) |
 | --------------- | ----: | ---------------------------: | ----------------: |
@@ -249,7 +253,7 @@ def fix_punct(s):
     return s
 ```
 
-So mxbai is effectively lossless too, with a small detokenizer — but it's also **5× slower to encode** (750µs vs 156µs) and **10× slower to decode** (420µs vs 41µs), entirely due to HuggingFace tokenizer overhead. The 10% smaller output doesn't justify it. For a storage codec, r50k is the clean choice.
+So mxbai is effectively lossless too, with a small detokenizer — but it's also **5× slower to encode** (750µs vs 156µs) and **10× slower to decode** (420µs vs 41µs), entirely due to HuggingFace tokenizer overhead. The marginal compression win doesn't justify it. For a storage codec, r50k is the clean choice.
 
 On UNK tokens: WordPiece has a `[UNK]` token that causes **actual** information loss. But for standard English text — including code, URLs, numbers, gibberish ASCII — it never fires. It only fires on emojis (🚀 → `[UNK]`) and some rare Unicode math symbols. So for typical RAG payloads over web or document text, UNK is a non-issue.
 
@@ -259,25 +263,24 @@ On UNK tokens: WordPiece has a `[UNK]` token that causes **actual** information 
 
 English Wikipedia is ~7M articles, 708 words/article on average — a useful benchmark for RAG-scale corpora.
 
-Extrapolating from the benchmark:
+Extrapolating from the corpus-average 3.35× (WikiText-103 test split, 1,773 articles):
 
-| Method         |       Per doc |    7M docs |   vs raw |
-| -------------- | ------------: | ---------: | -------: |
-| Raw UTF-8      |   4,497 bytes |    31.5 GB |       1x |
-| zstd -22       |   2,382 bytes |    16.7 GB |     1.9x |
-| r50k + zstd    |   1,721 bytes |    12.1 GB |     2.6x |
-| **r50k + ANS** | **884 bytes** | **6.2 GB** | **5.1x** |
-| mxbai + ANS    |     797 bytes |     5.6 GB |     5.6x |
+| Method                |         Per doc |    7M docs |    vs raw |
+| --------------------- | --------------: | ---------: | --------: |
+| Raw UTF-8             |     4,497 bytes |    31.5 GB |        1x |
+| zstd -22              |     2,382 bytes |    16.7 GB |      1.9x |
+| r50k + zstd           |     1,721 bytes |    12.1 GB |      2.6x |
+| **r50k + static ANS** | **1,342 bytes** | **9.4 GB** | **3.35x** |
 
-At 1B docs the storage gap is more dramatic:
+At 1B docs the storage gap is meaningful:
 
-| Method     |    1B docs | S3 ($0.02/GB/mo) | Disk ($0.08/GB/mo) |
-| ---------- | ---------: | ---------------: | -----------------: |
-| Raw UTF-8  |     4.5 TB |             ~$92 |              ~$368 |
-| r50k + ANS |    0.88 TB |             ~$18 |               ~$72 |
-| **Saving** | **3.6 TB** |      **~$74/mo** |       **~$296/mo** |
+| Method            |    1B docs | S3 ($0.02/GB/mo) | Disk ($0.08/GB/mo) |
+| ----------------- | ---------: | ---------------: | -----------------: |
+| Raw UTF-8         |     4.5 TB |             ~$92 |              ~$368 |
+| r50k + static ANS |     1.3 TB |             ~$27 |              ~$108 |
+| **Saving**        | **3.2 TB** |      **~$65/mo** |       **~$260/mo** |
 
-Disk savings are the bigger line item ($296/month on SSD at 1B docs), and the I/O win is the same magnitude: 0.88 TB reads 5× faster than 4.5 TB, directly reducing query latency when payloads are fetched during retrieval. S3 egress compounds it — at $0.09/GB, shipping 3.6 TB fewer data saves ~$324 per bulk transfer.
+Disk savings are the bigger line item (~$260/month on SSD at 1B docs), and the I/O win is proportional: 1.3 TB reads 3.4× faster than 4.5 TB, directly reducing query latency when payloads are fetched during retrieval. S3 egress compounds it — at $0.09/GB, shipping 3.2 TB fewer data saves ~$290 per bulk transfer.
 
 ## How This Compares to State of the Art
 
@@ -288,14 +291,14 @@ For context, here's where this sits on the broader compression landscape (benchm
 | Raw UTF-8                                |       8.0 |           1x | —              |
 | gzip -9                                  |      ~2.6 |         3.1x | Yes            |
 | zstd -22                                 |      ~2.0 |           4x | Yes            |
-| **BPE + ANS (this post)**                | **~1.56** |  **~5–5.4x** | **Yes**        |
+| **BPE + static ANS (this post)**         |  **~2.4** |    **~3.3x** | **Yes**        |
 | zpaq                                     |      ~1.4 |         5.7x | Slow           |
 | fx2-cmix (Hutter Prize record, Oct 2024) |     0.887 |           9x | Extremely slow |
 | Chinchilla 70B (DeepMind, 2024)          |     0.664 |          12x | Not practical  |
 
-The gap between r50k + ANS (~5x) and the Hutter Prize record (~9x) is exactly the signal that lives in **conditional token probabilities**. ANS here only models marginal frequency — how often each token appears globally. The top compressors model `P(token | all previous tokens)`, which is what LLMs do. That's the remaining 2x on the table.
+The gap between r50k + static ANS (~3.3x) and the Hutter Prize record (~9x) is exactly the signal that lives in **conditional token probabilities**. Static ANS only models marginal frequency — how often each token appears globally. The top compressors model `P(token | all previous tokens)`, which is what LLMs do. That's the remaining 3x on the table.
 
-Getting from 5x to 9x requires a language model. Getting from 1x to 5x just requires a tokenizer and 30 lines of Python.
+Getting from 3x to 9x requires a language model. Getting from 1x to 3x just requires a tokenizer and 30 lines of Python.
 
 ## What Needs to Change
 
@@ -337,19 +340,20 @@ READ                             READ
                                   return original text
 ```
 
-The entire round-trip is transparent to the user. Same API, 5x smaller payloads.
+The entire round-trip is transparent to the user. Same API, ~3x smaller payloads.
 
 As [search and generation converge](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation), keeping UTF-8 blobs in your index while the model reasons in tokens means maintaining two representations of the same text. Token-native payload storage collapses that to one.
 
 ## Key Takeaways
 
-- Vector databases optimize vectors aggressively; text payloads get generic LZ4 at best (~2x). Token-aware compression is a separate ~5x opportunity on top.
-- BPE tokenization (r50k, vocab=50,257) produces uint16 token IDs — 2 bytes each — that already beat gzip on raw text with zero further compression.
-- Adding ANS entropy coding on token IDs brings you to **5–5.4x compression** using 30 lines of Python and infrastructure already in every ML stack. r50k (uint16) gives 5.1x; cl100k (uint32) gives 5.4x — ANS overcomes the raw packing overhead because cl100k produces fewer tokens per document.
-- r50k is perfectly lossless (0% CER). mxbai WordPiece gives 5.7x but lowercases text — fixable with simple post-processing, but also 5–10× slower to tokenize.
-- **Latency is not a concern:** r50k and cl100k encode in 145–156µs — the tokenizer dominates, ANS adds only ~30µs. If you already tokenize at ingest, the marginal encode cost is those 30µs. Decode is ~40µs total.
-- The gap between this (~5x) and the Hutter Prize record (~9x) is conditional token probability — i.e., you need a language model. Getting to 5x doesn't.
-- At English Wikipedia scale (7M docs), this takes payload storage from 31.5 GB to 6.2 GB. The bigger win is I/O: 5x faster bulk reads, indexing, and replication.
+- Vector databases optimize vectors aggressively; text payloads get generic LZ4 at best (~1.9×). Token-aware compression is a separate opportunity on top.
+- BPE tokenization (r50k, vocab=50,257) produces uint16 token IDs — 2 bytes each — that already beat gzip on raw text with zero further compression (2.4× vs 1.9×).
+- Adding a **static ANS entropy coder** trained once on WikiText-103 brings the average to **3.35×** — about 2× better than gzip. The static table is the right design: per-document ANS requires storing a ~900-byte frequency table per doc to be decodable, which completely erases the compression gain on typical RAG chunk sizes.
+- r50k edges out cl100k for static ANS (3.35× vs 3.29×) because cl100k's larger vocabulary leaves more tokens under-represented in any fixed corpus table.
+- r50k is perfectly lossless (0% CER). mxbai WordPiece achieves marginally better compression but lowercases text — fixable with post-processing — and is 5–10× slower to tokenize.
+- **Latency is not a concern:** the tokenizer dominates encode (~132µs); ANS with a pre-loaded static model adds only ~30µs. Decode is ~40µs total.
+- The gap between this (~3.3×) and the Hutter Prize record (~9×) is conditional token probability — modelling `P(token | context)` instead of just global marginals. Getting from 3× to 9× requires a language model; getting from 1× to 3× just requires a tokenizer and 30 lines of Python.
+- At English Wikipedia scale (7M docs), this takes payload storage from 31.5 GB to ~9.4 GB. The bigger win is I/O: 3.4× faster bulk reads, indexing, and replication.
 
 ## Acknowledgements
 

@@ -278,7 +278,7 @@ export default function TokenCompressionPipeline() {
           fontSize="9"
           fill={textMuted}
         >
-          392 tokens · 784 bytes (2.4× vs UTF-8)
+          392 tokens · static ANS table (WikiText-103)
         </text>
 
         <line
@@ -314,16 +314,16 @@ export default function TokenCompressionPipeline() {
         />
 
         <text x={RES_X} y={R2_CY - 5} fontSize="11" fontWeight="600" fill="#10b981">
-          364 bytes
+          648 bytes
         </text>
         <text x={RES_X} y={R2_CY + 11} fontSize="16" fontWeight="700" fill="#10b981">
-          5.1×
+          2.9×
         </text>
 
         {/* Footnote */}
         <text x="8" y="278" fontSize="9" fill={textMuted}>
           first 20 chars shown; r50k tokenizer (GPT-2 BPE, 50,257-token vocab); same 1,853-byte
-          reference doc
+          reference doc; static ANS table trained on WikiText-103
         </text>
       </svg>
     </div>
