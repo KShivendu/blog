@@ -37,16 +37,13 @@ Qdrant stores on-disk payloads in [Gridstore](https://qdrant.tech/articles/grids
 
 That's the gap.
 
-## Tokenization is Already Compression
+## How It Works
 
-BPE (Byte Pair Encoding) — the tokenizer behind GPT-2, GPT-4, and most modern LLMs — merges frequently co-occurring byte sequences into single tokens. "retrieval" becomes one token. "embeddings" becomes one token. Common phrases get compressed into fewer symbols.
+<TokenCompressionPipeline />
 
-The compression angle is underappreciated. Consider English text:
+The top path shows what every vector database does today: store text as UTF-8 bytes, then compress with a generic codec. The bottom path is the proposal: tokenize first to get semantically-meaningful chunks, then apply entropy coding on the token IDs.
 
-- Average word length: ~5 characters = 5 bytes (ASCII)
-- Add a space: 6 bytes per word
-- Average BPE token spans: ~3/4 of a word ([OpenAI](https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them))
-- Token ID stored as uint16: 2 bytes
+**Step 1 — BPE tokenization.** BPE (Byte Pair Encoding) merges frequently co-occurring byte sequences into single tokens. "retrieval" becomes one token. " Generation" becomes one token — with the leading space, as the diagram shows. English text runs roughly 3/4 of a word per token ([OpenAI](https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them)):
 
 ```
 6 bytes/word × 0.75 words/token = 4.5 bytes/token (raw)
@@ -54,11 +51,26 @@ The compression angle is underappreciated. Consider English text:
 ratio: ~2.25x
 ```
 
-That's before applying any further compression on the token IDs themselves.
+**Step 2 — ANS entropy coding.** gzip and LZ4 operate on opaque bytes — they can't see that `[0x01, 0x7F]` is token ID 383. ANS (Asymmetric Numeral Systems), the entropy coder inside zstd, can be applied directly on token IDs. It assigns shorter codes to frequent tokens: token 198 (`" the"`) is 40× more common than token 47291 (`"embeddings"`). The result gets within **6 bytes of the Shannon entropy lower bound** — the theoretical minimum for lossless compression.
 
-The catch: this only works cleanly if the tokenizer's vocabulary fits in uint16 (max 65,535). GPT-4's `cl100k` tokenizer has 100,277 tokens — that needs uint32 (4 bytes), which kills the advantage for **raw packing**. GPT-2's `r50k` tokenizer has 50,257 tokens — fits cleanly in uint16. With ANS the story is different, as the table below shows.
+```python
+import constriction, numpy as np
+from collections import Counter
 
-<!-- DIAGRAM: show token ID sizes vs vocab sizes for common tokenizers -->
+def ans_encode(ids):
+    counts = Counter(ids)
+    vocab  = sorted(counts.keys())
+    v2i    = {v: i for i, v in enumerate(vocab)}
+    freqs  = np.array([counts[v] for v in vocab], dtype=np.float64)
+    freqs /= freqs.sum()
+
+    model   = constriction.stream.model.Categorical(freqs, perfect=False)
+    encoder = constriction.stream.stack.AnsCoder()
+    encoder.encode_reverse(np.array([v2i[t] for t in ids], dtype=np.int32), model)
+    return encoder.get_compressed().tobytes()
+```
+
+The vocabulary size determines the raw packing tradeoff:
 
 ```
 Tokenizer      Vocab size    ID type    Bytes/token (raw)   + ANS
@@ -203,54 +215,6 @@ Generic codecs improve with document length — longer text gives more repeated 
     legend: { orientation: 'h', y: -0.22 },
   }}
 />
-
-## What is ANS and Why Does It Matter
-
-zstd operates on bytes. It doesn't know that `[0x01, 0x7F]` is token ID 383 — it just sees two opaque bytes.
-
-ANS (Asymmetric Numeral Systems) — the entropy coder inside zstd's compression stage, also used in LZMA and FLAC — can be applied directly on token IDs. It knows that token 198 (`" the"`) appears 40× more than token 47291 (`"embeddings"`), so it assigns shorter codes to frequent tokens.
-
-The result: ANS on token IDs gets within **6 bytes of the Shannon entropy lower bound** — the theoretical minimum for lossless compression.
-
-```python
-import constriction, numpy as np
-from collections import Counter
-
-def ans_encode(ids):
-    counts = Counter(ids)
-    vocab  = sorted(counts.keys())
-    v2i    = {v: i for i, v in enumerate(vocab)}
-    freqs  = np.array([counts[v] for v in vocab], dtype=np.float64)
-    freqs /= freqs.sum()
-
-    model   = constriction.stream.model.Categorical(freqs, perfect=False)
-    encoder = constriction.stream.stack.AnsCoder()
-    encoder.encode_reverse(np.array([v2i[t] for t in ids], dtype=np.int32), model)
-    return encoder.get_compressed().tobytes()
-```
-
-The full pipeline:
-
-<TokenCompressionPipeline />
-
-```
-text (UTF-8)
-    │
-    ▼
-BPE tokenizer (r50k)
-    │  50,257-token vocab, fits uint16
-    ▼
-[token_id_1, token_id_2, ...]  ← 2 bytes each
-    │
-    ▼
-ANS encoder (frequency model over token IDs)
-    │  assigns short codes to frequent tokens
-    ▼
-compressed bytes  ←  5x smaller than original text
-    │
-    ▼ (decode path)
-ANS decoder → token IDs → tokenizer.decode → original text
-```
 
 ## The mxbai Story: Better Compression, Surprising Catch
 
