@@ -1,0 +1,92 @@
+---
+title: 'SPLADE Into a BM25 Field: The Tokenizer Trap'
+date: '2026-06-10'
+lastmod: '2026-06-10'
+tags: ['search', 'sparse-retrieval', 'nlp', 'information-retrieval']
+draft: false
+summary: 'A friend said they expand SPLADE terms into an OpenSearch BM25 text field and it works. We tested it. It ran fine and produced 0.36 NDCG@10 — worse than plain BM25. Here is why, and how to mostly fix it.'
+authors: ['default']
+---
+
+> This is a short follow-up to [Inference-Free SPLADE: Full Quality, 13× Faster Queries](/blog/if-splade).
+
+A friend from Parallel AI mentioned they expand SPLADE document vectors into a standard OpenSearch text field and it "just works." No impact indexing, no special sparse vector field — just dump the expanded tokens as a string and let BM25 score them.
+
+We already had all the benchmark infrastructure from the IF-SPLADE post, so we tried it.
+
+## The Setup
+
+For each document, take the SPLADE sparse vector (token indices + float weights) and convert it to a plain text string. Three variants:
+
+- **Binary**: include each expanded token once
+- **Weighted**: repeat token `round(weight × 3)` times, approximating TF
+- **Raw**: repeat token `max(1, min(20, round(weight)))` times — the naive approach, using raw SPLADE weights as repetition counts
+
+Index with standard Lucene BM25 (`k1=0.9, b=0.4`). Query with raw query text, no model.
+
+Model: [`naver/splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) on BEIR scifact.
+
+## First Run: Worse Than BM25
+
+| Approach                   |    NDCG@10 |
+| -------------------------- | ---------: |
+| Impact scoring (reference) | **0.6953** |
+| BM25 baseline              |     0.6789 |
+| BM25 text, raw             |     0.3778 |
+| BM25 text, weighted (×3)   |     0.3976 |
+| BM25 text, binary          |     0.3607 |
+
+All three variants land around 0.36–0.40 — significantly below the BM25 baseline. "Just works" was an overstatement.
+
+## What Went Wrong: Tokenizer Mismatch
+
+The document tokens are BERT subwords with `##` stripped: `cardiac`, `my`, `ocardial`, `corona`, `##ary`. Lucene's standard text analyzer tokenizes query text differently — it lowercases and splits on whitespace/punctuation, but has no concept of BERT subword splitting.
+
+So "myocardial" in a query goes through Lucene's analyzer as a single token `myocardial`, which never matches the BERT-stored `my` + `ocardial` subwords in the doc index. The query and doc token spaces are misaligned at the vocabulary level.
+
+Fix: pre-tokenize the query with BERT before handing it to Lucene.
+
+```python
+def bert_tokenize_query(tokenizer, text: str) -> str:
+    tokens = tokenizer.tokenize(text, add_special_tokens=False)
+    return " ".join(t.replace("##", "") for t in tokens if t and not t.startswith("["))
+```
+
+## Second Run: With BERT Query Tokenization
+
+| Approach                         |    NDCG@10 |
+| -------------------------------- | ---------: |
+| Impact scoring (reference)       | **0.6953** |
+| BM25 text, weighted + BERT query |     0.6572 |
+| BM25 text, raw + BERT query      |     0.6311 |
+| BM25 text, binary + BERT query   |     0.6198 |
+| BM25 baseline                    |     0.6789 |
+| BM25 text (no BERT query, best)  |     0.3976 |
+
+Much better. Weighted mode with BERT query tokenization reaches **0.6572** — above BM25 and only 3.8% below impact scoring.
+
+## Why There's Still a Gap
+
+Even with correct tokenization, BM25 TF-IDF normalization works against SPLADE. Two problems:
+
+**Document length penalty.** SPLADE doc vectors average 325 non-zeros. When stored as text, BM25's length normalization (`b=0.4`) penalizes these documents as "long." A BM25 document has ~50–100 real tokens; a SPLADE-expanded one has 325 repeated-or-not tokens. The scorer treats expansion as verbosity.
+
+**IDF distortion.** BM25 computes IDF over the corpus. Rare SPLADE expansion terms (low-frequency medical vocabulary) get high IDF weight regardless of their SPLADE activation weight. The SPLADE weight signal is replaced by corpus frequency statistics, which aren't the same thing.
+
+Impact scoring sidesteps both: it stores the SPLADE float weights directly as integers (scale=100) and computes an exact dot product, no normalization applied.
+
+## What This Means in Practice
+
+If you're using SPLADE expansion in Elasticsearch or OpenSearch with a standard `text` field:
+
+1. **BERT-tokenize your queries.** Without this you lose ~40% quality. The doc tokens are BERT subwords; the query must use the same vocabulary.
+2. **Use weighted repetition, not binary.** Binary drops all weight signal; `round(weight × scale)` preserves the rough ordering.
+3. **Expect ~4% quality loss vs impact scoring.** That gap is structural — BM25 normalization and IDF distortion can't be tuned away.
+
+If your engine supports sparse vector fields or impact scoring (`FeatureField` in Lucene, `rank_features` in Elasticsearch, neural sparse in OpenSearch), use those instead. The text field approach is a fallback for engines with no sparse vector support.
+
+## Key Takeaways
+
+- **"It works" depends on query tokenization.** Without BERT query tokenization, SPLADE-in-BM25 is worse than plain BM25.
+- **With BERT query tokenization**, weighted mode reaches 0.6572 NDCG@10 vs 0.6953 for impact scoring — a workable fallback.
+- **The residual gap is structural.** BM25 length normalization and IDF distortion replace the SPLADE weight signal; impact scoring preserves it.
