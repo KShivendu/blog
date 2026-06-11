@@ -1,0 +1,177 @@
+---
+title: 'The Hot Doc Problem: KV Cache Tiering for RAG'
+date: '2026-06-10'
+lastmod: '2026-06-10'
+tags: ['vector-databases', 'llm-inference', 'rag', 'internals']
+draft: true
+summary: 'Your RAG system re-prefills the same popular documents thousands of times per day. A Zipf coverage experiment shows 1% of docs handles 42% of queries. But does vLLM prefix caching actually help? We ran the experiment. The answer is nuanced.'
+authors: ['default']
+---
+
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
+
+The [previous post](/blog/tokenization-compression) covered storage: BPE tokenization + static entropy coding gives ~3× lossless compression on text payloads. After publishing, the obvious follow-up question surfaced: once you've stored documents efficiently, what happens at _inference_ time?
+
+RAG has two compute costs that rarely get discussed together:
+
+1. **Retrieval**: embedding lookup, ANN search — fast, well-studied
+2. **Prefill**: the LLM attends over the retrieved context before generating — slow, repeated, and largely ignored
+
+The second one is what this post is about.
+
+## The Same Document, Over and Over
+
+In a real RAG deployment, query traffic doesn't hit documents uniformly. Wikipedia has 6.7M articles. Most queries land on a tiny fraction of them — the Zipf distribution isn't a theoretical curiosity, it's empirically measured in every large search system.
+
+I simulated this with WikiText-103 (1,773 test articles) and a Zipf(s=1.0) distribution: assign each article a popularity rank 1..N, draw queries with probability ∝ 1/rank. This is a conservative Zipf — real corpora often have heavier tails.
+
+```python
+ranks = np.arange(1, N + 1, dtype=np.float64)
+probs = ranks ** (-1.0); probs /= probs.sum()
+query_ranks = rng.choice(N, size=100_000, replace=True, p=probs)
+```
+
+The results are striking:
+
+| Cache size | Docs cached | Query hit rate | KV storage (int8, Wikipedia scale) |
+| ---------- | ----------- | -------------- | ---------------------------------- |
+| 0.1%       | 1 doc       | **12.4%**      | 43 GB                              |
+| 1%         | 17 docs     | **42.5%**      | 431 GB                             |
+| 2%         | 35 docs     | 51.3%          | 862 GB                             |
+| 5%         | 88 docs     | 62.7%          | 2.1 TB                             |
+| 10%        | 177 docs    | 71.4%          | 4.3 TB                             |
+| 20%        | 354 docs    | 80.1%          | 8.6 TB                             |
+
+The single most popular document in the corpus gets **12.4% of all queries**. The top 17 documents cover 42.5%. This is the opportunity: if you could skip the LLM's prefill pass over those hot documents, you'd eliminate that computation for nearly half of all queries.
+
+The question is whether you can actually capture that benefit.
+
+## What Is TurboRAG?
+
+Before running our own experiment, I looked for prior art. [TurboRAG](https://arxiv.org/abs/2410.05258) (EMNLP 2025) pre-computes KV caches for documents offline and stores them on disk. At inference, it loads the cached KV directly, skipping the prefill entirely — reporting 8.6× TTFT reduction.
+
+The catch is the deployment story:
+
+- **Storage**: 28MB per ~600-token chunk → 28TB for a full Wikipedia-scale corpus
+- **Model-specific**: cached KV can't transfer between model versions or quantizations
+- **Fine-tuning required**: block-diagonal attention masks change the model's behavior, so you need to fine-tune to make quality hold (~$3k per model variant)
+- **No cold fallback**: if a document wasn't pre-cached, you have no graceful path
+
+103 GitHub stars as of June 2026. Not deployed in production anywhere I can find.
+
+The tiered alternative sounds more practical: use standard prefix caching (already in every LLM serving stack) for hot docs, fall back to normal prefill for cold docs, store only token IDs for everything (the 3× compression from the previous post). But does standard prefix caching actually work?
+
+## Experiment: Does vLLM Prefix Caching Help? (Spoiler: Barely)
+
+I ran this on Modal with an A10G (24GB), Qwen2.5-7B-Instruct, vLLM 0.6.6 with `enable_prefix_caching=True`. The setup:
+
+- **Hot doc**: one 202-word Wikipedia article, queried 6 times in a row
+- **Cold docs**: 20 different articles, each queried once
+- **Output**: 32 tokens per query (short answer)
+- **Prompt template**: `system_prompt + document + question`
+
+The idea: if prefix caching works, the `system_prompt + document` tokens should be cached after the first query, and subsequent queries over the same doc should only need to prefill the new `question` tokens (~10 tokens vs ~350 total).
+
+Results:
+
+| Condition                               | Avg latency  |
+| --------------------------------------- | ------------ |
+| First query (cold cache)                | 1,147 ms     |
+| Same doc, 2nd–6th query (warm cache)    | **1,090 ms** |
+| Different doc each time (cold baseline) | 1,127 ms     |
+
+**Speedup: 1.03×.** Essentially nothing.
+
+The prefix cache IS working — the 57ms difference between cold-first and warm-steady is the prefill savings for ~300 tokens. But generation of 32 tokens at ~28 tok/s takes roughly 1,140ms regardless. Prefill savings disappear into the noise of autoregressive decoding.
+
+### Why the Math Works Against You
+
+The fundamental issue:
+
+```
+total_latency = prefill_time + n_output_tokens / decode_throughput
+
+prefill(300 tokens, A10G) ≈ 50ms
+decode(32 tokens, A10G)   ≈ 1,100ms
+```
+
+Prefix caching eliminates ~200 tokens of prefill (the document portion), saving maybe ~35ms. Against a 1,100ms decoding budget, that's 3%.
+
+This is _not_ the same as TTFT (time to first token). If you're streaming tokens to a user and measuring when the first token appears, prefix caching _would_ give a meaningful speedup — you'd go from attending over 350 tokens down to ~50 (system + question only). The first token would appear ~7× faster. But for total response latency with typical RAG output lengths (50–200 tokens), the win evaporates.
+
+The breakeven point: prefix caching improves total latency meaningfully only when `n_output_tokens / decode_throughput < prefill_time`. For 300-token documents on an A10G, that means fewer than ~4 output tokens. RAG isn't usually that terse.
+
+## What the Storage Numbers Tell You
+
+Going back to experiment 2a: the 431 GB for 1% of Wikipedia at int8 KV precision is the real limiter.
+
+For Llama-3.1-8B with 8 GQA key-value heads:
+
+```
+KV bytes/token = 32 layers × 2 (K+V) × 8 heads × 128 dims × 2 bytes = 131,072 bytes
+```
+
+A 392-token document stores 392 × 128KB ≈ 49MB of KV per document. For the top 1% of Wikipedia (67,000 articles), that's 3.3TB of KV at fp16, 1.6TB at int8, 820GB at int4.
+
+NVMe can hold this cost-effectively — it's the same order of magnitude as full model checkpoints. The question is whether loading 49MB of KV from NVMe into GPU memory on a cache hit is faster than running prefill. Modern NVMe sequential read bandwidth is ~7GB/s, so loading a document's KV takes ~7ms. Prefill takes ~50ms. Net win: ~43ms per cache hit, before you account for the overhead of managing the cache.
+
+For TTFT-sensitive streaming applications, 43ms matters. For total latency with 100+ output tokens, it's noise.
+
+## What Actually Helps
+
+The honest summary of where gains are real:
+
+**Storage (always worth it):**
+
+- Token ID storage: 3× compression vs LZ4, zero inference cost, works everywhere
+- No model-specific state, no cache invalidation, no fine-tuning
+
+**KV caching (conditional):**
+
+- Meaningful for TTFT in streaming RAG (first-token latency, not total latency)
+- Standard vLLM APC works for hot docs with no fine-tuning — just enable it
+- Matters more for long documents (1,000+ tokens) where prefill time is substantial
+- TurboRAG-style offline precomputation only makes sense if you have a stable model, fixed corpus, and TTFT SLAs you can't meet otherwise
+
+**What doesn't help:**
+
+- KV caching for total latency when outputs are long (generation dominates)
+- Caching for cold or long-tail documents (most of the corpus)
+- Storing KV for all documents (28TB for Wikipedia — the TurboRAG paper's approach)
+
+## Tiered Architecture (What I'd Actually Build)
+
+Given the data, the practical design:
+
+```
+Layer 0 — Universal:
+  Store document as token IDs (uint16 for r50k, uint32 for cl100k)
+  + static ANS encoding → ~3× compression, self-contained, decodeable anywhere
+
+Layer 1 — Warm tier (top ~1% of docs, NVMe):
+  Quantized KV cache (int4, ~24MB/doc for 8B model)
+  Pre-computed, refreshed on model updates
+  Coverage: 42% of queries at ~820GB for Wikipedia
+
+Layer 2 — Hot tier (top ~0.1%, GPU SRAM or HBM):
+  Full-precision KV already resident in GPU memory
+  Coverage: 12% of queries with zero load latency
+  Fits ~20 documents at 49MB each in 1GB of reserved HBM
+```
+
+On a cache hit from Layer 1: load KV from NVMe (~7ms), skip 50ms prefill → meaningful TTFT improvement.
+On a Layer 2 hit: already in GPU memory, TTFT ≈ just the question tokens.
+On a miss: normal prefill, decompress token IDs on the fly (< 1ms decode time from the compression post).
+
+The key difference from TurboRAG: no fine-tuning, standard attention, model-agnostic token storage at the base layer. You lose TurboRAG's 8.6× claim, but you get a system that works with any model today.
+
+## Key Takeaways
+
+- Under Zipf(s=1.0), **1% of documents covers 42.5% of RAG queries**. Hot docs are real.
+- Standard vLLM prefix caching gives **~1× total latency improvement** for short outputs because generation dominates.
+- The actual win from prefix caching is **TTFT for streaming**, not total latency — and it's meaningful there (~7× for 300-token docs).
+- Storage break-even for int4 KV at 1% Wikipedia scale: ~820GB on NVMe. Feasible but not trivial.
+- The practical stack: **token ID storage everywhere** (3× compression, free) + **KV cache only for the top 1–10% hot docs** in TTFT-sensitive deployments.
+- TurboRAG's 28TB / fine-tuning requirement makes it a research result, not a deployment recommendation.
+
+The full experiment code is [on GitHub](https://github.com/KShivendu/blog/tree/main/experiments/kv_cache).
