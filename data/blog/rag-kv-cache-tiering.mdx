@@ -1,10 +1,10 @@
 ---
 title: 'The Hot Doc Problem: KV Cache Tiering for RAG'
 date: '2026-06-10'
-lastmod: '2026-06-10'
+lastmod: '2026-06-11'
 tags: ['vector-databases', 'llm-inference', 'rag', 'internals']
 draft: true
-summary: 'Your RAG system re-prefills the same popular documents thousands of times per day. A Zipf coverage experiment shows 1% of docs handles 42% of queries. But does vLLM prefix caching actually help? We ran the experiment. The answer is nuanced.'
+summary: 'Does KV caching for hot RAG documents actually pay? Corrected coverage math says the hot tier is tiny (571 docs for 42% of Wikipedia-scale queries) — but only if your query distribution is concentrated, and real pageview data is far flatter than the Zipf everyone assumes. Plus: multi-chunk prompts silently destroy prefix-cache reuse, canonical chunk ordering wins it back, and the TTFT speedup grows from 2× to 8.5× with context length.'
 authors: ['default']
 ---
 
@@ -21,30 +21,32 @@ The second one is what this post is about.
 
 ## The Same Document, Over and Over
 
-In a real RAG deployment, query traffic doesn't hit documents uniformly. Wikipedia has 6.7M articles. Most queries land on a tiny fraction of them — the Zipf distribution isn't a theoretical curiosity, it's empirically measured in every large search system.
+In a real RAG deployment, query traffic doesn't hit documents uniformly. Power-law-ish popularity shows up in every large search system — but as we'll see below, _how_ concentrated it is varies enormously by workload, and that variation turns out to decide everything.
 
-I simulated this with WikiText-103 (1,773 test articles) and a Zipf(s=1.0) distribution: assign each article a popularity rank 1..N, draw queries with probability ∝ 1/rank. This is a conservative Zipf — real corpora often have heavier tails.
+Modelling this correctly turns out to be subtle, and an earlier version of this post got it wrong. Under Zipf(s), the fraction of queries covered by caching the top k documents is `H(k,s) / H(N,s)` — a ratio of generalized harmonic numbers that depends on **both** the corpus size N and the exponent s. My first version simulated coverage at N=1,773 (WikiText test articles) and put Wikipedia-scale storage costs next to it. Those two columns described different systems: at a consistent N=6.7M with s=1.0, the numbers look like this:
 
-```python
-ranks = np.arange(1, N + 1, dtype=np.float64)
-probs = ranks ** (-1.0); probs /= probs.sum()
-query_ranks = rng.choice(N, size=100_000, replace=True, p=probs)
-```
+| Cache size | Docs cached | Query hit rate | KV storage (int8, Llama-3.1-8B) |
+| ---------- | ----------- | -------------- | ------------------------------- |
+| 0.01%      | 670         | **43.5%**      | 23 GB                           |
+| 0.1%       | 6,700       | 57.6%          | 233 GB                          |
+| 1%         | 67,000      | **71.7%**      | 2.3 TB                          |
+| 5%         | 335,000     | 81.6%          | 11.7 TB                         |
 
-The results are striking:
+Inverted, the headline is striking: under s=1.0, getting 42% query coverage at Wikipedia scale needs only **~571 documents — about 20 GB of int8 KV**. That's not a storage problem at all; it fits on one NVMe drive with room to spare.
 
-| Cache size | Docs cached | Query hit rate | KV storage (int8, Wikipedia scale) |
-| ---------- | ----------- | -------------- | ---------------------------------- |
-| 0.1%       | 1 doc       | **12.4%**      | 43 GB                              |
-| 1%         | 17 docs     | **42.5%**      | 431 GB                             |
-| 2%         | 35 docs     | 51.3%          | 862 GB                             |
-| 5%         | 88 docs     | 62.7%          | 2.1 TB                             |
-| 10%        | 177 docs    | 71.4%          | 4.3 TB                             |
-| 20%        | 354 docs    | 80.1%          | 8.6 TB                             |
+But before celebrating, the exponent deserves the same scrutiny as the corpus size. s=1.0 was an assumption, and coverage is brutally sensitive to it. Documents (and storage) needed to cover 42% of queries at N=6.7M:
 
-The single most popular document in the corpus gets **12.4% of all queries**. The top 17 documents cover 42.5%. This is the opportunity: if you could skip the LLM's prefill pass over those hot documents, you'd eliminate that computation for nearly half of all queries.
+| Zipf s | Docs for 42% coverage | int8 KV storage |
+| -----: | --------------------: | --------------: |
+|    0.7 |               399,872 |         13.9 TB |
+|    0.9 |                13,513 |          470 GB |
+|    1.0 |                   571 |           20 GB |
+|    1.1 |                    37 |          1.3 GB |
+|    1.2 |                     8 |          0.3 GB |
 
-The question is whether you can actually capture that benefit.
+Three-tenths of an exponent swings the hot tier from "fits in GPU memory" to "needs a storage cluster." So which s is real? I pulled actual English Wikipedia pageview data (Wikimedia REST API, May 2026, 6.7B monthly user views) as an empirical anchor: the top 1,000 articles cover only **7.7%** of article views, and the rank-frequency slope over the top 1,000 fits **s ≈ 0.55** — far flatter than the Zipf(1.0) I assumed. For Wikipedia-style browsing traffic, hot-document KV caching is hopeless: meaningful coverage requires caching a double-digit percentage of the corpus.
+
+Pageviews are a browsing proxy, not RAG traffic, and that cuts both ways. Workloads where queries funnel into a small document set — customer-support KBs (most tickets hit the same dozen articles), product docs, internal wikis, agent system prompts — sit at the concentrated end, plausibly s ≥ 1. The honest conclusion: **the hot-doc opportunity is real but workload-conditional, and the exponent is the whole game. Measure your own doc-hit distribution before provisioning a KV tier.** The good news from the corrected math: if your workload _is_ concentrated, the hot tier is small enough to be trivial.
 
 ## What Is TurboRAG?
 
@@ -102,21 +104,59 @@ This means the value of prefix caching is entirely about the user experience of 
 
 Under concurrent load (8 simultaneous requests for the same hot doc), wall time stayed flat at ~1.2s — all 8 requests returned together in the time it would take to serve one cold request. TTFT per request was 87ms. For a system where 12% of queries hit the same single document, this means those requests can be batched and served nearly for free.
 
+## The Multi-Chunk Reality
+
+The experiment above shares a hidden flaw with TurboRAG's benchmarks: the document sits at position 0, immediately after a fixed system prompt — the _best case_ for prefix caching. A real RAG prompt holds k retrieved chunks ordered by relevance, and APC only reuses KV blocks whose **entire prefix from the prompt start** matches a previously processed prompt. A hot chunk sitting behind a different first chunk gets zero reuse. Zipf coverage of documents does not translate into cache hit rate.
+
+How bad is it? vLLM's block matching (16-token blocks, hash chain from prompt start) can be simulated exactly. With Zipf(s=1.0)-drawn chunk sets and steady-state cache, the fraction of prompt tokens served from cache:
+
+| Chunks per prompt | Relevance (random) order | Canonical order | Recovery |
+| ----------------- | -----------------------: | --------------: | -------: |
+| k = 1             |                    69.9% |           69.9% |       1× |
+| k = 3             |                    32.5% |           48.8% |     1.5× |
+| k = 5             |                    19.6% |           41.4% |     2.1× |
+| k = 10            |                     9.5% |           33.1% |     3.5× |
+
+At a realistic k=5, relevance ordering wastes ~70% of the single-doc cache benefit. The mitigation in the third column is nearly free: **order chunks canonically** (globally hot chunks first) instead of by relevance score, so prompts that share hot chunks share a prefix. It's a one-line change in prompt assembly that doubles cache reuse.
+
+I validated this on the GPU (same Qwen2.5-7B / A10G setup, k=5, 50 Zipf-drawn queries per condition, fresh engine per condition, TTFT taken from vLLM's own request metrics rather than wall-clocking the stream):
+
+| Condition (k=5) | Predicted cached tokens | Median TTFT | Median prefill |
+| --------------- | ----------------------: | ----------: | -------------: |
+| Relevance order |                    6.0% |      160 ms |         157 ms |
+| Canonical order |                   24.3% |      137 ms |         134 ms |
+
+(The predicted fractions are lower than the steady-state table because 50 queries include the cache-filling phase.) The measured ~23ms TTFT gap matches the predicted cached-fraction delta within noise — the simulation is a reliable planning tool, and it runs in seconds on a laptop at any corpus scale.
+
+One unmeasured cost: canonical ordering moves chunks away from their relevance positions, and models attend unevenly across the context ("lost in the middle"). Whether the reordering hurts answer quality is workload-dependent and needs its own eval before you ship this.
+
+## Longer Contexts: Where the TTFT Win Actually Lives
+
+The 2× TTFT speedup above came from ~330-token prompts — the smallest realistic case, where there's barely any prefill to skip. Rerunning cold-vs-warm on longer single-document contexts (64 output tokens):
+
+| Prompt tokens | TTFT cold | TTFT warm | TTFT speedup | Total speedup |
+| ------------- | --------: | --------: | -----------: | ------------: |
+| ~330          |    143 ms |     73 ms |         2.0× |          1.1× |
+| 1,680         |    409 ms |     51 ms |     **8.0×** |          1.1× |
+| 3,325         |    426 ms |     50 ms |     **8.5×** |          1.2× |
+
+Two things worth staring at. First, **warm TTFT is flat at ~50ms regardless of context length** — on a hit, you only prefill the question, so first-token latency becomes independent of how much context you stuffed in. The 2× from the earlier experiment wasn't the ceiling; it was the floor. TurboRAG's headline 8.6× TTFT reduction reproduces _without any fine-tuning_ once the context is long enough — standard vLLM APC gets there at ~3k tokens.
+
+Second, total latency still barely moves (1.1–1.2×), because 64 output tokens at ~28 tok/s costs ~2.2s no matter what. The breakeven is unchanged: prefix caching pays on total latency only when prefill time rivals generation time — very long contexts with short outputs. For streaming UX, though, "first token in 50ms instead of 430ms" is the difference between instant and laggy.
+
 ## What the Storage Numbers Tell You
 
-Going back to experiment 2a: the 431 GB for 1% of Wikipedia at int8 KV precision is the real limiter.
-
-For Llama-3.1-8B with 8 GQA key-value heads:
+KV state is bulky. For Llama-3.1-8B with 8 GQA key-value heads:
 
 ```
 KV bytes/token = 32 layers × 2 (K+V) × 8 heads × 128 dims × 2 bytes = 131,072 bytes
 ```
 
-A 392-token document stores 392 × 128KB ≈ 49MB of KV per document. For the top 1% of Wikipedia (67,000 articles), that's 3.3TB of KV at fp16, 1.6TB at int8, 820GB at int4.
+A 531-token document (Wikipedia average) stores ~68MB of KV at fp16, ~34MB at int8 — roughly **30,000× larger than the same document stored as compressed token IDs** (~1.3KB). That asymmetry is why tiering exists at all: token IDs for everyone, KV state only for documents that earn it.
 
-NVMe can hold this cost-effectively — it's the same order of magnitude as full model checkpoints. The question is whether loading 49MB of KV from NVMe into GPU memory on a cache hit is faster than running prefill. Modern NVMe sequential read bandwidth is ~7GB/s, so loading a document's KV takes ~7ms. Prefill takes ~50ms. Net win: ~43ms per cache hit, before you account for the overhead of managing the cache.
+But the corrected coverage math above changes what "the limiter" is. Under a concentrated workload (s ≈ 1.0), 42% coverage costs ~20GB — storage is a non-issue; one NVMe drive holds the hot tier of a corpus a thousand times larger. Under a flat workload (s ≈ 0.55, like actual Wikipedia browsing), no storage budget rescues you — caching 67,000 documents buys ~8% coverage. **Storage was never the limiter. The query distribution is.**
 
-For TTFT-sensitive streaming applications, 43ms matters. For total latency with 100+ output tokens, it's noise.
+The serving-path question remains: is loading ~34–68MB of KV from NVMe into GPU memory faster than recomputing prefill? NVMe sequential reads at ~7GB/s put the load at ~5–10ms against ~50ms of prefill for a short document — a real win on paper, but the full path (NVMe → host RAM → PCIe → GPU, plus dequantization for a quantized tier) is unmeasured here, and vanilla vLLM has no NVMe KV tier; you'd need LMCache or a custom KV connector. I'm flagging that as napkin math, not a result. Quantized-KV answer quality is also unevaluated — exact prefix caching is bit-identical reuse, but an int4 offline tier is not.
 
 ## What Actually Helps
 
@@ -127,53 +167,62 @@ The honest summary of where gains are real:
 - Token ID storage: 3× compression vs LZ4, zero inference cost, works everywhere
 - No model-specific state, no cache invalidation, no fine-tuning
 
-**KV caching (conditional):**
+**Prompt assembly (free, do it now):**
 
-- Meaningful for TTFT in streaming RAG (first-token latency, not total latency)
-- Standard vLLM APC gives **~2× TTFT speedup** for hot docs (confirmed at 75.8% hit rate)
+- Canonical chunk ordering (hot chunks first) roughly **doubles** prefix-cache reuse at k=5–10 vs relevance ordering — one line in prompt assembly
+- Validate the quality impact (position effects) on your own evals before shipping
+
+**KV caching (conditional on your query distribution):**
+
+- The win is TTFT for streaming, and it **scales with context length**: 2× at ~330-token prompts, **8.5× at ~3.3k tokens** — warm TTFT pins at ~50ms regardless of context size
 - No fine-tuning, no architectural changes — just `enable_prefix_caching=True`
-- Matters most for long documents where prefill time is a larger fraction of TTFT
+- Whether hot docs cover enough traffic to matter depends almost entirely on the Zipf exponent of _your_ workload — measure it before provisioning anything
 - TurboRAG-style offline precomputation only makes sense if you have a stable model, fixed corpus, and TTFT SLAs you can't meet otherwise
 
 **What doesn't help:**
 
-- KV caching for total latency when outputs are long (generation dominates)
-- Caching for cold or long-tail documents (most of the corpus)
+- KV caching for total latency when outputs are long (generation dominates at every context length I tested)
+- Hot-doc caching under flat query distributions (s ≈ 0.55, like Wikipedia browsing traffic — no cache size rescues 7.7% top-1000 coverage)
+- Relevance-ordered multi-chunk prompts: they silently throw away ~70% of the cache benefit single-doc benchmarks promise
 - Storing KV for all documents (28TB for Wikipedia — the TurboRAG paper's approach)
 
 ## Tiered Architecture (What I'd Actually Build)
 
-Given the data, the practical design:
+Given the data, the practical design — now explicitly conditioned on measuring your workload first:
 
 ```
-Layer 0 — Universal:
-  Store document as token IDs (uint16 for r50k, uint32 for cl100k)
-  + static ANS encoding → ~3× compression, self-contained, decodeable anywhere
+Layer 0 — Universal (any workload):
+  Store documents as token IDs + static ANS → ~3× compression,
+  self-contained, model-agnostic
+  Assemble prompts with canonical chunk ordering → ~2× cache reuse, free
 
-Layer 1 — Warm tier (top ~1% of docs, NVMe):
-  Quantized KV cache (int4, ~24MB/doc for 8B model)
-  Pre-computed, refreshed on model updates
-  Coverage: 42% of queries at ~820GB for Wikipedia
+Layer 1 — GPU-resident APC (concentrated workloads, s ≳ 1):
+  Just enable_prefix_caching=True and let vLLM keep hot prefixes in HBM.
+  Under s=1.0 at Wikipedia scale, ~571 docs cover 42% of queries —
+  at ~34MB int8 KV per doc that's ~20GB: NVMe-trivial, and the hottest
+  few dozen docs fit directly in spare HBM.
 
-Layer 2 — Hot tier (top ~0.1%, GPU SRAM or HBM):
-  Full-precision KV already resident in GPU memory
-  Coverage: 12% of queries with zero load latency
-  Fits ~20 documents at 49MB each in 1GB of reserved HBM
+Layer 2 — NVMe KV tier (only if Layer 1 evicts too much):
+  Quantized KV via LMCache or a custom connector.
+  Unvalidated here: load-path latency and int4 quality both need
+  measurement before you build this.
 ```
 
-On a cache hit from Layer 1: load KV from NVMe (~7ms), skip 50ms prefill → meaningful TTFT improvement.
-On a Layer 2 hit: already in GPU memory, TTFT ≈ just the question tokens.
-On a miss: normal prefill, decompress token IDs on the fly (< 1ms decode time from the compression post).
+On an APC hit: warm TTFT pins at ~50ms regardless of context length.
+On a miss: normal prefill, decompress token IDs on the fly (< 1ms from the compression post).
 
-The key difference from TurboRAG: no fine-tuning, standard attention, model-agnostic token storage at the base layer. You lose TurboRAG's 8.6× claim, but you get a system that works with any model today.
+The key differences from TurboRAG: no fine-tuning, standard attention, model-agnostic token storage at the base layer. And at ~3k-token contexts, standard APC already reproduces TurboRAG's 8.6× TTFT reduction — the fine-tuning bought nothing you can't get from `enable_prefix_caching=True` plus sensible prompt assembly.
+
+If your measured query distribution is flat (s ≲ 0.8), stop at Layer 0: the math says no KV tier will pay for itself.
 
 ## Key Takeaways
 
-- Under Zipf(s=1.0), **1% of documents covers 42.5% of RAG queries**. Hot docs are real.
-- Standard vLLM prefix caching gives **~2× TTFT speedup** (143ms → 73ms, confirmed with hit-rate logging), but only **1.1× total latency** improvement because generation dominates.
-- The win from prefix caching is **TTFT for streaming** — the first token arrives 2× faster. Total latency is nearly unchanged.
-- Storage break-even for int4 KV at 1% Wikipedia scale: ~820GB on NVMe. Feasible but not trivial.
-- The practical stack: **token ID storage everywhere** (3× compression, free) + **KV cache only for the top 1–10% hot docs** in TTFT-sensitive deployments.
+- Zipf coverage is `H(k,s)/H(N,s)` — it depends on corpus size _and_ exponent. An earlier version of this post mixed N=1,773 hit rates with N=6.7M storage costs; at consistent Wikipedia scale under s=1.0, **42% coverage needs only ~571 docs (~20GB int8 KV)**. Storage was never the limiter — the query distribution is.
+- The exponent is the whole game: 42% coverage costs **0.3GB at s=1.2, 20GB at s=1.0, 14TB at s=0.7**. Real Wikipedia pageviews fit **s ≈ 0.55** (top-1000 articles = 7.7% of views) — hot-doc caching is hopeless for browsing-like traffic and viable for concentrated workloads (support KBs, product docs). **Measure your own doc-hit distribution first.**
+- Single-doc cache benchmarks are the best case. At k=5 relevance-ordered chunks, only **~20%** of prompt tokens hit the prefix cache (vs ~70% single-doc). **Canonical chunk ordering** (hot chunks first) recovers ~2× of that for free — validated on GPU: 160ms → 137ms median TTFT, matching the simulated cached-fraction delta. Quality impact of reordering is unmeasured.
+- The TTFT win **scales with context length**: 2× at ~330-token prompts, **8.5× at 3.3k tokens** (426ms → 50ms). Warm TTFT is flat ~50ms regardless of context size. Standard APC reproduces TurboRAG's 8.6× headline at ~3k tokens with zero fine-tuning.
+- Total latency stays generation-bound at every tested length (1.1–1.2× with 64-token outputs). Prefix caching is a streaming-UX and GPU-throughput optimization, not a total-latency one.
+- The practical stack: **token ID storage everywhere** (3× compression, free) + **canonical prompt ordering** (free) + **vLLM APC for TTFT-sensitive streaming**. Build an NVMe KV tier only after measuring s and APC eviction on your traffic.
 - TurboRAG's 28TB / fine-tuning requirement makes it a research result, not a deployment recommendation.
 
 The full experiment code is [on GitHub](https://github.com/KShivendu/blog/tree/main/experiments/kv_cache).

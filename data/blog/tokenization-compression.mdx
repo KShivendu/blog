@@ -308,6 +308,8 @@ At 1B docs the storage gap is meaningful:
 
 Disk savings are the bigger line item (~$260/month on SSD at 1B docs), and the I/O win is proportional: 1.3 TB reads 3.4× faster than 4.5 TB, directly reducing query latency when payloads are fetched during retrieval. S3 egress compounds it — at $0.09/GB, shipping 3.2 TB fewer data saves ~$290 per bulk transfer.
 
+One honest scoping note: in many vector collections the dominant byte is the vector itself, not the payload — a 1536-dim float32 embedding is ~6 KB, often larger than the text chunk stored next to it. Payload compression matters most when payloads are large relative to vectors, when vectors are aggressively quantized, or in payload-heavy workloads (long documents, metadata-rich points, hybrid search over stored text).
+
 ## How This Compares to State of the Art
 
 For context, here's where this sits on the broader compression landscape (benchmarked on enwik9, 1GB Wikipedia):
@@ -326,6 +328,21 @@ The gap between r50k + static ANS (~3.3x) and the Hutter Prize record (~9x) is e
 
 Getting from 3x to 9x requires a language model. Getting from 1x to 3x just requires a tokenizer and 30 lines of Python.
 
+The table also hides a strategic point: **the token representation is the format commitment; the entropy coder is swappable behind it.** Stored payloads are token IDs either way — upgrading from marginal ANS to an order-1 (bigram) model, or eventually to a small LM doing arithmetic coding on cold tiers, is a drop-in codec change with no data migration. Byte codecs have no comparable ladder: zstd -22 is roughly where they top out.
+
+I measured the first rung of that ladder. A bigram model — P(token | previous token) with absolute-discounting backoff to the static unigram table, trained on the same WikiText-103 train split — gives:
+
+| Bigram table size       | bits/token | Mean doc ratio |
+| ----------------------- | ---------: | -------------: |
+| none (unigram baseline) |      10.78 |          3.43× |
+| 1.4 MB (175k pairs)     |       8.51 |      **4.35×** |
+| 14 MB (1.75M pairs)     |       7.76 |          4.77× |
+| 69 MB (all 8.6M pairs)  |       7.61 |      **4.86×** |
+
+These are analytic cross-entropy numbers (no coder in the loop), but they're calibrated: the unigram baseline computed the same way gives 3.43× where real ANS measured 3.35×, so the coder costs ~2%. Call it **~4.7× in practice** — a 40% improvement over the headline result, from a context model that's one token deep and fits in L2-cache territory at the 1.4MB budget. WikiText-103's 118M training tokens only contain 8.6M distinct token pairs, so even the _full_ table is 69 MB — shared across the whole deployment, not per collection. Getting meaningfully past ~5× is where you need a real language model.
+
+Tokenizer choice barely moves the bigram result: rerunning the same measurement with cl100k (100k vocab) and o200k (200k vocab) lands within 1% of r50k (4.86× and 4.89× full-table respectively). The sparsity penalty I expected from larger vocabularies doesn't materialize — so at the bigram rung you can pick the tokenizer for ecosystem alignment with your serving model rather than for compression.
+
 ## What Needs to Change
 
 Nothing in the current stack prevents this. The pieces exist:
@@ -341,6 +358,8 @@ What would need to change in a vector DB like Qdrant:
 3. Decompress transparently on read
 
 The index, vectors, and query pipeline stay identical. This is purely a payload storage optimization.
+
+It does add one real cost worth naming: the vocabulary file becomes part of the on-disk format forever — a stronger durability contract than a byte codec, so encodings need to be versioned per collection.
 
 <!-- DIAGRAM: side-by-side of current architecture vs proposed architecture showing payload storage layer -->
 
@@ -368,7 +387,7 @@ READ                             READ
 
 The entire round-trip is transparent to the user. Same API, ~3x smaller payloads.
 
-As [search and generation converge](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation), keeping UTF-8 blobs in your index while the model reasons in tokens means maintaining two representations of the same text. Token-native payload storage collapses that to one.
+As [search and generation converge](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation), keeping UTF-8 blobs in your index while the model reasons in tokens means maintaining two representations of the same text. Token-native payload storage collapses that to one. (The representation change has consequences well beyond compression — replication traffic, free data-quality filtering, zero-cost storage of LLM output — covered in [a follow-up post](/blog/token-native-storage).)
 
 ## Key Takeaways
 
@@ -380,6 +399,7 @@ As [search and generation converge](https://www.kshivendu.dev/blog/why-search#th
 - **Latency is not a concern:** the tokenizer dominates encode (~132µs); ANS with a pre-loaded static model adds only ~30µs. Decode is ~40µs total.
 - The gap between this (~3.3×) and the Hutter Prize record (~9×) is conditional token probability — modelling `P(token | context)` instead of just global marginals. Getting from 3× to 9× requires a language model; getting from 1× to 3× just requires a tokenizer and 30 lines of Python.
 - At English Wikipedia scale (7M docs), this takes payload storage from 31.5 GB to ~9.4 GB. The bigger win is I/O: 3.4× faster bulk reads, indexing, and replication.
+- Token-native storage **future-proofs the codec**: the format commitment is the token IDs; the entropy coder behind them can be upgraded in place. Measured: a bigram model with a **1.4 MB table reaches 4.35×**, and the full 69 MB table reaches **~4.7×** (coder overhead included) — a 40% improvement over static ANS, no data migration. Byte codecs have no comparable upgrade ladder.
 
 ## Acknowledgements
 
