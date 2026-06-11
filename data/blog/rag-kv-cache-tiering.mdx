@@ -61,45 +61,46 @@ The catch is the deployment story:
 
 The tiered alternative sounds more practical: use standard prefix caching (already in every LLM serving stack) for hot docs, fall back to normal prefill for cold docs, store only token IDs for everything (the 3× compression from the previous post). But does standard prefix caching actually work?
 
-## Experiment: Does vLLM Prefix Caching Help? (Spoiler: Barely)
+## Experiment: Does vLLM Prefix Caching Help?
 
-I ran this on Modal with an A10G (24GB), Qwen2.5-7B-Instruct, vLLM 0.6.6 with `enable_prefix_caching=True`. The setup:
+I ran this on Modal (A10G, 24GB), Qwen2.5-7B-Instruct, vLLM 0.6.6 with `enable_prefix_caching=True`. An earlier version of this experiment measured _total_ latency — which turned out to be the wrong metric. The revised version uses `AsyncLLMEngine` with token-level streaming to measure TTFT directly, tests two doc lengths, and verifies the cache is actually hitting via vLLM engine metrics.
 
-- **Hot doc**: one 202-word Wikipedia article, queried 6 times in a row
-- **Cold docs**: 20 different articles, each queried once
-- **Output**: 32 tokens per query (short answer)
-- **Prompt template**: `system_prompt + document + question`
+Setup:
 
-The idea: if prefix caching works, the `system_prompt + document` tokens should be cached after the first query, and subsequent queries over the same doc should only need to prefill the new `question` tokens (~10 tokens vs ~350 total).
+- **Hot doc**: one Wikipedia article (202 words short, 380 words long), queried 6 times in a row
+- **Cold docs**: 10 different articles, each queried once
+- **Output**: 32 tokens per query
+- **Prompt template**: fixed `system_prompt + document + question` (stable prefix for cache lookup)
 
 Results:
 
-| Condition                               | Avg latency  |
-| --------------------------------------- | ------------ |
-| First query (cold cache)                | 1,147 ms     |
-| Same doc, 2nd–6th query (warm cache)    | **1,090 ms** |
-| Different doc each time (cold baseline) | 1,127 ms     |
+| Doc size     | TTFT cold | TTFT warm (cache hit) | **TTFT speedup** | Total latency speedup |
+| ------------ | --------- | --------------------- | ---------------- | --------------------- |
+| Short (202w) | 143 ms    | 73 ms                 | **2.0×**         | 1.1×                  |
+| Long (380w)  | 165 ms    | 73 ms                 | **2.2×**         | 1.1×                  |
 
-**Speedup: 1.03×.** Essentially nothing.
+**vLLM confirmed the cache was working: 75.8% prefix cache hit rate** after the first query over the hot doc.
 
-The prefix cache IS working — the 57ms difference between cold-first and warm-steady is the prefill savings for ~300 tokens. But generation of 32 tokens at ~28 tok/s takes roughly 1,140ms regardless. Prefill savings disappear into the noise of autoregressive decoding.
+TTFT halves. Total latency barely moves.
 
-### Why the Math Works Against You
-
-The fundamental issue:
+### Why TTFT and Total Latency Diverge
 
 ```
 total_latency = prefill_time + n_output_tokens / decode_throughput
 
-prefill(300 tokens, A10G) ≈ 50ms
-decode(32 tokens, A10G)   ≈ 1,100ms
+prefill(300 tokens, A10G)  ≈ 70–100ms
+decode(32 tokens, A10G)    ≈ 1,060ms
 ```
 
-Prefix caching eliminates ~200 tokens of prefill (the document portion), saving maybe ~35ms. Against a 1,100ms decoding budget, that's 3%.
+On a cache hit, the document's ~250 tokens are already in the KV cache. Only the ~15-token question needs prefilling, so TTFT drops from ~150ms to ~73ms — a 2× speedup. But the model still has to generate 32 tokens autoregressively at ~28 tok/s, and that takes over a second regardless. The prefill savings are real but invisible in total latency.
 
-This is _not_ the same as TTFT (time to first token). If you're streaming tokens to a user and measuring when the first token appears, prefix caching _would_ give a meaningful speedup — you'd go from attending over 350 tokens down to ~50 (system + question only). The first token would appear ~7× faster. But for total response latency with typical RAG output lengths (50–200 tokens), the win evaporates.
+The breakeven: prefix caching improves _total_ latency meaningfully only when generation is short enough that prefill dominates. For typical RAG answer lengths (50–200 tokens), generation wins.
 
-The breakeven point: prefix caching improves total latency meaningfully only when `n_output_tokens / decode_throughput < prefill_time`. For 300-token documents on an A10G, that means fewer than ~4 output tokens. RAG isn't usually that terse.
+This means the value of prefix caching is entirely about the user experience of streaming: cutting TTFT from 150ms to 73ms is a noticeable improvement. For batch processing or non-streaming APIs, it's irrelevant.
+
+### Concurrent Requests: The Real Win
+
+Under concurrent load (8 simultaneous requests for the same hot doc), wall time stayed flat at ~1.2s — all 8 requests returned together in the time it would take to serve one cold request. TTFT per request was 87ms. For a system where 12% of queries hit the same single document, this means those requests can be batched and served nearly for free.
 
 ## What the Storage Numbers Tell You
 
@@ -129,8 +130,9 @@ The honest summary of where gains are real:
 **KV caching (conditional):**
 
 - Meaningful for TTFT in streaming RAG (first-token latency, not total latency)
-- Standard vLLM APC works for hot docs with no fine-tuning — just enable it
-- Matters more for long documents (1,000+ tokens) where prefill time is substantial
+- Standard vLLM APC gives **~2× TTFT speedup** for hot docs (confirmed at 75.8% hit rate)
+- No fine-tuning, no architectural changes — just `enable_prefix_caching=True`
+- Matters most for long documents where prefill time is a larger fraction of TTFT
 - TurboRAG-style offline precomputation only makes sense if you have a stable model, fixed corpus, and TTFT SLAs you can't meet otherwise
 
 **What doesn't help:**
@@ -168,8 +170,8 @@ The key difference from TurboRAG: no fine-tuning, standard attention, model-agno
 ## Key Takeaways
 
 - Under Zipf(s=1.0), **1% of documents covers 42.5% of RAG queries**. Hot docs are real.
-- Standard vLLM prefix caching gives **~1× total latency improvement** for short outputs because generation dominates.
-- The actual win from prefix caching is **TTFT for streaming**, not total latency — and it's meaningful there (~7× for 300-token docs).
+- Standard vLLM prefix caching gives **~2× TTFT speedup** (143ms → 73ms, confirmed with hit-rate logging), but only **1.1× total latency** improvement because generation dominates.
+- The win from prefix caching is **TTFT for streaming** — the first token arrives 2× faster. Total latency is nearly unchanged.
 - Storage break-even for int4 KV at 1% Wikipedia scale: ~820GB on NVMe. Feasible but not trivial.
 - The practical stack: **token ID storage everywhere** (3× compression, free) + **KV cache only for the top 1–10% hot docs** in TTFT-sensitive deployments.
 - TurboRAG's 28TB / fine-tuning requirement makes it a research result, not a deployment recommendation.
