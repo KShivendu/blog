@@ -88,28 +88,28 @@ def decompress(data):
 
 Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/wikitext) test articles (≥30 words). The ANS frequency table was trained on the WikiText-103 train split — a shared static model, no per-document overhead.
 
-| Method                     |       avg |       p50 |       p90 |       p99 |    CER |
-| -------------------------- | --------: | --------: | --------: | --------: | -----: |
-| LZ4 (default in Qdrant/ES) |     ~1.3x |           |           |           |     0% |
-| gzip -9                    |     1.66x |     1.66x |     1.91x |     2.09x |     0% |
-| zstd -22                   |     1.68x |     1.68x |     1.92x |     2.10x |     0% |
-| brotli q=11                |     2.24x |     2.26x |     2.59x |     2.87x |     0% |
-| r50k BPE uint16 (raw)      |     2.33x |     2.33x |     2.60x |     2.85x |     0% |
-| zstd dict 112KB (WikiText) |     2.58x |     2.61x |     2.92x |     3.20x |     0% |
-| **r50k BPE + static ANS**  | **3.35x** | **3.37x** | **3.72x** | **4.01x** | **0%** |
+| Method                     |       min |    median |       max |    CER |
+| -------------------------- | --------: | --------: | --------: | -----: |
+| LZ4 (default in Qdrant/ES) |     ~1.0x |     ~1.3x |     ~1.5x |     0% |
+| gzip -9                    |     0.99x |     1.66x |     2.34x |     0% |
+| zstd -22                   |     1.11x |     1.68x |     2.39x |     0% |
+| brotli q=11                |     1.22x |     2.26x |     3.13x |     0% |
+| r50k BPE uint16 (raw)      |     1.04x |     2.33x |     3.34x |     0% |
+| zstd dict 112KB (WikiText) |     1.51x |     2.61x |     3.63x |     0% |
+| **r50k BPE + static ANS**  | **1.68x** | **3.37x** | **4.30x** | **0%** |
 
 **CER is character error rate** after a full round trip. 0% means lossless.
 
 Two things stand out. Raw uint16 token IDs — no compression algorithm at all — already beat every byte codec except brotli. And r50k + static ANS beats everything by a wide margin, including at p99.
 
-The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`), since it also learns from the corpus. It reaches 2.58x avg, still 30% behind. The difference is that the token model operates on units of language: `" embeddings"` is one symbol with a known global frequency, where a byte-level model has to rediscover that pattern from scratch.
+The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`), since it also learns from the corpus. It reaches 2.61x median, still 30% behind. The difference is that the token model operates on units of language: `" embeddings"` is one symbol with a known global frequency, where a byte-level model has to rediscover that pattern from scratch.
 
 <PlotlyChart
   data={[
     {
       type: 'bar',
       orientation: 'h',
-      x: [1.0, 1.3, 1.66, 1.68, 2.24, 2.33, 2.58, 3.35],
+      x: [1.0, 1.3, 1.66, 1.68, 2.26, 2.33, 2.61, 3.37],
       y: [
         'Raw UTF-8',
         'LZ4 — Qdrant/ES default',
@@ -132,12 +132,12 @@ The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`)
           '#10b981',
         ],
       },
-      text: ['1.0×', '1.3×', '1.66×', '1.68×', '2.24×', '2.33×', '2.58×', '3.35×'],
+      text: ['1.0×', '1.3×', '1.66×', '1.68×', '2.26×', '2.33×', '2.61×', '3.37×'],
       textposition: 'outside',
     },
   ]}
   layout={{
-    title: { text: 'Avg compression ratio — 1,773 WikiText-103 articles', font: { size: 14 } },
+    title: { text: 'Median compression ratio — 1,773 WikiText-103 articles', font: { size: 14 } },
     xaxis: { title: 'compression ratio (higher is better)', range: [0, 4.2] },
     yaxis: { autorange: 'reversed' },
     height: 380,
