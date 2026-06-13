@@ -88,17 +88,17 @@ def decompress(data):
 
 Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/wikitext) test articles (≥30 words). The ANS frequency table was trained on the WikiText-103 train split — a shared static model, no per-document overhead.
 
-| Method                     |       min |    median |       max |    CER |
-| -------------------------- | --------: | --------: | --------: | -----: |
-| LZ4 (default in Qdrant/ES) |     ~1.0x |     ~1.3x |     ~1.5x |     0% |
-| gzip -9                    |     0.99x |     1.66x |     2.34x |     0% |
-| zstd -22                   |     1.11x |     1.68x |     2.39x |     0% |
-| brotli q=11                |     1.22x |     2.26x |     3.13x |     0% |
-| r50k BPE uint16 (raw)      |     1.04x |     2.33x |     3.34x |     0% |
-| zstd dict 112KB (WikiText) |     1.51x |     2.61x |     3.63x |     0% |
-| **r50k BPE + static ANS**  | **1.68x** | **3.37x** | **4.30x** | **0%** |
+| Method                     |       min |    median |       max |
+| -------------------------- | --------: | --------: | --------: |
+| LZ4 (default in Qdrant/ES) |     ~1.0x |     ~1.3x |     ~1.5x |
+| gzip -9                    |     0.99x |     1.66x |     2.34x |
+| zstd -22                   |     1.11x |     1.68x |     2.39x |
+| brotli q=11                |     1.22x |     2.26x |     3.13x |
+| r50k BPE uint16 (raw)      |     1.04x |     2.33x |     3.34x |
+| zstd dict 112KB (WikiText) |     1.51x |     2.61x |     3.63x |
+| **r50k BPE + static ANS**  | **1.68x** | **3.37x** | **4.30x** |
 
-**CER is character error rate** after a full round trip. 0% means lossless.
+All methods are lossless — 0% character error rate on full round trip.
 
 Two things stand out. Raw uint16 token IDs — no compression algorithm at all — already beat every byte codec except brotli. And r50k + static ANS beats everything by a wide margin, including at p99.
 
@@ -275,9 +275,14 @@ Document length doesn't change the story — the ~2× gap over gzip holds across
 <details>
 <summary>Side quest: mxbai's WordPiece tokenizer compresses slightly better but lowercases your text. Expand if curious.</summary>
 
-The mixedbread embedding model (`mxbai-embed-large-v1`) uses BERT's WordPiece tokenizer with a 30,522-token vocabulary. Smaller vocabulary means more common tokens, lower entropy, slightly better compression: ~630 bytes vs r50k's 648 on the reference document.
+The mixedbread embedding model (`mxbai-embed-large-v1`) uses BERT's WordPiece tokenizer with a 30,522-token vocabulary. Smaller vocabulary means more common tokens, lower entropy, slightly better compression. On a 270-word technical RAG document:
 
-The catch is the 20.1% character error rate. All of it comes from two deterministic quirks of BERT tokenization: lowercasing (`"Qdrant"` → `"qdrant"`) and punctuation spacing (`"(content)"` → `"( content )"`). No information is destroyed; it's just re-spaced. Three regex rules recover the punctuation exactly:
+| Method                       |   Size | Ratio |
+| ---------------------------- | -----: | ----: |
+| r50k BPE + static ANS        |  648 B |  2.9x |
+| mxbai WordPiece + static ANS | ~630 B |   ~3x |
+
+The catch is a 20.1% **character error rate (CER)** after round-trip — meaning the decompressed text doesn't exactly match the original. All of it comes from two deterministic quirks of BERT tokenization: lowercasing (`"Qdrant"` → `"qdrant"`) and punctuation spacing (`"(content)"` → `"( content )"`). No semantic information is destroyed; it's cosmetic. Three regex rules recover the punctuation exactly:
 
 ```python
 def fix_punct(s):
