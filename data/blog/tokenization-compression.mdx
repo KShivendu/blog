@@ -4,7 +4,7 @@ date: '2026-05-12'
 lastmod: '2026-06-11'
 tags: ['compression', 'vector-databases', 'internals', 'nlp']
 draft: false
-summary: 'Vector databases compress text payloads with LZ4 or gzip at best. Tokenize the text first and entropy-code the token IDs, and you get ~3x lossless compression, twice what gzip manages, using pieces every ML stack already ships.'
+summary: 'Vector databases compress text payloads with LZ4 by default. Tokenize the text first and entropy-code the token IDs, and you get ~3x lossless compression, 2.6x what LZ4 manages, using pieces every ML stack already ships.'
 images: ['/static/images/blogs/tokenization-compression.jpg']
 authors: ['default']
 ---
@@ -346,7 +346,7 @@ There's also a bigger-picture reason to like token-native storage as [search and
 
 ## Key Takeaways
 
-- Vector databases apply LZ4 to text payloads (1.3x). Tokenizing first and entropy-coding the token IDs gives 3.35x on average. Lossless, about 2x better than gzip.
+- Vector databases apply LZ4 to text payloads (1.3x). Tokenizing first and entropy-coding the token IDs gives 3.35x on average. Lossless, 2.6x better than LZ4.
 - Raw uint16 token IDs alone reach 2.4x, beating every byte codec except brotli, with no compression algorithm at all.
 - The frequency table must be static and shared. Per-document tables cost ~900 bytes each and erase the gain.
 - Latency is a non-issue: ANS adds ~30µs to encoding (the tokenizer you may already run dominates), and decode is ~41µs.
