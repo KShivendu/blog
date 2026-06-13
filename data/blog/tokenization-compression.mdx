@@ -91,17 +91,17 @@ def decompress(data):
 
 Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/wikitext) test articles (≥30 words). The ANS frequency table was trained on the WikiText-103 train split — a shared static model, no per-document overhead.
 
-| Method                     |       min |    median |       max |
-| -------------------------- | --------: | --------: | --------: |
-| LZ4 (default in Qdrant/ES) |     ~1.0x |     ~1.3x |     ~1.5x |
-| gzip -9                    |     0.99x |     1.66x |     2.34x |
-| zstd -22                   |     1.11x |     1.68x |     2.39x |
-| brotli q=11                |     1.22x |     2.26x |     3.13x |
-| r50k BPE uint16 (raw)      |     1.04x |     2.33x |     3.34x |
-| cl100k BPE uint32 (raw)    |     0.45x |     1.13x |     1.62x |
-| zstd dict 112KB (WikiText) |     1.51x |     2.61x |     3.63x |
-| **r50k BPE + static ANS**  | **1.68x** | **3.37x** | **4.30x** |
-| cl100k BPE + static ANS    |     1.68x |     3.30x |     4.14x |
+| Method                      |       min |    median |       max |
+| --------------------------- | --------: | --------: | --------: |
+| LZ4 (default in Qdrant/ES)  |     ~1.0x |     ~1.3x |     ~1.5x |
+| gzip -9                     |     0.99x |     1.66x |     2.34x |
+| zstd -22                    |     1.11x |     1.68x |     2.39x |
+| brotli q=11                 |     1.22x |     2.26x |     3.13x |
+| r50k BPE uint16 (raw)       |     1.04x |     2.33x |     3.34x |
+| cl100k BPE uint32 (raw)     |     0.45x |     1.13x |     1.62x |
+| zstd dict 112KB (WikiText)  |     1.51x |     2.61x |     3.63x |
+| **r50k BPE + static ANS**   | **1.68x** | **3.37x** | **4.30x** |
+| **cl100k BPE + static ANS** | **1.68x** | **3.30x** | **4.14x** |
 
 All methods above are lossless — 0% character error rate on full round trip.
 
@@ -283,7 +283,14 @@ English Wikipedia is ~7M articles averaging 708 words. Applying the corpus-avera
 | zstd -22              |     2,382 bytes |    16.7 GB |      1.9x |
 | **r50k + static ANS** | **1,342 bytes** | **9.4 GB** | **3.35x** |
 
-At a billion documents that's 1.3 TB instead of 4.5 TB: roughly $260/month less on SSD, and every snapshot, replica, and bulk transfer shrinks by the same factor. The I/O win is often worth more than the storage bill, since 3.35x fewer bytes means 3.35x faster bulk reads, indexing, and replication.
+At a billion documents that's 1.3 TB instead of 4.5 TB. At $0.08/GB for SSD and $0.02/GB for S3-class object storage:
+
+| Storage tier   | Raw UTF-8 | r50k + ANS |   Saved |
+| -------------- | --------: | ---------: | ------: |
+| SSD ($0.08/GB) |   $360/mo |    $107/mo | $253/mo |
+| S3 ($0.02/GB)  |    $90/mo |     $27/mo |  $63/mo |
+
+Every snapshot, replica, and bulk transfer shrinks by the same 3.35× factor. The I/O win is often worth more than the storage bill — 3.35x fewer bytes means 3.35x faster bulk reads, indexing, and replication.
 
 One scoping note so the claim doesn't overreach: in collections with large embeddings, the vectors dominate total bytes (a 1536-dim float32 vector is ~6 KB, often bigger than the text next to it). Payload compression matters most when payloads are large, vectors are quantized, or text is the point of the collection.
 
