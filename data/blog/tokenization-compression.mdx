@@ -13,13 +13,13 @@ authors: ['default']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Every vector database stores two things for each point: the vector and the payload. Vectors get all the attention: quantization, compression, careful index design. The text in the payload gets LZ4 at best.
+Every vector search engine (aka vector DB) stores two things for each point: the vector and the payload. Vectors get all the attention: quantization, compression, careful index design. The text in the payload gets LZ4 at best.
 
 This post makes one claim: **tokenize that text before compressing it, and you roughly double what generic byte codecs achieve**. I'll show the benchmark, the latency cost (small), and what it would take to add this to a real database.
 
 ## The Forgotten Layer
 
-When you insert a document into Qdrant, Weaviate, or Elasticsearch, you typically store something like:
+When you insert a document into Qdrant, or Elasticsearch, you typically store something like:
 
 ```json
 {
@@ -33,13 +33,13 @@ When you insert a document into Qdrant, Weaviate, or Elasticsearch, you typicall
 
 Qdrant stores on-disk payloads in [Gridstore](https://qdrant.tech/articles/gridstore-key-value-storage/) (its custom KV engine, replacing RocksDB since v1.13) with LZ4 compression on by default. Elasticsearch applies LZ4 to stored fields too. Generic byte compression, which on text means roughly 1.3-2x. Neither knows anything about the structure of natural language.
 
-But there is a component that knows a lot about the structure of natural language, and it's already installed in every ML stack: the tokenizer.
+But there is a component that knows a lot about the structure of natural language, and it's already part of every embedding and language model: the tokenizer.
 
 ## How It Works
 
 <TokenCompressionPipeline />
 
-The top path is what databases do today: store UTF-8 bytes, compress with a generic codec. The bottom path is the proposal: tokenize first, then entropy-code the token IDs.
+The top path is what databases do today: store UTF-8 bytes, compress with a generic codec. The bottom path is my proposal: tokenize first, then entropy-code the token IDs.
 
 **Step 1: BPE tokenization.** BPE merges frequent byte sequences into single tokens. " language" is one token. "Retrieval" is three (`Ret + ri + eval`). On average one BPE token covers [3/4 of a word](https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them). An average English word is ~5 characters plus a space, so:
 
@@ -53,7 +53,7 @@ Just packing token IDs into uint16 already compresses, before any actual compres
 
 **Step 2: ANS entropy coding.** gzip and LZ4 see opaque bytes; they can't know that `[0x01, 0x7F]` is token 383. An entropy coder working directly on token IDs can give frequent tokens short codes: `" the"` is 40x more common than `"embeddings"`, so it gets a much shorter code. I used ANS (Asymmetric Numeral Systems, the entropy coder inside zstd) via the [constriction](https://github.com/bamler-lab/constriction) library.
 
-One design choice matters here: the frequency table is **trained once on a large corpus and shared**, not built per document. A per-document table compresses better on paper, but the decoder needs the table to reconstruct the document, so you'd have to store it alongside each payload. That's ~900 bytes for a typical 400-token chunk, which erases the entire gain. A shared static table costs nothing per document.
+One design choice matters here: the frequency table is **trained once on a large corpus and shared**, not built per document. A per-document table compresses better on paper, but the decoder needs the table to reconstruct the document, so you'd have to store it alongside each payload. That's ~900 bytes for a typical 400-token chunk, which erases the entire gain. A shared static table costs nothing per document. It's completely possible to learn this static table on a general corpus and reuse it everywhere.
 
 The whole thing is ~30 lines:
 
@@ -103,7 +103,7 @@ A ~270-word paragraph of technical RAG content (1,853 bytes), compressed every w
 
 \*mxbai's CER drops to 0% after simple post-processing, see the collapsed section below.
 
-CER is character error rate after a full round trip. 0% means lossless: r50k tokenization reconstructs the input byte-for-byte.
+**CER is character error rate** after a full round trip. 0% means lossless: r50k tokenization reconstructs the input byte-for-byte.
 
 Two things stand out. Raw uint16 token IDs, with no compression algorithm at all, already beat every byte codec except brotli. And tokenization + ANS beats everything, on a single small document, where byte codecs are weakest.
 
@@ -117,7 +117,7 @@ The single-document numbers hold up across a corpus. Averaged over 1,773 WikiTex
 | zstd dict 112KB (WikiText) |     2.58x |
 | **r50k + static ANS**      | **3.35x** |
 
-The fairest competitor is zstd with a corpus-trained dictionary, since it also gets to learn from the corpus. It reaches 2.58x, still 30% behind. The difference is that the token model operates on units of language: `" embeddings"` is one symbol with a known global frequency, where a byte-level model has to rediscover that pattern from scratch.
+The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`), since it also gets to learn from the corpus. It reaches 2.58x, still 30% behind. The difference is that the token model operates on units of language: `" embeddings"` is one symbol with a known global frequency, where a byte-level model has to rediscover that pattern from scratch.
 
 <PlotlyChart
   data={[
@@ -165,14 +165,14 @@ The fairest competitor is zstd with a corpus-trained dictionary, since it also g
 
 ### What does it cost in latency?
 
-Full pipeline, 2,000 runs on the same document:
+Measured across 200 WikiText-103 articles (50–500 words), one pass each, with the static corpus ANS model:
 
 | Pipeline                       |   Median |   p99 |
 | ------------------------------ | -------: | ----: |
-| r50k encode (tokenize + ANS)   |    156µs | 287µs |
-| r50k decode (ANS + detokenize) | **41µs** |  53µs |
+| r50k encode (tokenize + ANS)   |    110µs | 280µs |
+| r50k decode (ANS + detokenize) | **40µs** |  94µs |
 
-The tokenizer dominates the encode side: 132µs of the 156µs is tiktoken. ANS itself adds ~30µs. If your ingest pipeline already tokenizes (for the embedding model, for token counting), compression is nearly free. Decoding takes 41µs total, which is noise next to a disk read or a network hop.
+The tokenizer dominates the encode side. ANS itself adds ~30µs. If your ingest pipeline already tokenizes (for the embedding model, for token counting), compression is nearly free. Decoding takes 40µs total, which is noise next to a disk read or a network hop.
 
 Document length doesn't change the story — the ~2× gap over gzip holds across all lengths tested:
 
