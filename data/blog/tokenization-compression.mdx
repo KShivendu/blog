@@ -247,7 +247,15 @@ One scoping note so the claim doesn't overreach: in collections with large embed
 
 ## How Far Can This Go?
 
-The static frequency table only knows how often each token appears globally. The next step up is a bigram table — `P(token | previous token)` — which costs 1.4 MB and gets you to about 4.35x. A full bigram table (69 MB) reaches ~4.7x. Past that is LM territory.
+The static frequency table only knows how often each token appears globally. The next step up is a bigram table — `P(token | previous token)` — which costs 1.4 MB and gets you to about 4.35x. A full bigram table (69 MB) reaches ~4.7x.
+
+Past that is LM territory. Chinchilla 70B achieves 0.664 bits/byte on Wikipedia — roughly 12× compression — because a language model is literally computing `P(token | all previous tokens)`, which is the optimal entropy coder by definition. The gap between 3.3× and 12× is entirely conditional probability.
+
+| Method                           | Ratio     | Practical?            |
+| -------------------------------- | --------- | --------------------- |
+| **BPE + static ANS (this post)** | **~3.3×** | **Yes**               |
+| BPE + bigram table               | ~4.5×     | Yes (1.4 MB overhead) |
+| Chinchilla 70B                   | ~12×      | No                    |
 
 And because the stored format is just token IDs, swapping the unigram table for a bigram table later is a codec upgrade, not a data migration.
 
