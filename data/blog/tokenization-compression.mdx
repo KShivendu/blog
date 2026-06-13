@@ -55,7 +55,8 @@ Just packing token IDs into uint16 already compresses, before any actual compres
 
 One design choice matters here: the frequency table is **trained once on a large corpus and shared**, not built per document. A per-document table compresses better on paper, but the decoder needs the table to reconstruct the document, so you'd have to store it alongside each payload. That's ~900 bytes for a typical 400-token chunk, which erases the entire gain. A shared static table costs nothing per document. It's completely possible to learn this static table on a general corpus and reuse it everywhere.
 
-The whole thing is ~30 lines:
+<details>
+<summary>The whole thing is ~30 lines of Python. Expand to see.</summary>
 
 ```python
 import constriction, numpy as np, tiktoken
@@ -83,6 +84,8 @@ def decompress(data):
     ids = constriction.stream.stack.AnsCoder(buf).decode(model, n).tolist()
     return enc.decode(ids)
 ```
+
+</details>
 
 ## The Benchmark
 
