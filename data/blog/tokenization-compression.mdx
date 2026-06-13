@@ -31,7 +31,7 @@ When you insert a document into Qdrant, or Elasticsearch, you typically store so
 }
 ```
 
-Qdrant stores on-disk payloads in [Gridstore](https://qdrant.tech/articles/gridstore-key-value-storage/) (its custom KV engine, replacing RocksDB since v1.13) with LZ4 compression on by default. Elasticsearch applies LZ4 to stored fields too. Generic byte compression, which on text means roughly 1.3-2x. Neither knows anything about the structure of natural language.
+Qdrant stores on-disk payloads in [Gridstore](https://qdrant.tech/articles/gridstore-key-value-storage/) (its custom KV engine, replacing RocksDB since v1.13) with LZ4 compression on by default. Elasticsearch packs stored fields into 16 KB blocks and compresses each block with LZ4, so a handful of documents share a compression window. Either way, the codec sees at most a few documents at a time and has no learned model of the language — just whatever byte patterns happen to repeat within the block. That gets you roughly 1.3–2x on text.
 
 But there is a component that knows a lot about the structure of natural language, and it's already part of every embedding and language model: **the tokenizer**.
 
