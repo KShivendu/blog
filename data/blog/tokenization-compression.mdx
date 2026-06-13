@@ -119,6 +119,50 @@ The single-document numbers hold up across a corpus. Averaged over 1,773 WikiTex
 
 The fairest competitor is zstd with a corpus-trained dictionary, since it also gets to learn from the corpus. It reaches 2.58x, still 30% behind. The difference is that the token model operates on units of language: `" embeddings"` is one symbol with a known global frequency, where a byte-level model has to rediscover that pattern from scratch.
 
+<PlotlyChart
+  data={[
+    {
+      type: 'bar',
+      orientation: 'h',
+      x: [1.0, 1.3, 1.9, 1.9, 2.4, 2.5, 2.6, 2.6, 2.9],
+      y: [
+        'Raw UTF-8 (1,853 B)',
+        'LZ4 — Qdrant/ES default (1,468 B)',
+        'gzip -9 (984 B)',
+        'zstd -22 (981 B)',
+        'r50k uint16 raw (784 B)',
+        'zstd dict 112KB (747 B)',
+        'r50k + zstd (709 B)',
+        'brotli q=11 (711 B)',
+        'r50k + static ANS (648 B)',
+      ],
+      marker: {
+        color: [
+          '#94a3b8',
+          '#ef4444',
+          '#94a3b8',
+          '#94a3b8',
+          '#60a5fa',
+          '#f59e0b',
+          '#60a5fa',
+          '#f59e0b',
+          '#10b981',
+        ],
+      },
+      text: ['1.0×', '1.3×', '1.9×', '1.9×', '2.4×', '2.5×', '2.6×', '2.6×', '2.9×'],
+      textposition: 'outside',
+    },
+  ]}
+  layout={{
+    title: { text: 'Compression ratio by method (1,853-byte doc)', font: { size: 14 } },
+    xaxis: { title: 'compression ratio (higher is better)', range: [0, 4.0] },
+    yaxis: { autorange: 'reversed' },
+    height: 380,
+    margin: { t: 48, r: 80, b: 48, l: 240 },
+    showlegend: false,
+  }}
+/>
+
 ### What does it cost in latency?
 
 Full pipeline, 2,000 runs on the same document:
