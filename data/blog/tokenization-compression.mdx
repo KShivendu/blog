@@ -41,7 +41,9 @@ But there is a component that knows a lot about the structure of natural languag
 
 The top path is what databases do today: store UTF-8 bytes, compress with a generic codec. The bottom path is my proposal: tokenize first, then entropy-code the token IDs.
 
-**Step 1: BPE tokenization.** BPE merges frequent byte sequences into single tokens. " language" is one token. "Retrieval" is three (`Ret + ri + eval`). On average one BPE token covers [3/4 of a word](https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them). An average English word is ~5 characters plus a space, so:
+**Step 1: BPE tokenization.** BPE (Byte Pair Encoding) starts with raw bytes and repeatedly merges the most frequent adjacent pair into a new token, building up a vocabulary of common subwords. OpenAI ships two BPE tokenizers: **r50k** (used by GPT-2/GPT-3, 50,257 tokens) and **cl100k** (used by GPT-3.5/GPT-4, 100,277 tokens). cl100k has a larger vocabulary so it learns longer merges — it produces fewer tokens per document but each token ID needs 4 bytes (uint32) since the vocab exceeds the uint16 limit of 65,535. r50k fits in 2 bytes (uint16).
+
+BPE merges frequent byte sequences into single tokens. `" language"` is one token. `"Retrieval"` is three (`Ret + ri + eval`). On average one BPE token covers [3/4 of a word](https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them). An average English word is ~5 characters plus a space, so:
 
 ```
 6 bytes/word × 3/4 words/token = 4.5 bytes/token (raw text)
