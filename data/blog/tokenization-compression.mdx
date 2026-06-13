@@ -255,7 +255,9 @@ Measured across 200 WikiText-103 articles (50–500 words), static corpus ANS mo
 | r50k + ANS   |       54µs |   129µs |       18µs |    44µs |
 | cl100k + ANS |       55µs |   156µs |       18µs |    51µs |
 
-LZ4 decompresses in 1µs — it's designed entirely for speed. zstd dict has the slowest encoder (129µs) because it searches a 112KB dictionary per compress, but decompresses in 2µs. The tokenizer methods sit comfortably in the middle: ~54µs encode (dominated by the tokenizer, not ANS), ~18µs decode. If your ingest pipeline already tokenizes for embeddings, the compression encode is nearly free.
+LZ4 decompresses in 1µs — it's designed entirely for speed. zstd dict has the slowest encoder (129µs) because it searches a 112KB dictionary per compress, but decompresses in 2µs. The tokenizer methods sit comfortably in the middle: ~54µs encode (dominated by the tokenizer, not ANS), ~18µs decode.
+
+Note that today's embedding models use different tokenizers (WordPiece, SentencePiece) than LLM BPE tokenizers, so you can't skip the tokenization step by reusing embedding tokenization. The real benefit runs the other way: if you store token IDs in LLM format (r50k/cl100k), you avoid re-tokenizing retrieved documents at inference time when feeding them to the LLM — the token IDs are already there.
 
 Document length doesn't change the story — the ~2× gap over gzip holds across all lengths tested:
 
