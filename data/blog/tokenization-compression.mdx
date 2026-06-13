@@ -119,50 +119,6 @@ The single-document numbers hold up across a corpus. Averaged over 1,773 WikiTex
 
 The fairest competitor is zstd with a corpus-trained dictionary, since it also gets to learn from the corpus. It reaches 2.58x, still 30% behind. The difference is that the token model operates on units of language: `" embeddings"` is one symbol with a known global frequency, where a byte-level model has to rediscover that pattern from scratch.
 
-<PlotlyChart
-  data={[
-    {
-      type: 'bar',
-      orientation: 'h',
-      x: [1.0, 1.3, 1.9, 1.9, 2.4, 2.5, 2.6, 2.6, 2.9],
-      y: [
-        'Raw UTF-8 (1,853 B)',
-        'LZ4 — Qdrant/ES default (1,468 B)',
-        'gzip -9 (984 B)',
-        'zstd -22 (981 B)',
-        'r50k uint16 raw (784 B)',
-        'zstd dict 112KB (747 B)',
-        'r50k + zstd (709 B)',
-        'brotli q=11 (711 B)',
-        'r50k + static ANS (648 B)',
-      ],
-      marker: {
-        color: [
-          '#94a3b8',
-          '#ef4444',
-          '#94a3b8',
-          '#94a3b8',
-          '#60a5fa',
-          '#f59e0b',
-          '#60a5fa',
-          '#f59e0b',
-          '#10b981',
-        ],
-      },
-      text: ['1.0×', '1.3×', '1.9×', '1.9×', '2.4×', '2.5×', '2.6×', '2.6×', '2.9×'],
-      textposition: 'outside',
-    },
-  ]}
-  layout={{
-    title: { text: 'Compression ratio by method (1,853-byte doc)', font: { size: 14 } },
-    xaxis: { title: 'compression ratio (higher is better)', range: [0, 4.0] },
-    yaxis: { autorange: 'reversed' },
-    height: 380,
-    margin: { t: 48, r: 80, b: 48, l: 240 },
-    showlegend: false,
-  }}
-/>
-
 ### What does it cost in latency?
 
 Full pipeline, 2,000 runs on the same document:
@@ -174,53 +130,7 @@ Full pipeline, 2,000 runs on the same document:
 
 The tokenizer dominates the encode side: 132µs of the 156µs is tiktoken. ANS itself adds ~30µs. If your ingest pipeline already tokenizes (for the embedding model, for token counting), compression is nearly free. Decoding takes 41µs total, which is noise next to a disk read or a network hop.
 
-### Does document length change the picture?
-
-No. Longer documents compress a bit better under every method, and the gap stays put: token + ANS is about 2x better than gzip at every length I tested.
-
-<PlotlyChart
-  data={[
-    {
-      name: 'gzip -9',
-      x: [37, 100, 150, 212, 300, 475],
-      y: [1.39, 1.62, 1.75, 1.85, 1.93, 2.01],
-      mode: 'lines+markers',
-      line: { color: '#94a3b8', dash: 'dash' },
-      marker: { size: 6, color: '#94a3b8' },
-    },
-    {
-      name: 'zstd -22',
-      x: [37, 100, 150, 212, 300, 475],
-      y: [1.46, 1.63, 1.76, 1.86, 1.93, 2.03],
-      mode: 'lines+markers',
-      line: { color: '#64748b', dash: 'dash' },
-      marker: { size: 6, color: '#64748b' },
-    },
-    {
-      name: 'r50k + static ANS',
-      x: [37, 100, 150, 212, 300, 475],
-      y: [3.22, 3.36, 3.39, 3.41, 3.4, 3.51],
-      mode: 'lines+markers',
-      line: { color: '#10b981' },
-      marker: { size: 7, color: '#10b981' },
-    },
-    {
-      name: 'cl100k + static ANS',
-      x: [37, 100, 150, 212, 300, 475],
-      y: [3.17, 3.3, 3.33, 3.35, 3.34, 3.44],
-      mode: 'lines+markers',
-      line: { color: '#6366f1' },
-      marker: { size: 7, color: '#6366f1' },
-    },
-  ]}
-  layout={{
-    xaxis: { title: 'document length (words)', tickvals: [37, 100, 150, 212, 300, 475] },
-    yaxis: { title: 'compression ratio', range: [1.0, 4.5] },
-    height: 360,
-    margin: { t: 16, r: 32, b: 64, l: 64 },
-    legend: { orientation: 'h', y: -0.22 },
-  }}
-/>
+Document length doesn't change the story. Longer documents compress slightly better under every method, and the ~2× gap over gzip holds across all lengths tested (37–475 words).
 
 <details>
 <summary>Side quest: mxbai's WordPiece tokenizer compresses slightly better but lowercases your text. Expand if curious.</summary>
@@ -257,28 +167,7 @@ One scoping note so the claim doesn't overreach: in collections with large embed
 
 ## How Far Can This Go?
 
-For context, the broader compression landscape (enwik9, 1GB of Wikipedia):
-
-| Method                                   | bits/byte | Ratio vs raw | Practical?     |
-| ---------------------------------------- | --------: | -----------: | -------------- |
-| gzip -9                                  |      ~2.6 |         3.1x | Yes            |
-| zstd -22                                 |      ~2.0 |           4x | Yes            |
-| **BPE + static ANS (this post)**         |  **~2.4** |    **~3.3x** | **Yes**        |
-| zpaq                                     |      ~1.4 |         5.7x | Slow           |
-| fx2-cmix (Hutter Prize record, Oct 2024) |     0.887 |           9x | Extremely slow |
-| Chinchilla 70B (DeepMind, 2024)          |     0.664 |          12x | Not practical  |
-
-Everything between 3x and 9x is conditional probability: the static table only knows how often each token appears globally, while the top compressors model `P(token | everything before it)`, which is what language models do.
-
-You don't need a language model for the first step up that ladder, though. A bigram table, `P(token | previous token)`, trained on the same corpus:
-
-| Bigram table size       | Mean doc ratio |
-| ----------------------- | -------------: |
-| none (unigram baseline) |          3.43x |
-| 1.4 MB                  |          4.35x |
-| 69 MB (every pair seen) |          4.86x |
-
-These are analytic cross-entropy numbers rather than a running coder, but the method is calibrated: computed the same way, the unigram baseline gives 3.43x where the real ANS coder measured 3.35x, so expect to lose ~2% to coder overhead. Around 4.7x in practice. Tokenizer choice barely matters here; rerunning with cl100k and o200k landed within 1% of r50k. Beyond roughly 5x is genuinely LM territory.
+The static frequency table only knows how often each token appears globally. The next step up is a bigram table — `P(token | previous token)` — which costs 1.4 MB and gets you to about 4.35x. A full bigram table (69 MB) reaches ~4.7x. Past that is LM territory.
 
 And because the stored format is just token IDs, swapping the unigram table for a bigram table later is a codec upgrade, not a data migration.
 
@@ -316,7 +205,7 @@ READ                             READ
 
 There is one real cost: the vocabulary and frequency table become part of the on-disk format forever, so encodings have to be versioned per collection. A byte codec doesn't carry that obligation.
 
-There's also a bigger-picture reason to like token-native storage as [search and generation converge](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation): keeping UTF-8 blobs in the index while the model reasons in tokens means maintaining two representations of the same text. I cover the second-order effects (replication, data-quality filtering, storing LLM output) in [a follow-up post](/blog/token-native-storage).
+There's also a bigger-picture reason to like token-native storage as [search and generation converge](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation): keeping UTF-8 blobs in the index while the model reasons in tokens means maintaining two representations of the same text.
 
 ## Key Takeaways
 
@@ -329,10 +218,4 @@ There's also a bigger-picture reason to like token-native storage as [search and
 
 ## Acknowledgements
 
-The benchmarks use [tiktoken](https://github.com/openai/tiktoken), [zstandard](https://github.com/indygreg/python-zstandard), [lz4](https://github.com/python-lz4/python-lz4), and [constriction](https://github.com/bamler-lab/constriction). Hutter Prize numbers are from [Matt Mahoney's Large Text Compression Benchmark](https://www.mattmahoney.net/dc/text.html).
-
-- https://www.mattmahoney.net/dc/text.html
-- https://arxiv.org/abs/2309.10668 (Language Modeling is Compression, DeepMind)
-- https://bellard.org/nncp/
-- https://github.com/bamler-lab/constriction
-- https://github.com/openai/tiktoken
+The benchmarks use [tiktoken](https://github.com/openai/tiktoken), [zstandard](https://github.com/indygreg/python-zstandard), [lz4](https://github.com/python-lz4/python-lz4), and [constriction](https://github.com/bamler-lab/constriction). The "language modeling is compression" framing comes from [DeepMind's 2023 paper](https://arxiv.org/abs/2309.10668).
