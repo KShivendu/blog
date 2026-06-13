@@ -98,7 +98,20 @@ Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/
 | zstd dict 112KB (WikiText) |     1.51x |     2.61x |     3.63x |
 | **r50k BPE + static ANS**  | **1.68x** | **3.37x** | **4.30x** |
 
-All methods are lossless — 0% character error rate on full round trip.
+All methods above are lossless — 0% character error rate on full round trip.
+
+<details>
+<summary>Method glossary — what the names mean</summary>
+
+- **LZ4**: default codec in Qdrant and Elasticsearch. Optimized for speed, not ratio.
+- **gzip -9**: max compression level, classic deflate. The `-9` is the level (1–9).
+- **zstd -22**: [Zstandard](https://github.com/facebook/zstd) at level 22 ("ultra" mode). Much slower to compress than default, same decompression speed.
+- **brotli q=11**: Google's codec at max quality. Best ratio of the byte codecs, but slow.
+- **r50k BPE uint16 (raw)**: OpenAI's r50k tokenizer IDs stored as raw 2-byte integers — no entropy coding at all, just the ID array.
+- **zstd dict 112KB**: zstd with a 112KB dictionary trained on WikiText-103 (`zstd --train`). The fairest byte-codec comparison since it also learns from the corpus.
+- **r50k BPE + static ANS**: tokenize with r50k, then entropy-code the token IDs with ANS using a static frequency table trained on WikiText-103. The frequency table is shared — zero per-document overhead.
+
+</details>
 
 Two things stand out. Raw uint16 token IDs — no compression algorithm at all — already beat every byte codec except brotli. And r50k + static ANS beats everything by a wide margin, including at p99.
 
@@ -275,14 +288,14 @@ Document length doesn't change the story — the ~2× gap over gzip holds across
 <details>
 <summary>Side quest: mxbai's WordPiece tokenizer compresses slightly better but lowercases your text. Expand if curious.</summary>
 
-The mixedbread embedding model (`mxbai-embed-large-v1`) uses BERT's WordPiece tokenizer with a 30,522-token vocabulary. Smaller vocabulary means more common tokens, lower entropy, slightly better compression. On a 270-word technical RAG document:
+The mixedbread embedding model (`mxbai-embed-large-v1`) uses BERT's WordPiece tokenizer with a 30,522-token vocabulary. Smaller vocabulary means more common tokens, lower entropy, slightly better compression. Across 1,773 WikiText-103 test articles:
 
-| Method                       |   Size | Ratio |
-| ---------------------------- | -----: | ----: |
-| r50k BPE + static ANS        |  648 B |  2.9x |
-| mxbai WordPiece + static ANS | ~630 B |   ~3x |
+| Method                       |   min | median |   max |
+| ---------------------------- | ----: | -----: | ----: |
+| r50k BPE + static ANS        | 1.68x |  3.37x | 4.30x |
+| mxbai WordPiece + static ANS | 1.63x |  3.56x | 4.54x |
 
-The catch is a 20.1% **character error rate (CER)** after round-trip — meaning the decompressed text doesn't exactly match the original. All of it comes from two deterministic quirks of BERT tokenization: lowercasing (`"Qdrant"` → `"qdrant"`) and punctuation spacing (`"(content)"` → `"( content )"`). No semantic information is destroyed; it's cosmetic. Three regex rules recover the punctuation exactly:
+~5% better compression at the median. The problem is **character error rate (CER)**: 80.4% on average, every single article affected. The culprit is BERT's lowercasing — `"Qdrant"` becomes `"qdrant"`, `"Wikipedia"` becomes `"wikipedia"`. Case is permanently lost; there's no recovering it from the compressed form. Punctuation spacing (`"(content)"` → `"( content )"`) is a separate quirk, fixable with regex:
 
 ```python
 def fix_punct(s):
@@ -292,7 +305,7 @@ def fix_punct(s):
     return s
 ```
 
-Case is genuinely gone, though, and mxbai is also 5-10x slower to tokenize than tiktoken. For a storage codec, r50k is the clean choice. The one real risk with WordPiece is its `[UNK]` token, which destroys information, but on standard English text including code, URLs, and numbers, it only fires on emoji and rare Unicode math symbols.
+But case loss makes mxbai unsuitable as a general-purpose storage codec. r50k is lossless on all text. The one real risk with WordPiece is its `[UNK]` token, but on standard English including code and URLs, it only fires on emoji and rare Unicode symbols.
 
 </details>
 
