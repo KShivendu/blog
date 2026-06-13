@@ -5,11 +5,11 @@ lastmod: '2026-06-11'
 tags: ['compression', 'vector-databases', 'internals', 'nlp']
 draft: false
 summary: 'Vector databases compress text payloads with LZ4 or gzip at best. Tokenize the text first and entropy-code the token IDs, and you get ~3x lossless compression, twice what gzip manages, using pieces every ML stack already ships.'
-images: ['/static/images/blogs/tokenization-compression-og.jpg']
+images: ['/static/images/blogs/tokenization-compression.jpg']
 authors: ['default']
 ---
 
-![Tokenization as Compression Cover](/static/images/blogs/tokenization-compression-og.jpg)
+![Tokenization as Compression Cover](/static/images/blogs/tokenization-compression.jpg)
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
@@ -283,7 +283,7 @@ English Wikipedia is ~7M articles averaging 708 words. Applying the corpus-avera
 | zstd -22              |     2,382 bytes |    16.7 GB |      1.9x |
 | **r50k + static ANS** | **1,342 bytes** | **9.4 GB** | **3.35x** |
 
-At a billion documents that's 1.3 TB instead of 4.5 TB. At $0.08/GB for SSD and $0.02/GB for S3-class object storage:
+At a billion documents that's 1.3 TB instead of 4.5 TB. At \$0.08/GB for SSD and \$0.02/GB for S3-class object storage:
 
 | Storage tier   | Raw UTF-8 | r50k + ANS |   Saved |
 | -------------- | --------: | ---------: | ------: |
@@ -340,7 +340,7 @@ READ                             READ
                                   return original text
 ```
 
-There is one real cost: the vocabulary and frequency table become part of the on-disk format forever, so encodings have to be versioned per collection. A byte codec doesn't carry that obligation.
+There is one real cost: the vocabulary and frequency table become part of the on-disk format forever, so encodings have to be versioned per collection.
 
 There's also a bigger-picture reason to like token-native storage as [search and generation converge](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation): keeping UTF-8 blobs in the index while the model reasons in tokens means maintaining two representations of the same text.
 
