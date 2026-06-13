@@ -98,8 +98,10 @@ Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/
 | zstd -22                   |     1.11x |     1.68x |     2.39x |
 | brotli q=11                |     1.22x |     2.26x |     3.13x |
 | r50k BPE uint16 (raw)      |     1.04x |     2.33x |     3.34x |
+| cl100k BPE uint16 (raw)    |     0.89x |     2.27x |     3.24x |
 | zstd dict 112KB (WikiText) |     1.51x |     2.61x |     3.63x |
 | **r50k BPE + static ANS**  | **1.68x** | **3.37x** | **4.30x** |
+| cl100k BPE + static ANS    |     1.68x |     3.30x |     4.14x |
 
 All methods above are lossless — 0% character error rate on full round trip.
 
@@ -110,9 +112,10 @@ All methods above are lossless — 0% character error rate on full round trip.
 - **gzip -9**: max compression level, classic deflate. The `-9` is the level (1–9).
 - **zstd -22**: [Zstandard](https://github.com/facebook/zstd) at level 22 ("ultra" mode). Much slower to compress than default, same decompression speed.
 - **brotli q=11**: Google's codec at max quality. Best ratio of the byte codecs, but slow.
-- **r50k BPE uint16 (raw)**: OpenAI's r50k tokenizer IDs stored as raw 2-byte integers — no entropy coding at all, just the ID array.
+- **r50k BPE uint16 (raw)**: OpenAI's r50k tokenizer (vocab 50k) IDs stored as raw 2-byte integers — no entropy coding at all, just the ID array.
+- **cl100k BPE uint16 (raw)**: OpenAI's cl100k tokenizer (vocab 100k, used by GPT-4/embeddings) IDs stored raw. Larger vocabulary = fewer tokens per doc but larger IDs, so raw storage is worse than r50k. Can expand very short docs (min < 1x).
 - **zstd dict 112KB**: zstd with a 112KB dictionary trained on WikiText-103 (`zstd --train`). The fairest byte-codec comparison since it also learns from the corpus.
-- **r50k BPE + static ANS**: tokenize with r50k, then entropy-code the token IDs with ANS using a static frequency table trained on WikiText-103. The frequency table is shared — zero per-document overhead.
+- **r50k / cl100k BPE + static ANS**: tokenize, then entropy-code the token IDs with ANS using a static frequency table trained on WikiText-103. The frequency table is shared — zero per-document overhead. r50k wins slightly because its smaller vocabulary has higher per-token information density.
 
 </details>
 
@@ -241,14 +244,14 @@ The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`)
 
 ### What does it cost in latency?
 
-Measured across 200 WikiText-103 articles (50–500 words), one pass each, with the static corpus ANS model:
+Measured across 200 WikiText-103 articles (50–500 words), static corpus ANS model:
 
-| Pipeline                       |   Median |   p99 |
-| ------------------------------ | -------: | ----: |
-| r50k encode (tokenize + ANS)   |    110µs | 280µs |
-| r50k decode (ANS + detokenize) | **40µs** |  94µs |
+| Method | encode median | encode p99 | decode median | decode p99 |
+| ------ | ------------: | ---------: | ------------: | ---------: |
+| r50k   |          53µs |      123µs |          19µs |       45µs |
+| cl100k |          64µs |      166µs |          21µs |       52µs |
 
-The tokenizer dominates the encode side. ANS itself adds ~30µs. If your ingest pipeline already tokenizes (for the embedding model, for token counting), compression is nearly free. Decoding takes 40µs total, which is noise next to a disk read or a network hop.
+The tokenizer dominates the encode side. ANS itself adds ~15µs. If your ingest pipeline already tokenizes (for the embedding model, for token counting), compression is nearly free. Decoding is under 25µs, noise next to a disk read or a network hop.
 
 Document length doesn't change the story — the ~2× gap over gzip holds across all lengths tested:
 
