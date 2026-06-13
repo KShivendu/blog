@@ -246,12 +246,16 @@ The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`)
 
 Measured across 200 WikiText-103 articles (50–500 words), static corpus ANS model:
 
-| Method | encode median | encode p99 | decode median | decode p99 |
-| ------ | ------------: | ---------: | ------------: | ---------: |
-| r50k   |          53µs |      123µs |          19µs |       45µs |
-| cl100k |          64µs |      166µs |          21µs |       52µs |
+| Method       | enc median | enc p99 | dec median | dec p99 |
+| ------------ | ---------: | ------: | ---------: | ------: |
+| LZ4          |       15µs |    36µs |        1µs |     2µs |
+| gzip -9      |       23µs |    44µs |       19µs |    30µs |
+| zstd -22     |       68µs |   193µs |        3µs |     6µs |
+| zstd dict    |      129µs |   326µs |        2µs |     5µs |
+| r50k + ANS   |       54µs |   129µs |       18µs |    44µs |
+| cl100k + ANS |       55µs |   156µs |       18µs |    51µs |
 
-The tokenizer dominates the encode side. ANS itself adds ~15µs. If your ingest pipeline already tokenizes (for the embedding model, for token counting), compression is nearly free. Decoding is under 25µs, noise next to a disk read or a network hop.
+LZ4 decompresses in 1µs — it's designed entirely for speed. zstd dict has the slowest encoder (129µs) because it searches a 112KB dictionary per compress, but decompresses in 2µs. The tokenizer methods sit comfortably in the middle: ~54µs encode (dominated by the tokenizer, not ANS), ~18µs decode. If your ingest pipeline already tokenizes for embeddings, the compression encode is nearly free.
 
 Document length doesn't change the story — the ~2× gap over gzip holds across all lengths tested:
 
