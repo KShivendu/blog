@@ -31,7 +31,7 @@ When you insert a document into Qdrant, or Elasticsearch, you typically store so
 }
 ```
 
-Qdrant stores on-disk payloads in [Gridstore](https://qdrant.tech/articles/gridstore-key-value-storage/) (its custom KV engine, replacing RocksDB since v1.13) with LZ4 compression on by default. Elasticsearch packs stored fields into 16 KB blocks and compresses each block with LZ4, so a handful of documents share a compression window. Either way, the codec sees at most a few documents at a time and has no learned model of the language — just whatever byte patterns happen to repeat within the block. That gets you roughly 1.3–2x on text.
+Qdrant stores on-disk payloads in [Gridstore](https://qdrant.tech/articles/gridstore-key-value-storage/) (its custom KV engine, replacing RocksDB since v1.13) with LZ4 compression on by default. Elasticsearch packs stored fields into 16 KB blocks and compresses each block with LZ4, so a handful of documents share a compression window. Either way, the codec sees at most a few documents at a time and has no learned model of the language, just whatever byte patterns happen to repeat within the block. That gets you roughly 1.3–2x on text.
 
 But there is a component that knows a lot about the structure of natural language, and it's already part of every embedding and language model: **the tokenizer**.
 
@@ -51,7 +51,7 @@ ratio: ~2.25x
 
 Just packing token IDs into uint16 already compresses, before any actual compression algorithm runs.
 
-**Step 2: ANS entropy coding.** gzip and LZ4 see opaque bytes; they can't know that `[0x01, 0x7F]` is token 383. An entropy coder working directly on token IDs can give frequent tokens short codes: `" the"` is 40x more common than `"embeddings"`, so it gets a much shorter code. I used ANS (Asymmetric Numeral Systems, the entropy coder inside zstd) via the [constriction](https://github.com/bamler-lab/constriction) library.
+**Step 2: ANS entropy coding.** gzip and LZ4 see opaque bytes and can't know that `[0x01, 0x7F]` is token 383. An entropy coder working directly on token IDs can give frequent tokens short codes: `" the"` is 40x more common than `"embeddings"`, so it gets a much shorter code. I used ANS (Asymmetric Numeral Systems, the entropy coder inside zstd) via the [constriction](https://github.com/bamler-lab/constriction) library.
 
 One design choice matters here: the frequency table is **trained once on a large corpus and shared**, not built per document. A per-document table compresses better on paper, but the decoder needs the table to reconstruct the document, so you'd have to store it alongside each payload. That's ~900 bytes for a typical 400-token chunk, which erases the entire gain. A shared static table costs nothing per document. It's completely possible to learn this static table on a general corpus and reuse it everywhere.
 
@@ -89,7 +89,7 @@ def decompress(data):
 
 ## The Benchmark
 
-Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/wikitext) test articles (≥30 words). The ANS frequency table was trained on the WikiText-103 train split — a shared static model, no per-document overhead.
+Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/wikitext) test articles (≥30 words). The ANS frequency table was trained on the WikiText-103 train split, a shared static model with no per-document overhead.
 
 | Method                      |       min |    median |       max |
 | --------------------------- | --------: | --------: | --------: |
@@ -103,23 +103,23 @@ Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/
 | **r50k BPE + static ANS**   | **1.68x** | **3.37x** | **4.30x** |
 | **cl100k BPE + static ANS** | **1.68x** | **3.30x** | **4.14x** |
 
-All methods above are lossless — 0% character error rate on full round trip.
+All methods above are lossless (0% character error rate on full round trip).
 
 <details>
-<summary>Method glossary — what the names mean</summary>
+<summary>Method glossary: what the names mean</summary>
 
 - **LZ4**: default codec in Qdrant and Elasticsearch. Optimized for speed, not ratio.
 - **gzip -9**: max compression level, classic deflate. The `-9` is the level (1–9).
 - **zstd -22**: [Zstandard](https://github.com/facebook/zstd) at level 22 ("ultra" mode). Much slower to compress than default, same decompression speed.
 - **brotli q=11**: Google's codec at max quality. Best ratio of the byte codecs, but slow.
-- **r50k BPE uint16 (raw)**: r50k has 50,257 tokens — fits in uint16 (max 65,535), so 2 bytes per token ID.
-- **cl100k BPE uint32 (raw)**: cl100k has 100,277 tokens — exceeds uint16, requires uint32 (4 bytes per token). It produces fewer tokens per document than r50k (larger vocab = longer merges), but 4 bytes × fewer tokens still comes out worse than 2 bytes × more tokens. Hence 1.13x vs 2.33x.
+- **r50k BPE uint16 (raw)**: r50k has 50,257 tokens, which fits in uint16 (max 65,535), so 2 bytes per token ID.
+- **cl100k BPE uint32 (raw)**: cl100k has 100,277 tokens, which exceeds uint16 and requires uint32 (4 bytes per token). It produces fewer tokens per document than r50k (larger vocab = longer merges), but 4 bytes × fewer tokens still comes out worse than 2 bytes × more tokens. Hence 1.13x vs 2.33x.
 - **zstd dict 112KB**: zstd with a 112KB dictionary trained on WikiText-103 (`zstd --train`). The fairest byte-codec comparison since it also learns from the corpus.
-- **r50k / cl100k BPE + static ANS**: ANS allocates bits based on token frequency, not a fixed byte width. A common token gets ~1 bit; a rare one gets ~16 bits — regardless of vocab size. So the uint32 penalty that crushes cl100k raw disappears entirely: both tokenizers land near 3.3x.
+- **r50k / cl100k BPE + static ANS**: ANS allocates bits based on token frequency, not a fixed byte width. A common token gets ~1 bit and a rare one gets ~16 bits, regardless of vocab size. So the uint32 penalty that crushes cl100k raw disappears entirely, and both tokenizers land near 3.3x.
 
 </details>
 
-Two things stand out. r50k raw uint16 — no compression algorithm at all — already beats every byte codec except brotli. And r50k + static ANS beats everything by a wide margin. cl100k raw uint32 sits near 1.13x, worse than even gzip, yet cl100k + ANS recovers to 3.30x: the fixed-width storage penalty vanishes once ANS allocates bits by frequency instead of by vocab size.
+Two things stand out. r50k raw uint16 (no compression algorithm at all) already beats every byte codec except brotli. And r50k + static ANS beats everything by a wide margin. cl100k raw uint32 sits near 1.13x, worse than even gzip, yet cl100k + ANS recovers to 3.30x: the fixed-width storage penalty vanishes once ANS allocates bits by frequency instead of by vocab size.
 
 The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`), since it also learns from the corpus. It reaches 2.61x median, still 30% behind. The difference is that the token model operates on units of language: `" embeddings"` is one symbol with a known global frequency, where a byte-level model has to rediscover that pattern from scratch.
 
@@ -131,7 +131,7 @@ The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`)
       x: [1.0, 1.3, 1.66, 1.68, 2.26, 2.33, 2.61, 3.37],
       y: [
         'Raw UTF-8',
-        'LZ4 — Qdrant/ES default',
+        'LZ4 (Qdrant/ES default)',
         'gzip -9',
         'zstd -22',
         'brotli q=11',
@@ -156,7 +156,7 @@ The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`)
     },
   ]}
   layout={{
-    title: { text: 'Median compression ratio — 1,773 WikiText-103 articles', font: { size: 14 } },
+    title: { text: 'Median compression ratio, 1,773 WikiText-103 articles', font: { size: 14 } },
     xaxis: { title: 'compression ratio (higher is better)', range: [0, 4.2] },
     yaxis: { autorange: 'reversed' },
     height: 380,
@@ -230,7 +230,7 @@ The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`)
   ]}
   layout={{
     title: {
-      text: 'Distribution of compression ratio — 1,773 WikiText-103 articles',
+      text: 'Distribution of compression ratio, 1,773 WikiText-103 articles',
       font: { size: 14 },
     },
     barmode: 'overlay',
@@ -255,9 +255,9 @@ Measured across 200 WikiText-103 articles (50–500 words), static corpus ANS mo
 | r50k + ANS   |       54µs |   129µs |       18µs |    44µs |
 | cl100k + ANS |       55µs |   156µs |       18µs |    51µs |
 
-LZ4 decompresses in 1µs — it's designed entirely for speed. zstd dict has the slowest encoder (129µs) — we tested 32KB, 64KB, and 112KB dictionaries trained on WikiText-103 and picked 112KB as the best-performing size — but decompresses in 2µs. The tokenizer methods sit comfortably in the middle: ~54µs encode (dominated by the tokenizer, not ANS), ~18µs decode.
+LZ4 decompresses in 1µs, designed entirely for speed. zstd dict's encoder is slowest at 129µs (best of three dictionary sizes tested: 32KB, 64KB, 112KB), though it decompresses in 2µs. The tokenizer methods sit comfortably in the middle: ~54µs encode (dominated by the tokenizer, not ANS), ~18µs decode.
 
-Note that today's embedding models use different tokenizers (WordPiece, SentencePiece) than LLM BPE tokenizers, so you can't skip the tokenization step by reusing embedding tokenization. The real benefit runs the other way: if you store token IDs in LLM format (r50k/cl100k), you avoid re-tokenizing retrieved documents at inference time when feeding them to the LLM — the token IDs are already there.
+Note that today's embedding models use different tokenizers (WordPiece, SentencePiece) than LLM BPE tokenizers, so you can't skip the tokenization step by reusing embedding tokenization. The real benefit runs the other way: if you store token IDs in LLM format (r50k/cl100k), you avoid re-tokenizing retrieved documents at inference time when feeding them to the LLM, since the token IDs are already there.
 
 <details>
 <summary>Side quest: mxbai's WordPiece tokenizer compresses slightly better but lowercases your text. Expand if curious.</summary>
@@ -269,7 +269,7 @@ The mixedbread embedding model (`mxbai-embed-large-v1`) uses BERT's WordPiece to
 | r50k BPE + static ANS        | 1.68x |  3.37x | 4.30x |
 | mxbai WordPiece + static ANS | 1.63x |  3.56x | 4.54x |
 
-~5% better compression at the median. The problem is **character error rate (CER)**: 80.4% on average, every single article affected. After applying punctuation-spacing fixes (regex for `( x )` → `(x)`, etc.), CER stays at 81.3% — the fix is noise. The damage is overwhelmingly BERT's lowercasing: `"Qdrant"` → `"qdrant"`, `"Wikipedia"` → `"wikipedia"`. WikiText is dense with capitalized words — titles, proper nouns, sentence starts — so virtually every article is corrupted. Case is gone and unrecoverable. mxbai is not a viable lossless codec for real text.
+~5% better compression at the median. The problem is **character error rate (CER)**: 80.4% on average, every single article affected. After applying punctuation-spacing fixes (regex for `( x )` → `(x)`, etc.), CER stays at 81.3%, so the fix is noise. The damage is overwhelmingly BERT's lowercasing: `"Qdrant"` → `"qdrant"`, `"Wikipedia"` → `"wikipedia"`. WikiText is dense with capitalized words (titles, proper nouns, sentence starts), so virtually every article is corrupted. Case is gone and unrecoverable. mxbai is not a viable lossless codec for real text.
 
 </details>
 
@@ -290,15 +290,15 @@ At a billion documents that's 1.3 TB instead of 4.5 TB. At \$0.08/GB for SSD and
 | SSD ($0.08/GB) |   $360/mo |    $107/mo | $253/mo |
 | S3 ($0.02/GB)  |    $90/mo |     $27/mo |  $63/mo |
 
-Every snapshot, replica, and bulk transfer shrinks by the same 3.35× factor. The I/O win is often worth more than the storage bill — 3.35x fewer bytes means 3.35x faster bulk reads, indexing, and replication.
+Every snapshot, replica, and bulk transfer shrinks by the same 3.35× factor. The I/O win is often worth more than the storage bill: 3.35x fewer bytes means 3.35x faster bulk reads, indexing, and replication.
 
 One scoping note so the claim doesn't overreach: in collections with large embeddings, the vectors dominate total bytes (a 1536-dim float32 vector is ~6 KB, often bigger than the text next to it). Payload compression matters most when payloads are large, vectors are quantized, or text is the point of the collection.
 
 ## How Far Can This Go?
 
-The static frequency table only knows how often each token appears globally. The next step up is a bigram table — `P(token | previous token)` — which costs 1.4 MB and gets you to about 4.35x. A full bigram table (69 MB) reaches ~4.7x.
+The static frequency table only knows how often each token appears globally. The next step up is a bigram table (`P(token | previous token)`) which costs 1.4 MB and gets you to about 4.35x. A full bigram table (69 MB) reaches ~4.7x.
 
-Past that is LM territory. Chinchilla 70B achieves 0.664 bits/byte on Wikipedia — roughly 12× compression — because a language model is literally computing `P(token | all previous tokens)`, which is the optimal entropy coder by definition. The gap between 3.3× and 12× is entirely conditional probability.
+Past that is LM territory. Chinchilla 70B achieves 0.664 bits/byte on Wikipedia (roughly 12× compression) because a language model is literally computing `P(token | all previous tokens)`, which is the optimal entropy coder by definition. The gap between 3.3× and 12× is entirely conditional probability.
 
 | Method                           | Ratio     | Practical?            |
 | -------------------------------- | --------- | --------------------- |
