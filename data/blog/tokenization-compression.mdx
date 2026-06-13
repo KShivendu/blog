@@ -295,17 +295,7 @@ The mixedbread embedding model (`mxbai-embed-large-v1`) uses BERT's WordPiece to
 | r50k BPE + static ANS        | 1.68x |  3.37x | 4.30x |
 | mxbai WordPiece + static ANS | 1.63x |  3.56x | 4.54x |
 
-~5% better compression at the median. The problem is **character error rate (CER)**: 80.4% on average, every single article affected. The culprit is BERT's lowercasing — `"Qdrant"` becomes `"qdrant"`, `"Wikipedia"` becomes `"wikipedia"`. Case is permanently lost; there's no recovering it from the compressed form. Punctuation spacing (`"(content)"` → `"( content )"`) is a separate quirk, fixable with regex:
-
-```python
-def fix_punct(s):
-    s = re.sub(r'\( ', '(', s)
-    s = re.sub(r' \)', ')', s)
-    s = re.sub(r'(\w) - (\w)', r'\1-\2', s)
-    return s
-```
-
-But case loss makes mxbai unsuitable as a general-purpose storage codec. r50k is lossless on all text. The one real risk with WordPiece is its `[UNK]` token, but on standard English including code and URLs, it only fires on emoji and rare Unicode symbols.
+~5% better compression at the median. The problem is **character error rate (CER)**: 80.4% on average, every single article affected. After applying punctuation-spacing fixes (regex for `( x )` → `(x)`, etc.), CER stays at 81.3% — the fix is noise. The damage is overwhelmingly BERT's lowercasing: `"Qdrant"` → `"qdrant"`, `"Wikipedia"` → `"wikipedia"`. WikiText is dense with capitalized words — titles, proper nouns, sentence starts — so virtually every article is corrupted. Case is gone and unrecoverable. mxbai is not a viable lossless codec for real text.
 
 </details>
 
