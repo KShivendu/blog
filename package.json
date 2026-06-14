@@ -6,6 +6,7 @@
     "start": "cross-env SOCKET=true node ./scripts/next-remote-watch.js ./data",
     "dev": "next dev",
     "build": "next build && node ./scripts/generate-sitemap",
+    "fetch-tokenizer": "mkdir -p public/static && curl -L -o public/static/r50k_ranks.bin https://github.com/KShivendu/blog/releases/download/tokenizer-data-v1/r50k_ranks.bin && curl -L -o public/static/r50k_probs.bin https://github.com/KShivendu/blog/releases/download/tokenizer-data-v1/r50k_probs.bin",
     "serve": "next start",
     "analyze": "cross-env ANALYZE=true next build",
     "lint": "next lint --fix --dir pages --dir components --dir lib --dir layouts --dir scripts",
