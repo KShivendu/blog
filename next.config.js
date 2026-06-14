@@ -67,6 +67,8 @@ module.exports = withBundleAnalyzer({
     ]
   },
   webpack: (config, { dev, isServer }) => {
+    config.experiments = { ...config.experiments, asyncWebAssembly: true }
+
     config.module.rules.push({
       test: /\.svg$/,
       use: ['@svgr/webpack'],

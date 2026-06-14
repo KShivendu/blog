@@ -9,6 +9,7 @@ import { BlogNewsletterForm } from './NewsletterForm'
 import PlotlyChart from './PlotlyChart'
 import SpladeVsIF from './SpladeVsIF'
 import TokenCompressionPipeline from './TokenCompressionPipeline'
+import CompressionWidget from './CompressionWidget'
 
 export const MDXComponents = {
   Image,
@@ -19,6 +20,7 @@ export const MDXComponents = {
   PlotlyChart,
   SpladeVsIF,
   TokenCompressionPipeline,
+  CompressionWidget,
   wrapper: ({ components, layout, ...rest }) => {
     const Layout = require(`../layouts/${layout}`).default
     return <Layout {...rest} />
