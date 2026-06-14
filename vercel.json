@@ -1,3 +1,3 @@
 {
-  "buildCommand": "npm run fetch-tokenizer && npm run build"
+  "buildCommand": "npm run build"
 }
