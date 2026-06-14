@@ -43,7 +43,7 @@ The top path is what databases do today: store UTF-8 bytes, compress with a gene
 
 **Step 1: BPE tokenization.** BPE (Byte Pair Encoding) starts with raw bytes and repeatedly merges the most frequent adjacent pair into a new token, building up a vocabulary of common subwords. OpenAI ships two BPE tokenizers: **r50k** (used by GPT-2/GPT-3, 50,257 tokens) and **cl100k** (used by GPT-3.5/GPT-4, 100,277 tokens). cl100k has a larger vocabulary so it learns longer merges — it produces fewer tokens per document but each token ID needs 4 bytes (uint32) since the vocab exceeds the uint16 limit of 65,535. r50k fits in 2 bytes (uint16).
 
-BPE merges frequent byte sequences into single tokens. `" language"` is one token. `"Retrieval"` is three (`Ret + ri + eval`). On average one BPE token covers [3/4 of a word](https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them). An average English word is ~5 characters plus a space, so:
+BPE merges frequent byte sequences into single tokens. `"language"` is one token. `"Retrieval"` is three (`Ret + ri + eval`). On average one BPE token covers [3/4 of a word](https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them). An average English word is ~5 characters plus a space, so:
 
 ```
 6 bytes/word × 3/4 words/token = 4.5 bytes/token (raw text)
@@ -53,7 +53,7 @@ ratio: ~2.25x
 
 Just packing token IDs into uint16 already compresses, before any actual compression algorithm runs.
 
-**Step 2: ANS entropy coding.** gzip and LZ4 see opaque bytes and can't know that `[0x01, 0x7F]` is token 383. An entropy coder working directly on token IDs can give frequent tokens short codes: `" the"` is 40x more common than `"embeddings"`, so it gets a much shorter code. I used ANS (Asymmetric Numeral Systems, the entropy coder inside zstd) via the [constriction](https://github.com/bamler-lab/constriction) library.
+**Step 2: ANS entropy coding.** gzip and LZ4 see opaque bytes and can't know that `[0x01, 0x7F]` is token 383. An entropy coder working directly on token IDs can give frequent tokens short codes: `"the"` is 40x more common than `"embeddings"`, so it gets a much shorter code. I used ANS (Asymmetric Numeral Systems, the entropy coder inside zstd) via the [constriction](https://github.com/bamler-lab/constriction) library.
 
 One design choice matters here: the frequency table is **trained once on a large corpus and shared**, not built per document. A per-document table compresses better on paper, but the decoder needs the table to reconstruct the document, so you'd have to store it alongside each payload. That's ~900 bytes for a typical 400-token chunk, which erases the entire gain. A shared static table costs nothing per document. It's completely possible to learn this static table on a general corpus and reuse it everywhere.
 
@@ -123,7 +123,7 @@ All methods above are lossless (0% character error rate on full round trip).
 
 Two things stand out. r50k raw uint16 (no compression algorithm at all) already beats every byte codec except brotli. And r50k + static ANS beats everything by a wide margin. cl100k raw uint32 sits near 1.13x, worse than even gzip, yet cl100k + ANS recovers to 3.30x: the fixed-width storage penalty vanishes once ANS allocates bits by frequency instead of by vocab size.
 
-The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`), since it also learns from the corpus. It reaches 2.61x median, still 30% behind. The difference is that the token model operates on units of language: `" embeddings"` is one symbol with a known global frequency, where a byte-level model has to rediscover that pattern from scratch.
+The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`), since it also learns from the corpus. It reaches 2.61x median, still 30% behind. The difference is that the token model operates on units of language: `"embeddings"` is one symbol with a known global frequency, where a byte-level model has to rediscover that pattern from scratch.
 
 <PlotlyChart
   data={[
