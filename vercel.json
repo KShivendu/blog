@@ -1,0 +1,3 @@
+{
+  "buildCommand": "curl -L -o public/static/r50k_ranks.bin https://github.com/KShivendu/blog/releases/download/tokenizer-data-v1/r50k_ranks.bin && curl -L -o public/static/r50k_probs.bin https://github.com/KShivendu/blog/releases/download/tokenizer-data-v1/r50k_probs.bin && npm run build"
+}
