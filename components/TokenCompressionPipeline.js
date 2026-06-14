@@ -199,7 +199,7 @@ export default function TokenCompressionPipeline() {
           fontSize="10"
           fill={textMuted}
         >
-          LZ4 / gzip
+          LZ4
         </text>
 
         <line
@@ -213,10 +213,10 @@ export default function TokenCompressionPipeline() {
         />
 
         <text x={RES_X} y={R1_CY - 5} fontSize="11" fontWeight="600" fill={textMuted}>
-          984 bytes
+          1,468 bytes
         </text>
         <text x={RES_X} y={R1_CY + 11} fontSize="16" fontWeight="700" fill={textMuted}>
-          1.9×
+          1.3×
         </text>
 
         {/* ═══ ROW 2: TOKENS ═══ */}
