@@ -302,6 +302,8 @@ One scoping note so the claim doesn't overreach: in collections with large embed
 
 The static frequency table only knows how often each token appears globally. The next step up is a bigram table (`P(token | previous token)`) which costs 1.4 MB and gets you to about 4.35x. A full bigram table (69 MB) reaches ~4.7x.
 
+The probability model only controls how many bits each token gets — it doesn't change what's stored. Token IDs are always encoded and recovered exactly. A better model just allocates bits more precisely: `" model"` after `" language"` is far more likely than `" model"` in general, so a bigram table assigns it fewer bits. The decoder already knows the previous token (it just decoded it), so it uses the same table and recovers the exact token ID. Nothing is approximated — think of it as a smarter ruler for measuring bit lengths, not a lossy transform.
+
 Past that is LM territory. Chinchilla 70B achieves 0.664 bits/byte on Wikipedia (roughly 12× compression) because a language model is literally computing `P(token | all previous tokens)`, which is the optimal entropy coder by definition. The gap between 3.3× and 12× is entirely conditional probability.
 
 | Method                           | Ratio     | Practical?            |
