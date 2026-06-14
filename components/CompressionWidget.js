@@ -31,10 +31,6 @@ def decompress(data: bytes, model: CategoricalModel) -> str:
     ids = constriction.stream.stack.AnsCoder(buf).decode(model, n).tolist()
     return enc.decode(ids)`,
   },
-  {
-    label: 'Repetitive',
-    text: `the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the retrieval retrieval retrieval retrieval retrieval retrieval retrieval retrieval retrieval retrieval embedding embedding embedding embedding embedding embedding embedding embedding embedding embedding vector vector vector vector vector vector vector vector vector vector database database database database database database database database database database`,
-  },
 ]
 
 // ── pure JS BPE (no WASM) ─────────────────────────────────────────────────────
