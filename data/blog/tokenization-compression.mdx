@@ -302,7 +302,21 @@ One scoping note so the claim doesn't overreach: in collections with large embed
 
 The static frequency table only knows how often each token appears globally. The next step up is a bigram table (`P(token | previous token)`) which costs 1.4 MB and gets you to about 4.35x. A full bigram table (69 MB) reaches ~4.7x.
 
-The probability model only controls how many bits each token gets — it doesn't change what's stored. Token IDs are always encoded and recovered exactly. A better model just allocates bits more precisely: `" model"` after `" language"` is far more likely than `" model"` in general, so a bigram table assigns it fewer bits. The decoder already knows the previous token (it just decoded it), so it uses the same table and recovers the exact token ID. Nothing is approximated — think of it as a smarter ruler for measuring bit lengths, not a lossy transform.
+<details>
+<summary>How can a probabilistic model recover the exact text?</summary>
+
+The probability model only controls how many bits each token gets. The token IDs themselves are always stored and recovered exactly — nothing is approximated.
+
+Take the sequence `" language" → " model" → " retrieval"`:
+
+- **Unigram ANS**: `" model"` appears in 0.3% of all tokens → ~8 bits
+- **Bigram ANS**: `" model"` after `" language"` is very common → maybe ~4 bits
+
+The decoder recovers `" model"` exactly either way. It just decoded `" language"` first, so it knows to use `P(· | " language")` as the ruler for the next token — and gets the exact same ID back.
+
+Think of it as Morse code with a smarter codebook. E gets one dot not because "E" is approximate, but because it's frequent. A better frequency estimate means shorter codes, not lossy data.
+
+</details>
 
 Past that is LM territory. Chinchilla 70B achieves 0.664 bits/byte on Wikipedia (roughly 12× compression) because a language model is literally computing `P(token | all previous tokens)`, which is the optimal entropy coder by definition. The gap between 3.3× and 12× is entirely conditional probability.
 
