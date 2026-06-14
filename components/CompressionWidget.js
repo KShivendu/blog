@@ -174,12 +174,8 @@ export default function CompressionWidget() {
     setStatus('loading')
     try {
       const [ranks, probBuf] = await Promise.all([
-        loadRanks(
-          'https://github.com/KShivendu/blog/releases/download/tokenizer-data-v1/r50k_ranks.bin'
-        ),
-        fetch(
-          'https://github.com/KShivendu/blog/releases/download/tokenizer-data-v1/r50k_probs.bin'
-        ).then((r) => r.arrayBuffer()),
+        loadRanks('/static/r50k_ranks.bin'),
+        fetch('/static/r50k_probs.bin').then((r) => r.arrayBuffer()),
       ])
       ranksRef.current = ranks
       probsRef.current = new Float32Array(probBuf)
