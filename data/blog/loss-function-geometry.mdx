@@ -179,7 +179,11 @@ Here's the most striking chart. It shows how well-separated sentence meanings ar
 
 Twenty layers of computation — and sentences are barely more separable than at initialization. Then L20–L24 do almost everything: **0.22 → 0.32 → 0.41 → 0.83 → 3.66**.
 
-This shows up directly in retrieval. On a hard set of sentence pairs designed to fool the model — negations ("stock market surged" vs "stock market plunged"), role reversals ("tech giant acquired rival" vs "rival acquired tech giant") — Recall@1 sits flat at **0.30 from L0 through L11**. Then: 0.40 at L11, 0.50 at L17, 0.60 at L20, 0.70 at L22, **0.80 at L24**. The model genuinely cannot tell apart "surged" from "plunged" until the final few layers.
+This shows up directly in retrieval. On a hard set of sentence pairs designed to fool the model — negations ("stock market surged" vs "stock market plunged"), role reversals ("tech giant acquired rival" vs "rival acquired tech giant") — Recall@1 sits flat at **0.30 from L0 through L11**. Then: 0.40 at L11, 0.50 at L17, 0.60 at L20, 0.70 at L22, **0.80 at L24**.
+
+The word tokens "surged" and "plunged" are actually distinguishable from the very start (cosine 0.535 at L0 — clearly different). The problem is mean pooling: two shared words ("stock", "market") dominate the sentence average, bringing the full sentence cosine to **0.855 at L0**. Middle layers make it _worse_ before L24 helps — cosine peaks at 0.973 at L12 as the model builds generic contextual structure, then the contrastive fine-tuning in the final layers finally pulls the sentences apart.
+
+For role reversals ("tech giant acquired rival" vs "rival acquired tech giant"), the situation is geometric: mean pooling is order-invariant, so both sentences produce literally identical vectors at L0 (cosine = **1.000**). The model has to build position-sensitive representations from attention patterns before it can distinguish them at all.
 
 Why does discrimination concentrate so late? Not because the final layers apply larger updates — token norms are stable throughout. What changes is _coherence_: in the final layers, all tokens in a sentence get pushed in the same direction simultaneously. It's not that each token learns more; it's that the whole sentence's token cloud moves as a unit, driven by the contrastive gradient that's strongest at the output layer.
 
