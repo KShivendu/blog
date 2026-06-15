@@ -237,8 +237,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-21.68, 17.39] }, "yaxis": { "range": [-17.17, 21.91] } }
+      ]
     },
     {
       "name": "1",
@@ -359,8 +358,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-25.2, 18.98] }, "yaxis": { "range": [-18.91, 25.26] } }
+      ]
     },
     {
       "name": "2",
@@ -481,8 +479,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-21.42, 16.81] }, "yaxis": { "range": [-15.93, 22.3] } }
+      ]
     },
     {
       "name": "3",
@@ -603,8 +600,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-16.72, 14.6] }, "yaxis": { "range": [-13.0, 18.32] } }
+      ]
     },
     {
       "name": "4",
@@ -725,8 +721,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-13.99, 12.1] }, "yaxis": { "range": [-10.73, 15.36] } }
+      ]
     },
     {
       "name": "5",
@@ -847,8 +842,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-12.85, 11.53] }, "yaxis": { "range": [-9.88, 14.49] } }
+      ]
     },
     {
       "name": "6",
@@ -969,8 +963,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-12.08, 10.25] }, "yaxis": { "range": [-9.09, 13.25] } }
+      ]
     },
     {
       "name": "7",
@@ -1091,8 +1084,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-12.2, 10.52] }, "yaxis": { "range": [-9.36, 13.35] } }
+      ]
     },
     {
       "name": "8",
@@ -1213,8 +1205,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-10.9, 9.95] }, "yaxis": { "range": [-8.91, 11.94] } }
+      ]
     },
     {
       "name": "9",
@@ -1335,8 +1326,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-10.97, 9.62] }, "yaxis": { "range": [-8.63, 11.96] } }
+      ]
     },
     {
       "name": "10",
@@ -1457,8 +1447,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-10.2, 8.8] }, "yaxis": { "range": [-7.85, 11.14] } }
+      ]
     },
     {
       "name": "11",
@@ -1579,8 +1568,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-9.07, 7.8] }, "yaxis": { "range": [-6.94, 9.93] } }
+      ]
     },
     {
       "name": "12",
@@ -1701,8 +1689,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-8.21, 6.74] }, "yaxis": { "range": [-6.35, 8.59] } }
+      ]
     },
     {
       "name": "13",
@@ -1823,8 +1810,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-7.17, 5.86] }, "yaxis": { "range": [-5.55, 7.48] } }
+      ]
     },
     {
       "name": "14",
@@ -1945,8 +1931,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-7.12, 5.41] }, "yaxis": { "range": [-5.42, 7.11] } }
+      ]
     },
     {
       "name": "15",
@@ -2067,8 +2052,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-7.21, 4.53] }, "yaxis": { "range": [-5.47, 6.27] } }
+      ]
     },
     {
       "name": "16",
@@ -2189,8 +2173,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-6.44, 3.22] }, "yaxis": { "range": [-4.79, 4.87] } }
+      ]
     },
     {
       "name": "17",
@@ -2311,8 +2294,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-5.99, 2.5] }, "yaxis": { "range": [-4.65, 3.84] } }
+      ]
     },
     {
       "name": "18",
@@ -2433,8 +2415,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-5.93, 2.85] }, "yaxis": { "range": [-4.71, 4.08] } }
+      ]
     },
     {
       "name": "19",
@@ -2555,8 +2536,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-5.93, 2.54] }, "yaxis": { "range": [-4.38, 4.09] } }
+      ]
     },
     {
       "name": "20",
@@ -2677,8 +2657,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-5.42, 2.82] }, "yaxis": { "range": [-3.75, 4.49] } }
+      ]
     },
     {
       "name": "21",
@@ -2799,8 +2778,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-4.73, 2.31] }, "yaxis": { "range": [-3.23, 3.82] } }
+      ]
     },
     {
       "name": "22",
@@ -2921,8 +2899,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-4.1, 1.83] }, "yaxis": { "range": [-2.6, 3.33] } }
+      ]
     },
     {
       "name": "23",
@@ -3043,8 +3020,7 @@
           },
           "showlegend": false
         }
-      ],
-      "layout": { "xaxis": { "range": [-3.41, 1.66] }, "yaxis": { "range": [-2.49, 2.58] } }
+      ]
     },
     {
       "name": "24",
@@ -3165,8 +3141,129 @@
           },
           "showlegend": false
         }
+      ]
+    },
+    {
+      "name": "zoom",
+      "data": [
+        {
+          "type": "scatter",
+          "mode": "markers+text",
+          "x": [-0.1, -0.26, -0.16, 0.03, 0.12, -0.07, 0.34, -0.38, 0.59, -0.76, -0.72],
+          "y": [-0.36, 0.23, -0.22, -0.52, -0.16, -0.41, -0.48, -0.48, -0.1, -0.51, -1.07],
+          "text": [
+            "the",
+            "stock",
+            "market",
+            "surged",
+            "after",
+            "the",
+            "central",
+            "bank",
+            "cut",
+            "interest",
+            "rates"
+          ],
+          "textposition": "top center",
+          "textfont": { "size": 10 },
+          "marker": {
+            "size": 9,
+            "color": [
+              "#4f46e5",
+              "#7c3aed",
+              "#db2777",
+              "#dc2626",
+              "#d97706",
+              "#059669",
+              "#0284c7",
+              "#0891b2",
+              "#65a30d",
+              "#ea580c",
+              "#9333ea"
+            ],
+            "line": { "width": 1.5, "color": "white" },
+            "symbol": "circle"
+          },
+          "name": "surged",
+          "legendgroup": "s1",
+          "showlegend": true
+        },
+        {
+          "type": "scatter",
+          "mode": "markers+text",
+          "x": [0.1, -0.22, -0.08, 0.25, 0.23, 0.09, 0.37, -0.31, -0.12, -0.68, -0.61],
+          "y": [-1.21, -0.41, -0.95, -1.26, -1.26, -1.33, -1.15, -1.04, -1.75, -1.06, -1.76],
+          "text": [
+            "the",
+            "stock",
+            "market",
+            "plunged",
+            "after",
+            "the",
+            "central",
+            "bank",
+            "raised",
+            "interest",
+            "rates"
+          ],
+          "textposition": "bottom center",
+          "textfont": { "size": 10, "color": "#6b7280" },
+          "marker": {
+            "size": 9,
+            "color": [
+              "#4f46e5",
+              "#7c3aed",
+              "#db2777",
+              "#dc2626",
+              "#d97706",
+              "#059669",
+              "#0284c7",
+              "#0891b2",
+              "#65a30d",
+              "#ea580c",
+              "#9333ea"
+            ],
+            "line": { "width": 1.5, "color": "white" },
+            "symbol": "square-open"
+          },
+          "name": "plunged",
+          "legendgroup": "s2",
+          "showlegend": true
+        },
+        {
+          "type": "scatter",
+          "mode": "markers+text",
+          "x": [-0.12],
+          "y": [-0.37],
+          "text": ["mean_pool (surged)"],
+          "textposition": "top right",
+          "textfont": { "size": 9 },
+          "marker": {
+            "size": 14,
+            "symbol": "diamond",
+            "color": "#4f46e5",
+            "line": { "width": 2, "color": "white" }
+          },
+          "showlegend": false
+        },
+        {
+          "type": "scatter",
+          "mode": "markers+text",
+          "x": [-0.09],
+          "y": [-1.2],
+          "text": ["mean_pool (plunged)"],
+          "textposition": "bottom right",
+          "textfont": { "size": 9 },
+          "marker": {
+            "size": 14,
+            "symbol": "diamond",
+            "color": "#dc2626",
+            "line": { "width": 2, "color": "white" }
+          },
+          "showlegend": false
+        }
       ],
-      "layout": { "xaxis": { "range": [-1.68, 1.5] }, "yaxis": { "range": [-2.36, 0.83] } }
+      "layout": { "xaxis": { "range": [-1.78, 1.61] }, "yaxis": { "range": [-2.46, 0.93] } }
     }
   ],
   "layout": {
@@ -3174,10 +3271,10 @@
       "text": "PCA of token embeddings (axes fixed at L0): \"surged\" vs \"plunged\" converge to different points",
       "font": { "size": 12 }
     },
-    "xaxis": { "title": "PC1 (L0)", "range": [-16.31, 12.02], "showgrid": true, "zeroline": false },
+    "xaxis": { "title": "PC1 (L0)", "range": [-22.9, 18.61], "showgrid": true, "zeroline": false },
     "yaxis": {
       "title": "PC2 (L0)",
-      "range": [-17.17, 21.91],
+      "range": [-18.39, 23.13],
       "showgrid": true,
       "zeroline": false,
       "scaleanchor": "x"
@@ -3345,6 +3442,14 @@
           {
             "args": [["24"], { "frame": { "duration": 300, "redraw": true }, "mode": "immediate" }],
             "label": "24",
+            "method": "animate"
+          },
+          {
+            "args": [
+              ["zoom"],
+              { "frame": { "duration": 300, "redraw": true }, "mode": "immediate" }
+            ],
+            "label": "zoom",
             "method": "animate"
           }
         ]
