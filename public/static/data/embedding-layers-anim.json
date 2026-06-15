@@ -3142,6 +3142,128 @@
           "showlegend": false
         }
       ]
+    },
+    {
+      "name": "zoom",
+      "data": [
+        {
+          "type": "scatter",
+          "mode": "markers+text",
+          "x": [-0.1, -0.26, -0.16, 0.03, 0.12, -0.07, 0.34, -0.38, 0.59, -0.76, -0.72],
+          "y": [-0.36, 0.23, -0.22, -0.52, -0.16, -0.41, -0.48, -0.48, -0.1, -0.51, -1.07],
+          "text": [
+            "the",
+            "stock",
+            "market",
+            "surged",
+            "after",
+            "the",
+            "central",
+            "bank",
+            "cut",
+            "interest",
+            "rates"
+          ],
+          "textposition": "top center",
+          "textfont": { "size": 10 },
+          "marker": {
+            "size": 9,
+            "color": [
+              "#4f46e5",
+              "#7c3aed",
+              "#db2777",
+              "#dc2626",
+              "#d97706",
+              "#059669",
+              "#0284c7",
+              "#0891b2",
+              "#65a30d",
+              "#ea580c",
+              "#9333ea"
+            ],
+            "line": { "width": 1.5, "color": "white" },
+            "symbol": "circle"
+          },
+          "name": "surged",
+          "legendgroup": "s1",
+          "showlegend": true
+        },
+        {
+          "type": "scatter",
+          "mode": "markers+text",
+          "x": [0.1, -0.22, -0.08, 0.25, 0.23, 0.09, 0.37, -0.31, -0.12, -0.68, -0.61],
+          "y": [-1.21, -0.41, -0.95, -1.26, -1.26, -1.33, -1.15, -1.04, -1.75, -1.06, -1.76],
+          "text": [
+            "the",
+            "stock",
+            "market",
+            "plunged",
+            "after",
+            "the",
+            "central",
+            "bank",
+            "raised",
+            "interest",
+            "rates"
+          ],
+          "textposition": "bottom center",
+          "textfont": { "size": 10, "color": "#6b7280" },
+          "marker": {
+            "size": 9,
+            "color": [
+              "#4f46e5",
+              "#7c3aed",
+              "#db2777",
+              "#dc2626",
+              "#d97706",
+              "#059669",
+              "#0284c7",
+              "#0891b2",
+              "#65a30d",
+              "#ea580c",
+              "#9333ea"
+            ],
+            "line": { "width": 1.5, "color": "white" },
+            "symbol": "square-open"
+          },
+          "name": "plunged",
+          "legendgroup": "s2",
+          "showlegend": true
+        },
+        {
+          "type": "scatter",
+          "mode": "markers+text",
+          "x": [-0.12],
+          "y": [-0.37],
+          "text": ["mean_pool (surged)"],
+          "textposition": "top right",
+          "textfont": { "size": 9 },
+          "marker": {
+            "size": 14,
+            "symbol": "diamond",
+            "color": "#4f46e5",
+            "line": { "width": 2, "color": "white" }
+          },
+          "showlegend": false
+        },
+        {
+          "type": "scatter",
+          "mode": "markers+text",
+          "x": [-0.09],
+          "y": [-1.2],
+          "text": ["mean_pool (plunged)"],
+          "textposition": "bottom right",
+          "textfont": { "size": 9 },
+          "marker": {
+            "size": 14,
+            "symbol": "diamond",
+            "color": "#dc2626",
+            "line": { "width": 2, "color": "white" }
+          },
+          "showlegend": false
+        }
+      ],
+      "layout": { "xaxis": { "range": [-1.78, 1.61] }, "yaxis": { "range": [-2.46, 0.93] } }
     }
   ],
   "layout": {
@@ -3185,6 +3307,14 @@
             "label": "\u23f8 Pause",
             "method": "animate",
             "args": [[null], { "frame": { "duration": 0 }, "mode": "immediate" }]
+          },
+          {
+            "label": "\u2295 Zoom",
+            "method": "animate",
+            "args": [
+              ["zoom"],
+              { "frame": { "duration": 500, "redraw": true }, "mode": "immediate" }
+            ]
           }
         ]
       }
