@@ -1,0 +1,420 @@
+---
+title: 'The Geometry Your Loss Function Leaves Behind'
+date: '2026-06-15'
+lastmod: '2026-06-15'
+tags: ['embeddings', 'transformers', 'geometry', 'colbert', 'information-retrieval', 'nlp']
+draft: true
+summary: 'Dense contrastive and ColBERT MaxSim training produce completely different hidden-state geometries — and the fingerprint is visible at every layer, not just the output. Probing mxbai-embed-large-v1 and jina-colbert-v2 across all 25 depths.'
+images: []
+authors: ['default']
+---
+
+> Looking for TL;DR? Skip to [key takeaways](#key-takeaways)
+
+A dense embedding model and a ColBERT model share the same BERT-large backbone, the same 24 transformer layers, the same pretraining. By the final layer, their internal geometry looks nothing alike. The difference is entirely explained by the loss function.
+
+I probed [mxbai-embed-large-v1](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1) (contrastive, mean-pool loss) and [jina-colbert-v2](https://huggingface.co/jinaai/jina-colbert-v2) (MaxSim / ColBERT loss) layer by layer — all 25 depths (embedding layer + 24 transformer layers). The question: does the training objective leave a geometric fingerprint in the hidden states, or only in the final output?
+
+Answer: it's legible at every layer.
+
+## The Setup
+
+Five metrics, computed at every depth:
+
+- **Intra-sentence cosine** — mean pairwise cosine between all tokens within a sentence. 1.0 = all tokens identical direction; 0.0 = orthogonal.
+- **Anisotropy** — mean cosine between random token pairs drawn from _different_ sentences. High anisotropy means all tokens are globally attracted toward a common direction, regardless of meaning.
+- **Residual/mean ratio** — `‖token − sentence_mean‖ / ‖sentence_mean‖`. How far does each token deviate from its sentence centroid?
+- **Between/within variance ratio (B/W)** — variance of sentence means ÷ variance of tokens around their sentence mean. B/W > 1 means sentence means live in separate neighborhoods; B/W < 1 means token scatter exceeds sentence-level spread.
+- **Hard-set Recall@1** — retrieval on 16 sentences designed to fool the model: negations ("stock market surged" vs "stock market plunged"), role reversals ("tech giant acquired rival" vs "rival acquired tech giant"), minimal edits ("reduces cardiovascular risk" vs "increases risk of injury"). No easy wins.
+
+## Token Collapse Is Real
+
+At the embedding layer (L0), tokens within a sentence are nearly orthogonal — mean intra-sentence cosine = 0.055. Random tokens from different sentences are equally unrelated: anisotropy = 0.064. No structure at all.
+
+By L24, intra-sentence cosine reaches **0.880**. Every token in a sentence points nearly the same direction. Cross-sentence anisotropy reaches 0.425. The gap between the two is what matters: **0.880 − 0.425 = 0.455**. That gap is where sentence-level meaning lives. Within-sentence tokens are far more similar to each other than cross-sentence pairs are.
+
+Note that the residual/mean ratio confirms this in physical terms: at L0, tokens deviate from their sentence centroid by **2.5×** the centroid's magnitude. By L24, only **0.35×**. Tokens went from wandering far from their centroid to huddling near it.
+
+<PlotlyChart
+  data={[
+    {
+      type: 'scatter',
+      mode: 'lines+markers',
+      name: 'Intra-sentence cosine',
+      x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24],
+      y: [
+        0.0554, 0.24, 0.3032, 0.3606, 0.3281, 0.2852, 0.2093, 0.2763, 0.3096, 0.3726, 0.3881,
+        0.4037, 0.4028, 0.3896, 0.3259, 0.2954, 0.4016, 0.4294, 0.3753, 0.3146, 0.3709, 0.4755,
+        0.5524, 0.7295, 0.8798,
+      ],
+      line: { color: '#4f46e5', width: 2.5 },
+      marker: { size: 4 },
+      fill: 'tonexty',
+      fillcolor: 'rgba(79,70,229,0.10)',
+    },
+    {
+      type: 'scatter',
+      mode: 'lines+markers',
+      name: 'Cross-sentence anisotropy',
+      x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24],
+      y: [
+        0.0638, 0.2201, 0.2739, 0.344, 0.3113, 0.2492, 0.1744, 0.2449, 0.2771, 0.3475, 0.369,
+        0.3871, 0.3924, 0.3797, 0.2964, 0.2468, 0.3597, 0.3849, 0.3217, 0.2621, 0.3013, 0.3704,
+        0.4304, 0.5019, 0.4245,
+      ],
+      line: { color: '#f59e0b', width: 2.5 },
+      marker: { size: 4 },
+    },
+  ]}
+  layout={{
+    title: { text: 'mxbai-embed-large-v1: Token convergence across layers', font: { size: 14 } },
+    xaxis: {
+      title: 'Layer',
+      tickmode: 'array',
+      tickvals: [0, 4, 8, 12, 16, 20, 24],
+    },
+    yaxis: { title: 'Mean cosine similarity', range: [0, 1.0] },
+    height: 400,
+    margin: { t: 50, r: 30, b: 60, l: 70 },
+    showlegend: true,
+    legend: { orientation: 'h', y: -0.22 },
+    annotations: [
+      {
+        x: 24,
+        y: 0.8798,
+        text: '0.880',
+        showarrow: true,
+        arrowhead: 2,
+        ax: -40,
+        ay: -20,
+        font: { color: '#4f46e5', size: 12, family: 'monospace' },
+      },
+      {
+        x: 24,
+        y: 0.4245,
+        text: '0.425',
+        showarrow: true,
+        arrowhead: 2,
+        ax: -40,
+        ay: 20,
+        font: { color: '#f59e0b', size: 12, family: 'monospace' },
+      },
+      {
+        x: 20,
+        y: 0.65,
+        text: 'gap = 0.455<br>(sentence meaning)',
+        showarrow: false,
+        font: { color: '#6b7280', size: 11 },
+        bgcolor: 'rgba(255,255,255,0.8)',
+      },
+    ],
+  }}
+/>
+
+The trajectory isn't monotone. Intra-cosine rises sharply through L3 (0.361), _dips to 0.209 at L6_ — lower than L2 — before recovering. There is a second plateau around L10–L14, another dip near L15, then the late-layer explosion. I'll return to this at the end.
+
+## Sentence Discrimination Lives in the Last Five Layers
+
+Tokens converging within a sentence is necessary but not sufficient. The model also needs sentence _means_ to be separable from each other. The between/within variance ratio measures this directly.
+
+At L0, B/W = 0.088: within-sentence token scatter exceeds between-sentence spread — no sentence-level structure whatsoever. From L1 through L19, B/W barely moves, hovering between 0.12 and 0.18. Twenty layers of computation and sentence means are still not well separated.
+
+Then: **L20 = 0.220, L21 = 0.316, L22 = 0.408, L23 = 0.825, L24 = 3.655**. The final four layers do almost all sentence-level discrimination.
+
+<PlotlyChart
+  data={[
+    {
+      type: 'bar',
+      name: 'B/W variance ratio',
+      x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24],
+      y: [
+        0.088, 0.131, 0.137, 0.13, 0.133, 0.145, 0.156, 0.158, 0.157, 0.147, 0.132, 0.129, 0.126,
+        0.125, 0.148, 0.161, 0.164, 0.178, 0.184, 0.181, 0.22, 0.316, 0.408, 0.825, 3.655,
+      ],
+      marker: {
+        color: [
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#cbd5e1',
+          '#818cf8',
+          '#6366f1',
+          '#4f46e5',
+          '#3730a3',
+          '#1e1b4b',
+        ],
+      },
+    },
+  ]}
+  layout={{
+    title: { text: 'B/W variance ratio per layer — mxbai-embed-large-v1', font: { size: 14 } },
+    xaxis: {
+      title: 'Layer',
+      tickmode: 'array',
+      tickvals: [0, 4, 8, 12, 16, 20, 24],
+    },
+    yaxis: { title: 'Between/Within variance ratio', range: [0, 4.0] },
+    height: 380,
+    margin: { t: 50, r: 30, b: 60, l: 70 },
+    showlegend: false,
+    annotations: [
+      {
+        x: 24,
+        y: 3.655,
+        text: '3.655',
+        showarrow: false,
+        yanchor: 'bottom',
+        font: { color: '#1e1b4b', size: 12, family: 'monospace' },
+      },
+      {
+        x: 19,
+        y: 2.5,
+        text: 'L0–L19: flat (0.09–0.18)',
+        showarrow: false,
+        font: { color: '#9ca3af', size: 11 },
+      },
+    ],
+  }}
+/>
+
+Hard-set Recall@1 tracks this pattern exactly:
+
+<PlotlyChart
+  data={[
+    {
+      type: 'scatter',
+      mode: 'lines+markers',
+      name: 'Recall@1 (hard set)',
+      x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24],
+      y: [
+        0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.5,
+        0.5, 0.5, 0.6, 0.6, 0.7, 0.7, 0.8,
+      ],
+      line: { color: '#10b981', width: 2.5 },
+      marker: { size: 5 },
+    },
+  ]}
+  layout={{
+    title: { text: 'Recall@1 on hard sentence pairs across layers', font: { size: 14 } },
+    xaxis: {
+      title: 'Layer',
+      tickmode: 'array',
+      tickvals: [0, 4, 8, 12, 16, 20, 24],
+    },
+    yaxis: { title: 'Recall@1', range: [0, 1.0], tickformat: '.0%' },
+    height: 340,
+    margin: { t: 50, r: 30, b: 60, l: 70 },
+    showlegend: false,
+    annotations: [
+      {
+        x: 4,
+        y: 0.33,
+        text: 'Flat at 0.30 for 11 layers',
+        showarrow: false,
+        font: { color: '#9ca3af', size: 11 },
+      },
+      {
+        x: 24,
+        y: 0.8,
+        text: '0.80',
+        showarrow: true,
+        arrowhead: 2,
+        ax: -35,
+        ay: -15,
+        font: { color: '#10b981', size: 12, family: 'monospace' },
+      },
+    ],
+  }}
+/>
+
+The model cannot distinguish "stock market surged" from "stock market plunged" until the final few layers. The jump from 0.30 to 0.80 happens almost entirely in L11–L24.
+
+Why does discrimination concentrate in the late layers? Not because updates are larger — mean token norm is stable throughout (16.4 at L0, 18.5 at L24). What changes is their _coherence_: the average cosine between token-level update vectors (Δh) reaches **0.818** at L24. Early layers apply independent, idiosyncratic updates to each token. Late layers push the whole sentence's token cloud in a common direction simultaneously.
+
+This is consistent with contrastive gradient flow: the loss gradient is largest at the final layer and decays backward through the residual stream. The contrastive objective concentrates in the final few layers.
+
+## Why Mean Pooling Beats CLS
+
+At L0, `cos([CLS], mean_pool)` = 0.242 — CLS has its own learned embedding that starts partially anti-aligned with the token population average. Through the middle layers, alignment drops further: **0.465 at L6**. CLS is doing something fundamentally different from mean pooling for most of the network's depth.
+
+By L24: **0.958**. Nearly identical.
+
+<PlotlyChart
+  data={[
+    {
+      type: 'scatter',
+      mode: 'lines+markers',
+      name: 'cos([CLS], mean_pool)',
+      x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24],
+      y: [
+        0.2425, 0.6685, 0.7358, 0.8007, 0.7514, 0.6469, 0.4647, 0.5814, 0.6744, 0.771, 0.7896,
+        0.7947, 0.7825, 0.752, 0.6334, 0.5638, 0.6696, 0.6751, 0.6236, 0.5909, 0.6782, 0.7673,
+        0.8316, 0.9127, 0.9575,
+      ],
+      line: { color: '#7c3aed', width: 2.5 },
+      marker: { size: 4 },
+    },
+  ]}
+  layout={{
+    title: { text: 'CLS alignment with mean_pool across layers — mxbai', font: { size: 14 } },
+    xaxis: {
+      title: 'Layer',
+      tickmode: 'array',
+      tickvals: [0, 4, 8, 12, 16, 20, 24],
+    },
+    yaxis: { title: 'cos([CLS], mean_pool)', range: [0, 1.05] },
+    height: 360,
+    margin: { t: 50, r: 30, b: 60, l: 70 },
+    showlegend: false,
+    annotations: [
+      {
+        x: 6,
+        y: 0.4647,
+        text: '0.465 — minimum',
+        showarrow: true,
+        arrowhead: 2,
+        ax: 50,
+        ay: -25,
+        font: { color: '#7c3aed', size: 11 },
+      },
+      {
+        x: 24,
+        y: 0.9575,
+        text: '0.958',
+        showarrow: true,
+        arrowhead: 2,
+        ax: -40,
+        ay: 15,
+        font: { color: '#7c3aed', size: 11, family: 'monospace' },
+      },
+    ],
+  }}
+/>
+
+The [SBERT paper](https://arxiv.org/abs/1908.10084) established empirically that mean pooling outperforms CLS on sentence similarity benchmarks, attributing it loosely to CLS being task-specific during BERT pre-training. The layer trajectory gives the actual mechanism: CLS is a poor approximation of the sentence centroid for most of the network's depth, and only converges at the very end. Mean pooling tracks the centroid at every depth by definition — it is always the average of all token positions. The consequence for anyone using CLS at an intermediate layer — probing studies, multi-exit models, early-exit inference — is a concrete alignment penalty that doesn't vanish until L24.
+
+A related finding: the first principal component of the within-sentence token cloud is _not_ the semantic direction. `|cos(PC1, mean_pool)|` stays below 0.18 at all layers. PC1 captures within-sentence variation — syntactic roles, position, function vs content words — and this variation is nearly orthogonal to the semantic centroid. Mean pooling extracts the centroid and discards PC1's within-sentence noise. That's exactly right.
+
+## The Training Objective Is Geometrically Legible
+
+Everything above is mxbai, trained with a contrastive mean-pool loss. Now compare [jina-colbert-v2](https://huggingface.co/jinaai/jina-colbert-v2), trained with a MaxSim loss. (I'm probing the raw 1024-dim hidden states; jina-colbert-v2's actual ColBERT output passes through a separate 1024→128 projection.)
+
+At L24:
+
+<div style={{overflowX: 'auto'}}>
+
+| Metric               | **mxbai-embed-large-v1** | jina-colbert-v2 |
+| -------------------- | :----------------------: | :-------------: |
+| Intra-doc cosine     |        **0.880**         |      0.286      |
+| Cross-doc anisotropy |          0.425           |    **0.139**    |
+| Residual/mean ratio  |        **0.352**         |      1.424      |
+| B/W variance ratio   |        **3.655**         |      0.254      |
+
+</div>
+
+Every number is reversed. ColBERT tokens stay diverse (intra-cos **0.286**), spread in non-redundant directions (anisotropy **0.139**), deviate significantly from their centroid (residual/mean **1.424**), and their sentence means are not well separated (B/W **0.254**). The centroid is not discriminative — because it doesn't need to be. Retrieval is done by per-token maximum similarity, not centroid comparison.
+
+<PlotlyChart
+  data={[
+    {
+      type: 'scatter',
+      mode: 'lines+markers',
+      name: 'mxbai-embed-large-v1',
+      x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24],
+      y: [
+        0.0554, 0.24, 0.3032, 0.3606, 0.3281, 0.2852, 0.2093, 0.2763, 0.3096, 0.3726, 0.3881,
+        0.4037, 0.4028, 0.3896, 0.3259, 0.2954, 0.4016, 0.4294, 0.3753, 0.3146, 0.3709, 0.4755,
+        0.5524, 0.7295, 0.8798,
+      ],
+      line: { color: '#4f46e5', width: 2.5 },
+      marker: { size: 4 },
+    },
+    {
+      type: 'scatter',
+      mode: 'lines+markers',
+      name: 'jina-colbert-v2',
+      x: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24],
+      y: [
+        0.068, 0.317, 0.341, 0.392, 0.423, 0.445, 0.514, 0.542, 0.598, 0.616, 0.609, 0.599, 0.598,
+        0.576, 0.591, 0.611, 0.595, 0.618, 0.604, 0.613, 0.638, 0.692, 0.65, 0.645, 0.286,
+      ],
+      line: { color: '#10b981', width: 2.5, dash: 'dot' },
+      marker: { size: 4 },
+    },
+  ]}
+  layout={{
+    title: { text: 'Intra-doc token cosine similarity — dense vs ColBERT', font: { size: 14 } },
+    xaxis: {
+      title: 'Layer',
+      tickmode: 'array',
+      tickvals: [0, 4, 8, 12, 16, 20, 24],
+    },
+    yaxis: { title: 'Mean intra-doc cosine', range: [0, 1.0] },
+    height: 400,
+    margin: { t: 50, r: 30, b: 60, l: 70 },
+    showlegend: true,
+    legend: { orientation: 'h', y: -0.22 },
+    annotations: [
+      {
+        x: 24,
+        y: 0.8798,
+        text: '0.880',
+        showarrow: true,
+        arrowhead: 2,
+        ax: -45,
+        ay: -15,
+        font: { color: '#4f46e5', size: 11, family: 'monospace' },
+      },
+      {
+        x: 24,
+        y: 0.286,
+        text: '0.286',
+        showarrow: true,
+        arrowhead: 2,
+        ax: -45,
+        ay: 15,
+        font: { color: '#10b981', size: 11, family: 'monospace' },
+      },
+    ],
+  }}
+/>
+
+Note that ColBERT's intra-doc cosine peaks at **0.692** around L21 before the final layer drops it back to 0.286. This reflects the XLMRoberta backbone naturally producing token convergence in the middle layers — the ColBERT fine-tuning specifically targets the final layers to pull that convergence back, preserving token diversity where it matters for MaxSim scoring.
+
+The mechanism behind the divergence is direct. A contrastive mean-pool loss computes `cos(mean_pool(Q), mean_pool(D))`. The gradient flows into the centroid, which means it flows _identically_ into every token (since mean_pool = average over all tokens). Every token gets pushed in the same direction. Token collapse is not a side effect — it's the geometry that the loss function is building. The B/W ratio explodes because the loss is explicitly training sentence centroids to be discriminative.
+
+MaxSim loss computes the sum over query tokens of the max over document tokens of `cos(q_i, d_j)`. Each query token q_i is matched to its best document token — and different query tokens pair with different document tokens. Different tokens get pulled in different directions. No common direction emerges. The centroid is never made discriminative because the loss never operates on it.
+
+The training objective is not just present in the final embedding. It's legible in the geometry at every layer, from the way token clusters form to the B/W ratio trajectory to how much tokens move in unison.
+
+## An Open Question: The Non-Monotonic Dip
+
+The intra-sentence cosine curve is not monotone. It rises from L0 (0.055) to L3 (0.361), drops to **0.209 at L6**, recovers through L11, plateaus, dips again around L14–L15, then rises sharply in the final five layers.
+
+The most plausible explanation: middle layers _differentiate_ tokens before late layers collapse them. Building syntactic structure requires tokens to carry distinct role information — subject vs object vs modifier. Making tokens more directionally distinct in the middle layers sharpens structural encoding. Late layers, guided by the contrastive objective, then collapse the now-structured token cloud toward a shared semantic direction.
+
+This is consistent with probing literature showing syntactic features peak in L6–L10 and semantic features in L16–L24 for BERT-class models. But I haven't run the targeted experiments to confirm it — type-split analysis (separating CLS, function words, and content words), attention-vs-FFN ablations at the dip layers. For now it is the strongest hypothesis, not a confirmed result.
+
+## Key Takeaways
+
+- **Training objectives leave a geometric fingerprint at every layer, not just the output.** Dense contrastive and ColBERT MaxSim produce completely opposite hidden-state geometries — readable from the embedding layer through L24.
+- **Token collapse is real and dramatic in dense models.** Intra-sentence cosine: **0.055 → 0.880** across 24 layers. The gap over cross-sentence anisotropy (0.455) is where sentence-level meaning is encoded.
+- **Almost all sentence-level discrimination is built in the final 4–5 layers.** B/W variance ratio stays below 0.22 through L19, then explodes to **3.655 at L24**. Hard-set Recall@1 matches: flat at 0.30 through L16, then **0.80 at L24**.
+- **Mean pooling beats CLS because CLS only converges to the centroid at the final layer.** `cos([CLS], mean_pool)` = 0.242 at L0, drops to 0.465 at L6, reaches **0.958 at L24**. Mean pooling is always the centroid.
+- **ColBERT's geometry is the inverse of dense geometry by design.** Intra-doc cosine = 0.286, B/W = 0.254 — tokens stay diverse throughout because MaxSim loss matches tokens individually and never trains the centroid to be discriminative.
