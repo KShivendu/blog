@@ -3,7 +3,7 @@ import { useTheme } from 'next-themes'
 
 const Plot = dynamic(() => import('react-plotly.js'), { ssr: false })
 
-export default function PlotlyChart({ data, layout, config, style }) {
+export default function PlotlyChart({ data, layout, config, style, frames }) {
   const { theme, resolvedTheme } = useTheme()
   const isDark = (resolvedTheme || theme) === 'dark'
 
@@ -46,6 +46,7 @@ export default function PlotlyChart({ data, layout, config, style }) {
         data={data}
         layout={defaultLayout}
         config={defaultConfig}
+        frames={frames}
         style={{ width: '100%', ...style }}
         useResizeHandler
       />
