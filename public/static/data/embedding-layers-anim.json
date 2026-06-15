@@ -3307,6 +3307,14 @@
             "label": "\u23f8 Pause",
             "method": "animate",
             "args": [[null], { "frame": { "duration": 0 }, "mode": "immediate" }]
+          },
+          {
+            "label": "\u2295 Zoom",
+            "method": "animate",
+            "args": [
+              ["zoom"],
+              { "frame": { "duration": 500, "redraw": true }, "mode": "immediate" }
+            ]
           }
         ]
       }
@@ -3442,14 +3450,6 @@
           {
             "args": [["24"], { "frame": { "duration": 300, "redraw": true }, "mode": "immediate" }],
             "label": "24",
-            "method": "animate"
-          },
-          {
-            "args": [
-              ["zoom"],
-              { "frame": { "duration": 300, "redraw": true }, "mode": "immediate" }
-            ],
-            "label": "zoom",
             "method": "animate"
           }
         ]
