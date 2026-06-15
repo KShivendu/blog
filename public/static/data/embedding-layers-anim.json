@@ -237,7 +237,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-21.68, 17.39] }, "yaxis": { "range": [-17.17, 21.91] } }
     },
     {
       "name": "1",
@@ -358,7 +359,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-25.2, 18.98] }, "yaxis": { "range": [-18.91, 25.26] } }
     },
     {
       "name": "2",
@@ -479,7 +481,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-21.42, 16.81] }, "yaxis": { "range": [-15.93, 22.3] } }
     },
     {
       "name": "3",
@@ -600,7 +603,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-16.72, 14.6] }, "yaxis": { "range": [-13.0, 18.32] } }
     },
     {
       "name": "4",
@@ -721,7 +725,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-13.99, 12.1] }, "yaxis": { "range": [-10.73, 15.36] } }
     },
     {
       "name": "5",
@@ -842,7 +847,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-12.85, 11.53] }, "yaxis": { "range": [-9.88, 14.49] } }
     },
     {
       "name": "6",
@@ -963,7 +969,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-12.08, 10.25] }, "yaxis": { "range": [-9.09, 13.25] } }
     },
     {
       "name": "7",
@@ -1084,7 +1091,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-12.2, 10.52] }, "yaxis": { "range": [-9.36, 13.35] } }
     },
     {
       "name": "8",
@@ -1205,7 +1213,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-10.9, 9.95] }, "yaxis": { "range": [-8.91, 11.94] } }
     },
     {
       "name": "9",
@@ -1326,7 +1335,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-10.97, 9.62] }, "yaxis": { "range": [-8.63, 11.96] } }
     },
     {
       "name": "10",
@@ -1447,7 +1457,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-10.2, 8.8] }, "yaxis": { "range": [-7.85, 11.14] } }
     },
     {
       "name": "11",
@@ -1568,7 +1579,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-9.07, 7.8] }, "yaxis": { "range": [-6.94, 9.93] } }
     },
     {
       "name": "12",
@@ -1689,7 +1701,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-8.21, 6.74] }, "yaxis": { "range": [-6.35, 8.59] } }
     },
     {
       "name": "13",
@@ -1810,7 +1823,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-7.17, 5.86] }, "yaxis": { "range": [-5.55, 7.48] } }
     },
     {
       "name": "14",
@@ -1931,7 +1945,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-7.12, 5.41] }, "yaxis": { "range": [-5.42, 7.11] } }
     },
     {
       "name": "15",
@@ -2052,7 +2067,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-7.21, 4.53] }, "yaxis": { "range": [-5.47, 6.27] } }
     },
     {
       "name": "16",
@@ -2173,7 +2189,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-6.44, 3.22] }, "yaxis": { "range": [-4.79, 4.87] } }
     },
     {
       "name": "17",
@@ -2294,7 +2311,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-5.99, 2.5] }, "yaxis": { "range": [-4.65, 3.84] } }
     },
     {
       "name": "18",
@@ -2415,7 +2433,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-5.93, 2.85] }, "yaxis": { "range": [-4.71, 4.08] } }
     },
     {
       "name": "19",
@@ -2536,7 +2555,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-5.93, 2.54] }, "yaxis": { "range": [-4.38, 4.09] } }
     },
     {
       "name": "20",
@@ -2657,7 +2677,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-5.42, 2.82] }, "yaxis": { "range": [-3.75, 4.49] } }
     },
     {
       "name": "21",
@@ -2778,7 +2799,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-4.73, 2.31] }, "yaxis": { "range": [-3.23, 3.82] } }
     },
     {
       "name": "22",
@@ -2899,7 +2921,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-4.1, 1.83] }, "yaxis": { "range": [-2.6, 3.33] } }
     },
     {
       "name": "23",
@@ -3020,7 +3043,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-3.41, 1.66] }, "yaxis": { "range": [-2.49, 2.58] } }
     },
     {
       "name": "24",
@@ -3141,7 +3165,8 @@
           },
           "showlegend": false
         }
-      ]
+      ],
+      "layout": { "xaxis": { "range": [-1.68, 1.5] }, "yaxis": { "range": [-2.36, 0.83] } }
     }
   ],
   "layout": {
@@ -3149,10 +3174,10 @@
       "text": "PCA of token embeddings (axes fixed at L0): \"surged\" vs \"plunged\" converge to different points",
       "font": { "size": 12 }
     },
-    "xaxis": { "title": "PC1 (L0)", "range": [-16.5, 14.0], "showgrid": true, "zeroline": false },
+    "xaxis": { "title": "PC1 (L0)", "range": [-16.31, 12.02], "showgrid": true, "zeroline": false },
     "yaxis": {
       "title": "PC2 (L0)",
-      "range": [-13.5, 20.0],
+      "range": [-17.17, 21.91],
       "showgrid": true,
       "zeroline": false,
       "scaleanchor": "x"
@@ -3175,7 +3200,7 @@
             "args": [
               null,
               {
-                "frame": { "duration": 350, "redraw": true },
+                "frame": { "duration": 400, "redraw": true },
                 "fromcurrent": true,
                 "mode": "immediate"
               }
