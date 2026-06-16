@@ -1,0 +1,428 @@
+{
+  "snli_attractor": {
+    "data": [
+      {
+        "type": "scatter",
+        "mode": "lines+markers",
+        "name": "SNLI contradictions (n=500)",
+        "x": [
+          0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
+        ],
+        "y": [
+          0.6528, 0.7808, 0.8178, 0.8618, 0.8337, 0.7918, 0.7229, 0.8185, 0.8441, 0.8831, 0.8982,
+          0.9129, 0.9138, 0.902, 0.8496, 0.8108, 0.8623, 0.8629, 0.8393, 0.8188, 0.8191, 0.8052,
+          0.7932, 0.7728, 0.6174
+        ],
+        "line": { "color": "#dc2626", "width": 2.5 },
+        "marker": { "size": 5 }
+      },
+      {
+        "type": "scatter",
+        "mode": "markers",
+        "name": "Peak L12",
+        "x": [12],
+        "y": [0.9138],
+        "marker": { "size": 14, "color": "#dc2626", "symbol": "star" },
+        "showlegend": true
+      }
+    ],
+    "layout": {
+      "title": {
+        "text": "Mean pairwise cosine similarity \u2014 SNLI contradiction pairs (n=500)",
+        "font": { "size": 13 }
+      },
+      "xaxis": {
+        "title": "Layer",
+        "tickmode": "array",
+        "tickvals": [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]
+      },
+      "yaxis": { "title": "Mean cosine similarity", "range": [0.55, 0.95] },
+      "height": 360,
+      "margin": { "t": 50, "r": 20, "b": 60, "l": 70 },
+      "legend": { "orientation": "h", "y": -0.22 },
+      "shapes": [
+        {
+          "type": "line",
+          "x0": 12,
+          "x1": 12,
+          "y0": 0.55,
+          "y1": 0.95,
+          "line": { "color": "#dc2626", "width": 1, "dash": "dot" }
+        }
+      ],
+      "annotations": [
+        {
+          "x": 12,
+          "y": 0.9258,
+          "text": "Peak L12: 0.914",
+          "showarrow": false,
+          "font": { "size": 11, "color": "#dc2626" }
+        },
+        {
+          "x": 24,
+          "y": 0.5993999999999999,
+          "text": "L24: 0.617",
+          "showarrow": false,
+          "font": { "size": 11, "color": "#666" }
+        }
+      ]
+    }
+  },
+  "stsb_binned": {
+    "data": [
+      {
+        "type": "scatter",
+        "mode": "lines+markers",
+        "name": "Strong positive (0.8\u20131.0)",
+        "x": [
+          0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
+        ],
+        "y": [
+          0.8713, 0.9224, 0.9376, 0.9515, 0.9416, 0.9263, 0.9004, 0.9312, 0.9425, 0.9576, 0.963,
+          0.9674, 0.9672, 0.9627, 0.9441, 0.9353, 0.9524, 0.9538, 0.9482, 0.9437, 0.9456, 0.9501,
+          0.9549, 0.9564, 0.93
+        ],
+        "line": { "color": "#16a34a", "width": 2.5 },
+        "marker": { "size": 5, "symbol": "circle" }
+      },
+      {
+        "type": "scatter",
+        "mode": "lines+markers",
+        "name": "Soft positive (0.6\u20130.8)",
+        "x": [
+          0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
+        ],
+        "y": [
+          0.8207, 0.8928, 0.9131, 0.9337, 0.9209, 0.9009, 0.8631, 0.9068, 0.9209, 0.9417, 0.9494,
+          0.9562, 0.9567, 0.9511, 0.9252, 0.909, 0.9331, 0.9356, 0.9269, 0.9204, 0.9215, 0.9266,
+          0.9282, 0.9214, 0.8631
+        ],
+        "line": { "color": "#4ade80", "width": 2.5 },
+        "marker": { "size": 5, "symbol": "circle" }
+      },
+      {
+        "type": "scatter",
+        "mode": "lines+markers",
+        "name": "Medium (0.3\u20130.6)",
+        "x": [
+          0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
+        ],
+        "y": [
+          0.7815, 0.864, 0.8903, 0.9157, 0.8997, 0.8754, 0.8329, 0.8859, 0.9026, 0.9267, 0.936,
+          0.9454, 0.9463, 0.9394, 0.9072, 0.8865, 0.9156, 0.916, 0.902, 0.8901, 0.8833, 0.8805,
+          0.8756, 0.8594, 0.7595
+        ],
+        "line": { "color": "#f59e0b", "width": 2.5 },
+        "marker": { "size": 5, "symbol": "square" }
+      },
+      {
+        "type": "scatter",
+        "mode": "lines+markers",
+        "name": "Hard negative (0\u20130.3)",
+        "x": [
+          0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
+        ],
+        "y": [
+          0.7024, 0.8015, 0.8348, 0.8734, 0.8513, 0.8152, 0.7505, 0.8312, 0.8533, 0.8889, 0.905,
+          0.9209, 0.9235, 0.9146, 0.8663, 0.8336, 0.8761, 0.8737, 0.8491, 0.8275, 0.8121, 0.7859,
+          0.7737, 0.7386, 0.5702
+        ],
+        "line": { "color": "#dc2626", "width": 2.5 },
+        "marker": { "size": 5, "symbol": "diamond" }
+      }
+    ],
+    "layout": {
+      "title": {
+        "text": "Similarity attractor by bin \u2014 STS-B pairs (n=1,379)",
+        "font": { "size": 13 }
+      },
+      "xaxis": {
+        "title": "Layer",
+        "tickmode": "array",
+        "tickvals": [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]
+      },
+      "yaxis": { "title": "Mean cosine similarity", "range": [0.5, 1.0] },
+      "height": 380,
+      "margin": { "t": 50, "r": 20, "b": 80, "l": 70 },
+      "legend": { "orientation": "h", "y": -0.25 },
+      "shapes": [
+        {
+          "type": "line",
+          "x0": 12,
+          "x1": 12,
+          "y0": 0.5,
+          "y1": 1.0,
+          "line": { "color": "#94a3b8", "width": 1, "dash": "dot" }
+        }
+      ],
+      "annotations": [
+        {
+          "x": 12.4,
+          "y": 0.53,
+          "text": "L12 attractor",
+          "showarrow": false,
+          "font": { "size": 10, "color": "#64748b" }
+        }
+      ]
+    }
+  },
+  "stsb_pearson": {
+    "data": [
+      {
+        "type": "scatter",
+        "mode": "lines+markers",
+        "name": "Pearson r(model_cosine, human_score)",
+        "x": [
+          0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
+        ],
+        "y": [
+          0.4995, 0.5448, 0.5677, 0.5494, 0.5676, 0.5912, 0.611, 0.538, 0.5431, 0.5317, 0.5293,
+          0.5087, 0.5073, 0.5229, 0.5718, 0.6074, 0.6014, 0.6282, 0.6674, 0.6992, 0.7333, 0.8008,
+          0.8367, 0.8535, 0.8746
+        ],
+        "line": { "color": "#4f46e5", "width": 2.5 },
+        "marker": { "size": 5 },
+        "fill": "tozeroy",
+        "fillcolor": "rgba(79,70,229,0.08)"
+      },
+      {
+        "type": "scatter",
+        "mode": "markers",
+        "name": "L24 peak",
+        "x": [24],
+        "y": [0.8746],
+        "marker": { "size": 14, "color": "#4f46e5", "symbol": "star" }
+      }
+    ],
+    "layout": {
+      "title": {
+        "text": "Pearson correlation vs human similarity scores \u2014 STS-B (n=1,379)",
+        "font": { "size": 13 }
+      },
+      "xaxis": {
+        "title": "Layer",
+        "tickmode": "array",
+        "tickvals": [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]
+      },
+      "yaxis": { "title": "Pearson r", "range": [0.45, 0.95] },
+      "height": 360,
+      "margin": { "t": 50, "r": 20, "b": 60, "l": 70 },
+      "legend": { "orientation": "h", "y": -0.22 },
+      "annotations": [
+        {
+          "x": 24,
+          "y": 0.8896000000000001,
+          "text": "L24: r=0.875",
+          "showarrow": false,
+          "font": { "size": 11, "color": "#4f46e5" }
+        },
+        {
+          "x": 0.5,
+          "y": 0.4795,
+          "text": "L0: r=0.500",
+          "showarrow": false,
+          "font": { "size": 11, "color": "#94a3b8" }
+        }
+      ]
+    }
+  },
+  "preservation_hist": {
+    "data": [
+      {
+        "type": "bar",
+        "name": "Dimensions",
+        "x": [
+          -0.975, -0.925, -0.875, -0.825, -0.775, -0.725, -0.675, -0.625, -0.575, -0.525, -0.475,
+          -0.425, -0.375, -0.325, -0.275, -0.225, -0.175, -0.125, -0.075, -0.025, 0.025, 0.075,
+          0.125, 0.175, 0.225, 0.275, 0.325, 0.375, 0.425, 0.475, 0.525, 0.575, 0.625, 0.675, 0.725,
+          0.775, 0.825, 0.875, 0.925, 0.975
+        ],
+        "y": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 22, 45, 127, 195, 256, 190, 107, 49, 23,
+          5, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "width": [
+          0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+          0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+          0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05
+        ],
+        "marker": { "color": "#6366f1", "opacity": 0.85 }
+      }
+    ],
+    "layout": {
+      "title": {
+        "text": "Preservation spectrum: corr(dim at L0, dim at L24) across 2,758 sentences",
+        "font": { "size": 13 }
+      },
+      "xaxis": { "title": "Pearson r (L0 vs L24)", "range": [-1, 1] },
+      "yaxis": { "title": "Number of dimensions" },
+      "height": 350,
+      "margin": { "t": 50, "r": 20, "b": 60, "l": 70 },
+      "showlegend": false,
+      "shapes": [
+        {
+          "type": "line",
+          "x0": 0,
+          "x1": 0,
+          "y0": 0,
+          "y1": 268.8,
+          "line": { "color": "#dc2626", "width": 1.5, "dash": "dash" }
+        }
+      ],
+      "annotations": [
+        {
+          "x": 0.05,
+          "y": 243.2,
+          "text": "mean=0.024",
+          "showarrow": false,
+          "font": { "size": 11, "color": "#dc2626" }
+        }
+      ]
+    }
+  },
+  "peak_layer_dist": {
+    "data": [
+      {
+        "type": "bar",
+        "name": "Dimensions",
+        "x": [
+          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
+        ],
+        "y": [30, 3, 2, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 2, 5, 0, 3, 6, 6, 6, 1, 64, 894],
+        "marker": {
+          "color": [
+            "#22d3ee",
+            "#22d3ee",
+            "#22d3ee",
+            "#22d3ee",
+            "#22d3ee",
+            "#a78bfa",
+            "#a78bfa",
+            "#a78bfa",
+            "#a78bfa",
+            "#a78bfa",
+            "#a78bfa",
+            "#a78bfa",
+            "#a78bfa",
+            "#a78bfa",
+            "#a78bfa",
+            "#f59e0b",
+            "#f59e0b",
+            "#f59e0b",
+            "#f59e0b",
+            "#dc2626",
+            "#dc2626",
+            "#dc2626",
+            "#dc2626",
+            "#dc2626"
+          ],
+          "opacity": 0.9
+        }
+      }
+    ],
+    "layout": {
+      "title": {
+        "text": "Peak-contribution layer per dimension \u2014 which layer writes most to each dim (n=2,758 sentences)",
+        "font": { "size": 13 }
+      },
+      "xaxis": {
+        "title": "Layer (delta L\u2192L+1)",
+        "tickmode": "array",
+        "tickvals": [
+          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
+        ]
+      },
+      "yaxis": { "title": "Number of dimensions" },
+      "height": 350,
+      "margin": { "t": 50, "r": 20, "b": 60, "l": 70 },
+      "showlegend": false,
+      "annotations": [
+        {
+          "x": 24,
+          "y": 909,
+          "text": "L24: 894 dims (87.3%)",
+          "showarrow": false,
+          "font": { "size": 11, "color": "#dc2626" }
+        },
+        {
+          "x": 23,
+          "y": 79,
+          "text": "L23: 64",
+          "showarrow": false,
+          "font": { "size": 10, "color": "#666" }
+        }
+      ]
+    }
+  },
+  "matryoshka_slices": {
+    "data": [
+      {
+        "type": "bar",
+        "name": "Mean cosine",
+        "x": [
+          "0\u201364\n(64d)",
+          "64\u2013128\n(64d)",
+          "128\u2013256\n(128d)",
+          "256\u2013512\n(256d)",
+          "512\u20131024\n(512d)",
+          "0\u20131024\n(full)"
+        ],
+        "y": [0.5849, 0.5374, 0.5859, 0.5982, 0.644, 0.6174],
+        "error_y": {
+          "type": "data",
+          "array": [0.1613, 0.1806, 0.1514, 0.1441, 0.1267, 0.1341],
+          "visible": true
+        },
+        "marker": {
+          "color": ["#6366f1", "#6366f1", "#6366f1", "#6366f1", "#6366f1", "#374151"],
+          "opacity": 0.85
+        }
+      },
+      {
+        "type": "scatter",
+        "mode": "markers",
+        "name": "p10\u2013p90 range",
+        "x": [
+          "0\u201364\n(64d)",
+          "64\u2013128\n(64d)",
+          "128\u2013256\n(128d)",
+          "256\u2013512\n(256d)",
+          "512\u20131024\n(512d)",
+          "0\u20131024\n(full)"
+        ],
+        "y": [0.5761, 0.5367, 0.584, 0.5954, 0.6432, 0.6183],
+        "error_y": {
+          "type": "data",
+          "array": [0.2157, 0.236, 0.1985, 0.1924, 0.162, 0.1755],
+          "visible": true,
+          "color": "#94a3b8",
+          "thickness": 2,
+          "width": 6
+        },
+        "marker": { "size": 0, "opacity": 0 },
+        "showlegend": true
+      }
+    ],
+    "layout": {
+      "title": {
+        "text": "Matryoshka slice discrimination \u2014 cosine(premise, hypothesis) at L24 for SNLI contradictions (n=500)",
+        "font": { "size": 13 }
+      },
+      "xaxis": { "title": "Dimension slice" },
+      "yaxis": { "title": "Cosine similarity", "range": [0.45, 0.75] },
+      "height": 380,
+      "margin": { "t": 50, "r": 20, "b": 70, "l": 70 },
+      "legend": { "orientation": "h", "y": -0.22 },
+      "shapes": [
+        {
+          "type": "line",
+          "x0": -0.5,
+          "x1": 5.5,
+          "y0": 0.617426872253418,
+          "y1": 0.617426872253418,
+          "line": { "color": "#374151", "width": 1, "dash": "dot" }
+        }
+      ]
+    }
+  }
+}
