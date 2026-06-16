@@ -138,9 +138,13 @@ I measured how well each slice discriminates SNLI contradictions at L24 — lowe
 
 The 512–1024 slice is the _least_ discriminative of all, despite being the largest. The 64–128 slice is the most discriminative. The full vector (0.617) is between these extremes.
 
-This is the opposite of what you might expect. The intuition "more dimensions = better discrimination" doesn't hold within the Matryoshka structure. Here's why: MRL trains the model such that the first 64 dimensions already form a complete, independent embedding that minimizes the contrastive loss. The next 64 (dims 64–128) add orthogonal information that further reduces loss. By the time you reach dims 512–1024, those dimensions are capturing the finest-grained refinements — but they're also the dimensions that contribute most to making similar sentences look _more_ similar (the absolute magnitudes are smaller, so they drag the full-vector cosine toward the slice-average).
+This is the opposite of what you might expect. The intuition "more dimensions = better discrimination" doesn't hold within the Matryoshka structure.
 
-Put differently: the early Matryoshka tiers encode the coarsest but most contrastive signal. The later tiers encode fine-grained nuance. When you measure on contradictions — where you _want_ low similarity — the early tiers win.
+The reason isn't about magnitude — the 512–1024 slice actually has the **highest** L2 norm (~12.7) of any slice, while 0–64 has the lowest (~4.4). Cosine similarity is computed after normalization anyway, so raw magnitudes cancel out.
+
+The real reason is what the dims encode. MRL training forces the first 64 dimensions to carry the most **discriminative** (contrastive) signal, because the 64-dim model must function independently — it cannot afford to spend any of those 64 dims on shared semantic content. Later dims have that luxury, so they encode "what the sentence is about": topic, entities, general domain. For contradiction pairs, the topic is almost entirely shared (same dogs, same grass, same event) — only the relationship differs ("no grass" vs "in grass"). The early dims were specifically trained to capture that relational difference. The later dims capture the shared topic and therefore look more similar for contradictions.
+
+Put differently: the early Matryoshka tiers encode the most contrastive signal because they had to. The later tiers encode stable semantic content that is useful for ranking similar pairs, but that content is mostly shared between contradictions.
 
 Note that p10–p90 range (gray error bars) is widest for dim 64–128 (std = 0.181) and narrows toward the full vector (std = 0.134). The later slices not only discriminate less on average, they discriminate more consistently — they're encoding stable, low-variance semantic content rather than the noisier contrastive signal.
 
