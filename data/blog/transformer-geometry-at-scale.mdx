@@ -148,6 +148,82 @@ Put differently: the early Matryoshka tiers encode the most contrastive signal b
 
 Note that p10–p90 range (gray error bars) is widest for dim 64–128 (std = 0.181) and narrows toward the full vector (std = 0.134). The later slices not only discriminate less on average, they discriminate more consistently — they're encoding stable, low-variance semantic content rather than the noisier contrastive signal.
 
+## The Shape of Matryoshka: Normalization, Anisotropy, and What Full-Vector Cosine Actually Computes
+
+The discrimination results above beg a follow-up question: when you actually run retrieval with the full 1024-dim vector, what is the model really doing? Cosine similarity after unit normalization is a weighted combination of all slice contributions — but the weights are far from equal.
+
+### Experiment 1 — Energy per slice: the 512–1024 slice dominates
+
+For each sentence, we measure what fraction of the total squared L2 norm falls in each slice. That fraction is exactly the weight that slice gets in the final cosine dot product.
+
+<PlotlyChart data={scaleData.shape_energy.data} layout={scaleData.shape_energy.layout} />
+
+The 512–1024 slice holds **53.4%** of the total energy. The two most discriminative slices (0–64 and 64–128) together get only **11%**. The L2 norm also increases monotonically with slice index: 4.1 → 3.9 → 5.8 → 8.4 → 12.5, which is what creates the energy imbalance.
+
+This means full-vector cosine is structurally biased: it overweights the slices that encode shared topic content and underweights the slices that encode the relational, contrastive signal.
+
+### Experiment 2 — Rank correlation: which slice drives retrieval?
+
+We rank 500 SNLI pairs by cosine similarity computed independently within each slice, then measure how much each slice agrees with the others (and with the full vector).
+
+<PlotlyChart data={scaleData.shape_spearman.data} layout={scaleData.shape_spearman.layout} />
+
+| Slice        | Spearman r vs full vector |
+| ------------ | ------------------------- |
+| 0–64         | 0.872                     |
+| 64–128       | 0.888                     |
+| 128–256      | 0.937                     |
+| 256–512      | 0.974                     |
+| **512–1024** | **0.991**                 |
+
+The full-vector ranking is almost entirely determined by the 512–1024 slice (r = 0.991). The 0–64 slice still correlates at 0.872 — meaningful, but clearly different. The small slices also disagree most with each other: 0–64 vs 64–128 has the lowest inter-slice correlation at 0.784, suggesting they each capture genuinely different aspects of meaning that the larger slices blend together.
+
+### Experiment 3 — Norm equalization: what happens if all slices get equal weight?
+
+If we scale each slice to unit norm before concatenating (giving every slice equal energy), then re-normalize the full vector, how much does that shift things?
+
+<PlotlyChart data={scaleData.shape_eq.data} layout={scaleData.shape_eq.layout} />
+
+Mean cosine for SNLI contradictions shifts from **0.617 → 0.590** — meaningfully more discriminative. But the pair ranking barely changes (Spearman r = 0.988). The normalization imbalance inflates absolute similarity values for all pairs roughly equally, so it doesn't hurt retrieval ranking — but it does matter if you're applying a similarity threshold to filter candidates.
+
+### Experiment 4 — Anisotropy: later slices are increasingly wasteful
+
+For each slice, we compute the **participation ratio** — a measure of how many of the slice's dimensions are actually doing work (formally, `(Σλ)²/Σλ²` over PCA eigenvalues). A ratio of 1.0 means perfectly isotropic; closer to 0 means the variance is concentrated in a few directions.
+
+<PlotlyChart data={scaleData.shape_aniso.data} layout={scaleData.shape_aniso.layout} />
+
+| Slice    | Effective dims | % of budget used | Dims for 90% var |
+| -------- | -------------- | ---------------- | ---------------- |
+| 0–64     | 30 / 64        | **47%**          | 42               |
+| 64–128   | 31 / 64        | **48%**          | 41               |
+| 128–256  | 42 / 128       | 33%              | 68               |
+| 256–512  | 47 / 256       | 18%              | 96               |
+| 512–1024 | 52 / 512       | **10%**          | 125              |
+
+The two 64-dim slices use nearly half their dimensional budget. The 512-dim slice uses only 10% — 52 effective dimensions out of 512. You need only 125 dimensions to capture 90% of the variance within the 512–1024 slice.
+
+This is the geometric fingerprint of MRL training: early slices are forced to be dense and isotropic (every dimension pulled into service by the loss), while later slices sprawl the same amount of signal across far more dimensions. The 512–1024 slice isn't richer than the 64-dim slices — it's the same signal at lower density, surrounded by near-zero dimensions that add noise without information.
+
+### Experiment 5 — Dot product decomposition: where does each pair's cosine come from?
+
+After unit-normalizing the full vector, we can decompose the dot product between two sentences into per-slice contributions. The contributions sum exactly to the full cosine.
+
+<PlotlyChart data={scaleData.shape_decomp.data} layout={scaleData.shape_decomp.layout} />
+
+For all three pair types — hard contradiction (cos = 0.843), cross-domain (cos = 0.447), easy paraphrase (cos = 0.870) — the 512–1024 slice contributes **~55%** of the dot product. This is constant across pair types because the energy distribution is a property of the model weights, not the inputs.
+
+The independent slice cosines tell a more nuanced story, though. For the cross-domain pair, the 64–128 slice shows cosine 0.33 (very low — these sentences are truly unrelated in that subspace), while 512–1024 shows 0.45. The large slice is dragging the full-vector cosine upward relative to what the discriminative slices see.
+
+### What this means in practice
+
+Full-vector cosine in mxbai is not a neutral aggregation of Matryoshka tiers. It is effectively a **52-effective-dim retrieval** (the anisotropic signal of the 512–1024 slice), with minor corrections from smaller, denser, more discriminative slices that collectively hold only 11% of the energy.
+
+If you want the contrastive signal that MRL packed into early dims to actually influence retrieval:
+
+- **Truncate explicitly**: use 64–256 dim vectors. You lose recall on borderline cases but gain discrimination on hard negatives.
+- **Equalize slice norms** before retrieval. Rankings stay nearly identical (r = 0.988) but absolute scores become more calibrated.
+- **Don't assume "more dims = better"**: the 512–1024 slice actively makes contradictions look more similar, not less.
+
 ## Putting It Together
 
 These five measurements form a coherent picture of how mxbai-embed-large-v1 processes sentences:
