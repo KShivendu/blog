@@ -424,5 +424,345 @@
         }
       ]
     }
+  },
+  "shape_energy": {
+    "data": [
+      {
+        "type": "bar",
+        "name": "Energy share (%)",
+        "x": [
+          "0\u201364\n(64d)",
+          "64\u2013128\n(64d)",
+          "128\u2013256\n(128d)",
+          "256\u2013512\n(256d)",
+          "512\u20131024\n(512d)"
+        ],
+        "y": [5.6737, 5.2714, 11.51, 24.1065, 53.4383],
+        "error_y": {
+          "type": "data",
+          "array": [0.9136, 0.8168, 1.2739, 1.5863, 1.9566],
+          "visible": true
+        },
+        "marker": {
+          "color": ["#6366f1", "#8b5cf6", "#a78bfa", "#818cf8", "#c4b5fd"],
+          "opacity": 0.88
+        },
+        "yaxis": "y"
+      },
+      {
+        "type": "scatter",
+        "mode": "lines+markers",
+        "name": "Slice L2 norm",
+        "x": [
+          "0\u201364\n(64d)",
+          "64\u2013128\n(64d)",
+          "128\u2013256\n(128d)",
+          "256\u2013512\n(256d)",
+          "512\u20131024\n(512d)"
+        ],
+        "y": [4.0495, 3.9052, 5.776, 8.369, 12.4609],
+        "line": { "color": "#0f172a", "width": 2, "dash": "dot" },
+        "marker": { "size": 7, "color": "#0f172a" },
+        "yaxis": "y2"
+      }
+    ],
+    "layout": {
+      "title": {
+        "text": "Energy share in full-vector cosine \u2014 each slice's fraction of total squared norm (n=1,000 SNLI encodings)",
+        "font": { "size": 13 }
+      },
+      "xaxis": { "title": "Matryoshka slice" },
+      "yaxis": { "title": "Energy share (%)", "range": [0, 65] },
+      "yaxis2": {
+        "title": "Mean slice L2 norm",
+        "overlaying": "y",
+        "side": "right",
+        "range": [0, 18],
+        "showgrid": false
+      },
+      "height": 380,
+      "margin": { "t": 60, "r": 80, "b": 70, "l": 70 },
+      "legend": { "orientation": "h", "y": -0.25 },
+      "shapes": [
+        {
+          "type": "line",
+          "x0": -0.5,
+          "x1": 4.5,
+          "y0": 20,
+          "y1": 20,
+          "line": { "color": "#94a3b8", "width": 1, "dash": "dash" }
+        }
+      ],
+      "annotations": [
+        {
+          "x": 3,
+          "y": 22,
+          "yref": "y",
+          "text": "equal share = 20%",
+          "showarrow": false,
+          "font": { "size": 10, "color": "#64748b" }
+        }
+      ]
+    }
+  },
+  "shape_spearman": {
+    "data": [
+      {
+        "type": "heatmap",
+        "z": [
+          [1.0, 0.784, 0.795, 0.834, 0.85],
+          [0.784, 1.0, 0.83, 0.85, 0.863],
+          [0.795, 0.83, 1.0, 0.895, 0.913],
+          [0.834, 0.85, 0.895, 1.0, 0.95],
+          [0.85, 0.863, 0.913, 0.95, 1.0]
+        ],
+        "x": ["0-64", "64-128", "128-256", "256-512", "512-1024"],
+        "y": ["0-64", "64-128", "128-256", "256-512", "512-1024"],
+        "colorscale": "Blues",
+        "zmin": 0.75,
+        "zmax": 1.0,
+        "text": [
+          ["1.000", "0.784", "0.795", "0.834", "0.850"],
+          ["0.784", "1.000", "0.830", "0.850", "0.863"],
+          ["0.795", "0.830", "1.000", "0.895", "0.913"],
+          ["0.834", "0.850", "0.895", "1.000", "0.950"],
+          ["0.850", "0.863", "0.913", "0.950", "1.000"]
+        ],
+        "texttemplate": "%{text}",
+        "showscale": true,
+        "colorbar": { "title": "Spearman r", "len": 0.8 }
+      }
+    ],
+    "layout": {
+      "title": {
+        "text": "Cross-slice Spearman rank correlation \u2014 do slices agree on pair ordering?",
+        "font": { "size": 13 }
+      },
+      "xaxis": { "title": "Slice" },
+      "yaxis": { "title": "Slice", "autorange": "reversed" },
+      "height": 380,
+      "margin": { "t": 60, "r": 80, "b": 70, "l": 90 }
+    }
+  },
+  "shape_aniso": {
+    "data": [
+      {
+        "type": "bar",
+        "name": "Effective dims (% of slice size)",
+        "x": [
+          "0\u201364\n(64d)",
+          "64\u2013128\n(64d)",
+          "128\u2013256\n(128d)",
+          "256\u2013512\n(256d)",
+          "512\u20131024\n(512d)"
+        ],
+        "y": [46.8295, 47.9639, 32.7989, 18.4825, 10.1649],
+        "marker": {
+          "color": ["#6366f1", "#8b5cf6", "#a78bfa", "#818cf8", "#c4b5fd"],
+          "opacity": 0.88
+        },
+        "yaxis": "y"
+      },
+      {
+        "type": "scatter",
+        "mode": "lines+markers",
+        "name": "Dims needed for 90% variance",
+        "x": [
+          "0\u201364\n(64d)",
+          "64\u2013128\n(64d)",
+          "128\u2013256\n(128d)",
+          "256\u2013512\n(256d)",
+          "512\u20131024\n(512d)"
+        ],
+        "y": [42, 41, 68, 96, 125],
+        "line": { "color": "#0f172a", "width": 2, "dash": "dot" },
+        "marker": { "size": 7, "color": "#0f172a", "symbol": "diamond" },
+        "yaxis": "y2"
+      }
+    ],
+    "layout": {
+      "title": {
+        "text": "Anisotropy by slice \u2014 participation ratio (% of dims that are 'active') and dims needed for 90% variance",
+        "font": { "size": 13 }
+      },
+      "xaxis": { "title": "Matryoshka slice" },
+      "yaxis": { "title": "Effective dims (% of slice size)", "range": [0, 60] },
+      "yaxis2": {
+        "title": "Dims for 90% variance",
+        "overlaying": "y",
+        "side": "right",
+        "range": [0, 160],
+        "showgrid": false
+      },
+      "height": 380,
+      "margin": { "t": 60, "r": 80, "b": 70, "l": 70 },
+      "legend": { "orientation": "h", "y": -0.25 }
+    }
+  },
+  "shape_decomp": {
+    "data": [
+      {
+        "type": "bar",
+        "name": "0-64",
+        "x": [
+          "Hard contradiction\n(surged vs plunged)",
+          "Cross-domain\n(fox vs stock market)",
+          "Easy paraphrase\n(fox vs orange fox)"
+        ],
+        "y": [0.0634, 0.0441, 0.0548],
+        "marker": { "color": "#6366f1" }
+      },
+      {
+        "type": "bar",
+        "name": "64-128",
+        "x": [
+          "Hard contradiction\n(surged vs plunged)",
+          "Cross-domain\n(fox vs stock market)",
+          "Easy paraphrase\n(fox vs orange fox)"
+        ],
+        "y": [0.0428, 0.0165, 0.0393],
+        "marker": { "color": "#8b5cf6" }
+      },
+      {
+        "type": "bar",
+        "name": "128-256",
+        "x": [
+          "Hard contradiction\n(surged vs plunged)",
+          "Cross-domain\n(fox vs stock market)",
+          "Easy paraphrase\n(fox vs orange fox)"
+        ],
+        "y": [0.0966, 0.0574, 0.0859],
+        "marker": { "color": "#a78bfa" }
+      },
+      {
+        "type": "bar",
+        "name": "256-512",
+        "x": [
+          "Hard contradiction\n(surged vs plunged)",
+          "Cross-domain\n(fox vs stock market)",
+          "Easy paraphrase\n(fox vs orange fox)"
+        ],
+        "y": [0.1692, 0.0843, 0.2175],
+        "marker": { "color": "#818cf8" }
+      },
+      {
+        "type": "bar",
+        "name": "512-1024",
+        "x": [
+          "Hard contradiction\n(surged vs plunged)",
+          "Cross-domain\n(fox vs stock market)",
+          "Easy paraphrase\n(fox vs orange fox)"
+        ],
+        "y": [0.4708, 0.2444, 0.4729],
+        "marker": { "color": "#c4b5fd" }
+      }
+    ],
+    "layout": {
+      "title": {
+        "text": "Dot product decomposition by slice after unit normalization \u2014 which slice drives the final cosine?",
+        "font": { "size": 13 }
+      },
+      "xaxis": { "title": "Pair type" },
+      "yaxis": { "title": "Contribution to dot product" },
+      "barmode": "stack",
+      "height": 380,
+      "margin": { "t": 60, "r": 20, "b": 80, "l": 70 },
+      "legend": { "orientation": "h", "y": -0.28, "title": { "text": "Slice" } },
+      "annotations": [
+        {
+          "x": "Hard contradiction\n(surged vs plunged)",
+          "y": 0.8628,
+          "text": "cos=0.843",
+          "showarrow": false,
+          "font": { "size": 11, "color": "#374151" }
+        },
+        {
+          "x": "Cross-domain\n(fox vs stock market)",
+          "y": 0.4668,
+          "text": "cos=0.447",
+          "showarrow": false,
+          "font": { "size": 11, "color": "#374151" }
+        },
+        {
+          "x": "Easy paraphrase\n(fox vs orange fox)",
+          "y": 0.8905000000000001,
+          "text": "cos=0.870",
+          "showarrow": false,
+          "font": { "size": 11, "color": "#374151" }
+        }
+      ]
+    }
+  },
+  "shape_eq": {
+    "data": [
+      {
+        "type": "scatter",
+        "mode": "markers",
+        "name": "SNLI pairs",
+        "x": [
+          0.737, 0.5075, 0.7104, 0.5582, 0.5207, 0.6608, 0.6647, 0.5706, 0.6087, 0.7114, 0.6056,
+          0.6602, 0.3851, 0.8152, 0.6037, 0.4721, 0.5635, 0.7338, 0.5061, 0.3685, 0.5975, 0.7768,
+          0.557, 0.4615, 0.5589, 0.4892, 0.7061, 0.605, 0.5866, 0.5339, 0.7988, 0.6068, 0.558,
+          0.7563, 0.4649, 0.7011, 0.5111, 0.6971, 0.6705, 0.7615, 0.3967, 0.6457, 0.432, 0.6626,
+          0.4314, 0.8904, 0.6115, 0.551, 0.6338, 0.4432, 0.7735, 0.8598, 0.7144, 0.796, 0.82,
+          0.7679, 0.5219, 0.4606, 0.6932, 0.7917, 0.5287, 0.3129, 0.718, 0.7262, 0.4127, 0.4315,
+          0.6002, 0.3081, 0.6047, 0.7962, 0.5397, 0.6897, 0.3752, 0.6862, 0.2788, 0.8716, 0.4593,
+          0.5886, 0.4511, 0.7495, 0.8957, 0.7534, 0.6193, 0.7186, 0.6567, 0.644, 0.7293, 0.659,
+          0.6617, 0.5257, 0.7676, 0.5956, 0.4568, 0.6428, 0.7485, 0.7616, 0.7955, 0.6872, 0.8012,
+          0.7625, 0.5735, 0.3682, 0.5924, 0.8334, 0.6031, 0.8654, 0.7289, 0.5673, 0.5826, 0.7622,
+          0.5733, 0.4665, 0.7651, 0.5564, 0.6391, 0.3526, 0.5191, 0.4995, 0.5113, 0.3982, 0.6673,
+          0.6951, 0.8147, 0.7493, 0.7997, 0.5452, 0.614, 0.6365, 0.5496, 0.9694, 0.8425, 0.6746,
+          0.6611, 0.5714, 0.8374, 0.7938, 0.6733, 0.5552, 0.5258, 0.6126, 0.5431, 0.9096, 0.3597,
+          0.6305, 0.6129, 0.5102, 0.3253, 0.6701, 0.7612, 0.6486, 0.5647, 0.4196, 0.613, 0.5381,
+          0.8334, 0.7086, 0.6863, 0.5209, 0.5666, 0.6187, 0.6936, 0.6602, 0.8449, 0.5959, 0.6584,
+          0.567, 0.7205, 0.6732, 0.6531, 0.5399, 0.4279, 0.5233, 0.3887, 0.5163, 0.706, 0.9545,
+          0.7384, 0.5353, 0.6171, 0.5808, 0.5753, 0.6443, 0.6553, 0.7062, 0.422, 0.7766, 0.3961,
+          0.5542, 0.6802, 0.6025, 0.5504, 0.5765, 0.5446, 0.6271, 0.712, 0.8418, 0.5693, 0.6037,
+          0.7363, 0.7532
+        ],
+        "y": [
+          0.7057, 0.499, 0.6814, 0.5546, 0.4797, 0.6271, 0.6774, 0.4964, 0.5297, 0.6716, 0.6055,
+          0.6487, 0.312, 0.78, 0.5893, 0.4196, 0.5365, 0.7171, 0.4752, 0.3255, 0.5827, 0.7411,
+          0.5812, 0.371, 0.549, 0.4344, 0.6726, 0.5965, 0.5697, 0.5081, 0.7834, 0.5436, 0.506,
+          0.7371, 0.4414, 0.6737, 0.4873, 0.6799, 0.6371, 0.7421, 0.3747, 0.6447, 0.3858, 0.6173,
+          0.3613, 0.8725, 0.5936, 0.4662, 0.6043, 0.4324, 0.765, 0.8537, 0.7212, 0.7768, 0.8183,
+          0.7525, 0.4782, 0.3996, 0.7021, 0.7821, 0.5271, 0.2463, 0.6947, 0.7182, 0.3915, 0.423,
+          0.5771, 0.2894, 0.5691, 0.7966, 0.5071, 0.6768, 0.2663, 0.676, 0.2314, 0.8728, 0.4198,
+          0.569, 0.4024, 0.7457, 0.8812, 0.7334, 0.6007, 0.7121, 0.6368, 0.6297, 0.7125, 0.6684,
+          0.6016, 0.5006, 0.71, 0.547, 0.4282, 0.6041, 0.7313, 0.7664, 0.7812, 0.6485, 0.793,
+          0.7402, 0.5766, 0.3315, 0.5423, 0.8109, 0.5552, 0.8583, 0.7149, 0.5574, 0.53, 0.7214,
+          0.5671, 0.4407, 0.7476, 0.5347, 0.6105, 0.3154, 0.521, 0.4571, 0.4551, 0.3463, 0.6378,
+          0.6795, 0.8098, 0.7492, 0.7503, 0.5073, 0.5767, 0.6451, 0.5392, 0.9707, 0.8287, 0.6404,
+          0.6419, 0.5039, 0.8239, 0.787, 0.6256, 0.5151, 0.4874, 0.5679, 0.5298, 0.9031, 0.3275,
+          0.5465, 0.565, 0.4369, 0.2805, 0.6416, 0.703, 0.6435, 0.5647, 0.3571, 0.5651, 0.515,
+          0.8156, 0.7051, 0.659, 0.4846, 0.5646, 0.6024, 0.6805, 0.6174, 0.8284, 0.5514, 0.6287,
+          0.5032, 0.7004, 0.6491, 0.6231, 0.516, 0.3873, 0.4583, 0.3074, 0.4691, 0.6847, 0.9509,
+          0.7229, 0.4964, 0.5745, 0.5566, 0.584, 0.6133, 0.6179, 0.6952, 0.4137, 0.7857, 0.3318,
+          0.5111, 0.6716, 0.5634, 0.5381, 0.5673, 0.511, 0.5664, 0.7087, 0.8204, 0.5712, 0.6102,
+          0.731, 0.7154
+        ],
+        "marker": { "size": 5, "color": "#6366f1", "opacity": 0.5 }
+      },
+      {
+        "type": "scatter",
+        "mode": "lines",
+        "name": "y = x",
+        "x": [0.2, 1.0],
+        "y": [0.2, 1.0],
+        "line": { "color": "#94a3b8", "width": 1.5, "dash": "dash" },
+        "showlegend": true
+      }
+    ],
+    "layout": {
+      "title": {
+        "text": "Raw full-vector cosine vs norm-equalized cosine \u2014 SNLI contradictions (Spearman r=0.988)",
+        "font": { "size": 13 }
+      },
+      "xaxis": { "title": "Raw cosine (mean=0.617)", "range": [0.2, 1.0] },
+      "yaxis": { "title": "Equalized cosine (mean=0.590)", "range": [0.2, 1.0] },
+      "height": 380,
+      "margin": { "t": 60, "r": 20, "b": 70, "l": 70 },
+      "legend": { "orientation": "h", "y": -0.22 }
+    }
   }
 }
