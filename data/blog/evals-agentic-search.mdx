@@ -1,0 +1,150 @@
+---
+title: 'Getting Signal from an Agent That Never Stays Still: Evals for Agentic Search'
+date: '2026-06-16'
+tags: ['search', 'agents', 'evals', 'llm', 'finetuning']
+draft: true
+summary: 'In traditional search you watch what users click. In agentic search the agent reformulates, retries, and reasons — and your signal is buried three layers deep. Here are three patterns for extracting it.'
+---
+
+In traditional search, relevance is embarrassingly simple to measure. An e-commerce query for "trail running shoes" either ends in a purchase or it doesn't. With agentic search, the agent reformulates the query, paginates through results, reasons through contradictions, and then — maybe — surfaces something to the user. Your signal is buried three layers deep, and most of it is noise.
+
+> Looking for TL;DR? Skip to [key takeaways](#key-takeaways)
+
+This is Part 1 of a series on evals and finetuning for agentic search. Part 1 is about signal collection. Part 2 will cover closing the loop: contrastive annotation, embedding finetuning from oracle-derived triplets, and how to A/B test when the agent _is_ the user.
+
+## The Classical Signal Ladder
+
+Before talking about what's hard with agents, it's worth being precise about what works in traditional search.
+
+The implicit feedback hierarchy looks like this: **impressions → clicks → dwell time → conversions**. Each step is a higher-quality signal than the last. A click tells you something; a purchase tells you a lot. The reason the hierarchy works is that there's a _human_ at the bottom of the stack who has real intent and acts on it directly.
+
+In e-commerce, "add to cart" occupies a sweet spot — high intent, lower noise than clicks, doesn't require completing a purchase. If a product shows up in search results for "running shoes" and gets added to cart at a 12% rate while the second result gets 3%, the first result is objectively better for that query. You can use these signals directly for [learning to rank](https://en.wikipedia.org/wiki/Learning_to_rank), [hard negative mining](https://arxiv.org/abs/2007.01128), and embedding finetuning.
+
+Two important cleanup steps apply before using any of this:
+
+1. **Deduplication for high-signal events.** The same user adding the same item to cart three times in the same session is one signal, not three.
+2. **Position debiasing.** Items shown in position 1 get clicked more regardless of quality. [Inverse propensity scoring](https://dl.acm.org/doi/10.1145/3219819.3220091) corrects for this.
+
+Both steps are well-understood. The field has had 20 years to figure them out.
+
+## How Agents Break the Signal Model
+
+Now replace the human with an LLM agent.
+
+The agent is executing a task — say, researching competitors for a SaaS product or finding documentation to answer a technical question. It calls your search API repeatedly, reformulating the query each time. Maybe it starts with `"best vector database 2024"`, gets back ten results, finds them too generic, and retries with `"qdrant vs weaviate latency benchmarks"`. It does this five times before settling on two documents it actually uses.
+
+If you look at raw search API logs, you see six queries and sixty result impressions. None of these are the signal you want. The signal is: **which two documents did the agent actually use in its final response?**
+
+The problem is that agents don't have an "add to cart" button. They have a continuous loop of search → evaluate → reformulate → search again, and the loop terminates when the agent decides it has enough context — not when it clicks something.
+
+There's a second problem: unlike a user who has real intent anchored in the physical world, an LLM agent has _priors_. It has been trained on certain distributions of text and will systematically prefer items that look like what it's seen before. This matters a lot when we get to self-fulfilling prophecies, but let's first look at how to collect signal at all.
+
+## Three Patterns for Signal Collection
+
+### 1. Session-ID Tracking: Treat Agent Sessions Like User Sessions
+
+The simplest pattern requires only one instrumentation change: assign every agent invocation a stable session ID before it makes any API calls, and log every search call with that session ID.
+
+```
+Session: agent-session-f3a2b1
+Query 1: "vector database latency"     → 10 results
+Query 2: "qdrant vs weaviate benchmark" → 10 results
+Query 3: "qdrant latency p99"           → 10 results
+[Agent generates final answer using result IDs: doc-447, doc-891]
+```
+
+If you can recover which result IDs ended up in the agent's context window when it produced its final output, that's your positive signal. Documents that appeared in earlier queries but _not_ in the final context are weak negatives. Documents that never appeared at all are hard negatives.
+
+The quality of this signal depends entirely on your ability to track what the agent actually used. A few practical approaches:
+
+- **Structured final output.** Require the agent to return a `sources` field alongside its answer. This is the most reliable approach — it's explicit, auditable, and decoupled from implementation details.
+- **Context window logging.** Log the full prompt that produced the final response and extract document IDs from it. More brittle, but works without changing agent behavior.
+- **Reformulation as negative signal.** Every time the agent reformulates a query after receiving results, that's a soft signal that the results weren't satisfying. This is the equivalent of a pogostick in web search — the user leaves the result page without staying long enough to read it.
+
+Note that the session-ID pattern gives you _behavioral_ signal without requiring ground truth. It's cheap to collect at scale. The weakness is that agent behavior is noisy — the same underlying intent can produce very different query sequences depending on the model's sampling temperature and which results it happened to retrieve first.
+
+### 2. The Oracle Agent Pattern: Know What Was Actually Used
+
+The cleanest signal comes from owning the agent. If you deploy your own search agent as a layer between your search API and downstream consumers, you get exact visibility into what the agent used.
+
+The setup looks like this:
+
+```
+User query → [Your Search Agent] → Search API (multiple calls) → [Agent picks, reasons] → Final items + reasoning
+```
+
+Your search agent reads back every result it receives, picks the best items, and reasons through contradictions explicitly. Because it returns a structured response — `{"items": [...], "reasoning": "..."}` — you know with certainty which documents it selected from which queries.
+
+This is more than just better logging. The oracle agent actively _resolves_ the ambiguity that makes raw signals noisy:
+
+- **Deduplication across queries.** The same document appearing in three reformulated queries is one document, not three positive signals.
+- **Contradiction resolution.** When two sources say conflicting things, the agent picks one and says why. That choice is a high-quality signal about which source is more authoritative for this query type.
+- **Quality filtering before the signal reaches you.** The agent won't return a result that it didn't actually trust, so your positive set is cleaner than anything you'd get from implicit click data.
+
+The cost is latency and tokens — you're running an LLM over all your search results before returning to the user. For latency-sensitive applications this is a real constraint. But for async workflows (research agents, document processing pipelines), it's often the right default.
+
+One non-obvious benefit: the reasoning traces are training data. "I preferred doc-447 over doc-891 because doc-447 had benchmark numbers while doc-891 was only qualitative" is the kind of preference label that takes minutes to write manually and is effectively free when the agent produces it at query time.
+
+### 3. Minimal Surface + Doc-Fetch: Let the Agent Vote with Its Calls
+
+This pattern doesn't require an oracle agent. Instead, it exploits the structure of a two-stage retrieval API:
+
+**Stage 1 — search:** return minimal data per result: IDs, titles, short snippets. Keep the response lightweight.
+
+**Stage 2 — fetch:** expose a separate endpoint to retrieve full document content by ID.
+
+Now, when an agent calls the fetch endpoint for a specific document ID, that's a **high-intent signal**. The agent received a snippet, decided it was relevant enough to read in full, and made an explicit call for more. This is structurally similar to a click on a search result — it's an active choice, not just exposure.
+
+```
+Search("qdrant latency benchmarks") → [doc-447, doc-891, doc-332, ...] (IDs + snippets)
+Fetch(doc-447)  ← signal: agent found this worth reading
+Fetch(doc-891)  ← signal: agent found this worth reading
+[doc-332 never fetched → weak negative]
+```
+
+The advantages over raw implicit feedback:
+
+- **No deduplication needed across queries.** A fetch call is a fetch call — if the agent fetches doc-447 twice in a session, that's one signal, easy to dedup by (session, doc_id).
+- **No position bias correction needed.** The agent fetched what it fetched independent of its position in the search results. (Position in snippets matters less than in traditional blue-link search because the agent reads the snippet itself before deciding to fetch.)
+- **Works with any agent, not just yours.** You don't need to own the agent to observe its fetch calls. This makes it composable with third-party agents calling your API.
+
+The weakness is that this only tells you "the agent read this document." It doesn't tell you whether the document ended up being useful. An agent might fetch a document, read it, and conclude it's irrelevant. For that disambiguation you need either the oracle agent pattern or some form of downstream outcome tracking.
+
+## The Self-Fulfilling Prophecy Problem
+
+Here's the thing that should make you nervous about all three patterns: **LLMs have strong priors and will systematically prefer documents that look like their training distribution.**
+
+If your corpus includes both precise benchmark documents and vague marketing copy, an LLM agent trained on GPT-4-level pretraining data will reliably prefer the benchmark documents — not necessarily because they're more relevant to the user's actual task, but because they pattern-match to what a "good source" looks like to the model.
+
+This means your signal collection can converge on the model's priors rather than actual user utility. You finetune your embeddings on the oracle agent's choices, your embeddings drift toward the model's preferred surface features, and the oracle agent's future choices are even more biased. A closed loop that looks like it's getting better while diverging from ground truth.
+
+Three things that help break the prophecy:
+
+**Contrastive annotation.** For a sample of queries, collect human judgments on _pairs_ of results — "which of these two better answers the user's question?" — without showing annotators the agent's choices. Compare human preference to agent preference. When they diverge, you've found a blind spot.
+
+**Outcome-anchored labels.** If your agent is supporting a downstream task with a measurable outcome (customer support ticket resolved, code compiles, user marks answer as helpful), anchor your signal to _that_ outcome, not to intermediate agent choices. An agent that always fetches the most authoritative-looking documents but has a 40% task success rate is a calibration warning sign.
+
+**Adversarial examples in the training set.** Deliberately surface documents that are high-quality but stylistically different from what the model prefers — unformatted plaintext that happens to contain the exact answer, a forum post instead of a documentation page. If the oracle agent misses them while humans don't, those examples belong in your finetuning negatives.
+
+Note that this isn't a solved problem. It's more of an ongoing audit than a one-time fix. The right mental model is: your signal collection gives you a noisy proxy for relevance, and the proxy has systematic biases you need to measure and correct for continuously.
+
+## What to Do With These Signals
+
+Assuming you've collected clean (session-id, positive doc IDs, negative doc IDs) triples, the finetuning path is straightforward:
+
+**Embedding finetuning.** Use the positives and negatives as (query, positive, negative) triplets for [contrastive loss finetuning](https://arxiv.org/abs/2201.11903). The oracle agent pattern gives you the cleanest triplets; the session-ID pattern gives you more volume but requires more noise filtering. Finetuning on in-domain data typically gives **5–15 NDCG@10 points** on domain-specific benchmarks versus off-the-shelf embeddings.
+
+**Learning to rank.** If you have a reranker in your pipeline, the same (query, positive, negative) format feeds directly into [listwise or pairwise LTR](https://arxiv.org/abs/2105.14078). The advantage of LTR over embedding finetuning is that it can exploit features beyond semantic similarity: document freshness, authority signals, query-document interaction features.
+
+**Query reformulation finetuning.** If your agent's query reformulation is itself a learned step, the fact that reformulation N succeeded while reformulations 1 through N-1 failed is a preference label for the reformulation policy. This is a less common approach but directly optimizes the search loop rather than the retrieval step.
+
+The practical recommendation: start with the minimal surface + doc-fetch pattern because it's the cheapest to instrument and requires no changes to agent behavior. Graduate to oracle agent logging once you have enough volume to validate that agent choices correlate with downstream outcomes. Add contrastive human annotation on a sample of 200–500 queries per major query type to catch prophecy drift before it compounds.
+
+## Key Takeaways
+
+- **Traditional implicit feedback assumes a human at the bottom of the stack.** "Add to cart" works because human intent is ground truth. Agent behavior is a proxy for ground truth, not ground truth itself.
+- **Session-ID tracking is the cheapest entry point.** Assign a session ID to every agent invocation, log which documents ended up in the final context. Volume is high; quality requires noise filtering.
+- **The oracle agent pattern gives the cleanest signal.** Own the agent, extract its selections and reasoning. The reasoning traces are free training data.
+- **Minimal surface + doc-fetch is the most composable pattern.** Works with third-party agents. Fetch calls are high-intent signals structurally similar to search clicks.
+- **Self-fulfilling prophecy is the biggest risk.** LLMs prefer documents that match their priors. Without contrastive human annotation or outcome-anchored labels, your signal loop can converge on the model's biases rather than user utility.
+- **Finetuning order of operations:** instrument first, collect 1K+ examples, validate correlation with outcomes, then finetune. Finetuning on uncalibrated signals makes things worse, not better.
