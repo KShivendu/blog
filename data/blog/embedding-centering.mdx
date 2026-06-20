@@ -4,14 +4,16 @@ date: '2026-06-19'
 lastmod: '2026-06-19'
 tags: ['embeddings', 'transformers', 'retrieval', 'anisotropy', 'information-retrieval', 'qdrant']
 draft: true
-summary: 'Subtracting a single precomputed mean vector from mxbai/bge/gte embeddings improves discrimination by 65% with no model changes, no retraining, and negligible compute. This post explains why the cone exists, why centering dismantles it, why full whitening backfires, and how a vector database could implement this automatically.'
+summary: 'Subtracting a single precomputed mean vector from mxbai/bge/gte embeddings improves discrimination by 65% with no model changes, no retraining, and negligible compute. But it leaves retrieval rankings unchanged. This post explains what centering actually fixes, why full whitening backfires, and where the improvement lives.'
 images: []
 authors: ['default']
 ---
 
 > This post builds on the embedding geometry series. [Part 1](/blog/embedding-layers) covers token collapse. [Part 3](/blog/transformer-geometry-at-scale) validates findings at scale. The core finding from that series: all mxbai/bge/gte embeddings live in a narrow cone, and the cone poisons cosine similarity. This post is about the cheapest possible fix.
 
-Here is the experiment result first:
+Here are the experiment results first:
+
+**Discrimination and semantic similarity** (does centering help scores?):
 
 | Strategy                | Anisotropy | SNLI discrimination gap | STS-B Pearson r | Effective dims |
 | ----------------------- | ---------- | ----------------------- | --------------- | -------------- |
@@ -21,7 +23,19 @@ Here is the experiment result first:
 | Whiten (top 256 dims)   | ~0.000     | +0.209                  | 0.840           | 256            |
 | Whiten (top 56 dims)    | ~0.000     | +0.321                  | 0.825           | 56             |
 
-Subtracting a single 1024-dim vector — the corpus mean — eliminates anisotropy completely, improves hard-negative discrimination by 65%, and leaves STS-B correlation essentially unchanged. Full whitening actually hurts. The simple thing wins.
+**Retrieval rankings** (does centering help top-k recall?):
+
+| Strategy                | STS-B Recall@1 | STS-B Recall@5 | STS-B NDCG@10 |
+| ----------------------- | -------------- | -------------- | ------------- |
+| Raw (baseline)          | 0.582          | 0.714          | 0.669         |
+| **Subtract mean**       | **0.582**      | **0.717**      | **0.669**     |
+| Whiten (top 56 dims)    | 0.511          | 0.661          | 0.609         |
+| Whiten (top 256 dims)   | 0.562          | 0.687          | 0.647         |
+| Whiten (full 1024 dims) | 0.384          | 0.499          | 0.461         |
+
+Two very different stories. Centering eliminates anisotropy completely and improves hard-negative discrimination by 65% — but leaves retrieval rankings essentially unchanged. Full whitening actively hurts both. The simple thing wins, but only in score space, not rank space.
+
+This distinction matters for where you apply it.
 
 ## Why All Dense Embeddings Point the Same Direction
 
@@ -166,14 +180,28 @@ dot(q - μ, d - μ) = dot(q, d) - dot(q, μ) - dot(μ, d) + dot(μ, μ)
 
 No re-indexing. No re-encoding. No model changes.
 
-## Practical Impact
+## Where Centering Helps (and Where It Doesn't)
 
-The SNLI discrimination gap measures how well the model separates contradiction pairs from random cross-pairs. Raw mxbai: +0.212. Centered mxbai: +0.350. That's a 65% improvement from a one-time subtraction.
+The retrieval experiment clarifies the boundary precisely.
 
-To put this in retrieval terms: the model's ability to push hard negatives below true matches improves by 65% without any change to the model, training data, or index structure. For production systems where hard negatives are the failure mode (and they always are — easy cases work without dense retrieval), this is the highest-ROI post-processing step available.
+**What centering fixes: score calibration.** The SNLI discrimination gap measures how well the model separates hard negatives (contradiction pairs) from random cross-pairs. Raw mxbai: +0.212. Centered mxbai: +0.350. That's a 65% improvement in the absolute range of cosine scores. Similarity scores become meaningful numbers: a cosine of 0.85 after centering actually indicates high similarity, whereas before centering it might just mean "two English sentences."
 
-The centering vector is portable: compute it once on a background corpus, reuse it across all collections using the same embedding model. If Mixedbread published a precomputed mean for mxbai-embed-large-v1 (a 1024-float file, 4KB), every user would benefit immediately.
+**What centering doesn't fix: top-k ranking.** STS-B Recall@1 is 0.582 before and after centering — identical. The rank ordering of documents is almost entirely preserved. This makes sense: subtracting μ from all vectors shifts them by the same amount, so the relative ordering by cosine changes only slightly.
 
-The cone exists because MLM pretraining didn't optimise for isotropy. Centering is the minimal surgical fix that removes exactly the non-informative component the pretraining introduced, leaving the 55-dimensional semantic signal intact and uncompressed.
+This means centering's benefit depends on how you use similarity scores:
 
-It is, genuinely, a free lunch.
+| Use case                                                 | Centering helps?                       |
+| -------------------------------------------------------- | -------------------------------------- |
+| Top-k ANN retrieval (just need the ranking)              | No                                     |
+| Score thresholding (is this pair similar enough?)        | **Yes — 65% wider dynamic range**      |
+| Hybrid search score fusion (dense + sparse weighted sum) | **Yes — scores are better calibrated** |
+| Re-ranking with similarity as a feature                  | **Yes**                                |
+| Clustering with cosine distance                          | **Yes**                                |
+
+For production systems doing pure nearest-neighbour search, centering is neutral — it won't improve Recall@10. For systems that use cosine scores as confidence measures, thresholds, or fusion weights, it's the highest-ROI post-processing step available.
+
+Full whitening, by contrast, damages even the rankings (STS-B Recall@1 drops from 0.582 to 0.384), because it amplifies the ~969 noise dimensions until they overwhelm the ~55 signal dimensions.
+
+The centering vector is portable: compute it once on a background corpus, reuse it across all collections using the same embedding model. If Mixedbread published a precomputed mean for mxbai-embed-large-v1 (a 1024-float file, 4KB), every user would benefit immediately with zero retraining.
+
+The cone exists because MLM pretraining didn't optimise for isotropy. Centering is the minimal surgical fix: it removes exactly the non-informative component the pretraining introduced, leaving the 55-dimensional semantic signal intact and uncompressed. It's a free lunch — just a more specific one than it first appeared.
