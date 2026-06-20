@@ -1,0 +1,179 @@
+---
+title: 'The Free Lunch in Dense Retrieval: Centering Your Embeddings'
+date: '2026-06-19'
+lastmod: '2026-06-19'
+tags: ['embeddings', 'transformers', 'retrieval', 'anisotropy', 'information-retrieval', 'qdrant']
+draft: true
+summary: 'Subtracting a single precomputed mean vector from mxbai/bge/gte embeddings improves discrimination by 65% with no model changes, no retraining, and negligible compute. This post explains why the cone exists, why centering dismantles it, why full whitening backfires, and how a vector database could implement this automatically.'
+images: []
+authors: ['default']
+---
+
+> This post builds on the embedding geometry series. [Part 1](/blog/embedding-layers) covers token collapse. [Part 3](/blog/transformer-geometry-at-scale) validates findings at scale. The core finding from that series: all mxbai/bge/gte embeddings live in a narrow cone, and the cone poisons cosine similarity. This post is about the cheapest possible fix.
+
+Here is the experiment result first:
+
+| Strategy                | Anisotropy | SNLI discrimination gap | STS-B Pearson r | Effective dims |
+| ----------------------- | ---------- | ----------------------- | --------------- | -------------- |
+| Raw (baseline)          | 0.414      | +0.212                  | 0.893           | 54.7           |
+| **Subtract mean**       | **~0.000** | **+0.350 (+65%)**       | **0.895**       | **54.7**       |
+| Whiten (full 1024 dims) | ~0.000     | +0.130 (−39%)           | 0.837           | 1023           |
+| Whiten (top 256 dims)   | ~0.000     | +0.209                  | 0.840           | 256            |
+| Whiten (top 56 dims)    | ~0.000     | +0.321                  | 0.825           | 56             |
+
+Subtracting a single 1024-dim vector — the corpus mean — eliminates anisotropy completely, improves hard-negative discrimination by 65%, and leaves STS-B correlation essentially unchanged. Full whitening actually hurts. The simple thing wins.
+
+## Why All Dense Embeddings Point the Same Direction
+
+BERT pretraining uses masked language modelling (MLM): predict a masked token from its context. The output head is `softmax(W · h)` where `h` is the hidden state and `W` is the shared token embedding matrix (~30k vocabulary terms).
+
+High-frequency tokens — "the", "a", "is", "of" — appear in almost every training batch. Their embedding vectors in `W` receive the most gradient signal and establish a dominant direction in the 1024-dim space. Every sentence representation gets pulled slightly toward this direction because predicting common tokens is a constant pressure across all training examples.
+
+Self-attention compounds this: each layer computes a weighted average of value vectors, and mean-pooling averages again. After 12 rounds of averaging, every sentence representation has converged toward the same shared "generic English sentence" direction — regardless of what the sentence actually says.
+
+This is the **cone**: all embeddings point roughly northeast (in some arbitrary basis), with only small angular deviations encoding semantic content. PCA on mxbai embeddings confirms it — the top eigenvalue explains a disproportionate fraction of variance, and the effective dimensionality (participation ratio) is ~55 out of 1024.
+
+The practical consequence: cosine similarity between two mxbai embeddings is dominated by this shared direction. Even contradictions — "the market surged" vs "the market plunged" — have cosine ~0.62 at the final layer, because both vectors are mostly pointing northeast.
+
+## Why This Is BM25's Problem, Solved Differently
+
+BM25 solved an identical problem in 1994 with inverse document frequency:
+
+```
+IDF(term) = log(N / df)
+```
+
+Terms appearing in every document (df ≈ N) get IDF ≈ 0. They contribute nothing to the relevance score. Signal comes from rare, specific terms with high IDF.
+
+Dense embedding models have no IDF. MLM pretraining implicitly does the opposite — high-frequency tokens dominate the geometry. The embedding space is organised around what's most common, not what's most discriminative.
+
+Centering is the embedding equivalent of IDF: identify the "common direction" (the mean vector, analogous to common terms) and remove it before scoring. What remains is the variation that actually distinguishes sentences.
+
+## What Centering Does Geometrically
+
+Every mxbai embedding vector can be decomposed as:
+
+```
+v = μ + (v - μ)
+```
+
+where `μ` is the corpus mean and `(v - μ)` is the residual — the part unique to that sentence.
+
+When you compute cosine similarity without centering:
+
+```
+cos(a, b) = dot(a, b) / (||a|| · ||b||)
+           ≈ dot(μ, μ)/||μ||² + semantic_signal
+           = big shared constant + small meaningful signal
+```
+
+The `dot(μ, μ)` term is the same for every pair. It doesn't help rank pairs relative to each other — it just inflates every cosine score uniformly and compresses the useful dynamic range.
+
+After centering:
+
+```
+cos(a - μ, b - μ) = dot(a - μ, b - μ) / (||a - μ|| · ||b - μ||)
+                  = only semantic_signal
+```
+
+The shared constant is gone. The 55 effective semantic dimensions now operate without the mean direction drowning them out.
+
+This is why anisotropy drops from 0.414 to ~0.000: after centering, sentence pairs that have nothing in common no longer share the "northeast" component, so their cosine drops to near zero (as it should in a well-behaved embedding space).
+
+## Why Full Whitening Backfires
+
+Whitening goes further than centering: it rescales each principal direction to unit variance. The intent is to make all 1024 dimensions equally active.
+
+The problem: mxbai has ~55 genuine signal dimensions and ~969 near-zero noise dimensions. Centering leaves the noise dimensions alone — they're nearly zero, so their contribution to cosine is nearly zero anyway. Whitening amplifies them to equal scale as the signal dimensions. Suddenly 969 noise dimensions drown the 55 signal dimensions.
+
+```
+whiten_full: gap = +0.130  (worse than raw's +0.212)
+```
+
+The cone's _axis_ (mean direction) is noise — remove it. The cone's _spread_ contains the signal — preserve it. Centering removes exactly the right thing. Full whitening removes the right thing and then breaks everything else.
+
+Truncated whitening to 56 dimensions (`whiten_56`) recovers most of the centering benefit (gap = +0.321) because it keeps only the signal dimensions and discards the noise. But it's more complex to implement and loses some of the graded similarity signal that STS-B measures (r drops from 0.895 to 0.825).
+
+For production use: just center.
+
+## Computing the Mean Vector
+
+The mean vector needs to be representative of your embedding space. Three approaches:
+
+**1. From the model's pretraining distribution (best portability)**
+
+The cone's axis is almost entirely a pretraining artifact — it's the same for mxbai, bge-large, and gte-large (their backbone weights are 99.99% identical through L12). A mean vector computed on any large English corpus approximates the true cone axis well. Mixedbread could publish a precomputed mean vector alongside the model weights.
+
+**2. From your collection (best quality)**
+
+Sample 5–10k documents from your actual collection, compute their embeddings, average them. This accounts for domain shift — a medical corpus has a slightly different mean than a news corpus, both shifted from the base pretraining direction.
+
+```python
+sample = random.sample(all_documents, 5000)
+embeddings = model.encode(sample)
+mean_vector = embeddings.mean(axis=0)  # shape: (1024,)
+```
+
+**3. Incremental update as collection grows**
+
+Maintain a running mean with O(1) per-insert update:
+
+```python
+# On each new document insert:
+mean_vector = mean_vector * (N / (N + 1)) + new_embedding / (N + 1)
+N += 1
+```
+
+This keeps the mean current without reprocessing old vectors. The mean stabilises quickly — after ~1k documents it changes by less than 1% per batch.
+
+## How a Vector Database Could Implement This
+
+Currently, centering requires the user to subtract the mean before uploading and before each query. This is a footgun: if only one side is centered, scores are worse than raw. Most users don't know to do it at all.
+
+A vector database could make this automatic:
+
+```python
+# Collection creation
+client.create_collection(
+    "my_collection",
+    vectors_config=VectorParams(size=1024, distance=Distance.COSINE),
+    centering=CenteringConfig(
+        mode="auto",              # compute mean from collection
+        update_interval="daily",  # recompute periodically
+    )
+)
+
+# Upload raw embeddings — database stores them as-is
+client.upsert("my_collection", points=[...])
+
+# Query with raw embedding — database centers at scoring time
+client.search("my_collection", query_vector=raw_query)
+```
+
+The database stores raw vectors and the current mean vector. At scoring time it applies:
+
+```
+score(query, doc) = cosine(query - μ, doc - μ)
+```
+
+This can be rewritten as a modified dot product without recomputing centered vectors:
+
+```
+dot(q - μ, d - μ) = dot(q, d) - dot(q, μ) - dot(μ, d) + dot(μ, μ)
+```
+
+`dot(μ, μ)` is a precomputed constant. `dot(q, μ)` is computed once per query (one dot product). `dot(μ, d)` can be precomputed for every stored document at mean-update time. Net cost: one extra dot product per query, zero extra storage per document.
+
+No re-indexing. No re-encoding. No model changes.
+
+## Practical Impact
+
+The SNLI discrimination gap measures how well the model separates contradiction pairs from random cross-pairs. Raw mxbai: +0.212. Centered mxbai: +0.350. That's a 65% improvement from a one-time subtraction.
+
+To put this in retrieval terms: the model's ability to push hard negatives below true matches improves by 65% without any change to the model, training data, or index structure. For production systems where hard negatives are the failure mode (and they always are — easy cases work without dense retrieval), this is the highest-ROI post-processing step available.
+
+The centering vector is portable: compute it once on a background corpus, reuse it across all collections using the same embedding model. If Mixedbread published a precomputed mean for mxbai-embed-large-v1 (a 1024-float file, 4KB), every user would benefit immediately.
+
+The cone exists because MLM pretraining didn't optimise for isotropy. Centering is the minimal surgical fix that removes exactly the non-informative component the pretraining introduced, leaving the 55-dimensional semantic signal intact and uncompressed.
+
+It is, genuinely, a free lunch.
