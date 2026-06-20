@@ -101,18 +101,20 @@ One property of the standard model we've documented extensively is the **similar
 
 mxbai_2d still shows this:
 
-| Layer | mxbai_2d mean cosine (contradictions)            | mxbai_std |
-| ----- | ------------------------------------------------ | --------- |
-| L0    | 1.000 (CLS artifact — constant before attention) | 0.848     |
-| L12   | **0.914**                                        | **0.933** |
-| L18   | 0.845                                            | 0.821     |
-| L24   | 0.642                                            | 0.614     |
+| Layer | mxbai_2d mean cosine (contradictions) | mxbai_std |
+| ----- | ------------------------------------- | --------- |
+| L0    | 1.000 ⚠️ see note below               | 0.848     |
+| L12   | **0.914**                             | **0.933** |
+| L18   | 0.845                                 | 0.821     |
+| L24   | 0.642                                 | 0.614     |
+
+**On L0 = 1.000**: this is a CLS pooling artifact, not a real attractor. At L0 (the embedding layer, before any attention has run), the [CLS] token hasn't seen any context — it's the raw learned CLS embedding, a single constant vector shared by every sentence. Cosine between two identical vectors is always 1.000. The STS-B Pearson at L0 is also `NaN` for the same reason — zero variance across sentences means correlation is undefined. **Ignore L0 when reading the mxbai_2d curves.** The real attractor is at L12.
+
+mxbai_std uses mean pooling, which averages the actual input token embeddings at L0 — different sentences have different tokens, so L0 varies meaningfully (SNLI cos = 0.848, not 1.0).
 
 The 2D model's L12 attractor is slightly weaker (0.914 vs 0.933) and its final L24 discrimination is slightly better (0.642 vs 0.614). 2D training modestly reduces the attractor's peak, possibly because training the model to produce useful L12 representations forces it to avoid total geometric collapse at that depth.
 
 But the attractor is still there. 2D training redistributes when useful work happens without dismantling the backbone's pretraining geometry.
-
-Note: the L0 cosine of 1.000 for mxbai_2d is a CLS pooling artifact — the CLS token embedding is the same constant vector before any attention layer has processed the input, so all sentences have identical L0 representations. Mean pooling (used by mxbai_std) averages actual token embeddings at L0 and doesn't have this issue.
 
 ## What 2D Matryoshka training actually buys you
 
