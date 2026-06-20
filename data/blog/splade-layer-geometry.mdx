@@ -1,0 +1,139 @@
+---
+title: 'SPLADE Under the Microscope: How Sparse Retrieval Evolves Across Layers'
+date: '2026-06-19'
+lastmod: '2026-06-19'
+tags:
+  [
+    'embeddings',
+    'transformers',
+    'splade',
+    'sparse-retrieval',
+    'geometry',
+    'nlp',
+    'information-retrieval',
+  ]
+draft: true
+summary: 'We ran SPLADE layer by layer — feeding intermediate hidden states through its MLM head at each depth — and found a completely different geometry from dense models. While dense embeddings collapse to maximal similarity at L12, SPLADE compresses from 25,000 active terms to 67 by L12, improving discrimination monotonically. But the backbone attractor is still there — just in a different form.'
+images: []
+authors: ['default']
+---
+
+> This post is part of the embedding geometry series. [Part 1](/blog/embedding-layers) covers token collapse. [Part 2](/blog/similarity-attractor) covers the attractor. [Part 3](/blog/transformer-geometry-at-scale) validates findings at scale. Earlier posts established that all BERT-large dense embeddings collapse to a similarity attractor at L12 — contradictions and paraphrases become nearly indistinguishable. SPLADE uses the same backbone. Does it inherit the same problem?
+
+SPLADE (`naver/splade-cocondenser-ensembledistil`) uses a BERT-base encoder — 12 transformer layers, same pretraining, same MLM objective. But instead of mean-pooling hidden states into a dense vector, it routes each layer's output through the MLM head, applies ReLU + log(1+x), and takes a max over all token positions to produce a sparse vector over the 30,522-term vocabulary.
+
+The question: does the L12 similarity attractor — the most striking finding from the dense analysis — survive this architectural change?
+
+Short answer: yes, but at a different layer, in a weaker form, and with the opposite final-layer trajectory.
+
+## Setup
+
+We fed each of SPLADE's 13 hidden states (embedding layer + 12 transformer layers) directly through the MLM head, applied SPLADE's standard pooling, and measured the resulting sparse vectors. This is not how SPLADE runs in production — it only uses the final layer — but it lets us ask what the model _could_ produce at each depth.
+
+Sentences used for qualitative analysis:
+
+- **Surged**: "The stock market surged after the central bank cut interest rates"
+- **Plunged**: "The stock market plunged after the central bank raised interest rates"
+
+Same domain, opposite meaning. The ideal retrieval model gives these a low similarity score. Dense mxbai at its L12 attractor: cosine = 0.913. Indistinguishable.
+
+For scale measurements: 200 SNLI contradiction pairs.
+
+## Vocabulary Collapse: 25,000 → 67 Terms
+
+The most striking finding is the vocabulary trajectory. At L0 (raw token embeddings projected through the MLM head with no context), SPLADE activates **25,550 vocabulary terms** — nearly the entire vocab. By L12, it activates **67**.
+
+| Layer | Active terms (surged) | Top terms                                                        |
+| ----- | --------------------- | ---------------------------------------------------------------- |
+| L0    | 25,550                | interest, stock, bank, rates, cut, central, after, market        |
+| L4    | 4,534                 | bank, interest, cut, rates, central, after, market, stock        |
+| L6    | 5,759                 | bank, interest, central, cut, market, stock, rates, banks        |
+| L8    | **16,767**            | central, market, stock, bank, interest, **surged**, markets, cut |
+| L10   | 1,313                 | stock, market, bank, central, surged, interest, markets, stocks  |
+| L12   | **67**                | stock, interest, central, bank, market, cut, after, **surged**   |
+
+L0's 25k activations aren't semantic — they're the embedding matrix's raw projections, which spill energy across the whole vocabulary before any context has been processed. The network hasn't seen anything yet.
+
+The collapse from L0 to L4 (25k → 4.5k) is the first context pass: the token representations absorb their local neighbourhood and the vocabulary distribution sharpens around semantically relevant terms.
+
+Then something unexpected happens at L8: the count _expands_ back to 16,767. This is the backbone attractor manifesting in sparse space — hidden states become maximally averaged at this depth (the same phenomenon that peaks at L12 for BERT-large dense models, proportionally scaled for BERT-base's 12 layers). The MLM head projects this maximally-averaged representation back to a diffuse vocabulary distribution.
+
+After L8, the model compresses aggressively to 1,313 at L10 and 67 at L12 — the discriminative final representation.
+
+## The Sparse Attractor at L8
+
+Dense mxbai-embed-large-v1 has a similarity attractor at L12 (the 12th of 24 layers — exactly halfway). SPLADE has one at L8–L9 (roughly 67–75% through its 12 layers). Same proportional position. Same backbone origin.
+
+Sparse cosine between "surged" and "plunged" across layers:
+
+| Layer  | Sparse cosine | Jaccard overlap |
+| ------ | ------------- | --------------- |
+| L0     | 0.936         | 0.914           |
+| L4     | 0.903         | 0.749           |
+| L6     | 0.920         | 0.848           |
+| **L8** | **0.990**     | **0.951**       |
+| L10    | 0.874         | 0.748           |
+| L12    | **0.777**     | **0.561**       |
+
+L8 hits 0.990 — the two sentences are nearly identical in sparse space. The backbone attractor is unmistakable. But then L10 drops to 0.874 and L12 drops further to 0.777. The final layer is the _most discriminative_, not the least.
+
+At scale (200 SNLI contradiction pairs):
+
+| Layer   | Mean sparse cosine                  |
+| ------- | ----------------------------------- |
+| L0      | 0.860                               |
+| L4      | 0.556                               |
+| L6      | 0.672                               |
+| L8      | 0.923                               |
+| **L9**  | **0.992** (peak — sparse attractor) |
+| L10     | 0.459                               |
+| **L12** | **0.327**                           |
+
+SPLADE's final layer achieves **0.327** mean cosine for contradiction pairs. Dense mxbai at its attractor (L12): **0.913**. Dense mxbai at its best (L24): **0.617**. SPLADE's final-layer discrimination is roughly twice as good as the best dense layer, for the same contradictions, from the same backbone family.
+
+This is the core architectural difference. Dense models are forced to cram all semantic discrimination into a single pooled vector via a cosine objective. SPLADE's max-over-tokens pooling lets each token contribute its most relevant vocabulary activations independently — the "surged" token's contribution and the "plunged" token's contribution each vote for different vocabulary terms, naturally pulling the final sparse vectors apart.
+
+## Vocabulary Expansion: What SPLADE Adds
+
+At L12, 86.6% of SPLADE's 67 active terms were not in the original input sentence.
+
+"The stock market surged after the central bank cut interest rates" contains about 9 unique content tokens. SPLADE's L12 representation activates 67 terms — 58 of which the model inferred from context (expansions like "stocks", "markets", "rally", "monetary", "policy"). This vocabulary expansion is what makes SPLADE work as a retrieval model: queries and documents don't need to share exact terms if the model learned to expand them into the same semantic neighbourhood.
+
+At L0, 99.96% of active terms are expansions — but they're noise (25k activations, unfiltered). At L12, 86.6% are expansions — but they're _learned_ semantic expansions from 12 layers of context integration.
+
+Expansion rate across layers:
+
+| Layer | Active terms | Expansion rate       |
+| ----- | ------------ | -------------------- |
+| L0    | 25,550       | 100% (noise)         |
+| L6    | 5,759        | 99.8%                |
+| L12   | 67           | **86.6%** (semantic) |
+
+The compression from L0 to L12 is simultaneously a _denoising_ process — 25,483 spurious activations are suppressed, leaving 67 genuinely discriminative terms.
+
+## Convergence to Final Layer Is Non-Monotonic
+
+How similar is each layer's sparse vector to the final (L12) output?
+
+| Layer  | Cosine to L12                                 |
+| ------ | --------------------------------------------- |
+| L0     | 0.063                                         |
+| L4     | 0.182                                         |
+| L6     | 0.200                                         |
+| **L8** | **0.107** (attractor — _diverges_ from final) |
+| L10    | 0.448                                         |
+| L12    | 1.000                                         |
+
+L8, the attractor layer, is actually _less similar_ to the final output than L4 or L6. The attractor's diffuse, high-overlap sparse vector looks nothing like the final discriminative 67-term representation. L10 is the closest precursor (0.448), suggesting the last two layers do the critical compression work.
+
+This mirrors the dense finding: L13–L24 in dense mxbai does the discrimination work after the L12 attractor. SPLADE's L10–L12 plays the same role.
+
+## What This Means for Retrieval Architecture
+
+Dense embeddings handle the cone problem (anisotropy) by accepting it through L12 and then adding discrimination in L13–L24 — all compressed into a single vector at the end. SPLADE routes around it differently: the MLM head + ReLU + max-over-tokens transformation converts the anisotropic hidden state into a sparse vocabulary distribution where the discriminative signal is in _which terms survive_, not _which geometric direction the vector points_.
+
+This is why SPLADE implicitly recovers the IDF insight that BM25 had in 1994: terms that appear in every context (the sparse-attractor equivalent of high-frequency tokens) end up with low weights and low max-over-tokens survival rates at L12. The sparsification process is a learned IDF.
+
+The backbone attractor is still there at L8–L9. SPLADE doesn't eliminate it — the hidden states are just as anisotropic at that depth. But the sparse projection at L12 is immune to it, because it measures _which vocabulary concepts activate_ rather than _which geometric direction the vector points_.
+
+Dense retrieval and sparse retrieval use the same pretrained backbone and encounter the same geometry problem. They solve it with completely different output representations — and both approaches leave significant signal on the table that a hybrid (dense + sparse) can recover.
