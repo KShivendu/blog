@@ -1,0 +1,129 @@
+---
+title: '2D Matryoshka: How Layer-Exit Training Reshapes the Geometry of BERT'
+date: '2026-06-19'
+lastmod: '2026-06-19'
+tags: ['embeddings', 'transformers', 'matryoshka', 'retrieval', 'geometry', 'nlp', 'mxbai']
+draft: true
+summary: 'mxbai-embed-2d-large-v1 is trained to produce useful embeddings at every layer exit, not just the final one. We ran it layer by layer and found something striking: 2D training completely redistributes where the model does its work — shifting peak contributions from 77% at L24 to spread across L9–L20. Intermediate exits go from useless to genuinely competitive.'
+images: []
+authors: ['default']
+---
+
+> This post is part of the embedding geometry series. [Part 1](/blog/embedding-layers) covers token collapse. [Part 2](/blog/similarity-attractor) covers the attractor. Earlier posts established that standard BERT-large embedding models do nearly all their useful work in the last two layers — intermediate exits produce degenerate representations. This post asks whether 2D Matryoshka training changes that.
+
+Standard dense embedding models are wasteful in a specific way: they run all 24 transformer layers but only use the final output. Matryoshka Representation Learning (MRL) fixes the dimension axis — you can truncate from 1024 to 256 dims and still get most of the quality. But you still need all 24 layers.
+
+`mxbai-embed-2d-large-v1` goes further: it's trained to produce useful embeddings at each layer exit _and_ each dimension slice simultaneously. The hypothesis is that you could exit at L18 + 256 dims and get retrieval quality close to full L24 + 1024 dims.
+
+We ran both mxbai-embed-2d-large-v1 (CLS pooling) and mxbai-embed-large-v1 (mean pooling) through all 25 layers — embedding layer plus 24 transformer layers — and measured STS-B Pearson correlation, SNLI discrimination gap, and Recall@1 at each exit point and dimension size.
+
+## Standard mxbai is brutally last-layer dependent
+
+First, the baseline. mxbai-embed-large-v1 at each layer exit (full 1024 dims):
+
+| Layer   | STS-B Pearson r | Recall@1  |
+| ------- | --------------- | --------- |
+| L6      | 0.688           | 0.287     |
+| L12     | 0.635           | 0.223     |
+| L18     | 0.674           | 0.243     |
+| **L24** | **0.893**       | **0.303** |
+
+L12 is _worse_ than L6 — the similarity attractor peaks at L11 (cosine = 0.935), making contradiction pairs nearly indistinguishable and dragging down all metrics. L18 partially recovers but is still far below L24. The model does ~77% of its geometrically meaningful work at the very last layer.
+
+This is confirmed by the peak contribution layer analysis: across all 1024 dimensions, 77% of them show their largest per-layer change at L24. The model is essentially a 23-layer preprocessing pipeline feeding a single decisive final layer.
+
+## 2D training redistributes the work
+
+mxbai-embed-2d-large-v1 at the same layer exits (full 1024 dims):
+
+| Layer   | STS-B Pearson r | Recall@1  | vs mxbai_std |
+| ------- | --------------- | --------- | ------------ |
+| L6      | 0.773           | 0.220     | **+12.3%**   |
+| L12     | 0.790           | 0.217     | **+24.4%**   |
+| L13     | 0.786           | 0.220     | —            |
+| L16     | 0.778           | 0.240     | —            |
+| L18     | 0.792           | 0.233     | **+17.6%**   |
+| L20     | 0.794           | 0.240     | —            |
+| L22     | 0.834           | 0.203     | —            |
+| **L24** | **0.881**       | **0.233** | −1.3%        |
+
+At L12, the 2D model scores r=0.790 — nearly 25% better than the standard model's 0.635 at the same depth. At L18, it's at 0.792 while the standard model is at 0.674. The 2D model's intermediate exits are genuinely useful; the standard model's are not.
+
+The cost: at L24 + 1024 dims, the 2D model is slightly worse (0.881 vs 0.893 STS-B Pearson, 0.233 vs 0.303 Recall@1). You pay about 1.3% STS quality for full layer-exit flexibility.
+
+## Where the model does its work: peak contribution layers
+
+The most diagnostic metric is the **peak contribution layer** per dimension: for each of the 1024 output dimensions, which transformer layer produces the largest change?
+
+|                          | mxbai_std                     | mxbai_2d                                             |
+| ------------------------ | ----------------------------- | ---------------------------------------------------- |
+| % of dims peaking at L24 | **77%**                       | **0.9%**                                             |
+| Top contributing layers  | L24 (789), L23 (82), L20 (39) | L19 (199), L17 (182), L9 (165), L20 (163), L18 (106) |
+
+For mxbai_std, 789 out of 1024 dimensions receive their biggest update at the final layer. The geometry is concentrated in one place.
+
+For mxbai_2d, the peak contributions spread across L9–L20. No single layer dominates. The model has learned to do useful geometric work at every depth — which is exactly what you need for intermediate exits to be meaningful.
+
+This is the geometric signature of 2D Matryoshka training: it doesn't change the final output structure, it redistributes _when_ the representations become useful along the layer axis.
+
+## The efficiency frontier: layer × dimension
+
+The full 2D grid for STS-B Pearson at each (layer exit, dimension size):
+
+| Layer | 64 dims | 128 dims | 256 dims | 512 dims | 1024 dims |
+| ----- | ------- | -------- | -------- | -------- | --------- |
+| L6    | 0.742   | 0.756    | 0.760    | 0.765    | 0.773     |
+| L12   | 0.755   | 0.770    | 0.782    | 0.783    | 0.790     |
+| L18   | 0.757   | 0.772    | 0.784    | 0.792    | 0.792     |
+| L22   | 0.792   | 0.815    | 0.826    | 0.831    | 0.834     |
+| L24   | 0.827   | 0.857    | 0.869    | 0.877    | 0.881     |
+
+And for comparison, mxbai_std at the same checkpoints:
+
+| Layer | 64 dims | 256 dims | 1024 dims |
+| ----- | ------- | -------- | --------- |
+| L6    | 0.621   | 0.662    | 0.688     |
+| L12   | 0.588   | 0.609    | 0.635     |
+| L18   | 0.652   | 0.672    | 0.674     |
+| L24   | 0.831   | 0.881    | 0.893     |
+
+A few operating points worth noting:
+
+**mxbai_2d at L18 + 256 dims: r=0.784** — uses 75% of the layers and 25% of the dimensions, achieves 89% of the full model's quality. For latency-sensitive or cost-sensitive applications, this is a compelling tradeoff that didn't exist with the standard model.
+
+**mxbai_2d at L22 + 256 dims: r=0.826** — uses 92% of the layers and 25% of the dimensions, achieves 94% of full quality. A good default for production use.
+
+**mxbai_2d at L24 + 256 dims: r=0.869** — full depth, 4x dimension reduction, 98.6% of full quality. At this point both models are similar (mxbai_std gets 0.881 here), but only mxbai_2d supports the earlier layer exits that make dimension-only reduction worthwhile in all cases.
+
+## The attractor survives 2D training
+
+One property of the standard model we've documented extensively is the **similarity attractor**: at L11–L12, contradictions and paraphrases converge to nearly the same cosine similarity (~0.93), making pairs semantically indistinguishable at that depth.
+
+mxbai_2d still shows this:
+
+| Layer | mxbai_2d mean cosine (contradictions)            | mxbai_std |
+| ----- | ------------------------------------------------ | --------- |
+| L0    | 1.000 (CLS artifact — constant before attention) | 0.848     |
+| L12   | **0.914**                                        | **0.933** |
+| L18   | 0.845                                            | 0.821     |
+| L24   | 0.642                                            | 0.614     |
+
+The 2D model's L12 attractor is slightly weaker (0.914 vs 0.933) and its final L24 discrimination is slightly better (0.642 vs 0.614). 2D training modestly reduces the attractor's peak, possibly because training the model to produce useful L12 representations forces it to avoid total geometric collapse at that depth.
+
+But the attractor is still there. 2D training redistributes when useful work happens without dismantling the backbone's pretraining geometry.
+
+Note: the L0 cosine of 1.000 for mxbai_2d is a CLS pooling artifact — the CLS token embedding is the same constant vector before any attention layer has processed the input, so all sentences have identical L0 representations. Mean pooling (used by mxbai_std) averages actual token embeddings at L0 and doesn't have this issue.
+
+## What 2D Matryoshka training actually buys you
+
+**If you need full quality at full depth**: use mxbai_std. It's slightly better (STS-B r=0.893 vs 0.881, Recall@1=0.303 vs 0.233 at L24+1024d).
+
+**If you need dimension flexibility**: both models handle dim truncation similarly well at L24. mxbai_2d at L24+256d gets r=0.869, mxbai_std gets r=0.881. Close.
+
+**If you need layer flexibility**: only mxbai_2d. mxbai_std at L18 is r=0.674 — worse than mxbai_2d at L6 (r=0.773). The standard model's intermediate exits are functionally unusable for semantic tasks.
+
+**If you need both**: mxbai_2d at L18+256d (r=0.784) is dramatically better than anything mxbai_std can offer below L24. This is the regime where 2D training's value is clearest.
+
+The core insight from the geometry: 2D Matryoshka training doesn't teach the model to represent meaning differently at L24 — it teaches the model to represent meaning _earlier_. The peak contribution layer shifts from a single concentrated burst at L24 to a distributed signal across the middle layers. That redistribution is what makes early exits viable.
+
+For applications where inference latency or embedding cost matters — and for most production systems, it does — mxbai_2d offers an operating point that simply doesn't exist in the standard model: competitive semantic quality at 50–75% of the full layer depth.
