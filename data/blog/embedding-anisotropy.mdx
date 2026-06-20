@@ -1,0 +1,135 @@
+---
+title: 'Inside the Cone: Four Experiments on Embedding Anisotropy'
+date: '2026-06-19'
+lastmod: '2026-06-19'
+tags:
+  ['embeddings', 'transformers', 'anisotropy', 'geometry', 'nlp', 'bert', 'information-retrieval']
+draft: true
+summary: 'All mxbai/bge/gte embeddings live in a narrow cone — a shared direction that dominates cosine similarity and drowns out semantic signal. We ran four experiments to understand where the cone comes from, what it encodes, and whether fine-tuning fixes it. The answers are surprising: mean pooling creates most of it, fine-tuning rotates it rather than removing it, and base BERT points in a completely different direction.'
+images: []
+authors: ['default']
+---
+
+> This post is part of the embedding geometry series. [Part 1](/blog/embedding-layers) covers token collapse. [Part 2](/blog/similarity-attractor) covers the attractor. [The centering post](/blog/embedding-centering) covers the fix. This post is about understanding the problem more deeply.
+
+Dense embedding models have an anisotropy problem: all sentence vectors point roughly in the same direction. Cosine similarity between any two mxbai embeddings is around 0.42 on average — even for unrelated sentences. The "cone" means that the shared background direction dominates the score, and the semantic signal is a small perturbation on top.
+
+We ran four experiments to answer four questions about where this comes from.
+
+## Experiment 1: When does the cone form?
+
+We measured mean pairwise cosine similarity at each of mxbai's 25 layers (embedding layer + 24 transformer layers) using 300 SNLI sentences. Anisotropy 0.0 means perfectly isotropic; 1.0 means all vectors identical.
+
+| Layer   | Anisotropy | Layer   | Anisotropy |
+| ------- | ---------- | ------- | ---------- |
+| L0      | 0.626      | L13     | 0.909      |
+| L1      | 0.795      | L14     | 0.851      |
+| L2      | 0.834      | L15     | 0.814      |
+| L3      | **0.881**  | L16     | 0.876      |
+| L4      | 0.856      | L17     | 0.870      |
+| L5      | 0.795      | L18     | 0.840      |
+| L6      | 0.702      | L19     | 0.815      |
+| L7      | 0.814      | L20     | 0.792      |
+| L8      | 0.848      | L21     | 0.748      |
+| L9      | 0.900      | L22     | 0.723      |
+| L10     | 0.913      | L23     | 0.672      |
+| L11     | 0.923      | **L24** | **0.417**  |
+| **L12** | **0.924**  |         |            |
+
+The trajectory has a striking shape: **two builds and one crash**.
+
+**First build (L0→L3)**: anisotropy jumps from 0.626 to 0.881 in the first three attention layers. The raw token embeddings already have a shared direction from the MLM pretraining vocabulary, and the first few attention layers amplify this as each token attends to its context and absorbs the common signal.
+
+**Partial reversal (L4→L6)**: anisotropy dips back to 0.702. Some specialisation happens in the middle-early layers — the attention patterns become more content-specific, temporarily reducing the shared bias.
+
+**Second build (L7→L12)**: anisotropy climbs again to its global peak of 0.924. This is the backbone attractor we've documented elsewhere: by L12, all sentence representations have converged toward a common "generic English sentence" direction regardless of content.
+
+**Gradual decline (L13→L23)**: contrastive fine-tuning in L13–L24 slowly pushes representations apart. Anisotropy falls from 0.909 to 0.672 over 11 layers.
+
+**Final crash (L23→L24)**: anisotropy drops from 0.672 to 0.417 in a single layer. The last layer does the majority of the fine-tuning's geometric work. This is consistent with the peak contribution layer finding: 77% of dimension-wise changes happen at L24 in mxbai_std.
+
+The cone isn't a gentle pretraining artifact that fine-tuning gradually erodes. It builds to a peak at L12, then fine-tuning mostly ignores it until the final layer where it does nearly all the discriminative work at once.
+
+## Experiment 2: Mean pooling creates most of the cone
+
+The standard explanation for anisotropy in sentence embeddings is MLM pretraining — common tokens establish a dominant direction. But there's a more proximal cause: mean pooling.
+
+We measured anisotropy at L12 and L24 on two different representations:
+
+- **Token-level**: all non-padding token representations stacked (before pooling)
+- **Sentence-level**: mean-pooled sentence embeddings
+
+|                               | L12        | L24       |
+| ----------------------------- | ---------- | --------- |
+| Token-level anisotropy        | 0.446      | 0.379     |
+| **Sentence-level anisotropy** | **0.924**  | **0.417** |
+| Gap (sentence − token)        | **+0.478** | +0.038    |
+
+At L12: token-level anisotropy is 0.446 — moderate. Sentence-level is 0.924 — extreme. **Mean pooling more than doubles the anisotropy at the depth where the backbone attractor peaks.**
+
+Why? When you average N token vectors, the common component (the shared "northeast" direction) gets reinforced — it's present in every token, so it survives averaging. The sentence-specific signal is more variable across tokens and partially cancels. Mean pooling acts as a low-pass filter on the token geometry, keeping the shared background and suppressing the unique foreground.
+
+At L24: the gap almost disappears (sentence=0.417, token=0.379). The contrastive fine-tuning in L13–L24 has done two things simultaneously: it has pushed sentence embeddings apart (reducing anisotropy from 0.924 to 0.417), and it has done so in a way that makes the pooled representations less dominated by the shared token signal.
+
+**The practical implication**: the L12 anisotropy crisis is largely a pooling artifact. If you extract token-level representations at L12, they're already at 0.446 — not great, but not the 0.924 catastrophe you get from mean pooling. Mean pooling at the wrong layer is as harmful as the backbone attractor itself.
+
+## Experiment 3: What does the cone axis encode?
+
+We extracted the top PCA eigenvector of mxbai's L24 sentence embeddings (1000 SNLI sentences) — the "cone axis" — and projected every sentence onto it. The top and bottom sentences reveal what this direction actually represents.
+
+**Highest projection (closest to cone axis):**
+
+> "A man in a blue shirt is cutting the wood."
+> "A man in a button up shirt working with wire."
+> "A man in a blue hat and sweater, working on a wall."
+> "A man is shaving, brushing his teeth and cleaning his hair."
+> "A man in a flannel shirt cutting wood with a table saw."
+
+**Lowest projection (furthest from cone axis):**
+
+> "Girls playing soccer competitively in the grass."
+> "A girls basketball game with the girl on the white team dribbling the ball."
+> "Two girls doing cartwheels, while other children look on."
+> "A group of girls in dresses dancing."
+> "Several girls are playing darts."
+
+The cone axis doesn't cleanly separate by grammatical structure or sentence length. It separates **"man doing a physical task"** from **"girls doing sport or group activity"** — which is a corpus distribution artifact. SNLI is built on image captions from Flickr, which skews heavily toward images of men working, men in outdoor activities, men with tools. The dominant direction in mxbai's embedding space is pointing toward the center of mass of that training distribution.
+
+This has two implications. First, the cone axis is not a universal "generic English sentence" direction — it reflects the pretraining and fine-tuning data distribution. A model trained on biomedical text would have a cone axis pointing toward the center of mass of biomedical language. Second, a centering vector computed from one domain corpus (e.g. news) may not fully correct for a different deployment domain (e.g. legal documents) — the mean shifts with distribution.
+
+**Token-level projections**: we also projected L0 token embeddings (the raw vocabulary embeddings before any attention) onto the cone axis. The top tokens are not function words — they are obscure subword fragments (`##ffs`, `##bara`, `##nir`), rare place names (`pontiac`, `turin`, `sonora`), and unusual words (`newscast`, `allegro`). Common words like "the", "a", "is" are not the primary drivers of the cone direction at the raw embedding level.
+
+This is surprising given the standard explanation (MLM pretraining upweights common tokens). The cone axis learned by the full model through 24 layers of attention is more complex than a simple frequency bias. The final cone direction is shaped by both the pretraining geometry and the fine-tuning distribution.
+
+## Experiment 4: Fine-tuning rotates the cone, not removes it
+
+We computed the cone axis (top PCA eigenvector at L24) for four models: mxbai-embed-large-v1, bge-large-en-v1.5, gte-large, and bert-large-uncased. Then we measured cosine similarity between each pair of cone axes.
+
+|               | mxbai | bge       | gte       | base BERT |
+| ------------- | ----- | --------- | --------- | --------- |
+| **mxbai**     | 1.000 | **0.976** | **0.963** | 0.024     |
+| **bge**       | 0.976 | 1.000     | **0.967** | 0.025     |
+| **gte**       | 0.963 | 0.967     | 1.000     | 0.053     |
+| **base BERT** | 0.024 | 0.025     | 0.053     | 1.000     |
+
+The fine-tuned models (mxbai, bge, gte) all point in nearly the same direction — cosine ≥ 0.963 between any pair. This is consistent with their near-identical backbone weights.
+
+But base BERT's cone axis is **orthogonal** to all three fine-tuned models (cosine ≈ 0.024–0.053). They are pointing in completely different directions.
+
+Contrastive fine-tuning doesn't reduce the cone — mxbai's final anisotropy is 0.417, which is still substantial. What fine-tuning does is **rotate** the cone to a new direction aligned with the contrastive training distribution. The fine-tuned models all end up pointing toward the same new direction because they started from the same backbone and were trained on similar data (NLI, MS-MARCO, and related corpora).
+
+This has a concrete practical consequence: **the centering vector is model-family-specific**. A mean vector computed from base BERT embeddings would be useless for mxbai — their cone axes are orthogonal. You must compute the centering vector from the fine-tuned model you're actually using. But within the fine-tuned family (mxbai, bge, gte), cone axes are nearly identical — a centering vector computed for mxbai would work well for bge and vice versa.
+
+## What this tells us about the cone
+
+Four findings, one picture:
+
+1. **The cone builds in the first three layers and peaks at L12.** Fine-tuning barely touches it until the final layer, where it does most of the discriminative work at once.
+
+2. **Mean pooling is the main amplifier.** Token-level anisotropy at L12 is 0.446; sentence-level is 0.924. Pooling is creating the crisis, not just inheriting it. If you need to use intermediate layer representations, token-level is significantly less degenerate than mean-pooled.
+
+3. **The cone axis encodes corpus distribution, not just frequency.** The dominant direction points toward the center of mass of SNLI's image caption distribution — men doing physical tasks. The centering vector needs to be computed from data representative of your actual deployment corpus.
+
+4. **Fine-tuning rotates the cone rather than removing it.** Base BERT and mxbai point in orthogonal directions. The fine-tuned family (mxbai/bge/gte) shares a cone direction, making a single centering vector portable within the family.
+
+Together, these explain why centering works as well as it does: it removes the rotation that fine-tuning introduced on top of MLM pretraining, leaving only the semantic signal that the contrastive objective actually trained into the model.
