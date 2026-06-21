@@ -1,0 +1,165 @@
+---
+title: 'Cross-Modal Latent Terms: Do Images and Words Share Sparse Features?'
+date: '2026-06-20'
+lastmod: '2026-06-20'
+tags: ['search', 'sparse-retrieval', 'interpretability', 'multimodal', 'embeddings']
+draft: true
+summary: "Mixedbread showed dense text retrievers contain a trivially-extractable sparse vocabulary. I reproduced it on SciFact, then asked a question the paper doesn't: in a vision+text model, does a photo of a wolf fire the same latent features as the word 'wolf'? Mostly no — but the few shared features are the real deal."
+authors: ['default']
+---
+
+> Looking for TL;DR? Skip to [key takeaways](#key-takeaways).
+>
+> **Status: draft.** The multimodal numbers below are from a balanced, de-confounded run (matched image/text counts, diversified text descriptions, count-invariant metric). An earlier cheap run with an imbalance confound reported a much larger gap; I note the before/after where it matters.
+
+Mixedbread recently published [Latent Terms](https://www.mixedbread.com/blog/latent-terms): the claim is that a dense retriever, trained only with single-vector contrastive supervision, secretly learns a much richer representation than its cosine-similarity scoring can express — and you can extract it almost for free. Train a Sparse Autoencoder (SAE) on the frozen model's activations, read off which features fire, and you get a discrete "latent vocabulary" that's Zipfian like real language and drops straight into BM25.
+
+No retrieval training. No distillation. Just an SAE on a frozen model, and suddenly your dense retriever has a keyword index.
+
+That's a fun enough result on its own. But it raised a question I couldn't stop thinking about: **if this works on text retrievers, what happens on a model that sees both images and text?** Does a photo of a wolf decompose into the _same_ latent features as the word "wolf" — or does each modality get its own private vocabulary?
+
+I had Modal credits and a free evening. Here's what I found.
+
+## First, does the text version actually reproduce?
+
+Before extending anything, I wanted the base method working on my own machine. The recipe:
+
+1. Freeze an off-the-shelf retriever ([facebook/contriever](https://huggingface.co/facebook/contriever)).
+2. Run it over a corpus, collect token-level hidden states.
+3. Train a TopK SAE (16k features, k=16) on those activations — plain reconstruction loss, nothing retrieval-specific.
+4. For each document token, its ≤16 firing features become discrete "latent terms." Aggregate per doc into integer term frequencies.
+5. Index those latent terms with BM25 and evaluate.
+
+On [BEIR SciFact](https://github.com/beir-cellar/beir) (5,183 docs, 300 queries), the result lands exactly where the paper says it should:
+
+<div style={{overflowX: 'auto'}}>
+
+| Method                  | NDCG@10    | Recall@100 |
+| ----------------------- | ---------- | ---------- |
+| **Latent Terms + BM25** | **0.6927** | **0.937**  |
+| Lexical BM25            | 0.6605     | 0.8859     |
+| Dense cosine (backbone) | 0.5997     | 0.906      |
+
+</div>
+
+The extracted latent terms **beat both the dense backbone they came from and plain lexical BM25**. Read that again: a keyword index built by reading the SAE's mind outperforms the model's own native cosine scoring. The SAE explained ~89% of activation variance (FVU 0.11) with 99.9% of features in use — a healthy decomposition, not a degenerate one.
+
+One honest caveat: I trained the SAE _in-domain_ on SciFact itself rather than on MSMARCO like the paper. That's a shortcut that likely flatters the numbers slightly. But the ordering — latent terms > lexical > dense — is the whole point, and it holds.
+
+So the machinery works. Time for the actual question.
+
+## The multimodal question
+
+The text paper operates at the token level: each token's hidden state goes through the SAE. You can't naively do that across modalities, because an image patch-token (living in a vision transformer's space) and a text token (living in a text encoder's space) aren't in the same coordinate system. A feature couldn't be "the same" across them.
+
+The one place the two modalities _are_ comparable is the final pooled, contrastively-aligned embedding — that's the entire reason `cosine(dog_photo, "dog")` is a meaningful number in a CLIP-style model. So the design is:
+
+> Train **one** SAE on the **union** of pooled image and text embeddings from a shared-space model. Now both modalities decompose into the _same_ feature basis, and "do they share features?" becomes a literal set-overlap question.
+
+Concretely: [SigLIP](https://huggingface.co/google/siglip-base-patch16-224) (frozen), ~1,500 [CIFAR-100](https://huggingface.co/datasets/uoft-cs/cifar100) images across 100 named classes, matched against ~900 _varied_ text descriptions of those classes (real phrases like "a wild canine predator", not just templated names — this matters, see below). One TopK SAE (4,096 features, k=32) on the pooled embeddings, with modality-balanced training batches. Then I ask, per concept: do its images and its text label fire overlapping features?
+
+Total cost of the experiment: a couple of cents and under two minutes on a T4.
+
+## What I found: mostly-separate vocabularies, with a real shared core
+
+Three measurements, three pieces of the story.
+
+**1. Concept identity survives across modalities.** For each concept I took the top-32 features fired by its images and by its text, and measured Jaccard overlap — same-concept (wolf images vs "wolf") versus cross-concept (wolf images vs "rose").
+
+<div style={{overflowX: 'auto'}}>
+
+| Overlap (Jaccard@32)          | Value  |
+| ----------------------------- | ------ |
+| Same concept (img ↔ its text) | 0.0141 |
+| Cross concept                 | 0.0002 |
+| Shuffled-label null           | 0.0002 |
+
+</div>
+
+Same-concept overlap is **88× higher** than cross-concept and well above the shuffled null. So the features an image fires are genuinely predictive of the features its text label fires — concept identity is shared across the modalities. Good.
+
+But look at the absolute numbers: 0.0144 is _tiny_. Of the ~64 features in the union of a concept's image and text top-32, barely one is shared. Which leads to:
+
+**2. The two modalities mostly use different drawers.** I labeled every active SAE feature by how much of its activation came from images vs text:
+
+<PlotlyChart
+  data={[
+    {
+      type: 'bar',
+      x: ['image-only', 'shared', 'text-only'],
+      y: [0.679, 0.081, 0.24],
+      marker: { color: ['#6366f1', '#10b981', '#f59e0b'] },
+      text: ['67.9%', '8.1%', '24.0%'],
+      textposition: 'outside',
+    },
+  ]}
+  layout={{
+    title: {
+      text: 'How features split by modality (balanced, count-normalized)',
+      font: { size: 15 },
+    },
+    xaxis: { title: '' },
+    yaxis: { title: 'fraction of active features', range: [0, 1.05] },
+    height: 360,
+    showlegend: false,
+    margin: { t: 56, r: 24, b: 48, l: 64 },
+  }}
+/>
+
+About **68% of features are image-only**, ~24% text-only, and only **~8% are activation-shared** — with **19% binary co-activated** (fired by at least one image _and_ one text vector). The model keeps its picture vocabulary and its word vocabulary largely in separate drawers. This is the [CLIP modality gap](https://arxiv.org/abs/2203.02053) (image and text embeddings occupy separate cones) showing up at the level of discrete, interpretable features.
+
+**A caveat worth being loud about — because it bit me.** My _first_ cheap run reported 94.5% image-only. That number was inflated by a data imbalance: 20,000 diverse images against only ~700 low-diversity text vectors (the same templated class name wrapped seven ways). The SAE naturally spends more features on the side with more variety. Balancing the counts and giving the text genuine descriptive diversity dropped image-only from 94.5% → ~68%. The gap is real and clearly holds — even balanced, the large majority of features stay modality-specific — but it was _much_ smaller than the naive setup suggested. Quote the balanced number.
+
+**3. When a feature is shared, it means the same thing.** This is the part that surprised me. Among the features that _are_ shared, I checked whether the feature's top-activating image concept matches its top-activating text concept. It does **84.6% of the time.** A few examples, named purely from the data (CIFAR labels make this free):
+
+```
+F5990 [shared] images: wolf, raccoon, shark   text: wolf, shark, fox       → predators
+F2743 [shared] images: possum, mouse, shrew    text: possum, shrew, kangaroo → small mammals
+F7513 [shared] images: butterfly, caterpillar  text: butterfly, caterpillar  → insects
+```
+
+So the shared core isn't noise or coincidental co-firing. A genuinely cross-modal "wolf-ness" feature exists; it just lives in a small minority. Two mostly-separate worlds, connected by a handful of solid bridges.
+
+As a sanity check that the sparse codes carry real signal, text→image retrieval using the sparse codes hits Recall@10 of 0.43 versus 0.79 for raw SigLIP cosine — the decomposition keeps about half the cross-modal retrieval signal.
+
+## The thing that _didn't_ work
+
+I also tried to reproduce the paper's feature taxonomy on the text side — its breakdown of features into Lexical / Narrow-Semantic / Broad-Topical (≈33/10/57). My version came out as garbage, and it's worth saying why.
+
+I named features by their top-activating tokens, sorted by document frequency, and looked at the top. Every one of them fired on the _most common_ tokens in the corpus — commas, "the", "and", "…". That's the saturated head of the Zipfian distribution: filler. The actually-meaningful content features live in the mid-frequency band, which I never surfaced. (Retrieval was unaffected, because BM25's IDF gives those ubiquitous features ≈ zero weight — they're in every document, so they're useless for ranking and silently ignored.)
+
+It's a good reminder: the same feature-naming routine worked beautifully on the multimodal side (clean concept labels, no stopword tail) and uselessly on raw text. Interpretability readouts are only as good as what you choose to look at.
+
+## Limitations
+
+**Setup sensitivity.** The first cheap run (20k images vs ~700 low-diversity text vectors) reported 94.5% image-only; balancing counts and diversifying the text descriptions dropped that to ~68%. The headline number is sensitive to how you balance the modalities and how much text variety you give the SAE — quote the balanced one, and know the gap shrinks but doesn't close.
+
+**CIFAR is 32×32.** SigLIP upscales to 224. Concept signal is clearly strong (raw retrieval at 0.92), but these are blurry inputs and a higher-resolution dataset would be cleaner.
+
+**Pooled, not patch-level.** Working in the shared embedding space is necessary for the cross-modal comparison, but it means we're studying "latent concepts," not the token-granular "latent terms" of the original paper.
+
+**In-domain SAE, single seed.** Both the text and multimodal SAEs are trained on the eval data, single seed. Fine for a first look; not enough for a claim with error bars.
+
+## Key Takeaways
+
+- **Vision+text models keep largely-separate sparse vocabularies.** With balanced counts, ~68% of features are image-only and only ~8% are activation-shared (~19% co-activated by both) — the CLIP modality gap, made discrete. Same-concept overlap beats cross-concept 88×, so the signal is real even where features are shared.
+- **The shared core is trustworthy.** When a feature _is_ used by both modalities, it means the same concept 84.6% of the time. A real "wolf" feature exists for both the photo and the word; it's just a minority.
+- **The base method reproduces.** On SciFact, an SAE read off a frozen Contriever beats both lexical BM25 (0.66 → 0.69 NDCG@10) and the dense backbone's own cosine scoring (0.60). The "dense retrievers know more than they express" claim holds on text — that's the foundation everything else builds on.
+- **Watch your confounds.** A naive setup screamed "94.5% modality-specific"; balancing counts and diversifying text cut that to ~68%. The effect was real but inflated — the cheap first number would have been a misleading headline.
+- **Interpretability readouts are fragile.** Naming text features by raw token frequency surfaces only punctuation and stopwords. Choose the frequency band, or the labels are meaningless — even when the underlying retrieval works fine.
+
+## Citation
+
+This work builds directly on Mixedbread's Latent Terms:
+
+```
+@misc{latentterms,
+  title={Latent Terms: Dense Retrievers Contain Trivially Extractable BM25-ready Zipfian Vocabularies},
+  author={Benjamin Clavié and Sean Lee and Aamir Shakir and Makoto P. Kato},
+  year={2026},
+  eprint={2605.29384},
+  archivePrefix={arXiv},
+  primaryClass={cs.IR},
+  url={https://arxiv.org/abs/2605.29384},
+}
+```
