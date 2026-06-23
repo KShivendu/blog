@@ -1,0 +1,70 @@
+---
+title: 'Scaling laws for vector search'
+date: '2025-11-29'
+lastmod: '2025-11-29'
+tags: ['search', 'internals', 'infra']
+draft: true
+summary: 'Measuring how brute-force vector search latency scales with dataset size, and what binary quantization actually buys you versus the napkin math.'
+images: ['/static/images/blogs/exa-clean.jpg']
+authors: ['default']
+---
+
+![Exa Napkin Math Blog Cover Image](/static/images/blogs/exa-clean.jpg)
+
+Latency vs Recall
+
+We'll study:
+
+- Effect of increasing dataset size: `range(0, 10M, 100M, 1B)`
+- Effect of increasing dims
+
+We'll do it with the following:
+
+- Effect of binary quantization
+
+And we'll do this with two different approaches:
+
+- Brute force vector comparisons (with SIMD optimizations)
+- HNSW
+
+## Results: brute-force scaling
+
+First data points, measured with [`bfb`](https://github.com/qdrant/bfb) against a Qdrant cluster, with HNSW disabled (`indexing_threshold = 0`) so every query is a full scan. Random 256-dim vectors, search percentiles are server-side, 2000 queries per point.
+
+![Brute-force latency and throughput vs dataset size](/static/images/blogs/scaling_bruteforce.png)
+
+| Vectors | fp32 p50 | Binary quant p50 | BQ no-rescore p50 | fp32 QPS | BQ QPS |
+| ------- | -------- | ---------------- | ----------------- | -------- | ------ |
+| 100k    | 34 ms    | 11.5 ms          | 11.4 ms           | 182      | 398    |
+| 200k    | 76 ms    | 28.7 ms          | 28.9 ms           | 102      | 223    |
+| 500k    | 187 ms   | 85 ms            | 85.5 ms           | 42       | 89     |
+| 1M      | 366 ms   | 144 ms           | 147 ms            | 21       | 65     |
+
+Three things fall out of this:
+
+- **Full scan is cleanly linear in N.** fp32 latency tracks the ideal `O(N)` line almost exactly (34 → 76 → 187 → 366 ms for 100k → 1M). No surprises — brute force does what it says.
+- **Rescoring is free.** Binary quant with rescore and without rescore are within noise of each other at every size. Rescoring the top candidates against the original (in-RAM) vectors costs essentially nothing, so it's never the thing to cut.
+- **Binary quant only buys ~2.5× here, not the ~192× the bit-count math suggests.** A 256-bit BQ vector is `(1536 × 32) / 256 = 192×` smaller in raw bits, but brute force is bandwidth- and overhead-bound, not bottlenecked on the distance op. The real win is scanning ~32× less data, and even that is eaten into by fixed per-query cost. This gap between napkin math and reality is exactly the kind of thing I wanted to pin down.
+
+### Time complexity analysis of HNSW vector indexing:
+
+Each HNSW insertion needs a search, and assuming it takes K ops to add the found K links. This means insertion time is:
+
+(O(log1) + k) + (O(log2) + k) + .... (O(logN) + k)
+
+Sigma(log(I), i*from=1, i_to=N) + kN
+= log(1 * 2 \_ 3 \* .... N) + kN
+= log(N!) + kN
+
+We have Stirling's approximation for large N:
+
+log(N!)≈NlogN−N
+
+log(N!)+kN≈NlogN−N+kN=NlogN+(k−1)N
+
+Since K is constant, time complexity is O(NLogN) which is very bad
+
+Why am I doing this? How it aligns with my life philosophy?
+
+- I think napkin maths is a meta technique. It's very generalizable and very powerful. I want to see how well I can predict the system and its behaviour with the numbers I'll get.
+- Although, this is good for
