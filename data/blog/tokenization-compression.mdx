@@ -4,7 +4,7 @@ date: '2026-05-12'
 lastmod: '2026-06-11'
 tags: ['compression', 'vector-databases', 'internals', 'nlp']
 draft: false
-summary: 'Vector databases compress text payloads with LZ4 by default. Tokenize the text first and entropy-code the token IDs, and you get ~3x lossless compression, 2.6x what LZ4 manages, using pieces every ML stack already ships.'
+summary: 'Vector databases compress text payloads with LZ4 by default. Tokenize the text first and entropy-code the token IDs, and you get ~3x lossless compression, 2.9x what LZ4 manages, using pieces every ML stack already ships.'
 images: ['/static/images/blogs/tokenization-compression.jpg']
 authors: ['default']
 ---
@@ -31,7 +31,7 @@ When you insert a document into Qdrant, or Elasticsearch, you typically store so
 }
 ```
 
-Qdrant stores on-disk payloads in [Gridstore](https://qdrant.tech/articles/gridstore-key-value-storage/) (its custom KV engine, replacing RocksDB since v1.13) with LZ4 compression on by default. Elasticsearch packs stored fields into 16 KB blocks and compresses each block with LZ4, so a handful of documents share a compression window. Either way, the codec sees at most a few documents at a time and has no learned model of the language, just whatever byte patterns happen to repeat within the block. That gets you roughly 1.3–2x on text.
+Qdrant stores on-disk payloads in [Gridstore](https://qdrant.tech/articles/gridstore-key-value-storage/) (its custom KV engine, replacing RocksDB since v1.13) with LZ4 compression on by default. Elasticsearch packs stored fields into 16 KB blocks and compresses each block with LZ4, so a handful of documents share a compression window. Either way, the codec sees at most a few documents at a time and has no learned model of the language, just whatever byte patterns happen to repeat within the block. That gets you roughly 1.15–2x on text.
 
 But there is a component that knows a lot about the structure of natural language, and it's already part of every embedding and language model: **the tokenizer**.
 
@@ -95,7 +95,7 @@ Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/
 
 | Method                      |       min |    median |       max |
 | --------------------------- | --------: | --------: | --------: |
-| LZ4 (default in Qdrant/ES)  |     ~1.0x |     ~1.3x |     ~1.5x |
+| LZ4 (default in Qdrant/ES)  |     0.88x |     1.15x |     1.78x |
 | gzip -9                     |     0.99x |     1.66x |     2.34x |
 | zstd -22                    |     1.11x |     1.68x |     2.39x |
 | brotli q=11                 |     1.22x |     2.26x |     3.13x |
@@ -132,7 +132,7 @@ The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`)
     {
       type: 'bar',
       orientation: 'h',
-      x: [1.0, 1.3, 1.66, 1.68, 2.26, 2.33, 2.61, 3.37],
+      x: [1.0, 1.15, 1.66, 1.68, 2.26, 2.33, 2.61, 3.37],
       y: [
         'Raw UTF-8',
         'LZ4 (Qdrant/ES default)',
@@ -155,7 +155,7 @@ The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`)
           '#10b981',
         ],
       },
-      text: ['1.0×', '1.3×', '1.66×', '1.68×', '2.26×', '2.33×', '2.61×', '3.37×'],
+      text: ['1.0×', '1.15×', '1.66×', '1.68×', '2.26×', '2.33×', '2.61×', '3.37×'],
       textposition: 'outside',
     },
   ]}
@@ -366,7 +366,7 @@ There's also a bigger-picture reason to like token-native storage as [search and
 
 ## Key Takeaways
 
-- Vector databases apply LZ4 to text payloads (1.3x). Tokenizing first and entropy-coding the token IDs gives 3.35x on average. Lossless, 2.6x better than LZ4.
+- Vector databases apply LZ4 to text payloads (1.15x). Tokenizing first and entropy-coding the token IDs gives 3.35x on average. Lossless, 2.9x better than LZ4.
 - Raw uint16 token IDs alone reach 2.4x, beating every byte codec except brotli, with no compression algorithm at all.
 - The frequency table must be static and shared. Per-document tables cost ~900 bytes each and erase the gain.
 - Latency is a non-issue: ANS adds ~30µs to encoding (the tokenizer you may already run dominates), and decode is ~41µs.
