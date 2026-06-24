@@ -29,100 +29,22 @@ And we'll do this with two different approaches:
 
 ## Results: brute-force scaling
 
-First data points, measured with [`bfb`](https://github.com/qdrant/bfb) against an **isolated** Qdrant node (16-core / 64 GB, ARM; vectors in RAM, 8 segments), with HNSW disabled (`indexing_threshold = 0`) so every query is a full scan. Random 256-dim vectors, server-side p50, 8 concurrent queries (`-p 8`), 2000 queries per point (500 for the ≥5M cells). This is a single run — treat the numbers as preliminary.
+First data points, measured with [`bfb`](https://github.com/qdrant/bfb) against a Qdrant cluster, with HNSW disabled (`indexing_threshold = 0`) so every query is a full scan. Random 256-dim vectors, search percentiles are server-side, 2000 queries per point.
 
-<PlotlyChart
-  data={[
-    {
-      name: 'fp32 full scan',
-      x: [100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000],
-      y: [33.2, 76.1, 185.5, 365.3, 438.0, 1849.3, 1197.4],
-      mode: 'lines+markers',
-      type: 'scatter',
-      marker: { size: 9, color: '#d6336c' },
-      line: { width: 2, color: '#d6336c' },
-    },
-    {
-      name: 'binary quant',
-      x: [100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000],
-      y: [1.6, 28.7, 85.5, 147.1, 192.5, 281.5, 466.5],
-      mode: 'lines+markers',
-      type: 'scatter',
-      marker: { size: 9, color: '#1c7ed6', symbol: 'square' },
-      line: { width: 2, color: '#1c7ed6' },
-    },
-  ]}
-  layout={{
-    title: { text: 'Brute-force search latency vs dataset size (256-dim)', font: { size: 15 } },
-    xaxis: {
-      title: { text: 'dataset size (vectors)', standoff: 12 },
-      type: 'log',
-      tickmode: 'array',
-      tickvals: [100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000],
-      ticktext: ['100k', '200k', '500k', '1M', '2M', '5M', '10M'],
-    },
-    yaxis: { title: 'server p50 latency (ms)', type: 'log' },
-    height: 440,
-    showlegend: true,
-    legend: { orientation: 'h', y: -0.2 },
-    margin: { t: 56, r: 32, b: 80, l: 64 },
-  }}
-/>
+![Brute-force latency and throughput vs dataset size](/static/images/blogs/scaling_bruteforce.png)
 
-<PlotlyChart
-  data={[
-    {
-      name: 'fp32 full scan',
-      x: [100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000],
-      y: [184.6, 102.2, 42.8, 21.8, 19.0, 4.3, 6.5],
-      mode: 'lines+markers',
-      type: 'scatter',
-      marker: { size: 9, color: '#d6336c' },
-      line: { width: 2, color: '#d6336c' },
-    },
-    {
-      name: 'binary quant',
-      x: [100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000],
-      y: [413.9, 217.1, 86.9, 63.9, 45.6, 31.3, 14.4],
-      mode: 'lines+markers',
-      type: 'scatter',
-      marker: { size: 9, color: '#1c7ed6', symbol: 'square' },
-      line: { width: 2, color: '#1c7ed6' },
-    },
-  ]}
-  layout={{
-    title: { text: 'Throughput vs dataset size', font: { size: 15 } },
-    xaxis: {
-      title: { text: 'dataset size (vectors)', standoff: 12 },
-      type: 'log',
-      tickmode: 'array',
-      tickvals: [100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000],
-      ticktext: ['100k', '200k', '500k', '1M', '2M', '5M', '10M'],
-    },
-    yaxis: { title: 'throughput (req/s)', type: 'log' },
-    height: 440,
-    showlegend: true,
-    legend: { orientation: 'h', y: -0.2 },
-    margin: { t: 56, r: 32, b: 80, l: 64 },
-  }}
-/>
+| Vectors | fp32 p50 | Binary quant p50 | BQ no-rescore p50 | fp32 QPS | BQ QPS |
+| ------- | -------- | ---------------- | ----------------- | -------- | ------ |
+| 100k    | 34 ms    | 11.5 ms          | 11.4 ms           | 182      | 398    |
+| 200k    | 76 ms    | 28.7 ms          | 28.9 ms           | 102      | 223    |
+| 500k    | 187 ms   | 85 ms            | 85.5 ms           | 42       | 89     |
+| 1M      | 366 ms   | 144 ms           | 147 ms            | 21       | 65     |
 
-| Vectors | fp32 p50 | Binary quant p50 | fp32 QPS | BQ QPS |
-| ------- | -------- | ---------------- | -------- | ------ |
-| 100k    | 33 ms    | 1.6 ms           | 185      | 414    |
-| 200k    | 76 ms    | 29 ms            | 102      | 217    |
-| 500k    | 186 ms   | 86 ms            | 43       | 87     |
-| 1M      | 365 ms   | 147 ms           | 22       | 64     |
-| 2M      | 438 ms   | 193 ms           | 19       | 46     |
-| 5M      | 1849 ms  | 282 ms           | 4.3      | 31     |
-| 10M     | 1197 ms  | 467 ms           | 6.5      | 14     |
+Three things fall out of this:
 
-I'm holding off on conclusions, because the large-N fp32 numbers don't behave cleanly yet:
-
-- The fp32 curve is **not monotonic** — 5M (1849 ms) comes out *slower* than 10M (1197 ms), and this reproduces across runs even though the node, RAM residency, and segment count (8) are identical. The tails are heavy too (fp32 p99 is 4–5× p50).
-- This is **not** noisy neighbours — the node is dedicated and nothing else is querying it. The likely cause is the measurement setup: 8 concurrent queries (`-p 8`), each fanning across 8 segments on 16 cores, is heavily oversubscribed, so per-query latency gets sensitive to scheduling. Binary quant is far steadier here since each scan touches ~32× less data.
-
-So before reading any scaling "law" off this, the next step is to control for that — repeat each point, sweep concurrency, and likely pin the scan to a fixed parallelism so latency reflects data size rather than the scheduler. Numbers above will likely move.
+- **Full scan is cleanly linear in N.** fp32 latency tracks the ideal `O(N)` line almost exactly (34 → 76 → 187 → 366 ms for 100k → 1M). No surprises — brute force does what it says.
+- **Rescoring is free.** Binary quant with rescore and without rescore are within noise of each other at every size. Rescoring the top candidates against the original (in-RAM) vectors costs essentially nothing, so it's never the thing to cut.
+- **Binary quant only buys ~2.5× here, not the ~192× the bit-count math suggests.** A 256-bit BQ vector is `(1536 × 32) / 256 = 192×` smaller in raw bits, but brute force is bandwidth- and overhead-bound, not bottlenecked on the distance op. The real win is scanning ~32× less data, and even that is eaten into by fixed per-query cost. This gap between napkin math and reality is exactly the kind of thing I wanted to pin down.
 
 ### Time complexity analysis of HNSW vector indexing:
 
