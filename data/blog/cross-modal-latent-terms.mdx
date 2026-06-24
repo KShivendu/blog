@@ -78,7 +78,7 @@ Three measurements, three pieces of the story.
 
 Same-concept overlap is **88× higher** than cross-concept and well above the shuffled null. So the features an image fires are genuinely predictive of the features its text label fires — concept identity is shared across the modalities. Good.
 
-But look at the absolute numbers: 0.0144 is _tiny_. Of the ~64 features in the union of a concept's image and text top-32, barely one is shared. Which leads to:
+But look at the absolute numbers: 0.0141 is _tiny_. Of the ~64 features in the union of a concept's image and text top-32, barely one is shared. Which leads to:
 
 **2. The two modalities mostly use different drawers.** I labeled every active SAE feature by how much of its activation came from images vs text:
 
@@ -146,6 +146,23 @@ It's a good reminder: the same feature-naming routine worked beautifully on the 
 - **The shared core is trustworthy.** When a feature _is_ used by both modalities, it means the same concept 84.6% of the time. A real "wolf" feature exists for both the photo and the word; it's just a minority.
 - **The base method reproduces.** On SciFact, an SAE read off a frozen Contriever beats both lexical BM25 (0.66 → 0.69 NDCG@10) and the dense backbone's own cosine scoring (0.60). The "dense retrievers know more than they express" claim holds on text — that's the foundation everything else builds on.
 - **Watch your confounds.** A naive setup screamed "94.5% modality-specific"; balancing counts and diversifying text cut that to ~68%. The effect was real but inflated — the cheap first number would have been a misleading headline.
+
+## Citation
+
+This post builds directly on Mixedbread's Latent Terms work. If you're referencing the underlying method, cite the original:
+
+```bibtex
+@misc{latentterms,
+  title={Latent Terms: Dense Retrievers Contain Trivially Extractable BM25-ready Zipfian Vocabularies},
+  author={Benjamin Clavié and Sean Lee and Aamir Shakir and Makoto P. Kato},
+  year={2026},
+  eprint={2605.29384},
+  archivePrefix={arXiv},
+  primaryClass={cs.IR},
+  url={https://arxiv.org/abs/2605.29384},
+}
+```
+
 - **Interpretability readouts are fragile.** Naming text features by raw token frequency surfaces only punctuation and stopwords. Choose the frequency band, or the labels are meaningless — even when the underlying retrieval works fine.
 
 ## Citation
