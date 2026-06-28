@@ -1,0 +1,289 @@
+---
+title: 'Continual Learning Is Upsert'
+date: '2026-06-26'
+lastmod: '2026-06-26'
+tags: ['ai', 'machine-learning', 'databases', 'continual-learning']
+draft: true
+summary: 'A trained model is a database built by lossily ingesting a dataset that is only ever a sample of the world. Once you see it that way, continual learning stops being one problem and becomes three: a write path that has to choose between override and expand, a generation layer that breaks the one guarantee databases give you for free, and a verifier that decides which derived facts are allowed to become real.'
+images: []
+authors: ['default']
+---
+
+> Looking for TL;DR? Skip to [key takeaways](#key-takeaways)
+
+Continual learning gets discussed as if it were one problem. It's three. And they're the same three a database already solves — except a neural network has thrown away the one thing that makes them tractable: keys.
+
+The cleanest way to reason about continual learning is to stop thinking of a model as a brain and start thinking of it as a database. Not as a metaphor, as an architecture. Once you do, the open problems sort themselves into a shape that databases have spent fifty years naming, and the genuinely unsolved parts become obvious because they're exactly the parts where the analogy breaks.
+
+## The model is a database
+
+A trained model is a database. Training is ingestion: you take a corpus, run it through an expensive, lossy ETL, and what comes out is a structure you can query without rescanning the corpus. It's lossy — it doesn't keep the rows, it keeps a representation that reconstructs them approximately — but it has every other property of a database. Expensive to build, cheap to query, internally organized into something you can grow, compact, and shard. The segment-and-compaction machinery in the rest of this post is database-_internal_, and it applies to the model precisely because the model **is** the database, not one index inside it.
+
+The thing it ingests is not the database. It's the **dataset** — and the dataset is only ever a finite sample of the **world**. So there are three tiers, and keeping them straight is what makes the rest tractable:
+
+- **The world** — ground truth, infinite, the only source of fresh information.
+- **The dataset** — the finite slice of the world you actually ingest.
+- **The model** — the database built from that slice.
+
+This is what makes continual learning a real problem rather than a one-time build. The world keeps moving past the dataset; the dataset is always a stale, partial snapshot; the model is a lossy compression of even that. Continual learning is the standing job of **re-ingesting fresh slices of the world** to keep the database from falling behind the territory it's supposed to answer questions about. It's database maintenance with a known vocabulary — writes, compaction, invalidation, materialized views. The value of the framing is that it tells you precisely which of those operations a model can already do, and which one it can't.
+
+## The write path is upsert
+
+Adding knowledge to a model looks like one operation but is actually two, and conflating them is why naive fine-tuning corrupts what it touches.
+
+The first is **override**: the new information contradicts or refines something already in the database. A fact changed. A belief was wrong. In database terms this is an `UPDATE` — same key, new value — and in a log-structured store it's a write plus a tombstone that retires the old version. Override holds the size of the database constant. It is also the _dangerous_ operation, because in a model the old value isn't stored in one addressable place. It's smeared across shared parameters, so overwriting it perturbs everything that shared those parameters. Override is where catastrophic forgetting lives.
+
+The second is **expand**: the new information is genuinely novel. It occupies a region of the world the model has never represented. In database terms this is an `INSERT`, and if you're out of room it's adding capacity — a new segment, a new shard. Expand protects what's already there, because it allocates fresh structure instead of trampling existing structure. It is the _expensive_ operation, because it grows the artifact and therefore the cost of every future query.
+
+A real continually-learning system needs both. Override-only systems forget — every new fact corrupts an old one. Expand-only systems bloat and contradict themselves — they accumulate forever, including accumulating their own errors, and never reconcile. The two operations are the two horns of the same dilemma, and the architecture has to _budget_ between them: how much corruption risk will I tolerate before I'm forced to grow, and how much growth before I'm forced to compact and override.
+
+That last word matters. The full write lifecycle isn't override-or-expand, it's a loop: **expand** new knowledge into fresh capacity where it's cheap and safe, **override** to reconcile contradictions and retire stale versions, then **compact** — periodically merge the accumulated segments back down, resolving tombstones and pruning redundancy. Compaction is what stops expand from growing the database without bound, and the merged result is usually smaller than the sum of its inputs because consolidation removes the overlap. This is the log-structured merge-tree, applied to weights.
+
+Here's the full correspondence:
+
+<div style={{overflowX: 'auto'}}>
+
+| Database concept                 | Continual-learning counterpart                               |
+| -------------------------------- | ------------------------------------------------------------ |
+| The world / territory            | Ground truth — infinite, the only source of fresh data       |
+| Raw rows to ingest (the dataset) | The finite slice of the world you train on                   |
+| The database itself              | **The trained model** — lossy, queryable, segmented          |
+| ETL / ingestion                  | Training — and continual re-ingestion of fresh data          |
+| Query / read                     | Inference                                                    |
+| `INSERT` / add capacity          | **Expand** — allocate fresh parameters for novel knowledge   |
+| `UPDATE` + tombstone             | **Override** — overwrite an existing belief in place         |
+| Compaction                       | Consolidating segments; merged size is less than the sum     |
+| Mutable, unindexed write buffer  | Fast, recent memory (in-context, adapters, a retrieval tier) |
+| Immutable, indexed segment       | Consolidated weights — slow, stable, queryable               |
+| Materialized view                | A derived fact the model generated and chose to store        |
+| Materialized-view invalidation   | Retiring derived facts whose premises have changed           |
+
+</div>
+
+## The hard part: a database with no keys
+
+Here's where the analogy breaks, and the break _is_ the unsolved problem.
+
+An ordinary database routes a write for free. The key tells it everything: if the key exists, it's an `UPDATE`; if it doesn't, it's an `INSERT`. `upsert` is trivial because the store is addressable — every fact has a location, and the location is computable from the fact.
+
+A model is a database that threw away its keys. Knowledge is superposed across shared parameters, not filed at addresses. So when new information arrives, **nothing tells the model whether it's an override or an expand.** "Is this a correction of something I already believe, or something genuinely new?" is not a lookup. It's an inference the system has to make about its own contents — and getting it wrong fails silently, in both directions:
+
+- Route a correction as an expand, and the old wrong version and the new right version coexist and fight at query time. Nothing reconciled them, because nothing recognized they were about the same thing. This is `INSERT`-ing what should have been an `UPDATE` and never compacting.
+- Route genuinely novel knowledge as an override, and you corrupt an unrelated-but-nearby region to make room for something that needed its own space. This is `UPDATE`-ing the wrong key.
+
+So the framing relocates the problem. The hard part of continual learning was never "how do I write to a model" — fine-tuning writes fine. The hard part is **deciding what kind of write a given piece of knowledge is, in a store that has no keys to tell you.** It's `upsert` routing over keyless, superposed memory. Solve that and most of continual learning falls out. Nobody has.
+
+## Generation breaks the one guarantee
+
+Everything so far is about _memory_ — storing and retrieving what's already known. But the model is a strange database: an ordinary one only returns rows it ingested, while a model derives rows that were never in the dataset. That's the whole point of it, and it's where the analogy needs a third piece.
+
+In database terms, generation is the **view layer** — the part that derives results not literally on disk: aggregations, joins, computed columns, materialized views. A view produces tuples that aren't in any base table. So generation maps onto views cleanly, except for one thing, and it's the thing that matters most.
+
+**Database derivation is truth-preserving. Generation is not.** A `SUM` is correct by construction if the underlying rows are correct — derivation there is deduction, and the result is _entailed_. Generation interpolates and extrapolates over a lossy manifold, so what it derives is a **conjecture**, not an entailment. Some conjectures are genuine reasoning. Many are confident and wrong. The generation layer emits candidate rows of unknown truth value.
+
+That single fact forbids the obvious design. You cannot let the generation layer write its output back into the storage layer directly. If you do, you are materializing views computed by a lossy engine and filing them as base facts — and then training the next model on those facts. The database starts ingesting its own query outputs as if they were fresh source data, drifting off the world it was supposed to track, each generation a lossy copy of a lossy copy. The naive "model generates, model learns from what it generated" loop is exactly the thing that destroys it.
+
+## The third layer: the oracle gate
+
+The only way storage and generation coexist is a layer between them that databases don't need, because databases never derive anything untrue: a **verifier**. A gate that decides which generated candidates are allowed to be promoted into storage.
+
+And the verifier has to be grounded in something _outside the model_, because the model is the thing whose loss you're trying not to compound. The verifier can be a proof checker, a compiler and a test suite, the rules of a game, a tool call against a real source, or in the limit an experiment against the physical world. What it cannot be is the model's own confidence.
+
+This layer works because of an asymmetry: **deriving is hard, verifying is cheap.** It's expensive to produce a proof and cheap to check one; expensive to write the program and cheap to run the tests. So the system can afford to let generation explore wastefully and lean on the verifier to filter, keeping only what survives. That filtered survivor is the only thing that earns a write back into storage — at which point it re-enters the `upsert` routing from before, as either an override or an expand.
+
+This is also why self-play already "solved" continual learning — in the narrow domains that happen to ship with a perfect oracle. A game's rules are a flawless verifier, so a system can generate moves, check them against the rules, learn from the verified ones, and bootstrap indefinitely without drifting, because every write was signed off by ground truth. The reason this hasn't generalized is not the learning. It's that open domains don't come with a perfect, cheap verifier, and **a general-purpose oracle for open-domain truth is the second thing nobody has.**
+
+Putting all three layers together gives the actual shape of a continual-learning system:
+
+<svg viewBox="0 0 760 470" width="100%" style={{ maxWidth: '720px', display: 'block', margin: '1.5rem auto', fontFamily: 'inherit' }} role="img" aria-label="Three-layer continual learning architecture: storage, generation, verification, with a feedback loop">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#64748b" />
+    </marker>
+  </defs>
+
+{' '}
+<rect
+  x="250"
+  y="14"
+  width="260"
+  height="42"
+  rx="8"
+  fill="#f1f5f9"
+  stroke="#94a3b8"
+  strokeWidth="1.5"
+/>
+<text x="380" y="33" textAnchor="middle" fontSize="13" fontWeight="600" fill="#334155">
+  The world
+</text>
+<text x="380" y="48" textAnchor="middle" fontSize="11" fill="#64748b">
+  ground truth + the only fresh entropy
+</text>
+
+{' '}
+<line
+  x1="380"
+  y1="56"
+  x2="380"
+  y2="92"
+  stroke="#64748b"
+  strokeWidth="1.5"
+  markerEnd="url(#arrow)"
+/>
+<text x="392" y="78" fontSize="10.5" fill="#64748b">
+  new observations
+</text>
+
+{' '}
+<rect
+  x="70"
+  y="94"
+  width="620"
+  height="92"
+  rx="10"
+  fill="#eef2ff"
+  stroke="#6366f1"
+  strokeWidth="1.5"
+/>
+<text x="86" y="116" fontSize="13" fontWeight="700" fill="#4338ca">
+  1 · Storage — the database
+</text>
+<rect
+  x="90"
+  y="128"
+  width="270"
+  height="44"
+  rx="6"
+  fill="#ffffff"
+  stroke="#a5b4fc"
+  strokeWidth="1.2"
+/>
+<text x="225" y="146" textAnchor="middle" fontSize="11.5" fill="#3730a3">
+  mutable segments
+</text>
+<text x="225" y="161" textAnchor="middle" fontSize="10" fill="#6366f1">
+  recent, unconsolidated
+</text>
+<rect
+  x="400"
+  y="128"
+  width="270"
+  height="44"
+  rx="6"
+  fill="#ffffff"
+  stroke="#a5b4fc"
+  strokeWidth="1.2"
+/>
+<text x="535" y="146" textAnchor="middle" fontSize="11.5" fill="#3730a3">
+  immutable segments
+</text>
+<text x="535" y="161" textAnchor="middle" fontSize="10" fill="#6366f1">
+  consolidated weights
+</text>
+
+{' '}
+<line
+  x1="380"
+  y1="186"
+  x2="380"
+  y2="218"
+  stroke="#64748b"
+  strokeWidth="1.5"
+  markerEnd="url(#arrow)"
+/>
+<text x="392" y="206" fontSize="10.5" fill="#64748b">
+  retrieve / read
+</text>
+
+{' '}
+<rect
+  x="70"
+  y="220"
+  width="620"
+  height="64"
+  rx="10"
+  fill="#ecfdf5"
+  stroke="#10b981"
+  strokeWidth="1.5"
+/>
+<text x="86" y="242" fontSize="13" fontWeight="700" fill="#047857">
+  2 · Generation — the query planner
+</text>
+<text x="86" y="262" fontSize="11" fill="#059669">
+  derives candidate rows — conjectures, not entailments
+</text>
+
+{' '}
+<line
+  x1="380"
+  y1="284"
+  x2="380"
+  y2="316"
+  stroke="#64748b"
+  strokeWidth="1.5"
+  markerEnd="url(#arrow)"
+/>
+<text x="392" y="304" fontSize="10.5" fill="#64748b">
+  candidates
+</text>
+
+{' '}
+<rect
+  x="70"
+  y="318"
+  width="620"
+  height="64"
+  rx="10"
+  fill="#fffbeb"
+  stroke="#f59e0b"
+  strokeWidth="1.5"
+/>
+<text x="86" y="340" fontSize="13" fontWeight="700" fill="#b45309">
+  3 · Verification — the oracle gate
+</text>
+<text x="86" y="360" fontSize="11" fill="#d97706">
+  promote only what something outside the model signs off on
+</text>
+
+{' '}
+<path
+  d="M690 350 C 740 350, 740 140, 690 140"
+  fill="none"
+  stroke="#f59e0b"
+  strokeWidth="1.5"
+  strokeDasharray="5 4"
+  markerEnd="url(#arrow)"
+/>
+<text
+  x="724"
+  y="248"
+  textAnchor="middle"
+  fontSize="10.5"
+  fill="#b45309"
+  transform="rotate(90 724 248)"
+>
+  upsert survivors: override / expand
+</text>
+
+  <path d="M70 350 C 30 350, 30 412, 90 412" fill="none" stroke="#94a3b8" strokeWidth="1.3" strokeDasharray="4 4" markerEnd="url(#arrow)" />
+  <text x="150" y="416" fontSize="10.5" fill="#64748b">rejected → discarded</text>
+</svg>
+
+The loop runs: generate candidates, verify them against something outside the model, promote the survivors through `upsert`, compact periodically. Layer 3 is doing three jobs at once. It's the hallucination filter, the engine that lets the system create genuinely new knowledge instead of only ingesting it, and the re-anchor to reality that keeps the database from drifting into a hall of mirrors.
+
+## What's worth writing back
+
+One more thing the view framing gives you for free: most generation should never be written back at all.
+
+A database doesn't materialize every view. Most are computed on demand and thrown away, because materializing them costs storage and, worse, costs _maintenance_ — a materialized view has to be invalidated and recomputed whenever its inputs change. The same economics apply to a model. Most generation should be **virtual**: answer the query, return the result, forget it. Writing back is the exception, and it's governed by exactly the policy a database uses to decide what to materialize — promote a derived fact only if it was verified, expensive to recompute, and likely to be queried again.
+
+And every promoted derived fact has to carry its **provenance**: which base facts it was derived from. Because when an override later changes one of those base facts, every derived fact that depended on it is now stale and has to be invalidated and recomputed. This is materialized-view invalidation, and skipping it is how a knowledge base ends up confidently serving conclusions whose premises it has already retracted.
+
+## Key Takeaways
+
+- **The model is a database; the world is the dataset it samples.** Three tiers: the world (ground truth), the dataset (a finite slice of it), and the model (a lossy database built from that slice). Continual learning is re-ingesting fresh slices of the world to keep the database from falling behind. Everything else follows from that.
+- **The write path is `upsert`, and it's two operations.** Override (`UPDATE` in place — cheap, but corrupts what it touches) and expand (`INSERT` new capacity — safe, but grows the artifact). Override-only systems forget; expand-only systems bloat and contradict themselves. You need both, plus compaction to close the loop.
+- **The unsolved part of memory is a database with no keys.** An ordinary database routes a write for free because the key tells it `UPDATE` vs `INSERT`. A model has to _infer_ whether new knowledge overrides or extends what it already holds, and getting it wrong fails silently. That routing decision is the real open problem.
+- **Generation breaks truth-preservation.** It's the view layer, but unlike a database view its output is conjecture, not entailment. Writing it straight back into storage is the model-collapse loop — a database ingesting its own lossy outputs.
+- **The third layer is a verifier grounded outside the model.** Generate, verify against a real oracle, promote only the survivors. It works because verifying is cheaper than deriving. Self-play already solved continual learning in domains that ship with a perfect oracle — a general verifier for open domains is the second thing nobody has.
+- **Most generation shouldn't be written back.** Keep it virtual by default; materialize only what's verified, expensive, and reused — and track provenance so derived facts get invalidated when their premises change.
