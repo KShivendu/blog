@@ -1,0 +1,285 @@
+---
+title: 'Static Embeddings: Inference-Free Dense Retrieval'
+date: '2026-06-29'
+lastmod: '2026-06-29'
+tags: ['search', 'embeddings', 'nlp', 'information-retrieval']
+draft: true
+summary: 'Static embeddings drop the transformer entirely — a token lookup plus a mean. On BEIR scifact they hit ~92% of all-MiniLM quality at 30–100× lower query latency and 60–240× faster indexing, all on CPU. One catch: they are mathematically blind to word order, and a strong BM25 still beats them on lexical text.'
+images: ['/static/images/blogs/if-splade.jpg']
+authors: ['default']
+---
+
+> Looking for TL;DR? Skip to [key takeaways](#key-takeaways)
+
+In [Inference-Free SPLADE](/blog/if-splade) I removed the transformer from the _query_ side of sparse search: documents still get neural expansion at index time, but queries are just tokenized. The result was full SPLADE quality at 13× lower latency.
+
+Static embeddings push that idea to its limit on the _dense_ side: there is no transformer at query time **or** index time. A document vector is computed by looking up one vector per token from a fixed table and averaging them. No attention, no forward pass — `O(tokens)` table lookups plus a mean.
+
+This is conceptually word2vec/GloVe, but the lookup tables are **distilled from modern sentence transformers**, so they're far better than classic word vectors. Two families dominate today:
+
+- [**Model2Vec**](https://github.com/MinishLab/model2vec) (`potion-base-32M`, `potion-retrieval-32M`) — distills a sentence transformer into a static table via a forward pass over the vocabulary, then PCA and Zipf re-weighting.
+- [**`sentence-transformers/static-retrieval-mrl-en-v1`**](https://huggingface.co/sentence-transformers/static-retrieval-mrl-en-v1) — a _trained_ `EmbeddingBag` with [Matryoshka](https://huggingface.co/blog/matryoshka) dimensions (1024 → 32), reportedly the only static model to beat BM25 on NanoBEIR.
+
+I benchmarked them against a full transformer dense baseline and BM25 on the same dataset as the SPLADE post, all on CPU. The speedups are enormous, the quality cost is real, and there's one result that should make you cautious.
+
+## How It Works
+
+<StaticPipeline />
+
+The only difference from a normal sentence transformer is the middle. A transformer runs 6–12 attention layers; a static model replaces that entire stack with a single lookup table. Everything else — tokenize, pool, cosine — is identical.
+
+```python
+from model2vec import StaticModel
+
+model = StaticModel.from_pretrained("minishlab/potion-base-32M")
+# encode = tokenize → look up one row per token → mean-pool. No transformer.
+vecs = model.encode(["heart attack", "cardiac arrest"])
+```
+
+Because there's no forward pass, this runs at thousands of documents per second on a CPU. The price you pay is in what a lookup-then-average _can't_ represent — more on that below.
+
+## Results
+
+I benchmarked on [BEIR scifact](https://github.com/beir-cellar/beir) (5,183 docs, 300 test queries, scientific claim verification) — the same dataset as the SPLADE post. Exact brute-force cosine search, everything on CPU. Query latency is measured per query (batch size 1), the real query path.
+
+<div style={{overflowX: 'auto'}}>
+
+| Method                     | Type        | NDCG@10    | Recall@10  | MRR@10     | Dim  | Query embed | Index throughput |
+| -------------------------- | ----------- | ---------- | ---------- | ---------- | ---- | ----------- | ---------------- |
+| bge-small-en-v1.5          | transformer | **0.7215** | **0.8396** | **0.6891** | 384  | 21.6ms      | 6.5 docs/s       |
+| BM25                       | lexical     | 0.6644     | 0.7816     | 0.6337     | —    | —           | 6,360 docs/s     |
+| all-MiniLM-L6-v2           | transformer | 0.6484     | 0.7883     | 0.6068     | 384  | 12.1ms      | 19 docs/s        |
+| static-retrieval-mrl-en-v1 | **static**  | 0.5935     | 0.7295     | 0.5568     | 1024 | **0.39ms**  | **1,126 docs/s** |
+| potion-base-32M            | **static**  | 0.5618     | 0.7024     | 0.5246     | 512  | **0.12ms**  | **1,571 docs/s** |
+
+</div>
+
+The headline tradeoff: `static-retrieval-mrl-en-v1` reaches **91.5% of all-MiniLM's NDCG@10** (0.5935 vs 0.6484) while embedding queries **31× faster** (0.39ms vs 12.1ms) and indexing documents **58× faster** (1,126 vs 19 docs/sec). Against bge-small the quality gap widens (82%) but the speed gap does too: **55× faster queries, 173× faster indexing**.
+
+<PlotlyChart
+  data={[
+    {
+      name: 'Transformer dense',
+      x: [21.6, 12.1],
+      y: [0.7215, 0.6484],
+      mode: 'markers+text',
+      type: 'scatter',
+      text: ['bge-small', 'all-MiniLM'],
+      textposition: ['top left', 'bottom left'],
+      marker: { size: 13, color: '#6366f1', line: { width: 2, color: 'white' } },
+      textfont: { size: 11 },
+    },
+    {
+      name: 'Static',
+      x: [0.39, 0.12],
+      y: [0.5935, 0.5618],
+      mode: 'markers+text',
+      type: 'scatter',
+      text: ['static-mrl', 'potion'],
+      textposition: ['top right', 'bottom right'],
+      marker: { size: 14, color: '#10b981', symbol: 'star', line: { width: 1, color: 'white' } },
+      textfont: { size: 11 },
+    },
+  ]}
+  layout={{
+    title: { text: 'Quality vs Query Latency (BEIR scifact, CPU)', font: { size: 15 } },
+    xaxis: {
+      title: { text: 'Median query embed latency (ms), lower is better →', standoff: 12 },
+      type: 'log',
+      tickmode: 'array',
+      tickvals: [0.1, 0.2, 0.4, 1, 2, 5, 12, 22],
+      ticktext: ['0.1', '0.2', '0.4', '1', '2', '5', '12', '22'],
+      range: [-1.1, 1.5],
+    },
+    yaxis: { title: 'NDCG@10 ↑ higher is better', range: [0.5, 0.75] },
+    shapes: [
+      {
+        type: 'line',
+        x0: -1.1,
+        x1: 1.5,
+        xref: 'x',
+        y0: 0.6644,
+        y1: 0.6644,
+        yref: 'y',
+        line: { color: '#f59e0b', width: 1.5, dash: 'dash' },
+      },
+    ],
+    annotations: [
+      {
+        x: 1.5,
+        y: 0.6644,
+        xref: 'x',
+        yref: 'y',
+        text: 'BM25 = 0.664',
+        showarrow: false,
+        font: { size: 11, color: '#f59e0b' },
+        xanchor: 'right',
+        yanchor: 'bottom',
+      },
+    ],
+    height: 440,
+    showlegend: true,
+    legend: { orientation: 'h', y: -0.2 },
+    margin: { t: 56, r: 32, b: 80, l: 64 },
+  }}
+/>
+
+The latency gap is even more dramatic at index time. Static models encode in the same ballpark as BM25's tokenizer; transformers are two-to-three orders of magnitude slower on CPU:
+
+<PlotlyChart
+  data={[
+    {
+      x: ['potion', 'static-mrl', 'all-MiniLM', 'bge-small'],
+      y: [1571, 1126, 19, 6.5],
+      type: 'bar',
+      marker: { color: ['#10b981', '#34d399', '#6366f1', '#818cf8'] },
+      text: ['1,571', '1,126', '19', '6.5'],
+      textposition: 'outside',
+    },
+  ]}
+  layout={{
+    title: { text: 'Document Encoding Throughput (docs/sec, CPU)', font: { size: 15 } },
+    xaxis: { title: '' },
+    yaxis: {
+      title: 'docs / sec',
+      type: 'log',
+      range: [0.6, 3.4],
+      tickmode: 'array',
+      tickvals: [10, 100, 1000],
+      ticktext: ['10', '100', '1,000'],
+    },
+    height: 350,
+    margin: { t: 56, r: 24, b: 48, l: 64 },
+    showlegend: false,
+  }}
+/>
+
+## The Result That Should Make You Cautious
+
+Look at the dashed line in the latency chart again: **BM25 (0.6644) beats both static models and all-MiniLM.** Only bge-small clearly clears it.
+
+This isn't a knock on static embeddings specifically — it's a property of scifact. Scientific claim verification is lexically dense: queries and the relevant documents share rare, specific terms (gene names, methods, conditions), which is exactly what BM25 is good at. The same pattern shows up in the [SPLADE post](/blog/if-splade), where dense MiniLM-class models also underperform a tuned BM25 here.
+
+The honest reading: on lexical-heavy corpora, a static embedding buys you **30–100× lower latency at the cost of ~10% NDCG vs a same-tier transformer — and you may still be behind BM25.** The win is unambiguous only where you'd reach for dense retrieval anyway (paraphrase-heavy, vocabulary-mismatch queries) and latency or GPU cost is the binding constraint.
+
+## The Defining Limitation: Word Order
+
+Here's the mechanism behind the quality gap, and it's a clean one. A static sentence vector is `mean(lookup(t) for t in tokens)`. Mean-pooling is **permutation-invariant**: reorder the tokens and the average is byte-for-byte identical. The model literally cannot tell two reorderings of the same words apart.
+
+Drag the slider — shuffle the word order and watch the sentence vector stay exactly put:
+
+<StaticEmbeddingDemo />
+
+I measured this directly. For pairs that are pure reorderings of the same tokens, the static cosine is **exactly 1.0000**; a transformer, via attention and position encoding, pulls them apart — though by less than you might expect:
+
+<PlotlyChart
+  data={[
+    {
+      name: 'static-retrieval-mrl',
+      orientation: 'h',
+      y: [
+        '"tech giant acquired rival"<br>vs reversed',
+        '"dog bites man"<br>vs "man bites dog"',
+        '"cat chased mouse"<br>vs reversed',
+        '"surged" vs "plunged"<br>(words differ)',
+      ],
+      x: [1.0, 1.0, 1.0, 0.8],
+      type: 'bar',
+      marker: { color: '#10b981' },
+      text: ['1.000', '1.000', '1.000', '0.80'],
+      textposition: 'outside',
+    },
+    {
+      name: 'all-MiniLM (transformer)',
+      orientation: 'h',
+      y: [
+        '"tech giant acquired rival"<br>vs reversed',
+        '"dog bites man"<br>vs "man bites dog"',
+        '"cat chased mouse"<br>vs reversed',
+        '"surged" vs "plunged"<br>(words differ)',
+      ],
+      x: [0.985, 0.907, 0.983, 0.727],
+      type: 'bar',
+      marker: { color: '#6366f1' },
+      text: ['0.985', '0.907', '0.983', '0.727'],
+      textposition: 'outside',
+    },
+  ]}
+  layout={{
+    title: { text: 'Cosine similarity: can the model tell these apart?', font: { size: 14 } },
+    barmode: 'group',
+    xaxis: { title: 'cosine (1.0 = identical, lower = distinguished)', range: [0, 1.15] },
+    yaxis: { autorange: 'reversed' },
+    height: 420,
+    margin: { t: 48, r: 32, b: 56, l: 150 },
+    legend: { orientation: 'h', y: -0.18 },
+  }}
+/>
+
+Two things worth noting. First, the transformer is only _approximately_ order-sensitive on short sentences — "dog bites man" vs "man bites dog" still scores 0.91, not far from the static 1.000. Mean-pooling over contextualized tokens washes out a lot of word order even in a transformer. Second, and more useful: the bottom row ("surged" vs "plunged") swaps a _word_, not the order — and there the static model (0.80) does about as well as the transformer (0.73).
+
+So the cost of going static is specifically **word order and composition**, not vocabulary. If your relevance signal lives in which words appear — which is most of retrieval — static holds up. If it lives in how they're arranged ("flight NY→London" vs "London→NY", negation, role reversal), static is blind by construction.
+
+## Matryoshka: Quality vs Dimension
+
+`static-retrieval-mrl-en-v1` is trained with [Matryoshka representation learning](https://huggingface.co/blog/matryoshka), so you can truncate the 1024-d vector to fewer dimensions and just re-normalize — no re-encoding. Since static models have no depth (no layers), this dimension axis is the closest thing they have to a quality knob. Here's how NDCG@10 degrades as you shrink it:
+
+<PlotlyChart
+  data={[
+    {
+      x: [1024, 512, 256, 128, 64, 32],
+      y: [0.5935, 0.5759, 0.5644, 0.535, 0.4587, 0.3093],
+      mode: 'lines+markers+text',
+      type: 'scatter',
+      text: ['0.594', '0.576', '0.564', '0.535', '0.459', '0.309'],
+      textposition: 'top center',
+      marker: { size: 9, color: '#10b981' },
+      line: { color: '#10b981', width: 2 },
+    },
+  ]}
+  layout={{
+    title: { text: 'static-retrieval-mrl: NDCG@10 vs Matryoshka dimension', font: { size: 14 } },
+    xaxis: {
+      title: 'embedding dimension',
+      type: 'log',
+      tickmode: 'array',
+      tickvals: [32, 64, 128, 256, 512, 1024],
+      ticktext: ['32', '64', '128', '256', '512', '1024'],
+    },
+    yaxis: { title: 'NDCG@10', range: [0.25, 0.65] },
+    height: 360,
+    margin: { t: 48, r: 24, b: 56, l: 64 },
+    showlegend: false,
+  }}
+/>
+
+Truncating to **256-d keeps 95% of full quality at a quarter of the storage** (0.564 vs 0.594). The curve stays gentle down to 128-d, then falls off a cliff: 64-d drops to 77% of full, and 32-d to just 52%. The sweet spot for this model is 256–512 dimensions — small enough to be cheap, large enough to dodge the cliff.
+
+## Where Static Embeddings Fit
+
+Static embeddings are to dense retrieval what BM25 is to sparse: the **no-model baseline**. The whole spectrum, from the SPLADE post and this one:
+
+- **Sparse:** BM25 (no model) → inference-free SPLADE (model at index only) → full SPLADE (model both sides)
+- **Dense:** static embeddings (tiny lookup, no transformer) → … → full transformer dense
+
+Reach for static when: latency or CPU/GPU budget is the binding constraint, the corpus is large and re-encoding cost matters, or you need an embedding you can run anywhere (edge, mobile, a Lambda with no GPU). A 1,500 docs/sec CPU encoder that needs no accelerator is a genuinely different operational story from a transformer.
+
+Skip static when: relevance depends on word order or composition, the domain is paraphrase-heavy enough that you'd lose to BM25 _and_ want the dense quality, or you simply have the GPU budget and want the last 10% of NDCG.
+
+## Limitations
+
+**Single dataset.** Everything here is BEIR scifact (n=300 queries). scifact is lexically dense, which flatters BM25 and is roughly a worst case for dense models — static included. On paraphrase-heavy benchmarks (e.g. Quora, FiQA) the static-vs-BM25 gap should narrow or flip. Treat the ~92%-of-MiniLM number as one point, not a law.
+
+**Order blindness is structural, not tunable.** No amount of dimension or training fixes permutation invariance — it's baked into mean-pooling a lookup table. Models that need word order can't be static.
+
+**Vocabulary is frozen at distillation time.** Like inference-free SPLADE, a static table can't adapt to truly novel terms at query time. Out-of-vocabulary tokens fall back to subword averages.
+
+**potion uses its own larger vocabulary** (512-d, ~63k tokens) while static-mrl reuses BERT's (1024-d, 30,522 tokens). They're not the same coordinate system; compare them by quality and latency, not by dimension.
+
+## Key Takeaways
+
+- **Static embeddings drop the transformer entirely** — tokenize, look up one vector per token, average. On scifact, `static-retrieval-mrl` hits **91.5% of all-MiniLM's NDCG@10 at 31× lower query latency and 58× faster indexing**, all on CPU.
+- **A strong BM25 (0.664) still beats every static model and all-MiniLM here.** On lexical-heavy corpora, static buys you speed, not a quality win — only bge-small clears BM25. Pick static when latency/CPU cost binds, not for raw relevance.
+- **Static embeddings are exactly word-order blind.** Any reordering of the same tokens yields a byte-identical vector (cosine 1.000). A transformer is only _approximately_ order-sensitive. The cost is composition, not vocabulary — where words _differ_, static ≈ transformer.
+- **Matryoshka truncation to 256-d keeps 95% of quality** at a quarter of the storage; below 128-d it falls off a cliff (64-d → 77%, 32-d → 52%).
+- **Think of static as the no-model dense baseline** — the dense analog of BM25, and the natural floor below inference-free SPLADE on the latency/quality frontier.
