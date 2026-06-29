@@ -11,6 +11,8 @@ import SpladeVsIF from './SpladeVsIF'
 import TokenCompressionPipeline from './TokenCompressionPipeline'
 import CompressionWidget from './CompressionWidget'
 import HighDimOrthogonality from './HighDimOrthogonality'
+import StaticEmbeddingDemo from './StaticEmbeddingDemo'
+import StaticPipeline from './StaticPipeline'
 
 export const MDXComponents = {
   Image,
@@ -23,6 +25,8 @@ export const MDXComponents = {
   TokenCompressionPipeline,
   CompressionWidget,
   HighDimOrthogonality,
+  StaticEmbeddingDemo,
+  StaticPipeline,
   wrapper: ({ components, layout, ...rest }) => {
     const Layout = require(`../layouts/${layout}`).default
     return <Layout {...rest} />
