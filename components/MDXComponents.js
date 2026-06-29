@@ -10,6 +10,7 @@ import PlotlyChart from './PlotlyChart'
 import SpladeVsIF from './SpladeVsIF'
 import TokenCompressionPipeline from './TokenCompressionPipeline'
 import CompressionWidget from './CompressionWidget'
+import HighDimOrthogonality from './HighDimOrthogonality'
 
 export const MDXComponents = {
   Image,
@@ -21,6 +22,7 @@ export const MDXComponents = {
   SpladeVsIF,
   TokenCompressionPipeline,
   CompressionWidget,
+  HighDimOrthogonality,
   wrapper: ({ components, layout, ...rest }) => {
     const Layout = require(`../layouts/${layout}`).default
     return <Layout {...rest} />
