@@ -4,7 +4,7 @@ date: '2026-06-29'
 lastmod: '2026-06-29'
 tags: ['search', 'embeddings', 'nlp', 'information-retrieval']
 draft: true
-summary: 'Static embeddings drop the transformer entirely — a token lookup plus a mean. On BEIR scifact they hit ~92% of all-MiniLM quality at 30–100× lower query latency and 60–240× faster indexing, all on CPU. One catch: they are mathematically blind to word order, and a strong BM25 still beats them on lexical text.'
+summary: 'Static embeddings drop the transformer entirely — a token lookup plus a mean. The retrieval-tuned potion-retrieval-32M hits 98% of all-MiniLM quality on scifact at ~90× lower query latency and beats BM25 on argument retrieval, all on CPU. Benchmarked across 4 BEIR datasets, with the win over BM25 tracking lexical overlap. One catch: they are mathematically blind to word order.'
 images: ['/static/images/blogs/if-splade.jpg']
 authors: ['default']
 ---
@@ -15,12 +15,12 @@ In [Inference-Free SPLADE](/blog/if-splade) I removed the transformer from the _
 
 Static embeddings push that idea to its limit on the _dense_ side: there is no transformer at query time **or** index time. A document vector is computed by looking up one vector per token from a fixed table and averaging them. No attention, no forward pass — `O(tokens)` table lookups plus a mean.
 
-This is conceptually word2vec/GloVe, but the lookup tables are **distilled from modern sentence transformers**, so they're far better than classic word vectors. Two families dominate today:
+This is conceptually word2vec/GloVe, but the lookup tables are **distilled or trained from modern sentence transformers**, so they're far better than classic word vectors. Two families dominate today:
 
-- [**Model2Vec**](https://github.com/MinishLab/model2vec) (`potion-base-32M`, `potion-retrieval-32M`) — distills a sentence transformer into a static table via a forward pass over the vocabulary, then PCA and Zipf re-weighting.
-- [**`sentence-transformers/static-retrieval-mrl-en-v1`**](https://huggingface.co/sentence-transformers/static-retrieval-mrl-en-v1) — a _trained_ `EmbeddingBag` with [Matryoshka](https://huggingface.co/blog/matryoshka) dimensions (1024 → 32), reportedly the only static model to beat BM25 on NanoBEIR.
+- [**Model2Vec**](https://github.com/MinishLab/model2vec) — distills a sentence transformer into a static table via a forward pass over the vocabulary, then PCA and Zipf re-weighting. [`potion-base-32M`](https://huggingface.co/minishlab/potion-base-32M) is distilled from BGE-base on **C4 web text** (general-purpose); [`potion-retrieval-32M`](https://huggingface.co/minishlab/potion-retrieval-32M) then fine-tunes that on a **retrieval mix (MS MARCO, GooAQ, SQuAD, S2ORC, NQ, TriviaQA, PubMedQA…)**.
+- [**`sentence-transformers/static-retrieval-mrl-en-v1`**](https://huggingface.co/sentence-transformers/static-retrieval-mrl-en-v1) — a _trained_ `EmbeddingBag` ([Tom Aarsen's recipe](https://huggingface.co/blog/static-embeddings)) with [Matryoshka](https://huggingface.co/blog/matryoshka) dimensions (1024 → 32), trained on **80M retrieval pairs** from the same QA/MS MARCO family.
 
-I benchmarked them against a full transformer dense baseline and BM25 on the same dataset as the SPLADE post, all on CPU. The speedups are enormous, the quality cost is real, and there's one result that should make you cautious.
+The training data matters: it tells you where each model should be strong (QA, paraphrase, low lexical overlap) and where it won't be. I benchmarked them against a full transformer dense baseline and BM25 across **four BEIR datasets**, all on CPU. The speedups are enormous, and the quality story has a clean pattern — static dense beats BM25 exactly where lexical matching breaks down.
 
 ## How It Works
 
@@ -31,30 +31,33 @@ The only difference from a normal sentence transformer is the middle. A transfor
 ```python
 from model2vec import StaticModel
 
-model = StaticModel.from_pretrained("minishlab/potion-base-32M")
+model = StaticModel.from_pretrained("minishlab/potion-retrieval-32M")
 # encode = tokenize → look up one row per token → mean-pool. No transformer.
 vecs = model.encode(["heart attack", "cardiac arrest"])
 ```
 
 Because there's no forward pass, this runs at thousands of documents per second on a CPU. The price you pay is in what a lookup-then-average _can't_ represent — more on that below.
 
-## Results
+## Results on scifact
 
-I benchmarked on [BEIR scifact](https://github.com/beir-cellar/beir) (5,183 docs, 300 test queries, scientific claim verification) — the same dataset as the SPLADE post. Exact brute-force cosine search, everything on CPU. Query latency is measured per query (batch size 1), the real query path.
+I started on [BEIR scifact](https://github.com/beir-cellar/beir) (5,183 docs, 300 test queries, scientific claim verification) — the same dataset as the SPLADE post. Exact brute-force cosine search, everything on CPU. Query latency is per query (batch size 1), the real query path.
 
 <div style={{overflowX: 'auto'}}>
 
 | Method                     | Type        | NDCG@10    | Recall@10  | MRR@10     | Dim  | Query embed | Index throughput |
 | -------------------------- | ----------- | ---------- | ---------- | ---------- | ---- | ----------- | ---------------- |
 | bge-small-en-v1.5          | transformer | **0.7215** | **0.8396** | **0.6891** | 384  | 21.6ms      | 6.5 docs/s       |
-| BM25                       | lexical     | 0.6644     | 0.7816     | 0.6337     | —    | —           | 6,360 docs/s     |
+| BM25                       | lexical     | 0.6645     | 0.7849     | 0.6325     | —    | —           | 6,360 docs/s     |
 | all-MiniLM-L6-v2           | transformer | 0.6484     | 0.7883     | 0.6068     | 384  | 12.1ms      | 19 docs/s        |
-| static-retrieval-mrl-en-v1 | **static**  | 0.5935     | 0.7295     | 0.5568     | 1024 | **0.39ms**  | **1,126 docs/s** |
-| potion-base-32M            | **static**  | 0.5618     | 0.7024     | 0.5246     | 512  | **0.12ms**  | **1,571 docs/s** |
+| **potion-retrieval-32M**   | **static**  | 0.6345     | 0.7948     | 0.5912     | 512  | **0.13ms**  | **1,562 docs/s** |
+| static-retrieval-mrl-en-v1 | static      | 0.5935     | 0.7295     | 0.5568     | 1024 | 0.39ms      | 1,126 docs/s     |
+| potion-base-32M            | static      | 0.5618     | 0.7024     | 0.5246     | 512  | 0.12ms      | 1,571 docs/s     |
 
 </div>
 
-The headline tradeoff: `static-retrieval-mrl-en-v1` reaches **91.5% of all-MiniLM's NDCG@10** (0.5935 vs 0.6484) while embedding queries **31× faster** (0.39ms vs 12.1ms) and indexing documents **58× faster** (1,126 vs 19 docs/sec). Against bge-small the quality gap widens (82%) but the speed gap does too: **55× faster queries, 173× faster indexing**.
+Two things jump out. First, **the retrieval-tuned static model is far better than the general one**: `potion-retrieval-32M` (0.6345) beats its own base `potion-base-32M` (0.5618) by **13%**, just from fine-tuning the same table on retrieval data. Always use the retrieval variant.
+
+Second, the headline tradeoff: `potion-retrieval-32M` reaches **97.9% of all-MiniLM's NDCG@10** (0.6345 vs 0.6484) — and actually **beats it on Recall@10** (0.7948 vs 0.7883) — while embedding queries **~90× faster** (0.13ms vs 12.1ms) and indexing **~80× faster** (1,562 vs 19 docs/sec). It lands within 4.5% of BM25, at a query cost indistinguishable from BM25's.
 
 <PlotlyChart
   data={[
@@ -71,12 +74,12 @@ The headline tradeoff: `static-retrieval-mrl-en-v1` reaches **91.5% of all-MiniL
     },
     {
       name: 'Static',
-      x: [0.39, 0.12],
-      y: [0.5935, 0.5618],
+      x: [0.13, 0.39, 0.12],
+      y: [0.6345, 0.5935, 0.5618],
       mode: 'markers+text',
       type: 'scatter',
-      text: ['static-mrl', 'potion'],
-      textposition: ['top right', 'bottom right'],
+      text: ['potion-retrieval', 'static-mrl', 'potion-base'],
+      textposition: ['top right', 'bottom right', 'bottom right'],
       marker: { size: 14, color: '#10b981', symbol: 'star', line: { width: 1, color: 'white' } },
       textfont: { size: 11 },
     },
@@ -129,11 +132,11 @@ The latency gap is even more dramatic at index time. Static models encode in the
 <PlotlyChart
   data={[
     {
-      x: ['potion', 'static-mrl', 'all-MiniLM', 'bge-small'],
-      y: [1571, 1126, 19, 6.5],
+      x: ['potion-retrieval', 'static-mrl', 'all-MiniLM', 'bge-small'],
+      y: [1562, 1126, 19, 6.5],
       type: 'bar',
       marker: { color: ['#10b981', '#34d399', '#6366f1', '#818cf8'] },
-      text: ['1,571', '1,126', '19', '6.5'],
+      text: ['1,562', '1,126', '19', '6.5'],
       textposition: 'outside',
     },
   ]}
@@ -154,13 +157,64 @@ The latency gap is even more dramatic at index time. Static models encode in the
   }}
 />
 
-## The Result That Should Make You Cautious
+## Where Static Embeddings Actually Win
 
-Look at the dashed line in the latency chart again: **BM25 (0.6644) beats both static models and all-MiniLM.** Only bge-small clearly clears it.
+scifact is one dataset, and a lexically dense one — queries and relevant documents share rare, specific terms (gene names, conditions), which is exactly BM25's strength. To see where static dense pays off, I ran the same benchmark on three more BEIR datasets spanning the lexical-overlap spectrum: [**arguana**](https://huggingface.co/datasets/BeIR/arguana) (argument → counter-argument, almost no shared vocabulary), [**nfcorpus**](https://huggingface.co/datasets/BeIR/nfcorpus) (medical), and [**fiqa**](https://huggingface.co/datasets/BeIR/fiqa) (financial QA). Transformer corpora were encoded on a Modal A10G; static and BM25 stayed on CPU.
 
-This isn't a knock on static embeddings specifically — it's a property of scifact. Scientific claim verification is lexically dense: queries and the relevant documents share rare, specific terms (gene names, methods, conditions), which is exactly what BM25 is good at. The same pattern shows up in the [SPLADE post](/blog/if-splade), where dense MiniLM-class models also underperform a tuned BM25 here.
+<div style={{overflowX: 'auto'}}>
 
-The honest reading: on lexical-heavy corpora, a static embedding buys you **30–100× lower latency at the cost of ~10% NDCG vs a same-tier transformer — and you may still be behind BM25.** The win is unambiguous only where you'd reach for dense retrieval anyway (paraphrase-heavy, vocabulary-mismatch queries) and latency or GPU cost is the binding constraint.
+| Model (NDCG@10)          | scifact    | nfcorpus   | **arguana** | fiqa   |
+| ------------------------ | ---------- | ---------- | ----------- | ------ |
+| BM25                     | **0.6645** | **0.3105** | 0.3152      | 0.2318 |
+| **potion-retrieval-32M** | 0.6345     | 0.3076     | **0.3327**  | 0.1885 |
+| static-retrieval-mrl     | 0.5935     | 0.3004     | **0.3314**  | 0.1996 |
+| all-MiniLM-L6-v2         | 0.6484     | 0.3179     | 0.3664      | 0.3637 |
+| bge-small-en-v1.5        | 0.7215     | 0.3402     | 0.4305      | 0.3884 |
+
+</div>
+
+The pattern is clean: **a static embedding's win over BM25 tracks how little lexical overlap the task has.**
+
+<PlotlyChart
+  data={[
+    {
+      name: 'BM25',
+      x: ['arguana', 'nfcorpus', 'scifact', 'fiqa'],
+      y: [0.3152, 0.3105, 0.6645, 0.2318],
+      type: 'bar',
+      marker: { color: '#f59e0b' },
+    },
+    {
+      name: 'potion-retrieval-32M (static)',
+      x: ['arguana', 'nfcorpus', 'scifact', 'fiqa'],
+      y: [0.3327, 0.3076, 0.6345, 0.1885],
+      type: 'bar',
+      marker: { color: '#10b981' },
+    },
+    {
+      name: 'all-MiniLM-L6-v2 (transformer)',
+      x: ['arguana', 'nfcorpus', 'scifact', 'fiqa'],
+      y: [0.3664, 0.3179, 0.6484, 0.3637],
+      type: 'bar',
+      marker: { color: '#6366f1' },
+    },
+  ]}
+  layout={{
+    title: { text: 'Static vs BM25 vs transformer, by dataset (NDCG@10)', font: { size: 14 } },
+    barmode: 'group',
+    xaxis: { title: '← lower lexical overlap · higher lexical overlap →' },
+    yaxis: { title: 'NDCG@10' },
+    height: 400,
+    legend: { orientation: 'h', y: -0.18 },
+    margin: { t: 48, r: 24, b: 72, l: 56 },
+  }}
+/>
+
+- **arguana** — queries are arguments, relevant docs are _counter-arguments_ that rarely reuse the query's words. BM25 has little to grip. Here **both static models beat BM25** (potion-retrieval 0.333 vs 0.315, +5.6%) — the clean win, at ~0.1ms/query.
+- **nfcorpus** — static essentially **ties** BM25 (0.308 vs 0.311).
+- **scifact / fiqa** — lexically dense; BM25 wins. On fiqa, financial jargon overlaps heavily and a real transformer (MiniLM 0.364) is needed to beat BM25 — static (0.20) can't.
+
+So the honest reading: a static embedding buys you **~90× lower query latency**, and on low-lexical-overlap retrieval it **beats BM25 outright**. On lexical-heavy corpora it trails BM25, and if you need to clear BM25 there you need a real transformer (and its latency). Note that the static-vs-BM25 verdict flips on the _task_, not the model — pick static when vocabulary mismatch, not exact-term matching, is your problem.
 
 ## The Defining Limitation: Word Order
 
@@ -262,24 +316,24 @@ Static embeddings are to dense retrieval what BM25 is to sparse: the **no-model 
 - **Sparse:** BM25 (no model) → inference-free SPLADE (model at index only) → full SPLADE (model both sides)
 - **Dense:** static embeddings (tiny lookup, no transformer) → … → full transformer dense
 
-Reach for static when: latency or CPU/GPU budget is the binding constraint, the corpus is large and re-encoding cost matters, or you need an embedding you can run anywhere (edge, mobile, a Lambda with no GPU). A 1,500 docs/sec CPU encoder that needs no accelerator is a genuinely different operational story from a transformer.
+Reach for static when: latency or CPU/GPU budget is the binding constraint, the corpus is large and re-encoding cost matters, you need an embedding you can run anywhere (edge, mobile, a Lambda with no GPU), **or your task has low lexical overlap** (paraphrase, argument, question→passage) where it beats BM25 outright. A 1,500 docs/sec CPU encoder that needs no accelerator is a genuinely different operational story from a transformer.
 
-Skip static when: relevance depends on word order or composition, the domain is paraphrase-heavy enough that you'd lose to BM25 _and_ want the dense quality, or you simply have the GPU budget and want the last 10% of NDCG.
+Skip static when: relevance depends on word order or composition, the corpus is lexically dense enough that BM25 already wins (and BM25 is free), or you have the GPU budget and the task needs a real transformer to clear BM25 at all (fiqa was this case — MiniLM 0.36 vs static 0.20 vs BM25 0.23).
 
 ## Limitations
 
-**Single dataset.** Everything here is BEIR scifact (n=300 queries). scifact is lexically dense, which flatters BM25 and is roughly a worst case for dense models — static included. On paraphrase-heavy benchmarks (e.g. Quora, FiQA) the static-vs-BM25 gap should narrow or flip. Treat the ~92%-of-MiniLM number as one point, not a law.
+**Four datasets, all small.** arguana (8.7k), nfcorpus (3.6k), scifact (5.2k), fiqa (57.6k) — chosen to span lexical overlap and stay feasible for exact CPU search. The lexical-overlap pattern is robust across them, but the absolute numbers are dataset-specific; don't read the arguana win as "static beats BM25 everywhere."
+
+**Use the retrieval-tuned model.** `potion-base-32M` is distilled on general C4 text and trails its retrieval fine-tune `potion-retrieval-32M` by ~13% NDCG. The base model is the wrong thing to benchmark for search — a mistake easy to make since it's the "default" potion.
 
 **Order blindness is structural, not tunable.** No amount of dimension or training fixes permutation invariance — it's baked into mean-pooling a lookup table. Models that need word order can't be static.
 
-**Vocabulary is frozen at distillation time.** Like inference-free SPLADE, a static table can't adapt to truly novel terms at query time. Out-of-vocabulary tokens fall back to subword averages.
-
-**potion uses its own larger vocabulary** (512-d, ~63k tokens) while static-mrl reuses BERT's (1024-d, 30,522 tokens). They're not the same coordinate system; compare them by quality and latency, not by dimension.
+**Vocabulary is frozen at training time.** A static table can't adapt to truly novel terms at query time; out-of-vocabulary tokens fall back to subword averages. potion uses its own vocabulary (512-d) while static-mrl reuses BERT's (1024-d) — compare them by quality and latency, not by dimension.
 
 ## Key Takeaways
 
-- **Static embeddings drop the transformer entirely** — tokenize, look up one vector per token, average. On scifact, `static-retrieval-mrl` hits **91.5% of all-MiniLM's NDCG@10 at 31× lower query latency and 58× faster indexing**, all on CPU.
-- **A strong BM25 (0.664) still beats every static model and all-MiniLM here.** On lexical-heavy corpora, static buys you speed, not a quality win — only bge-small clears BM25. Pick static when latency/CPU cost binds, not for raw relevance.
+- **Static embeddings drop the transformer entirely** — tokenize, look up one vector per token, average. The retrieval-tuned `potion-retrieval-32M` hits **97.9% of all-MiniLM's NDCG@10 on scifact (and beats its Recall@10) at ~90× lower query latency and ~80× faster indexing**, all on CPU.
+- **Static dense beats BM25 exactly where lexical matching breaks down.** On arguana (argument→counter-argument, low word overlap) both static models clear BM25 (+5.6%); on lexically dense scifact/fiqa, BM25 wins. The verdict flips on the _task_, not the model.
+- **Use the retrieval-tuned variant.** `potion-retrieval-32M` beats general-purpose `potion-base-32M` by ~13% NDCG — same table, fine-tuned on MS MARCO/QA data. Benchmarking the base model understates static retrieval badly.
 - **Static embeddings are exactly word-order blind.** Any reordering of the same tokens yields a byte-identical vector (cosine 1.000). A transformer is only _approximately_ order-sensitive. The cost is composition, not vocabulary — where words _differ_, static ≈ transformer.
 - **Matryoshka truncation to 256-d keeps 95% of quality** at a quarter of the storage; below 128-d it falls off a cliff (64-d → 77%, 32-d → 52%).
-- **Think of static as the no-model dense baseline** — the dense analog of BM25, and the natural floor below inference-free SPLADE on the latency/quality frontier.
