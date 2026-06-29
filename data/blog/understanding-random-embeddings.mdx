@@ -1,0 +1,271 @@
+---
+title: 'Understanding Random Embeddings'
+date: '2026-06-29'
+lastmod: '2026-06-29'
+tags: ['vector-search', 'embeddings', 'hnsw', 'information-retrieval']
+draft: true
+summary: "High-dimensional random vectors are nearly equidistant — the 'nearest neighbor' is barely nearer than nothing, and a search index has nothing to navigate by. I unpack what that means, what 'structure' is the cure for, and what structure actually buys: mostly compute, not recall."
+images: []
+authors: ['default']
+---
+
+> Looking for TL;DR? Skip to [key takeaways](#key-takeaways)
+
+Generate 8,000 random 1024-dimensional unit vectors and ask a simple question: which vector is any given vector's nearest neighbor, and how near is it? The answer barely means anything. The closest of all 8,000 sits at cosine **0.12**; a random pair sits at **0.00**. The "nearest neighbor" is almost exactly as far away as everything else.
+
+Do the same with real embeddings — [`mxbai-embed-large-v1`](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1) over 8,000 short text strings, same count, same 1024 dimensions — and the picture is completely different: the nearest neighbor sits at cosine **0.73**, the median pair at **0.39**. There's a real gap between "near" and "typical."
+
+That gap is the entire game. Nearest-neighbor search lives or dies on it. This post is about what random high-dimensional vectors actually look like, why search can't do anything with them, and what "structure" means as the cure — measured by what it does to search compute and recall.
+
+## Random vectors have no neighbors
+
+In high dimensions, random points concentrate: nearly all pairwise distances pile up around the same value. This is the [concentration of distances](https://en.wikipedia.org/wiki/Curse_of_dimensionality#Nearest_neighbor_search), and it's been known to break nearest-neighbor search since [Beyer et al. (1999)](https://link.springer.com/chapter/10.1007/3-540-49257-7_15) asked "when is nearest neighbor meaningful?". For random unit vectors the answer is: essentially never. Two random directions in 1024-d are almost always orthogonal (cosine ≈ 0), and even the closest of thousands is only nudged off orthogonal.
+
+Here's the contrast directly — the cosine to a vector's nearest neighbor, its 10th neighbor, and a typical (median) pair:
+
+<PlotlyChart
+  data={[
+    {
+      name: 'real (mxbai)',
+      x: ['nearest (top-1)', '10th nearest', 'median pair'],
+      y: [0.732, 0.638, 0.385],
+      type: 'bar',
+      marker: { color: '#10b981' },
+      text: ['0.73', '0.64', '0.39'],
+      textposition: 'outside',
+    },
+    {
+      name: 'random',
+      x: ['nearest (top-1)', '10th nearest', 'median pair'],
+      y: [0.119, 0.095, 0.0],
+      type: 'bar',
+      marker: { color: '#f59e0b' },
+      text: ['0.12', '0.10', '0.00'],
+      textposition: 'outside',
+    },
+  ]}
+  layout={{
+    title: { text: 'How much nearer is "nearest"? (cosine similarity)', font: { size: 15 } },
+    barmode: 'group',
+    yaxis: { title: 'cosine similarity', range: [-0.02, 0.85] },
+    height: 380,
+    margin: { t: 48, r: 24, b: 48, l: 64 },
+    legend: { orientation: 'h', y: -0.18 },
+  }}
+/>
+
+For real embeddings the bars fall off a cliff: the nearest is much closer than typical, and there's a clear ordering among the top neighbors. For random vectors the bars are flat and low — the nearest neighbor (0.12) is barely distinguishable from a coin-flip pair (0.00). **There is no neighborhood to find.**
+
+One way to put a single number on this: the [intrinsic dimension](https://en.wikipedia.org/wiki/Intrinsic_dimension), estimated with the [TwoNN](https://www.nature.com/articles/s41598-017-11873-y) method. Random data comes out at ~**230** (the estimator saturates well below the true ~1024, but the message is clear: it fills its space). Real mxbai embeddings come out at ~**14**. A thousand-dimensional embedding that actually lives on a ~14-dimensional surface — that low-dimensional surface is what "structure" will turn out to mean.
+
+## What that costs a search index
+
+[HNSW](https://arxiv.org/abs/1603.09320) finds nearest neighbors by greedily walking a graph: from some entry node, hop to whichever neighbor is closer to the query, repeat. The walk only works if there's a distance _gradient_ to follow — each step has to get meaningfully closer. Random vectors have no gradient (every direction is ~equidistant), so the walk wanders and the index has to compensate by exploring far more candidates.
+
+I built HNSW indexes (M=16, efConstruction=200) over both datasets and swept the search-time effort knob `efSearch`, measuring recall@10 against exact brute force and the query latency. Mechanism first, then the numbers: real data should converge quickly and cheaply; random data should need a much wider search for less reward.
+
+<PlotlyChart
+  data={[
+    {
+      name: 'real (mxbai)',
+      x: [0.0098, 0.0163, 0.027, 0.0455, 0.078],
+      y: [0.897, 0.9, 0.9, 0.9, 0.9],
+      mode: 'markers+lines+text',
+      type: 'scatter',
+      text: ['ef16', 'ef32', 'ef64', 'ef128', 'ef256'],
+      textposition: 'bottom center',
+      marker: { size: 10, color: '#10b981' },
+      textfont: { size: 10 },
+    },
+    {
+      name: 'random',
+      x: [0.0165, 0.0262, 0.0461, 0.0812, 0.1375],
+      y: [0.768, 0.794, 0.805, 0.823, 0.855],
+      mode: 'markers+lines+text',
+      type: 'scatter',
+      text: ['ef16', 'ef32', 'ef64', 'ef128', 'ef256'],
+      textposition: 'top center',
+      marker: { size: 10, color: '#f59e0b' },
+      textfont: { size: 10 },
+    },
+  ]}
+  layout={{
+    title: { text: 'Recall vs latency, real vs random (HNSW, efSearch sweep)', font: { size: 15 } },
+    xaxis: {
+      title: { text: 'median query latency (ms), lower is better →', standoff: 12 },
+      type: 'log',
+      tickmode: 'array',
+      tickvals: [0.01, 0.02, 0.05, 0.1],
+      ticktext: ['0.01', '0.02', '0.05', '0.1'],
+    },
+    yaxis: { title: 'recall@10 ↑', range: [0.74, 0.93] },
+    height: 420,
+    margin: { t: 48, r: 32, b: 64, l: 64 },
+    legend: { orientation: 'h', y: -0.2 },
+  }}
+/>
+
+Real embeddings hit **0.90 recall by efSearch=32**, at **0.016ms** per query, and stay pinned there. Random embeddings never reach it: even at efSearch=256 — **8× the search effort and 5× the latency** — they top out at **0.855**, and the gap only closes slowly because the search is fighting the geometry. Note that this is the _same index algorithm, the same 1024 dimensions, the same 8,000 vectors_. The only thing that changed is whether the vectors have structure.
+
+## So what is "structure"?
+
+"Structure" is vague, so let me make it operational: I started from pure random vectors and injected structure three ways, then watched what each does to search. Each is a knob from "random" toward "real."
+
+1. **Low intrinsic dimension** — generate the vectors inside an `r`-dimensional subspace, then embed that into 1024-d. Sweep `r` from 2 to 1024.
+2. **Spectral decay** — keep all 1024 dimensions but scale them by a decaying spectrum (`i^(-α/2)`), so a few directions dominate. Sweep `α`. This is the [anisotropy](/blog/embedding-anisotropy) real embeddings are famous for.
+3. **Clusters** — draw the vectors from a mixture of 64 centers and sweep how tight the clusters are.
+
+Plotting query latency against the measured intrinsic dimension (each point is one setting; lower-left is cheaper) separates two distinct mechanisms:
+
+<PlotlyChart
+  data={[
+    {
+      name: 'low intrinsic dim',
+      x: [0.3, 6.4, 25.1, 64.2, 118.2, 158.5],
+      y: [0.0055, 0.0242, 0.0487, 0.0537, 0.0554, 0.0556],
+      mode: 'markers+lines',
+      type: 'scatter',
+      marker: { size: 9, color: '#6366f1' },
+    },
+    {
+      name: 'spectral decay',
+      x: [12.2, 20.4, 33.1, 65.5, 163.7, 217.5],
+      y: [0.0172, 0.0218, 0.0275, 0.0341, 0.0546, 0.0615],
+      mode: 'markers+lines',
+      type: 'scatter',
+      marker: { size: 9, color: '#8b5cf6' },
+    },
+    {
+      name: 'clusters (tightening)',
+      x: [226.6, 154.6, 145.3, 156.0, 141.1, 145.9],
+      y: [0.0561, 0.0339, 0.0296, 0.022, 0.0153, 0.0128],
+      mode: 'markers+lines',
+      type: 'scatter',
+      marker: { size: 9, color: '#10b981' },
+    },
+    {
+      name: 'random (anchor)',
+      x: [229.9],
+      y: [0.0578],
+      mode: 'markers',
+      type: 'scatter',
+      marker: { size: 15, color: '#f59e0b', symbol: 'star', line: { width: 1, color: 'white' } },
+    },
+    {
+      name: 'real mxbai (anchor)',
+      x: [14.2],
+      y: [0.0372],
+      mode: 'markers',
+      type: 'scatter',
+      marker: { size: 15, color: '#ef4444', symbol: 'star', line: { width: 1, color: 'white' } },
+    },
+  ]}
+  layout={{
+    title: {
+      text: 'What structure buys: query latency vs intrinsic dimension',
+      font: { size: 15 },
+    },
+    xaxis: {
+      title: { text: 'intrinsic dimension (TwoNN) →', standoff: 12 },
+      type: 'log',
+      tickmode: 'array',
+      tickvals: [1, 3, 10, 30, 100, 230],
+      ticktext: ['1', '3', '10', '30', '100', '230'],
+    },
+    yaxis: { title: 'median query latency (ms) ↓', range: [0, 0.066] },
+    height: 440,
+    margin: { t: 48, r: 32, b: 64, l: 64 },
+    legend: { orientation: 'h', y: -0.2 },
+  }}
+/>
+
+**Two mechanisms, and they're not the same:**
+
+- **Lowering effective dimensionality** (subspace rank _or_ spectral decay) helps, and the gain _tracks intrinsic dimension_ — both curves slide down-and-left together. This is the direct cure for distance concentration: collapse onto a low-dimensional surface and neighbors become meaningful again.
+- **Clustering helps through a different door.** As clusters tighten, latency drops **4–5×** (0.056 → 0.013ms) while the intrinsic dimension stays _high_ (~145). The cluster points fall almost straight down, off the dimensionality trend. Clusters don't reduce dimensionality — they create separable basins, so the greedy walk routes between blobs cheaply even though each blob is still high-dimensional. The intrinsic-dimension estimate can't even see this win.
+
+Real mxbai (the red star) has both: a low intrinsic dimension (~14) _and_ cluster structure — which is why it sits where it does, far cheaper than random.
+
+There's a second, quieter result hiding in this sweep. **Structure mostly buys compute, not recall.** Once _any_ of these knobs is turned even slightly past "random," recall snaps to the ~0.90 HNSW ceiling and stays there; the dramatic 4–5× swings are all in latency. The recall gap is really just the one-time jump from random's 0.81 floor to the structured 0.90 ceiling — after that, structure is a _compute_ story, not an accuracy one.
+
+<details>
+<summary>**Full numbers** (intrinsic dim · recall@10 · latency) for all three sweeps</summary>
+
+<div style={{overflowX: 'auto'}}>
+
+| knob                | intrinsic dim | recall@10 | ms/query |
+| ------------------- | ------------: | --------: | -------: |
+| random (anchor)     |         229.9 |     0.807 |   0.0578 |
+| real mxbai (anchor) |          14.2 |     0.900 |   0.0372 |
+| intrinsic r=2       |           0.3 |     0.900 |   0.0055 |
+| intrinsic r=8       |           6.4 |     0.900 |   0.0242 |
+| intrinsic r=32      |          25.1 |     0.900 |   0.0487 |
+| intrinsic r=128     |          64.2 |     0.898 |   0.0537 |
+| intrinsic r=512     |         118.2 |     0.883 |   0.0554 |
+| intrinsic r=1024    |         158.5 |     0.871 |   0.0556 |
+| spectral α=0.5      |         163.7 |     0.877 |   0.0546 |
+| spectral α=1.0      |          65.5 |     0.898 |   0.0341 |
+| spectral α=1.5      |          33.1 |     0.900 |   0.0275 |
+| spectral α=2.0      |          20.4 |     0.900 |   0.0218 |
+| spectral α=3.0      |          12.2 |     0.900 |   0.0172 |
+| clusters c=0.5      |         154.6 |     0.900 |   0.0339 |
+| clusters c=2.0      |         156.0 |     0.900 |   0.0220 |
+| clusters c=8.0      |         145.9 |     0.900 |   0.0128 |
+
+</div>
+
+8,000 vectors, 1024-d, 1,500 queries, HNSW M=16/efC=200/efSearch=64.
+
+</details>
+
+## You can't add structure in the index
+
+If structure is what makes search cheap, the obvious next question is whether you can bolt it on _after_ the embeddings are fixed — at index-build time, keeping the vectors (and therefore the true neighbors, and recall) untouched. I tried the three natural levers. All three are negatives, and the negatives are the point.
+
+**Insertion order.** HNSW is built incrementally, so the order you insert vectors changes the graph. I tried inserting cluster-by-cluster, cluster-medoids-first, and densest-points-first against a random baseline. The graph changes; the cost doesn't.
+
+<div style={{overflowX: 'auto'}}>
+
+| insert order (real embeddings) | recall@10 | distance comps / query |
+| ------------------------------ | --------: | ---------------------: |
+| random                         |     0.900 |                  1,022 |
+| cluster-blocked                |     0.900 |                  1,027 |
+| medoid-first                   |     0.900 |                  1,024 |
+| hub-first                      |     0.900 |                  1,024 |
+
+</div>
+
+**Smart entry points.** HNSW spends hops descending its upper layers to find a good place to start the base-layer search. So I tried skipping that: route the query to its cluster first (compare to 64 centroids) and start the search right inside that cluster. It didn't help — and the reason is the useful part. A single _fixed_ entry point with **no hierarchy at all** costs the same as the full hierarchy:
+
+<div style={{overflowX: 'auto'}}>
+
+| entry strategy (real embeddings) | recall@10 | distance comps / query |
+| -------------------------------- | --------: | ---------------------: |
+| full HNSW hierarchy              |     0.900 |                  1,016 |
+| single global fixed entry        |     0.900 |              **1,001** |
+| cluster-routed entry             |     0.900 |                  1,016 |
+
+</div>
+
+At a practical `efSearch`, the cost is dominated by the **base-layer beam** — the work of examining the ~`efSearch` candidates around the query to polish the answer — not by _getting_ to the right neighborhood. A better starting point only saves the cheap descent. (This flips at very large N, where the descent grows ~log N and routing starts to matter — worth revisiting at 100M+ scale, but at 8k it's noise.)
+
+The third lever, `M` and `efConstruction`, _does_ move the numbers — but only by trading compute for recall along the usual curve, not by manufacturing a free speedup.
+
+The throughline: none of the index-side tricks make search cheaper for free. The ~3× spread we keep seeing — random at ~1,875 distance comps vs real at ~1,020 vs tight clusters at ~570 — comes from the data's own geometry, which is baked in when the embeddings are produced. An index can trade compute for recall; it can't put structure into vectors that don't have it.
+
+<details>
+<summary>**Aside: HNSW indexes are nondeterministic** — and it doesn't matter</summary>
+
+Rebuild the same HNSW index over the same vectors and you get a _different graph every time_ — not because of a random seed or insertion order, but because the default multi-threaded build has a race in how concurrent neighbor updates land. With the same seed and same order, the saved index differs byte-for-byte on every run; only single-threaded construction (`num_threads=1`) reproduces it exactly.
+
+The reassuring part: across all those different graphs, recall and latency are stable to within ~0.1%. Different graph, same quality. So the nondeterminism is real but benign — worth knowing if you ever try to diff or cache indexes by hash.
+
+</details>
+
+## Key Takeaways
+
+- **High-dimensional random vectors have no neighbors.** The nearest of 8,000 random 1024-d vectors sits at cosine 0.12 vs 0.00 for a random pair — barely nearer than nothing. Real embeddings show a real gap (0.73 vs 0.39), and that gap is what nearest-neighbor search depends on.
+- **Random embeddings are expensive to search and cap out lower.** Same index, same dimensions: real hits 0.90 recall at efSearch=32; random never beats 0.855 even at 8× the search effort.
+- **"Structure" is two things.** Low effective dimensionality (cures distance concentration; gain tracks intrinsic dim) and clustering (separable basins; 4–5× cheaper search _independent_ of dimensionality). Real embeddings have both — intrinsic dimension ~14 plus clusters.
+- **Structure mostly buys compute, not recall.** Past the random→structured jump, recall pins at the HNSW ceiling; the big wins are all in latency.
+- **You can't add structure in the index.** Insertion order and smart entry points give nothing at this scale (the base-layer beam dominates, not the descent); `M`/`efConstruction` only trade compute for recall. The geometry is set when the embeddings are made — the index can't fake it.
