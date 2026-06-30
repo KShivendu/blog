@@ -286,6 +286,34 @@ The trend is real but **weak and not significant**: Spearman ρ = **−0.43** (p
 
 So the stronger, defensible claim is narrower than the four-dataset chart suggested: **static dense is roughly BM25-competitive on average (≈92% of its mean NDCG) at ~90× lower latency, with a mild tendency to win on low-lexical-overlap / semantic tasks** — not a clean law you can read off an overlap score. If relevance is paraphrase- or duplicate-driven (Quora, arguana), static is a strong, cheap default; if it's multi-hop or term-precise (HotpotQA, Touche, scifact), reach for BM25 or a real transformer.
 
+<details>
+<summary>**Full NanoBEIR table** — NDCG@10 with bootstrap 95% CIs, all 13 datasets sorted by lexical overlap</summary>
+
+<div style={{overflowX: 'auto'}}>
+
+| Dataset        | overlap | BM25                             | potion-retrieval-32M             | static-mrl                   | all-MiniLM-L6-v2             | bge-small-en-v1.5            |
+| -------------- | ------- | -------------------------------- | -------------------------------- | ---------------------------- | ---------------------------- | ---------------------------- |
+| ArguAna        | 0.15    | 0.365 <sub>[0.28,0.45]</sub>     | 0.408 <sub>[0.32,0.49]</sub>     | 0.407 <sub>[0.32,0.49]</sub> | 0.549 <sub>[0.47,0.63]</sub> | 0.636 <sub>[0.55,0.72]</sub> |
+| ClimateFEVER   | 0.48    | 0.328 <sub>[0.25,0.40]</sub>     | 0.335 <sub>[0.25,0.42]</sub>     | 0.331 <sub>[0.25,0.41]</sub> | 0.296 <sub>[0.22,0.37]</sub> | 0.305 <sub>[0.23,0.39]</sub> |
+| NQ             | 0.50    | 0.469 <sub>[0.36,0.58]</sub>     | 0.443 <sub>[0.34,0.54]</sub>     | 0.453 <sub>[0.35,0.56]</sub> | 0.590 <sub>[0.48,0.70]</sub> | 0.532 <sub>[0.42,0.64]</sub> |
+| SciFact        | 0.51    | 0.717 <sub>[0.62,0.81]</sub>     | 0.683 <sub>[0.57,0.79]</sub>     | 0.611 <sub>[0.50,0.72]</sub> | 0.727 <sub>[0.63,0.82]</sub> | 0.755 <sub>[0.64,0.85]</sub> |
+| FiQA2018       | 0.58    | 0.352 <sub>[0.26,0.44]</sub>     | 0.366 <sub>[0.27,0.47]</sub>     | 0.365 <sub>[0.27,0.47]</sub> | 0.477 <sub>[0.38,0.58]</sub> | 0.471 <sub>[0.38,0.57]</sub> |
+| SCIDOCS        | 0.61    | 0.338 <sub>[0.27,0.41]</sub>     | 0.305 <sub>[0.24,0.38]</sub>     | 0.264 <sub>[0.19,0.34]</sub> | 0.433 <sub>[0.36,0.50]</sub> | 0.414 <sub>[0.33,0.49]</sub> |
+| MSMARCO        | 0.64    | 0.490 <sub>[0.39,0.60]</sub>     | 0.410 <sub>[0.31,0.51]</sub>     | 0.404 <sub>[0.30,0.50]</sub> | 0.554 <sub>[0.44,0.65]</sub> | 0.619 <sub>[0.50,0.72]</sub> |
+| NFCorpus       | 0.67    | 0.328 <sub>[0.24,0.43]</sub>     | 0.335 <sub>[0.24,0.44]</sub>     | 0.324 <sub>[0.23,0.43]</sub> | 0.332 <sub>[0.24,0.43]</sub> | 0.370 <sub>[0.27,0.49]</sub> |
+| HotpotQA       | 0.70    | **0.827** <sub>[0.77,0.88]</sub> | 0.602 <sub>[0.52,0.68]</sub>     | 0.655 <sub>[0.57,0.73]</sub> | 0.596 <sub>[0.51,0.68]</sub> | 0.818 <sub>[0.75,0.88]</sub> |
+| QuoraRetrieval | 0.73    | 0.788 <sub>[0.70,0.87]</sub>     | **0.897** <sub>[0.84,0.95]</sub> | 0.895 <sub>[0.84,0.94]</sub> | 0.937 <sub>[0.88,0.97]</sub> | 0.953 <sub>[0.91,0.98]</sub> |
+| FEVER          | 0.77    | 0.818 <sub>[0.72,0.90]</sub>     | 0.673 <sub>[0.59,0.76]</sub>     | 0.692 <sub>[0.61,0.77]</sub> | 0.793 <sub>[0.72,0.87]</sub> | 0.921 <sub>[0.87,0.97]</sub> |
+| DBPedia        | 0.86    | 0.561 <sub>[0.48,0.63]</sub>     | 0.565 <sub>[0.50,0.63]</sub>     | 0.568 <sub>[0.49,0.64]</sub> | 0.550 <sub>[0.48,0.63]</sub> | 0.580 <sub>[0.50,0.66]</sub> |
+| Touche2020     | 0.99    | **0.723** <sub>[0.68,0.76]</sub> | 0.527 <sub>[0.47,0.58]</sub>     | 0.570 <sub>[0.51,0.63]</sub> | 0.475 <sub>[0.41,0.54]</sub> | 0.540 <sub>[0.47,0.61]</sub> |
+| **mean**       | —       | **0.546**                        | 0.504                            | 0.503                        | 0.562                        | **0.609**                    |
+
+</div>
+
+CIs are 95% bootstrap over the 50 queries (B=1000); they're wide because each Nano dataset has only 50 queries, which is exactly why most single-dataset static-vs-BM25 gaps aren't significant. Bold marks the BM25 wins/losses that survive the paired Wilcoxon test (HotpotQA, Touche2020 for BM25; Quora for static). Note `bge-small` leads the mean (0.609) but at ~22ms/query vs static's ~0.13ms.
+
+</details>
+
 ## The Defining Limitation: Word Order
 
 Here's the mechanism behind the quality gap, and it's a clean one. A static sentence vector is `mean(lookup(t) for t in tokens)`. Mean-pooling is **permutation-invariant**: reorder the tokens and the average is byte-for-byte identical. The model literally cannot tell two reorderings of the same words apart.
