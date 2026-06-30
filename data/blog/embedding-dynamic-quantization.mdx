@@ -1,0 +1,154 @@
+---
+title: 'Dynamic Quantization for Embedding Models: Lossless Retrieval by Crushing Only the Lazy Layers'
+date: '2026-06-30'
+lastmod: '2026-06-30'
+tags: ['embeddings', 'quantization', 'information-retrieval', 'nlp']
+draft: false
+summary: 'Uniform 4-bit quantization costs an embedding model real retrieval quality. Quantizing only the layers that are not doing real work costs nothing — and a layer-by-layer look at the model tells you which layers those are. Validated on mxbai-embed-large + BEIR scifact.'
+images: ['/static/images/blogs/embedding-dynamic-quantization.jpg']
+authors: ['default']
+---
+
+> Looking for TL;DR? Skip to [key takeaways](#key-takeaways)
+
+Quantize an embedding model uniformly to 4-bit and you lose retrieval quality. Quantize only the layers that aren't doing real work and you lose nothing — and a mechanistic look at the model tells you exactly which layers those are.
+
+[Unsloth's dynamic quantization](https://unsloth.ai/blog/dynamic-v2) made this idea famous for LLMs: don't quantize every layer to the same width. A few weights carry outsized importance, so keep the sensitive ones at higher precision and crush the rest. Naively quantizing everything breaks the model; selectively protecting the right pieces lets you go far lower on average.
+
+That's an LLM story. The interesting question for retrieval is: **does it transfer to an embedding encoder, and how do you decide which layers to protect?** For [`mixedbread-ai/mxbai-embed-large-v1`](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1) (BERT-large, 335M params, 24 layers) I had an unusual advantage — I'd already mapped what each layer does. So instead of guessing, I could pick the layers from first principles, then test the pick.
+
+## What each layer actually does
+
+mxbai turns a sequence of tokens into one sentence vector across 24 layers. To see where that happens, I tracked each token's nearest neighbor at every layer: is a token sitting next to copies of the **same word** (in other sentences), or next to its **own sentence-mates**?
+
+<PlotlyChart
+  data={[
+    {
+      name: 'NN = same word (other sentences)',
+      x: ['WE', 'L10', 'L19', 'L20', 'L21', 'L22', 'L23', 'L24'],
+      y: [0.81, 0.78, 0.76, 0.74, 0.62, 0.53, 0.41, 0.14],
+      mode: 'lines+markers',
+      type: 'scatter',
+      marker: { size: 8, color: '#6366f1' },
+    },
+    {
+      name: 'NN = own sentence-mate',
+      x: ['WE', 'L10', 'L19', 'L20', 'L21', 'L22', 'L23', 'L24'],
+      y: [0.0, 0.01, 0.03, 0.06, 0.18, 0.3, 0.49, 0.85],
+      mode: 'lines+markers',
+      type: 'scatter',
+      marker: { size: 8, color: '#10b981' },
+    },
+  ]}
+  layout={{
+    title: {
+      text: 'When does a token stop being a "word" and become part of a "sentence"?',
+      font: { size: 14 },
+    },
+    xaxis: { title: 'layer' },
+    yaxis: { title: 'fraction of tokens', range: [0, 1] },
+    height: 380,
+    margin: { t: 48, r: 24, b: 48, l: 64 },
+    legend: { orientation: 'h', y: -0.2 },
+  }}
+/>
+
+For the first ~20 layers, tokens are organized **by which word they are** — "guitar" sits next to other "guitar"s, and the sentences they came from are scattered. Only in the last few layers does it flip: tokens re-sort so that the words of one sentence cluster together. The crossover lands sharply at **layer 23 of 24**.
+
+Two more measurements back this up. First, how much each layer rewrites its input: the **middle layers barely move anything** per step, while the big changes happen early and at the very end. Second, the training objective — mxbai's contrastive loss only ever touches the final pooled vector, so nothing supervises the middle layers to do anything specific. They're cheap, generic "gather the context" filler; the real, graded work is deferred to the last layers.
+
+Note that this is exactly a quantization importance map, for free. If the middle layers are coasting, they should tolerate aggressive quantization. If the last few layers do the binding, they're the ones to protect. That's a hypothesis — and quantization is how you test it.
+
+## The experiment
+
+I quantized mxbai with [bitsandbytes](https://github.com/TimDettmers/bitsandbytes) NF4 (4-bit) and compared schemes. bitsandbytes gives two tiers — a module is either 4-bit or kept in fp16 — so a "dynamic" scheme here is a choice of _which modules to keep in fp16_:
+
+- **nf4** — everything 4-bit (the naive baseline).
+- **protect_downproj** — keep every FFN down-projection in fp16 (the module LLM quantizers protect first).
+- **protect_late** — keep layers 18–23 in fp16.
+- **crush_middle** — 4-bit _only_ the lazy middle (layers 7–19); keep early + late + embeddings in fp16.
+- **int8** — uniform 8-bit, as a near-lossless reference.
+
+Two screens. First, a cheap **embedding-fidelity** check on 143 sentences (no labels needed): how much do quantized embeddings drift from fp32, and do a sentence's top-10 nearest neighbors survive? Then the real test: **retrieval on [BEIR scifact](https://github.com/beir-cellar/beir)** (5,183 docs, 300 queries), NDCG@10 and Recall@10, queries encoded with mxbai's `"Represent this sentence for searching relevant passages: "` prompt.
+
+## Results
+
+Fidelity first. The number that matters is **top-10 neighbor retention** — how often the quantized model's nearest neighbors match fp32's:
+
+<div style={{overflowX: 'auto'}}>
+
+| Scheme           | cos to fp32 | top-10 neighbors kept | ~% weights at 4-bit |
+| ---------------- | ----------- | --------------------- | ------------------- |
+| nf4 (naive)      | 0.988       | 0.947                 | 100%                |
+| protect_downproj | 0.990       | 0.957                 | 67%                 |
+| protect_late     | 0.998       | 0.971                 | 75%                 |
+| **crush_middle** | **1.000**   | **0.991**             | **54%**             |
+| int8             | 0.999       | 0.987                 | 0% (8-bit)          |
+
+</div>
+
+Naive 4-bit flips ~5% of top-10 neighbors. `crush_middle` — quantizing _more_ of the model's compute-heavy middle, just not the ends — keeps **0.991**, better than even uniform int8. So the fidelity proxy says the layer map was right. But neighbor retention on 143 sentences is a proxy. Does it hold on real retrieval, where there are 5,000 distractors to trip on?
+
+<PlotlyChart
+  data={[
+    {
+      type: 'bar',
+      x: ['fp32', 'int8', 'nf4 (naive)', 'crush_middle'],
+      y: [0.7381, 0.7395, 0.7241, 0.7401],
+      marker: { color: ['#94a3b8', '#6366f1', '#ef4444', '#10b981'] },
+      text: ['0.738', '0.740', '0.724', '0.740'],
+      textposition: 'outside',
+    },
+  ]}
+  layout={{
+    title: {
+      text: 'BEIR scifact NDCG@10 — naive 4-bit loses, dynamic recovers',
+      font: { size: 14 },
+    },
+    xaxis: { title: '' },
+    yaxis: { title: 'NDCG@10 ↑', range: [0.7, 0.75] },
+    height: 380,
+    margin: { t: 48, r: 24, b: 48, l: 64 },
+    showlegend: false,
+  }}
+/>
+
+<div style={{overflowX: 'auto'}}>
+
+| Scheme           | NDCG@10    | Recall@10  | ~avg bits/weight |
+| ---------------- | ---------- | ---------- | ---------------- |
+| fp32             | 0.7381     | 0.8741     | 16               |
+| int8             | 0.7395     | 0.8741     | 8                |
+| **nf4 (naive)**  | **0.7241** | 0.8632     | ~4               |
+| **crush_middle** | **0.7401** | **0.8774** | ~9.5             |
+
+</div>
+
+Naive 4-bit costs **−0.014 NDCG@10** (−1.9% relative) and −0.011 Recall@10. The 5% neighbor-flip from the fidelity screen does surface as lost ranking once there's a real corpus to confuse it. And `crush_middle` recovers all of it — **0.7401 NDCG@10, matching (nudging past) fp32.** The middle 13 layers really are free to quantize; the loss came entirely from touching the ends.
+
+## The LLM prior doesn't transfer
+
+Here's the part that surprised me. The single most-protected module in LLM quantization is the FFN down-projection — Unsloth and [llama.cpp](https://github.com/ggerganov/llama.cpp) both flag it as the most quant-sensitive, corroborated by the [Super Weights paper](https://arxiv.org/abs/2411.07191). For mxbai, protecting it barely helped: top-10 retention went 0.947 → **0.957**, versus 0.971 for protecting late layers and **0.991** for crushing only the middle.
+
+For this embedding encoder, **layer position is the right importance signal, not module type.** The LLM recipe — "protect the down-projections" — is the wrong knob here. You can't copy it; you have to ask what _this_ model's layers are doing. (mxbai also has the massive-activation "register" dimensions the Super Weights work targets — a handful of dimensions holding 70%+ of a layer's norm — but on the unit-normalized sphere that embeddings live on, the per-sentence geometry already absorbs them, so protecting them specifically didn't move retrieval.)
+
+## What to ship
+
+The honest practical answer for mxbai is anticlimactic: **ship int8.** It's near-lossless (0.7395 NDCG@10, ≈ fp32) at 8 bits, no layer selection required. `crush_middle` matches it but, with the ends kept in fp16, averages ~9.5 bits — bigger than int8. With bitsandbytes' two tiers, the dynamic scheme is a scientific win (the middle is provably free), not a size win.
+
+The real size win needs a third tier. The middle is free at 4-bit and the ends survive 8-bit, so a **4-bit middle / 8-bit ends / fp16 embeddings** scheme should land around **~5.8 average bits at ≈fp32 retrieval** — below int8, at full quality. bitsandbytes can't express three tiers; that needs [torchao](https://github.com/pytorch/ao) or a GGUF imatrix build. I haven't built it, but the two screens above say it should work.
+
+## Limitations
+
+**One model, one dataset.** Everything here is mxbai on BEIR scifact. The layer map (lazy middle, late binding) is specific to how this model was trained; a model with a different pooling or objective could put its "real work" elsewhere. The right move for any new model is to remake the map, not reuse mine.
+
+**Fidelity is a proxy, retrieval is the truth.** The 143-sentence neighbor-retention screen predicted the scifact result here, but it's a screen — confirm on the actual task before trusting a scheme.
+
+**bitsandbytes is two-tier.** Every "dynamic" scheme above is either 4-bit or fp16 per module. The genuinely efficient 3-tier scheme is unbuilt; treat its projected ~5.8 bits as a hypothesis, not a measurement.
+
+## Key Takeaways
+
+- **Naive 4-bit costs an embedding model real retrieval quality** — −1.9% NDCG@10 on scifact — but quantizing _only_ the lazy middle layers (4-bit L7–19, ends in fp16) fully recovers it (**0.7401 vs 0.7381 fp32**).
+- **A mechanistic layer map is a free quantization importance map.** mxbai's middle layers coast (small per-step change, unsupervised by the contrastive loss); the word→sentence binding snaps in only at layer 23. So the middle is safe to crush and the ends must be protected — and quantization confirmed it causally.
+- **The LLM prior doesn't transfer.** Protecting FFN down-projections — the LLM go-to — barely helped (0.957 retention); layer position, not module type, is the signal for embedding encoders.
+- **For mxbai today, ship int8** — near-lossless at 8 bits, no tuning. The dynamic scheme is the scientific result; a 3-tier (4/8/16) build via torchao or GGUF is the path to a real sub-8-bit, full-quality model.
