@@ -407,6 +407,109 @@ So the cost of going static is specifically **word order and composition**, not 
 
 Truncating to **256-d keeps 95% of full quality at a quarter of the storage** (0.564 vs 0.594). The curve stays gentle down to 128-d, then falls off a cliff: 64-d drops to 77% of full, and 32-d to just 52%. The sweet spot for this model is 256–512 dimensions — small enough to be cheap, large enough to dodge the cliff.
 
+## Can Fuzzy Keyword Matching Beat Plain Fusion? (No)
+
+Mean-pooling throws away term identity. A tempting fix sits _between_ sparse retrieval and [ColBERT](https://arxiv.org/abs/2004.12832): keep each token as a "keyword," but match keywords by **vector similarity** instead of exact string match, then score BM25-style. That's roughly [COIL](https://arxiv.org/abs/2104.07186) / late-interaction — and the static table hands you the token vectors for free, no transformer. I built the transformer-free versions and benchmarked them on all 13 NanoBEIR datasets against the one baseline everyone should try first: **trivial score fusion of BM25 + static-dense.**
+
+<PlotlyChart
+  data={[
+    {
+      x: [
+        'BM25 + static-dense<br>(fuse)',
+        'BM25',
+        'query expansion',
+        'static MaxSim',
+        'doc-side SPLADE',
+        'static-dense',
+      ],
+      y: [0.564, 0.546, 0.531, 0.507, 0.503, 0.504],
+      type: 'bar',
+      marker: { color: ['#10b981', '#f59e0b', '#94a3b8', '#94a3b8', '#94a3b8', '#6366f1'] },
+      text: ['0.564', '0.546', '0.531', '0.507', '0.503', '0.504'],
+      textposition: 'outside',
+    },
+  ]}
+  layout={{
+    title: {
+      text: 'Mean NDCG@10 over 13 NanoBEIR (all transformer-free, CPU)',
+      font: { size: 14 },
+    },
+    xaxis: { title: '' },
+    yaxis: { title: 'NDCG@10', range: [0.45, 0.59] },
+    height: 380,
+    margin: { t: 48, r: 24, b: 64, l: 56 },
+    showlegend: false,
+  }}
+/>
+
+The result is unambiguous, and it's a negative one for the clever methods:
+
+- **Trivial fusion wins.** Min-max fusing BM25 with static-dense cosine reaches **0.564** vs BM25's 0.546 (+0.018, p=0.009, stable across fusion weights α∈[0.35,0.8] on 13 datasets) — and beats _both_ its parents (static-dense alone is 0.504). BM25 and dense fail on anti-correlated tasks (lexical vs semantic), so fusing them is close to ideal.
+- **Query-side expansion is a wash** (0.531, _below_ BM25). Not because expansion does nothing — because it does opposite things on different tasks:
+
+<PlotlyChart
+  data={[
+    {
+      orientation: 'h',
+      y: [
+        'FEVER',
+        'Touche2020',
+        'HotpotQA',
+        'MSMARCO',
+        'DBPedia',
+        'ArguAna',
+        'FiQA',
+        'SCIDOCS',
+        'ClimateFEVER',
+        'NQ',
+        'SciFact',
+        'NFCorpus',
+        'Quora',
+      ],
+      x: [
+        -0.086, -0.069, -0.048, -0.029, -0.017, -0.014, -0.007, 0.011, 0.016, 0.02, 0.027, 0.041,
+        0.067,
+      ],
+      type: 'bar',
+      marker: {
+        color: [
+          '#ef4444',
+          '#ef4444',
+          '#ef4444',
+          '#ef4444',
+          '#ef4444',
+          '#ef4444',
+          '#ef4444',
+          '#10b981',
+          '#10b981',
+          '#10b981',
+          '#10b981',
+          '#10b981',
+          '#10b981',
+        ],
+      },
+    },
+  ]}
+  layout={{
+    title: { text: 'Query expansion lift over BM25, per dataset (NDCG@10)', font: { size: 14 } },
+    xaxis: {
+      title: '← hurts (lexical / multi-hop)   ·   helps (semantic / QA) →',
+      zeroline: true,
+      zerolinewidth: 2,
+    },
+    yaxis: { autorange: 'reversed' },
+    height: 420,
+    margin: { t: 48, r: 24, b: 56, l: 96 },
+    showlegend: false,
+  }}
+/>
+
+Expansion helps paraphrase/QA tasks (Quora +0.07, NFCorpus +0.04, SciFact +0.03) and hurts lexical/multi-hop ones (FEVER −0.09, Touche −0.07, HotpotQA −0.05) by roughly equal amounts. You can't know the task type a priori, so the average is nothing — and IDF-gating (don't expand rare identity terms) doesn't separate the two.
+
+- **The heavier mechanisms are actively worse.** Doc-side expansion (the SPLADE direction) floods documents with neighbors and drops to 0.503; **static MaxSim** (ColBERT minus the learned encoder) collapses toward bag-of-tokens at 0.507 — both significantly below BM25 (p&lt;1e-5). Tellingly, both _beat_ BM25 on MS MARCO and Quora — the distribution `potion-retrieval` was trained on — but lose badly everywhere precision matters.
+
+The lesson: a static table's **fixed neighbor geometry** is enough to _add_ to a real retriever (the fusion win) but not to _be_ one. What real SPLADE and ColBERT have that this lacks is **learned, contextual** expansion weights; selection, pooling, and gating over an off-the-shelf geometry can't recover it. (Whether _learned-but-static_ weights would close the gap is untested — but the systemic, un-gateable losses on lexical tasks suggest the geometry itself, not just the weighting, is the limit.) If you want cheap gains over BM25 from a static model: **fuse, don't fuzz.**
+
 ## Where Static Embeddings Fit
 
 Static embeddings are to dense retrieval what BM25 is to sparse: the **no-model baseline**. The whole spectrum, from the SPLADE post and this one:
