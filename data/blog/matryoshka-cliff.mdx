@@ -1,0 +1,207 @@
+---
+title: 'Does Matryoshka Reranking Lose Relevant Docs? I Ran the Numbers'
+date: '2026-05-16'
+tags: ['search', 'embeddings', 'internals', 'experiments']
+draft: true
+summary: 'We ran an experiment to test whether Exa-style iterative Matryoshka reranking silently loses relevant documents. It does — and 100% of the loss happens at the very first filter stage.'
+images: []
+authors: ['default']
+---
+
+> Looking for TL;DR? Check [key takeaways](#-key-takeaways)
+
+In my [previous blog](/blog/exa-napkin-math) I reverse-engineered Exa's infrastructure costs. Their vector search pipeline looks roughly like this:
+
+> 256d BQ IVF → top-1000 → 1024d BQ rerank → top-? → 2048d bf16 rerank → top-? → cross-encoder → top-10
+
+A friend asked after reading it: **does this iterative narrowing silently lose relevant documents?** If a doc gets filtered out in the 256d stage, it can never be recovered by the 1024d or 2048d reranking. And if your evals only measure precision of what you returned, you'd never know what you missed.
+
+I ran the experiment. Here's what I found.
+
+## 🔬 Experiment Setup
+
+**Model**: [nomic-embed-text-v1.5](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5) — 768d [Matryoshka](https://huggingface.co/blog/matryoshka) model, supports dimension truncation at any point.
+
+**Dataset**: [SciFact](https://huggingface.co/datasets/BeIR/scifact) from [BEIR](https://github.com/beir-cellar/beir) — 5183 scientific paper abstracts, 300 test queries, ground-truth relevance labels. Picked this because queries are precise scientific claims ("X causes Y in Z") that require fine-grained semantic matching — exactly the kind of thing a coarse embedding might get wrong.
+
+**Pipeline under test** (proportional to Exa's 256→1024→2048 dims at 768d scale):
+
+```
+64d → top-k1 → 256d → top-100 → 512d → top-25 → 768d → top-10
+```
+
+**Oracle**: direct cosine search at full 768d over all 5183 docs — what the model would return if there were no filters.
+
+**The sweep**: instead of testing one k1, sweep `k1 ∈ [20, 50, 100, 200, 500, 1000, 5183]` to find where the recall cliff starts.
+
+### How aggressive is Exa's first-stage filter?
+
+Before looking at results, it's worth anchoring on how aggressive Exa's real filter actually is:
+
+- Exa uses [IVF Index](https://youtu.be/chz74Mtd1AA?si=DvvDE3rO9HvVvox7&t=429) with ~200k clusters of 100k docs each (~20B total)
+  - At query time, they probe ~10 clusters → 1M candidates, then filter with 256d BQ to top-1000
+  - That's `1000 / 1M probed = 0.1%` of probed candidates, or `1000 / 20B = 0.000005%` of total corpus
+- Our most aggressive test: `k1=20` from `5183 docs = 20 / 5183 = 0.39%`
+  - Ratio vs Exa: `0.39% / 0.000005% = 78,000x more generous` — our "worst case" is Exa's easy case
+- Our experiment also uses `64d` as the first-stage dim. Exa uses `256d BQ` — 4x more bits, almost certainly better ρ
+
+So our results are a **lower bound** on Exa's recall performance. Which makes the cliff we find even more striking.
+
+## 📊 The Recall Cliff
+
+| k1   | % corpus | recall vs oracle | recall vs qrels | perfect recall | recall < 0.5 |
+| ---- | -------- | ---------------- | --------------- | -------------- | ------------ |
+| 20   | 0.39%    | 0.509            | 0.668           | 2%             | **42%**      |
+| 50   | 0.96%    | 0.694            | 0.755           | 11%            | 13%          |
+| 100  | 1.93%    | 0.810            | 0.765           | 26%            | 3%           |
+| 200  | 3.86%    | 0.906            | —               | 48%            | 0%           |
+| 500  | 9.65%    | 0.962            | —               | 72%            | 0%           |
+| 1000 | 19.3%    | 0.974            | —               | 79%            | 0%           |
+| 5183 | 100%     | **0.978**        | 0.797           | 81%            | 0%           |
+
+Note how the cliff lives between **1–4% corpus retention** — that's exactly where most aggressive production pipelines operate. Going from `k1=200` (recall=0.906) to `k1=50` (recall=0.694) is a 21-point drop for a 3x reduction in k1. At `k1=20`, **42% of queries lose more than half their oracle results**.
+
+Two other things worth noting:
+
+- **Even k1=5183 (all docs pass through) only gives recall=0.978**, not 1.0. The downstream 256d and 512d reranking stages do introduce a small irreducible loss of ~2%.
+- **`recall_vs_qrels` degrades too** — not just recall vs oracle. At `k1=20`, qrel recall drops from 0.797 to 0.668, a **16% real recall loss** on labeled-relevant documents. These aren't near-duplicates; these are docs a user would actually want.
+
+## 🔩 Where Exactly Does the Loss Happen?
+
+Stage-by-stage breakdown at `k1=100` over the full 5183-doc corpus:
+
+| Stage             | Mean recall drop | % of total loss | Queries losing ≥1 doc |
+| ----------------- | ---------------- | --------------- | --------------------- |
+| **64d → top-100** | **0.190**        | **100%**        | **74%**               |
+| 256d → top-50     | 0.000            | 0%              | 0%                    |
+| 512d → top-25     | 0.000            | 0%              | 0%                    |
+| 768d → top-10     | 0.000            | 0%              | 0%                    |
+
+Note how **100% of the recall loss happens at the first stage**. Once a doc is dropped by the 64d filter, the subsequent 256d, 512d, and 768d reranking stages contribute _zero_ additional loss — but they also can't recover anything.
+
+This is actually somewhat good news for the multi-stage reranking design: the iterative narrowing from coarse to fine dimensions is faithful once the candidate pool is established. The problem is entirely about **how many docs the first filter lets through**, not about the reranking structure itself.
+
+## 🔮 Predicting Which Queries Will Fail
+
+The best predictor of recall loss is **Spearman ρ between 64d rankings and 768d rankings** — how much does the coarse filter agree with what the full-dim model considers relevant?
+
+Distribution across 300 test queries:
+
+| ρ(64d, 768d) | queries   | recall at k1=20   |
+| ------------ | --------- | ----------------- |
+| < 0.25       | 12 (4%)   | 0.317 (min: 0.10) |
+| 0.25–0.35    | 79 (26%)  | 0.406 (min: 0.10) |
+| 0.35–0.45    | 129 (43%) | 0.515 (min: 0.10) |
+| 0.45–0.55    | 62 (21%)  | 0.631 (min: 0.20) |
+| > 0.55       | 18 (6%)   | 0.628 (min: 0.10) |
+
+**30% of queries have ρ < 0.35** — the coarse and full-dim rankings strongly disagree. Queries in this zone lose 60–70% of their oracle results even at our most generous-relative-to-Exa filter. And the min recall hits 0.10, meaning one query lost 9/10 oracle results.
+
+Intuitively: low ρ means "the semantics this query needs are not well-captured by 64d." These tend to be queries that require fine-grained distinctions — a specific mechanism, a specific population, a specific treatment — where many docs look similar at coarse resolution but diverge at full resolution.
+
+## ⚠️ The Scale Problem
+
+Two things work in Exa's favor vs our experiment:
+
+1. Their first stage uses **256d BQ** (4x more information than our 64d), so their ρ equivalent would be higher and the cliff shifts left
+2. Their embedding model is a **fine-tuned 4096d model** likely better than nomic-embed-768d at capturing semantic nuance
+
+Two things work against them:
+
+1. Their first-stage filter is **78,000x more aggressive** than our most aggressive test
+2. At 20B docs, even probing 10 clusters of 100k still means returning top-1000 from 1M candidates — a 0.1% retention rate
+
+There's no way to extrapolate our recall curve to `0.000005%`. But the steepness of the cliff between 0.4–4% suggests the outcome at 0.000005% is determined almost entirely by **how much semantic signal Exa's 256d BQ vectors actually preserve**. The downstream reranking stages are largely irrelevant if the first filter is aggressive enough.
+
+Note that Exa also uses IVF clustering (not HNSW), which adds another layer of approximation: docs near cluster boundaries can be assigned to the "wrong" cluster and missed entirely by the centroid-based routing, independently of the BQ recall issue.
+
+## 🚨 The "Never Caught" Problem
+
+To be precise: standard offline evals with properly collected ground truth **do** catch this. `recall@k = |retrieved ∩ relevant| / |relevant|` — the denominator is the full relevant set, so a doc filtered by stage 1 shows up as a miss. NDCG works the same way. We used SciFact's independent labels exactly this way and measured a real 3.5–16% qrel recall drop depending on k1.
+
+The problem is two-fold:
+
+**1. In production you rarely have labels.** You can't run recall@10 on live traffic without annotating queries. What you can measure instead — CTR, session length, thumbs down — are weak signals that won't reliably surface a 10% recall drop on a specific query type like "fine-grained mechanism X in population Y".
+
+**2. Offline labels are only as good as how they were collected.** If a company's internal eval labels were assembled by annotating the top results from _their own pipeline_, then docs filtered in stage 1 never enter the labeling pool. The labels become pipeline-biased, and recall@k on them misses exactly the gap we're worried about. BEIR datasets avoid this because they were labeled independently of any retrieval system.
+
+The only reliable way to catch silent first-stage losses is to periodically run **full-corpus retrieval on a sample of queries** and diff it against the pipeline output — basically computing our oracle and comparing. At 20B docs this is expensive (~$200k per full eval run based on my [embedding cost estimates](/blog/exa-napkin-math#-embedding-generation)), which is why it probably doesn't happen on every model update.
+
+Note that Exa likely does some version of this via their [offline evals](https://exa.ai/blog/evals-at-exa). But whether their label collection is pipeline-independent, and whether it covers the specific 30% of queries with low ρ(coarse, full-dim) that are most at risk, is unclear.
+
+## 🔄 Can a Rotation Before Truncation Save Recall?
+
+A reader asked the obvious follow-up: if the first-stage filter is where all the loss happens, can we make the _truncated prefix itself_ a better coarse ranker? The natural idea is to **rotate the embedding space with PCA before truncating** — instead of keeping nomic's first 64 (or 256) trained dimensions, fit PCA on the corpus and keep the top-k principal components. PCA packs maximum variance into the leading axes, so the truncated vector should preserve more of the full-768 ranking.
+
+I re-ran the exact funnel above with three first-stage variants — **MRL-prefix** (the trained Matryoshka prefix, our baseline), **PCA**, and **ITQ** (PCA followed by a variance-balancing rotation, the standard "rotate-before-binarize" trick from [ITQ](https://www.cs.cmu.edu/~efros/courses/LBMV09/Papers/cvpr11_ITQ.pdf)/[OPQ](https://www.microsoft.com/en-us/research/wp-content/uploads/2013/06/pami13opq.pdf)) — in **two regimes**: plain float cosine, and **binary-quantized** (1-bit-per-dim), since binary quantization is what Exa actually runs at its 256d first stage.
+
+### Float first stage: PCA genuinely helps
+
+At the blog's exact 64d float first stage, PCA shifts the entire cliff:
+
+| k1  | % corpus | MRL-prefix | **PCA**   | Δ      |
+| --- | -------- | ---------- | --------- | ------ |
+| 20  | 0.39%    | 0.531      | **0.714** | +0.183 |
+| 50  | 0.96%    | 0.708      | **0.872** | +0.164 |
+| 100 | 1.93%    | 0.822      | **0.938** | +0.117 |
+| 200 | 3.86%    | 0.905      | 0.970     | +0.065 |
+| 500 | 9.65%    | 0.964      | 0.978     | +0.015 |
+
+(recall vs oracle; my MRL-prefix column reproduces the [original cliff](#-the-recall-cliff) within ~1 point, so the pipeline is faithful.)
+
+The gain is largest exactly where the filter is most aggressive — **+18 points at k1=20**. In 64 real-valued numbers, PCA simply packs more of the full-768 variance than nomic's trained prefix does, so the coarse ranking agrees more with the oracle. At 256d float the edge shrinks to near-zero: the trained prefix already captures enough by then.
+
+So for a _float_ Matryoshka funnel, PCA-before-truncation is a real, free win. **But Exa's first stage isn't float — it's 256d binary.**
+
+### Binary first stage: PCA backfires, ITQ wins
+
+Once the first stage is binary-quantized (sign of each dim → 1 bit, ranked by Hamming distance — Exa's actual 256d BQ), the story inverts:
+
+| k1  | MRL-prefix | PCA   | **ITQ**   | Δ(ITQ) |
+| --- | ---------- | ----- | --------- | ------ |
+| 20  | 0.391      | 0.442 | **0.670** | +0.279 |
+| 50  | 0.538      | 0.563 | **0.821** | +0.283 |
+| 100 | 0.664      | 0.664 | **0.911** | +0.247 |
+| 200 | 0.775      | 0.755 | **0.949** | +0.174 |
+| 500 | 0.901      | 0.861 | **0.972** | +0.072 |
+
+(recall vs oracle at 256d binary first stage)
+
+**Naive PCA barely helps and then actively hurts** (−2 to −4 points at moderate k1). The reason is the leading indicator from earlier: ρ(coarse, full) _collapses_ from **0.62 (MRL) to 0.29 (PCA)**. Binary quantization spends exactly 1 bit per dimension regardless of that axis's variance — but PCA _concentrates_ variance into the first few components, so the trailing ~250 bits become near-random sign flips. PCA is the worst possible rotation to feed a binary quantizer.
+
+**ITQ** fixes precisely this. It adds an orthogonal rotation that _balances_ variance across the kept dimensions so every bit carries roughly equal information — and it lifts recall by **+28 points at k1=20**, pushing ρ to **0.655**, above even the trained MRL prefix. The win shows up on real labeled documents too, not just oracle agreement:
+
+| k1  | MRL-prefix | PCA   | **ITQ**   |
+| --- | ---------- | ----- | --------- |
+| 20  | 0.672      | 0.746 | **0.773** |
+| 50  | 0.746      | 0.778 | **0.817** |
+| 100 | 0.790      | 0.802 | **0.837** |
+
+(recall vs **qrels** — labeled-relevant docs — at 256d BQ. ITQ recovers +10 points of real recall at the aggressive operating point.)
+
+### So — would this help Exa?
+
+- **PCA specifically: no, and possibly worse.** PCA-before-truncation helps a float funnel, but Exa's first stage is binary, where PCA concentrates variance into a handful of useful bits and wastes the rest. On our setup it _degraded_ first-stage recall.
+- **A learned rotation before binarization (ITQ/OPQ): very likely yes.** This is the generalized version of the idea, and it attacks the exact stage where we showed [100% of the loss happens](#-where-exactly-does-the-loss-happen). It recovered ~25–28 points of first-stage recall at the most aggressive filter — turning a brutal cliff into a gentle slope — and raised the ρ that predicts which queries fail. It's cheap (a single matmul at index and query time), it's fit on a corpus sample, and it preserves the nested structure the funnel relies on.
+
+The caveat: ITQ must be **fit on the deployment corpus** and refit on large distribution shift, and our SciFact scale (5183 docs) is nowhere near Exa's 20B — so treat the magnitudes as directional, not as a promise of the gain at web scale. But the mechanism is robust and well-established: if Exa is feeding MRL-truncated (or worse, PCA-truncated) vectors straight into binary quantization without a variance-balancing rotation, **adding one is probably the single highest-leverage fix to their first-stage recall.**
+
+## 🔑 Key Takeaways
+
+- **The recall cliff is real.** Matryoshka pipelines lose significant recall at aggressive first-stage filter ratios. At 1.93% corpus retention (k1=100), **74% of queries already lose at least one oracle result** and 3% of queries lose more than half.
+- **100% of the loss is at the first stage.** The iterative 256d→512d→768d reranking contributes zero additional recall loss once the candidate pool is set. The multi-stage reranking structure is not the problem — the first-stage filter aggressiveness is.
+- **ρ(coarse, full-dim) is the leading indicator.** ~30% of queries have low rank correlation between 64d and 768d, making them most vulnerable. These are the queries that need fine-grained semantic distinctions the coarse filter can't see.
+- **Exa's operating point is beyond what we can test.** Their 256d BQ model is better than our 64d, but their filter is 78,000x more aggressive. Net impact unknown — but the cliff we found at 1–4% corpus retention suggests it matters.
+- **Silent recall loss is easy to miss in practice.** Offline evals with independent labels catch it, but production monitoring without labels doesn't. And if eval labels were collected by annotating pipeline results, they're biased — you'll never see the docs stage 1 already filtered out.
+- **A rotation before truncation can recover much of the cliff — but PCA is the wrong one for binary.** PCA-before-truncation helps a _float_ funnel (+18 pts recall at the most aggressive filter) but _hurts_ once the first stage is binary-quantized, because it concentrates variance into a few bits. A variance-balancing rotation (ITQ/OPQ) recovered ~25–28 points of first-stage recall at 256d BQ — Exa's actual setting. If you binary-quantize a truncated embedding, rotate it first.
+
+## Acknowledgements
+
+Thanks to the discussion on [my previous blog](/blog/exa-napkin-math) that prompted this experiment. Feel free to DM me on [X](http://kshivendu.dev/x) or [LinkedIn](http://kshivendu.dev/linkedin) if you spot wrong assumptions or have better data on what Exa's actual first-stage recall looks like.
+
+- https://huggingface.co/nomic-ai/nomic-embed-text-v1.5
+- https://huggingface.co/datasets/BeIR/scifact
+- https://huggingface.co/blog/matryoshka
+- https://exa.ai/blog/building-web-scale-vector-db
+- https://exa.ai/blog/evals-at-exa
+- https://github.com/beir-cellar/beir
