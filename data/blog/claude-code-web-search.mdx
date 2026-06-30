@@ -1,0 +1,270 @@
+---
+title: 'How Claude Code Web Search Works'
+date: '2026-06-26'
+lastmod: '2026-06-26'
+tags: ['search', 'internals', 'agents']
+draft: true
+summary: 'When Claude Code searches the web, the expensive model never touches the internet. It plans the work, then scatters it across a cheaper model running in parallel, and only reads the summaries. Reverse-engineered by intercepting its network traffic with mitmproxy.'
+authors: ['default']
+---
+
+> Looking for TL;DR? Skip to [key takeaways](#key-takeaways)
+
+When Claude Code searches the web, the model you're paying for never touches the internet. The main agent (Opus) calls a `WebSearch` tool, but that tool isn't a search engine — it's a "go ask a cheaper model" button. The actual searching, fetching, and reading get delegated to Haiku, and Opus only ever reads the tidy summary.
+
+I found this by pointing Claude Code at a [mitmproxy](https://mitmproxy.org/) instance and reading its decrypted HTTPS traffic. The setup is three environment variables:
+
+```bash
+export HTTPS_PROXY=http://127.0.0.1:8080
+export NODE_EXTRA_CA_CERTS=~/.mitmproxy/mitmproxy-ca-cert.pem   # the native binary honors this
+claude -p "what is the latest released version of Qdrant?" --strict-mcp-config
+```
+
+`--strict-mcp-config` disables every configured MCP server, so no third-party search tool is in the way. This is the pure built-in path, and everything below is read straight off the wire.
+
+## One question, six API calls
+
+That single prompt produced **six** `POST /v1/messages` calls. Only four of them are the main agent loop. The other two are sub-calls to a different, cheaper model:
+
+<div style={{overflowX: 'auto'}}>
+
+| #     | Model                | Tools                     | What it is                                                                              |
+| ----- | -------------------- | ------------------------- | --------------------------------------------------------------------------------------- |
+| 0     | claude-opus-4-8      | 10 base                   | Main loop — emits `ToolSearch(select:WebSearch,WebFetch)` to lazy-load the tool schemas |
+| 1     | claude-opus-4-8      | 12                        | Main loop — now has the tools; emits `WebSearch(query)`                                 |
+| **2** | **claude-haiku-4-5** | **`web_search_20250305`** | **Sub-call: "Perform a web search for the query: …"**                                   |
+| 3     | claude-opus-4-8      | 12                        | Main loop — gets results; emits `WebFetch(url, prompt)`                                 |
+| **4** | **claude-haiku-4-5** | **none**                  | **Sub-call: "Web page content:\n---\n…" + extraction prompt**                           |
+| 5     | claude-opus-4-8      | 12                        | Main loop — gets the summary; writes the final answer                                   |
+
+</div>
+
+Here's the key detail: `WebSearch` and `WebFetch` are handed to Opus as ordinary client-side tools — they carry no `type` field, so they are _not_ Anthropic's public server-side `web_search_20250305` tool. When Opus calls one, the harness on your machine intercepts the call and spins up a Haiku sub-call to do the real work.
+
+## Three players, and the expensive one does the least
+
+There are three actors, not two. Sorting out who does what is the whole story:
+
+<div style={{overflowX: 'auto'}}>
+
+| Step      | Who hits the network / search                    | Who reads & summarizes | Glue                                 |
+| --------- | ------------------------------------------------ | ---------------------- | ------------------------------------ |
+| WebSearch | Anthropic's server-side search backend           | Haiku                  | harness spawns the Haiku call        |
+| WebFetch  | **The harness** (your machine downloads the URL) | Haiku                  | harness downloads, then spawns Haiku |
+
+</div>
+
+Note that the premium model does the least manual work. Opus _decides_ what to search and what to fetch, but the bulky labor — running searches, downloading pages, reading messy HTML — is pushed onto Haiku and the harness.
+
+## WebSearch: delegated to Haiku
+
+Opus never runs a search itself. The harness builds a brand-new request to `claude-haiku-4-5` whose only tool is the genuine server-side `web_search_20250305`. The whole request is tiny and purpose-built:
+
+```text
+model:   claude-haiku-4-5,  max_tokens: 32000
+system:  [ billing-header,
+           "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+           "You are an assistant for performing a web search tool use" ]
+tools:   [ { type: "web_search_20250305", name: "web_search", max_uses: 8 } ]
+user:    "Perform a web search for the query: Qdrant latest stable version release GitHub 2026"
+```
+
+Two things worth pausing on. First, **Opus rewrites the query before delegating** — my prompt said "latest version of Qdrant", but Opus shipped Haiku the sharper string `Qdrant latest stable version release GitHub 2026`. The planning happens in the expensive model; the execution happens in the cheap one. Second, the searcher is capped at **`max_uses: 8`** — Haiku can issue at most eight underlying searches per delegated call.
+
+Haiku triggers the tool, Anthropic's backend runs the actual search against its index, and Haiku writes up the result. That write-up is what Opus receives as a plain `tool_result`:
+
+```text
+Web search results for query: "Qdrant latest stable version release GitHub 2026"
+
+Links: [{"title":"Releases · qdrant/qdrant","url":"https://github.com/qdrant/qdrant/releases"}, … 10 links]
+
+Based on the search results … the latest version is v1.18.2, released on June 4, 2026 …
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.
+```
+
+That trailing `REMINDER` is injected by the tool, not generated by the model. It's how Claude Code forces citations into the final answer.
+
+## WebFetch: the harness downloads, Haiku reads
+
+Fetching splits the labor differently. Here the **harness itself** makes the HTTP request — I caught the raw `GET https://github.com/qdrant/qdrant/releases` leaving the machine through the proxy.
+
+Before fetching, the harness asks Anthropic whether the domain is allowed, via `GET /api/web/domain_info`. The response is a one-line gate:
+
+```json
+{ "domain": "github.com", "can_fetch": true }
+```
+
+Note that this is a _policy_ check, not a _liveness_ check. When I pointed `WebFetch` at a domain that doesn't exist, `domain_info` still returned `can_fetch: true` — and then the harness's own GET failed at the transport layer, surfacing the raw error **`Socket is closed`** with no Haiku call at all. The gate decides "are we allowed to fetch this domain", not "is this site up".
+
+When the fetch succeeds, the harness hands the downloaded HTML to Haiku with **zero tools** and a prompt shaped like:
+
+```text
+Web page content:
+---
+<the raw page HTML>
+---
+What is the latest released version of Qdrant and its release date?
+```
+
+Haiku returns clean markdown notes (cached with `cache_control: ephemeral, 1h`), and only those notes reach Opus. The raw HTML never enters the expensive context.
+
+## Asking for more: the parallel scatter-gather
+
+The single-search trace above hides the best part. When I asked it to compare **three** vector databases at once, Opus didn't loop one-at-a-time. It emitted all three `WebSearch` calls in a _single_ turn, and the harness fired the Haiku searches **in parallel**. Same for the page fetches. Here's the real timeline from the wire:
+
+<PlotlyChart
+  data={[
+    {
+      name: 'Opus (plan)',
+      type: 'bar',
+      orientation: 'h',
+      base: [6.31, 10.18, 20.55, 33.27],
+      x: [3.6, 3.75, 5.73, 18.23],
+      y: [
+        'Opus · plan + ToolSearch',
+        'Opus · emit 3 searches',
+        'Opus · emit 2 fetches',
+        'Opus · write answer',
+      ],
+      marker: { color: '#6366f1' },
+    },
+    {
+      name: 'Haiku (search)',
+      type: 'bar',
+      orientation: 'h',
+      base: [14.11, 14.26, 14.31],
+      x: [2.74, 6.08, 5.45],
+      y: ['Haiku · search Qdrant', 'Haiku · search Weaviate', 'Haiku · search Milvus'],
+      marker: { color: '#10b981' },
+    },
+    {
+      name: 'harness (network)',
+      type: 'bar',
+      orientation: 'h',
+      base: [26.52, 26.83],
+      x: [0.14, 1.07],
+      y: ['harness · domain_info ×2', 'harness · GET pages ×2'],
+      marker: { color: '#f59e0b' },
+    },
+    {
+      name: 'Haiku (read page)',
+      type: 'bar',
+      orientation: 'h',
+      base: [27.99, 30.31],
+      x: [3.21, 2.86],
+      y: ['Haiku · read milvus.io', 'Haiku · read github'],
+      marker: { color: '#34d399' },
+    },
+  ]}
+  layout={{
+    title: {
+      text: 'One prompt, three DBs: the parallel scatter-gather (time in seconds)',
+      font: { size: 14 },
+    },
+    barmode: 'overlay',
+    xaxis: { title: 'seconds since first API call →', range: [0, 52] },
+    yaxis: {
+      autorange: 'reversed',
+      categoryorder: 'array',
+      categoryarray: [
+        'Opus · plan + ToolSearch',
+        'Opus · emit 3 searches',
+        'Haiku · search Qdrant',
+        'Haiku · search Weaviate',
+        'Haiku · search Milvus',
+        'Opus · emit 2 fetches',
+        'harness · domain_info ×2',
+        'harness · GET pages ×2',
+        'Haiku · read milvus.io',
+        'Haiku · read github',
+        'Opus · write answer',
+      ],
+    },
+    height: 460,
+    margin: { t: 48, r: 24, b: 56, l: 168 },
+    legend: { orientation: 'h', y: -0.16 },
+  }}
+/>
+
+The three green bars start within 0.2s of each other — that's three independent Haiku searches running at once. The pattern is **plan, then scatter, then gather**: Opus plans the whole batch in one turn, the harness fans the work out across Haiku workers concurrently, and the results come back together for the next Opus turn. The two `domain_info` checks and the two page downloads parallelize the same way.
+
+## The economics: who pays for what
+
+Once you see the token counts, the design's whole purpose snaps into focus. Adding up usage across the three-database run:
+
+<div style={{overflowX: 'auto'}}>
+
+| Model | calls | fresh input | output | cache read | cache write |
+| ----- | ----: | ----------: | -----: | ---------: | ----------: |
+| Opus  |     4 |      13,266 |  2,144 | **94,701** |      24,804 |
+| Haiku |     5 |  **75,694** |  1,376 |          0 |           0 |
+
+</div>
+
+<PlotlyChart
+  data={[
+    {
+      name: 'Fresh input tokens',
+      type: 'bar',
+      x: ['Opus (premium)', 'Haiku (cheap)'],
+      y: [13266, 75694],
+      marker: { color: '#6366f1' },
+      text: ['13,266', '75,694'],
+      textposition: 'outside',
+    },
+    {
+      name: 'Cache-read tokens',
+      type: 'bar',
+      x: ['Opus (premium)', 'Haiku (cheap)'],
+      y: [94701, 0],
+      marker: { color: '#94a3b8' },
+      text: ['94,701', '0'],
+      textposition: 'outside',
+    },
+  ]}
+  layout={{
+    title: {
+      text: 'Where the tokens go: bulk content is quarantined in the cheap model',
+      font: { size: 14 },
+    },
+    barmode: 'group',
+    xaxis: { title: '' },
+    yaxis: { title: 'tokens', range: [0, 105000] },
+    height: 380,
+    margin: { t: 48, r: 24, b: 40, l: 72 },
+    legend: { orientation: 'h', y: -0.18 },
+  }}
+/>
+
+The raw bulk — ten search-result blobs plus full HTML pages — adds up to **75,694 input tokens, and every one of them went into Haiku**, not Opus. Opus only ever saw **13,266 fresh tokens**, about 5.7× less. And note the cache column: Opus runs almost entirely on cache (94,701 read tokens, growing every turn as the conversation is replayed), while **Haiku caches nothing** — its inputs are one-shot, unique, and not worth caching. The expensive model is kept on a strict diet of small, cacheable context; the cheap model eats the firehose.
+
+## What Opus never sees
+
+The server-side `web_search` tool actually returns rich citation objects — each result carries an `encrypted_content` blob and a `page_age` field:
+
+```json
+{
+  "type": "web_search_result",
+  "title": "Releases · qdrant/qdrant",
+  "url": "https://github.com/qdrant/qdrant/releases",
+  "encrypted_content": "EqQSCioIERgCIiQ4YTRm…", // long opaque blob
+  "page_age": "…"
+}
+```
+
+None of this reaches Opus. It's consumed entirely inside the Haiku sub-call. Opus only gets Haiku's plain-text writeup, the list of link URLs, and that injected `REMINDER` to cite them. The model writing your final answer is working from a digest, never the raw evidence.
+
+## Why build it this way
+
+The main model's context is the scarce, expensive resource. Dumping ten raw search results and a full HTML page into Opus would bloat its context and burn premium tokens. So the harness quarantines the bulky, low-value work — running searches, downloading pages, parsing messy HTML — inside Haiku, runs it in parallel for speed, and lets Opus read only the distilled output. It's a clean-desk policy: the senior model reads one-paragraph briefings, not the pile of source documents.
+
+There's a nice accident that shows the value of the redundancy. In one run, the Haiku _fetch_ sub-call misread a date as "released on June 4, **2024**", while the Haiku _search_ sub-call had it right at **2026** — and Opus, seeing both, sided with the search result. Two independent cheap reads cross-checking each other.
+
+## Key Takeaways
+
+- **The expensive model never touches the internet.** Opus calls `WebSearch`/`WebFetch` as client-side tools; the harness intercepts them and delegates to `claude-haiku-4-5`. One simple web query fanned out into **six** `/v1/messages` calls — four Opus, two Haiku.
+- **It's plan-then-scatter-gather, and the scatter is parallel.** Asked to compare three databases, Opus emitted all three searches in one turn and the harness ran the Haiku searches **concurrently** (three searches starting within 0.2s of each other), then gathered the results for the next turn.
+- **Searching and fetching are split across actors.** The search runs server-side on Anthropic's backend (via Haiku holding `web_search_20250305`, capped at `max_uses: 8`); the page download runs on the harness on your own machine, gated by a `domain_info` policy check that returns `{ can_fetch }`.
+- **The cheap model absorbs the firehose.** Across one run, Haiku ingested **75,694 input tokens** of raw search results and HTML versus Opus's **13,266 fresh** — and Opus rode 94,701 cached tokens while Haiku cached nothing. That asymmetry _is_ the design.
+- **Opus works from a digest, never raw evidence.** Citation payloads (`encrypted_content`, `page_age`) stay trapped in the Haiku layer; only plain-text summaries, link lists, and an injected "you MUST cite sources" reminder reach the model that writes your answer.
