@@ -1,0 +1,146 @@
+---
+title: 'You can fake every statistic of an embedding and still fail'
+date: '2026-07-02'
+lastmod: '2026-07-02'
+tags: ['embeddings', 'vector-search', 'geometry', 'information-retrieval']
+draft: false
+summary: "I tried to build fake embeddings that match real ones. Matching all five popular structure metrics was easy — and the result was still a useless fog. The thing that actually worked was copying the geometry locally, which also tells you what a transformer's 24 layers are each doing."
+images: []
+authors: ['default']
+---
+
+> TL;DR at the [bottom](#key-takeaways). DM me on [X](http://kshivendu.dev/x) or [LinkedIn](http://kshivendu.dev/linkedin) if I got something wrong :)
+
+In the [last post](/blog/random-embeddings) I argued that "structure" is just the compute an encoder froze into geometry, and that an index can't fake it after the fact. That left me with an obvious itch: can _I_ fake it? Not by training a model — just by writing down a generator that spits out vectors as real-looking and real-_shaped_ as [`mxbai-embed-large-v1`](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1)'s.
+
+Short version: matching the numbers everyone quotes was easy, and it produced garbage. Here's what went wrong and what finally worked.
+
+## 🎯 Matching real embeddings by the numbers
+
+There are five metrics people reach for to describe an embedding space (I go into them in the [anisotropy](/blog/embedding-anisotropy) posts): intrinsic dimension, IsoScore, participation ratio, average-cosine anisotropy, and mean nearest-neighbor cosine. So I built a generator to hit all five: a Gaussian mixture, generated inside real mxbai's own covariance eigenbasis, with the cluster spread copied from real's spectrum. A bit of coordinate-descent tuning on three knobs (cluster count, within-cluster spread, off-center mean) and it lands right on top of real, validated at 10,000 vectors:
+
+<div style={{overflowX: 'auto'}}>
+
+| metric              | real mxbai | my fake |
+| ------------------- | ---------: | ------: |
+| intrinsic dim       |       14.3 |    14.4 |
+| IsoScore            |      0.128 |   0.125 |
+| participation ratio |        132 |     129 |
+| anisotropy          |      0.390 |   0.397 |
+| nn-cosine           |      0.732 |   0.698 |
+
+</div>
+
+Five for five, within noise. By every number the field uses, this fake _is_ a real embedding space. So I plotted it next to real (UMAP fit on real, both clouds dropped into the same map) expecting them to overlap.
+
+## 🌫️ ...and it's a fog
+
+![Real embeddings vs my statistics-matched fake vs local-PCA, in the same UMAP projection](/static/images/blogs/shape-real-vs-synthetic.png)
+
+Real (left) is **tight clumps with big empty gaps**. My fake (middle) is a **diffuse fog** that smears across the gaps real leaves empty. Same five numbers, completely different shape. And it's not just cosmetic: build an HNSW index over each and the fog needs **~44% more distance comparisons per query** (1,464 vs 1,017 at 10k) to hit the same recall. Compared to the [last post's](/blog/random-embeddings) numbers (random ~1,875, real ~1,020), the fog lands right in between — matching real's stats bought back about half the search gap, and no more. Statistically real, geometrically halfway.
+
+Worse, I traced _why_. Participation ratio wants the variance spread evenly across many directions (~132 of them here), and the only way to get that from a mixture is near-uniform cluster sizes — which is exactly what smears tight clumps into fog. So **chasing one of the five numbers actively broke the shape.** The metrics weren't just insufficient; one was fighting me.
+
+### A ruler that actually sees shape
+
+The five metrics are all _global averages_ over the whole cloud. Shape is _local_. So I need a local ruler. The one that works is a **k-NN two-sample test** (a classifier two-sample test, or [C2ST](https://arxiv.org/abs/1610.06545)): pool the real and fake points, and for each point ask what fraction of its nearest neighbors come from the _other_ set. If the two clouds are genuinely the same, any point is surrounded by a coin-flip mix, so the score sits at **0.5**. If they're distinguishable, points cluster with their own kind and it drops toward 0.
+
+The trick that makes it trustworthy: calibrate it with a **real-vs-held-out-real** ceiling. Split real embeddings in two and score them against each other — that tells you what "identical" actually looks like at this sample size (it's ~0.50, as it should be). Then:
+
+<div style={{overflowX: 'auto'}}>
+
+| cloud                           | c2st (→ 0.50 = identical) |
+| ------------------------------- | ------------------------: |
+| real vs held-out real (ceiling) |                  **0.50** |
+| my statistics-matched fog       |                  **0.21** |
+| local-PCA fake (next section)   |                  **0.48** |
+
+</div>
+
+The fog scores 0.21 — a classifier separates it from real almost perfectly, even though all five summary stats say they're identical. (One aside worth its own line, promised from the last post: **average-cosine anisotropy is the worst of the five** — it reads ~0 for random noise _and_ for tightly structured synthetic data, only firing for real embeddings' off-center [cone](/blog/embedding-anisotropy). IsoScore and intrinsic dimension are far better, but as we just saw, none of them catches shape.)
+
+## 🧩 The fix: copy the geometry locally
+
+Here's what my fog got wrong. A single Gaussian mixture uses _one_ global covariance for the whole space, so it fills the entire ellipsoid real lives inside — including the empty parts real never visits. Real embeddings sit on a _curved, clumpy_ surface inside that ellipsoid. To match the surface you have to describe it **locally**: chop the cloud into patches, and give each patch its own shape.
+
+That's one formula, applied per patch:
+
+<p style={{ textAlign: 'center', fontSize: '1.15em' }}>
+  point = normalize( <b>m</b> + <b>V</b> · ( √<b>Λ</b> · z ) )
+</p>
+
+Start with a ball of random noise `z`, **stretch** it by the patch's variances (√Λ), **rotate** it into the patch's orientation (V), **shift** it to the patch's center (m), and **normalize** onto the sphere (embeddings are compared by cosine, so only direction matters). One patch is one blob; real embeddings are ~120 of these tiling a curved surface. It's [local PCA](https://en.wikipedia.org/wiki/Principal_component_analysis), basically.
+
+The four operations are much easier to feel than to read, so here's the whole thing as something you can poke — step through the formula, then watch why one blob fails and many local blobs succeed:
+
+<ResizingIframe
+  src="/static/interactives/blob_recipe.html"
+  title="Interactive: building an embedding from noise via stretch, rotate, shift, normalize — then local-PCA patches"
+/>
+
+Do this — give each of ~120 patches its own local covariance — and the fake jumps from c2st 0.21 to **0.48**, right at the 0.50 ceiling (the green cloud in the image above). It's a real generative model — ~120 patches of parameters, not a copied covariance. The fog was never a tuning problem; it was using one description where the data needed a hundred local ones.
+
+## 🧠 What this says about the model's own layers
+
+Once you have a ruler that sees shape and a generator that matches it, you can point both at mxbai's _own internals_ — the word-embedding table, and each of the 24 transformer layers — and ask what the model is doing to the geometry as a token becomes a sentence. Following ~850 tokens through the layers:
+
+<PlotlyChart
+  data={[
+    {
+      name: 'intrinsic dimension',
+      x: ['WE', 'L0', 'L3', 'L6', 'L12', 'L18', 'L24'],
+      y: [0.2, 0.4, 4.9, 5.1, 5.3, 4.7, 5.4],
+      type: 'scatter',
+      mode: 'markers+lines',
+      marker: { size: 9, color: '#6366f1' },
+      yaxis: 'y',
+    },
+    {
+      name: 'shape fidelity (c2st → 0.50)',
+      x: ['WE', 'L0', 'L3', 'L6', 'L12', 'L18', 'L24'],
+      y: [0.49, 0.44, 0.4, 0.44, 0.44, 0.43, 0.46],
+      type: 'scatter',
+      mode: 'markers+lines',
+      marker: { size: 9, color: '#10b981' },
+      yaxis: 'y2',
+    },
+  ]}
+  layout={{
+    title: { text: 'mxbai token geometry, layer by layer', font: { size: 15 } },
+    xaxis: { title: 'stage (word embedding → final layer)' },
+    yaxis: { title: 'intrinsic dim', range: [0, 6] },
+    yaxis2: { title: 'c2st', overlaying: 'y', side: 'right', range: [0.3, 0.55] },
+    height: 400,
+    margin: { t: 48, r: 60, b: 56, l: 56 },
+    legend: { orientation: 'h', y: -0.25 },
+  }}
+/>
+
+The headline is **de-duplication**. In running text the word "the" shows up many times, and the word-embedding layer gives every copy the _identical_ vector — so the token cloud starts as a pile of stacked duplicates (identical points have nowhere to vary, so intrinsic dim starts near 0). By layer 3, attention has folded in enough context that every token is distinct, and the cloud inflates into a genuine ~5-dimensional manifold. Then it **stops growing**: intrinsic dim plateaus at ~5 all the way to the final layer, while the cloud gets steadily more anisotropic and tightly clustered (nn-cosine climbs to 0.95). The searchable, cone-shaped geometry that everything downstream depends on is _built by the layers_ — it isn't sitting in the word table waiting.
+
+Poke at any stage yourself — drag to layer 3 and watch the intrinsic dim collapse (duplicates) then inflate (context):
+
+<ResizingIframe
+  src="/static/interactives/layer_explorer.html"
+  title="Interactive: mxbai geometry at every layer — pick a stage and see real vs synthetic, shape fidelity, and metrics"
+/>
+
+The green curve is the fun part: **local-PCA reproduces every single layer** (c2st ~0.4–0.49 against the 0.50 ceiling), while the single-Gaussian fog fails at all of them. So it's never a plain blob at any layer; it's always a curved sheet of clusters getting rearranged. The one dip is layer 3, where the duplicates dissolve and the geometry is most in flux — the hardest layer to fake, which feels right.
+
+One more thing, since it connects to [Matryoshka truncation](/blog/matryoshka-cliff): the _full_ word-embedding matrix (all 30,522 tokens) is a big, loose, ~32-dimensional dictionary — isotropic only compared to what the model does to it later (IsoScore 0.23, versus 0.80+ deep in the stack), with a random word's nearest neighbor sitting way out at cosine 0.53. Keep just the first 64 Matryoshka dimensions and the structure survives (intrinsic dim barely drops, 32 → 30) but it gets **crowded**: IsoScore jumps to 0.80 and the shape becomes measurably harder to reproduce (c2st 0.49 → 0.40). Truncation packs the structure tighter; it doesn't destroy it.
+
+## 📌 Key takeaways
+
+- **Matching the five standard metrics is not enough.** A generator can hit real mxbai's intrinsic dim, IsoScore, participation ratio, anisotropy, and nn-cosine (all five, at 10k) and still be a diffuse fog that's ~44% more expensive to search. Those metrics are global averages; shape is local.
+- **Chasing a metric can break the thing you care about.** Forcing participation ratio to match required near-uniform clusters, which smeared the clumps. The metric fought the shape.
+- **Use a k-NN two-sample test, calibrated by a real-vs-real ceiling.** It reads ~0.50 for identical clouds; the fog scored 0.21. It's the only ruler here that actually saw the shape gap.
+- **The fix is local geometry.** `normalize(m + V·√Λ·z)` per patch — ~120 local covariances instead of one global one — takes the fake from 0.21 to 0.48. One description where the data needed a hundred.
+- **A transformer de-duplicates, then refines.** The word table is a loose ~32-dim near-isotropic dictionary; the first few layers inflate stacked duplicates into a ~5-dim contextual manifold, and the rest tighten and tilt it into the searchable cone. Local-PCA reproduces every layer; a single Gaussian reproduces none.
+
+## 🔭 Closing thoughts
+
+I started out wanting to fake an embedding space and mostly learned how bad our usual rulers are. Five metrics that the whole field quotes, and you can satisfy all of them while producing something visibly and measurably wrong. The honest measure turned out to be the dumb one — "can a nearest-neighbor classifier tell the two clouds apart?" — and the honest _fix_ was equally blunt: stop describing the cloud with one global shape, and describe it locally.
+
+The part I didn't expect was how cleanly the same two tools read the model's own layers: you can watch a transformer take a dictionary of stacked word-copies and, in about three layers, inflate it into the low-dimensional clustered manifold that everything downstream depends on. Which closes the loop from the last post — structure really is just cached compute, and now we can watch it being cached, one layer at a time.
+
+Thanks for reading! DM me on [X](http://kshivendu.dev/x) or [LinkedIn](http://kshivendu.dev/linkedin) if you want to nerd out or tell me I'm wrong.

@@ -3,23 +3,23 @@ title: 'Understanding Random Embeddings'
 date: '2026-06-29'
 lastmod: '2026-06-29'
 tags: ['vector-search', 'embeddings', 'hnsw', 'information-retrieval']
-draft: true
+draft: false
 summary: "High-dimensional random vectors are nearly equidistant — the 'nearest neighbor' is barely nearer than nothing, and a search index has nothing to navigate by. I unpack what that means, what 'structure' is the cure for, and what structure actually buys: mostly compute, not recall."
 images: []
 authors: ['default']
 ---
 
-> Looking for TL;DR? Skip to [key takeaways](#key-takeaways)
+> Looking for TL;DR? Skip to [key takeaways](#key-takeaways). And feel free to DM me on [X](http://kshivendu.dev/x) or [LinkedIn](http://kshivendu.dev/linkedin) if I got something wrong :)
 
-Generate 8,000 random 1024-dimensional unit vectors and ask a simple question: which vector is any given vector's nearest neighbor, and how near is it? The answer barely means anything. The closest of all 8,000 sits at cosine **0.12**; a random pair sits at **0.00**. The "nearest neighbor" is almost exactly as far away as everything else.
+I've always heard that random vectors are useless for search, but I wanted to actually see it. So I generated 8,000 random 1024-dimensional unit vectors and asked the simplest question I could: for any given vector, which one is its nearest neighbor, and how near is it?
 
-Do the same with real embeddings — [`mxbai-embed-large-v1`](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1) over 8,000 short text strings, same count, same 1024 dimensions — and the picture is completely different: the nearest neighbor sits at cosine **0.73**, the median pair at **0.39**. There's a real gap between "near" and "typical."
+The closest of all 8,000 sits at cosine **0.12**. A random pair sits at **0.00**. So the "nearest neighbor" is basically the least-far of 8,000 roughly-equidistant points — there's nothing special about it.
 
-That gap is the entire game. Nearest-neighbor search lives or dies on it. This post is about what random high-dimensional vectors actually look like, why search can't do anything with them, and what "structure" means as the cure — measured by what it does to search compute and recall.
+Now the same test with real embeddings ([`mxbai-embed-large-v1`](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1) over 8,000 short text strings, same count, same 1024 dims): the nearest neighbor sits at **0.73**, the median pair at **0.39**. Look at that for a second — a real embedding's _typical_ pair (0.39) is already closer than random's _best_ neighbor of 8,000 (0.12). The whole distribution is shifted. That 0.12-vs-0.73 gap is what this whole post is about — why random vectors don't have it, what "structure" is as the cure, and what that structure actually buys you (mostly compute, it turns out, not recall).
 
-## Random vectors have no neighbors
+## 🎲 Random vectors don't have neighbors
 
-In high dimensions, random points concentrate: nearly all pairwise distances pile up around the same value. This is the [concentration of distances](https://en.wikipedia.org/wiki/Curse_of_dimensionality#Nearest_neighbor_search), and it's been known to break nearest-neighbor search since [Beyer et al. (1999)](https://link.springer.com/chapter/10.1007/3-540-49257-7_15) asked "when is nearest neighbor meaningful?". For random unit vectors the answer is: essentially never. Two random directions in 1024-d are almost always orthogonal (cosine ≈ 0), and even the closest of thousands is only nudged off orthogonal.
+In high dimensions, random points concentrate: nearly all pairwise distances pile up around the same value. This is the [concentration of distances](https://en.wikipedia.org/wiki/Curse_of_dimensionality#Nearest_neighbor_search), and it's been known to break nearest-neighbor search since [Beyer et al. (1999)](https://link.springer.com/chapter/10.1007/3-540-49257-7_15) asked "when is nearest neighbor meaningful?". For random unit vectors the answer is: essentially never. Two random directions in 1024-d are almost always orthogonal (cosine ≈ 0), and even the closest of 8,000 only gets nudged to 0.12.
 
 Here's the contrast directly — the cosine to a vector's nearest neighbor, its 10th neighbor, and a typical (median) pair:
 
@@ -58,9 +58,9 @@ For real embeddings the bars fall off a cliff: the nearest is much closer than t
 
 Why is the random "nearest neighbor" so far away? Because in high dimensions, almost every pair of vectors is **perpendicular**.
 
-## In high dimensions, everything is perpendicular
+## 📐 In 1024 dimensions, everything is perpendicular
 
-Pick two random directions in `d` dimensions and measure the cosine between them. In 2D or 3D they're often quite aligned. As `d` grows, the cosine concentrates hard around 0 — two random unit vectors are almost certainly nearly orthogonal. Drag the dimension below and hit resample; watch the distribution of pairwise cosines collapse onto 0:
+Here's the part I found genuinely unintuitive. Pick two random directions in `d` dimensions and measure the cosine between them. In 2D or 3D they're often fairly aligned. But as `d` grows, the cosine concentrates around 0, so two random unit vectors are almost always nearly orthogonal. Drag the dimension below and hit resample to watch the distribution of pairwise cosines collapse onto 0:
 
 <HighDimOrthogonality />
 
@@ -100,7 +100,7 @@ The width of that distribution shrinks as exactly **1/√d**. The intuition: a u
   }}
 />
 
-The consequence is brutal for search. By 1024 dimensions, **99.9% of random pairs sit within ±0.1 cosine of perfectly orthogonal** — up from 6.5% in 2D:
+This is what wrecks search. In 2D, only **6.5%** of random pairs are near-perpendicular (within ±0.1 cosine of orthogonal) — you can picture that. By 1024-d it's **99.9%**:
 
 <div style={{overflowX: 'auto'}}>
 
@@ -114,13 +114,13 @@ The consequence is brutal for search. By 1024 dimensions, **99.9% of random pair
 
 </div>
 
-When everything is perpendicular to everything else, "nearest" stops meaning anything: no direction is meaningfully closer than any other. That's the geometry real embeddings have to escape — and the rest of this post is about how they do it.
+When everything is perpendicular to everything else, "nearest" stops meaning much: no direction is meaningfully closer than any other. That's the geometry real embeddings escape — the rest of the post is how.
 
-## What that costs a search index
+## 🔍 What that costs a search index
 
-[HNSW](https://arxiv.org/abs/1603.09320) finds nearest neighbors by greedily walking a graph: from some entry node, hop to whichever neighbor is closer to the query, repeat. The walk only works if there's a distance _gradient_ to follow — each step has to get meaningfully closer. Random vectors have no gradient (every direction is ~equidistant), so the walk wanders and the index has to compensate by exploring far more candidates.
+So what does this cost an actual index? [HNSW](https://arxiv.org/abs/1603.09320) finds nearest neighbors by greedily walking a graph: from some entry node, hop to whichever neighbor is closer to the query, repeat. That only works if there's a distance _gradient_ to follow, i.e. each step has to get you meaningfully closer. Random vectors have no gradient (every direction is ~equidistant), so the walk wanders and the index has to explore far more candidates to compensate.
 
-I built HNSW indexes (M=16, efConstruction=200) over both datasets and swept the search-time effort knob `efSearch`, measuring recall@10 against exact brute force and the query latency. Mechanism first, then the numbers: real data should converge quickly and cheaply; random data should need a much wider search for less reward.
+I built HNSW indexes (M=16, efConstruction=200) over both datasets and swept the search-effort knob `efSearch`, measuring recall@10 against exact brute force plus query latency:
 
 <PlotlyChart
   data={[
@@ -163,17 +163,17 @@ I built HNSW indexes (M=16, efConstruction=200) over both datasets and swept the
   }}
 />
 
-Real embeddings hit **0.90 recall by efSearch=32**, at **0.016ms** per query, and stay pinned there. Random embeddings never reach it: even at efSearch=256 — **8× the search effort and 5× the latency** — they top out at **0.855**, and the gap only closes slowly because the search is fighting the geometry. Note that this is the _same index algorithm, the same 1024 dimensions, the same 8,000 vectors_. The only thing that changed is whether the vectors have structure.
+Real embeddings hit **0.90 recall by efSearch=32**, at **0.016ms** per query, and stay pinned there. Random never gets there: even at efSearch=256 (8× the effort, 5× the latency) it tops out at **0.855**. Note that this is the same index, same 1024 dims, same 8,000 vectors. The only thing that changed is whether the vectors have structure, and you can't `efSearch` your way out of geometry.
 
-## So what is "structure"?
+## 🧱 So what is structure, then?
 
-"Structure" is vague, so let me make it operational: I started from pure random vectors and injected structure three ways, then watched what each does to search. Each is a knob from "random" toward "real."
+"Structure" is a vague word, so let me pin it to something I can measure. I started from pure random vectors and injected structure three ways, then watched what each did to search. Each is a knob from "random" toward "real":
 
 1. **Low intrinsic dimension** — generate the vectors inside an `r`-dimensional subspace, then embed that into 1024-d. Sweep `r` from 2 to 1024.
 2. **Spectral decay** — keep all 1024 dimensions but scale them by a decaying spectrum (`i^(-α/2)`), so a few directions dominate. Sweep `α`. This is the [anisotropy](/blog/embedding-anisotropy) real embeddings are famous for.
 3. **Clusters** — draw the vectors from a mixture of 64 centers and sweep how tight the clusters are.
 
-To put all three knobs on a common axis I use **intrinsic dimension** — roughly, how many numbers you'd actually need to pin down a point, regardless of how many it's stored with. A sheet of paper crumpled inside a 3D room is still intrinsically 2D; random vectors are the opposite, using up nearly every dimension they're given. I estimate it with the [TwoNN](https://www.nature.com/articles/s41598-017-11873-y) method (random data comes out at ~230, real mxbai at ~**14**). Plotting query latency against intrinsic dimension (each point is one setting; lower-left is cheaper) separates two distinct mechanisms:
+To put all three knobs on a common axis I use **intrinsic dimension** — roughly, how many numbers you'd actually need to pin down a point, regardless of how many it's stored with. A sheet of paper crumpled inside a 3D room is still intrinsically 2D; random vectors are the opposite, using up nearly every dimension they're given. I estimate it with [TwoNN](https://www.nature.com/articles/s41598-017-11873-y), a standard intrinsic-dimension estimator — and the contrast is the key number here: **random comes out ~230, real mxbai ~14**. Plotting query latency against intrinsic dimension (each point is one knob setting; hover to see which; lower-left is cheaper) separates two distinct mechanisms:
 
 <PlotlyChart
   data={[
@@ -184,6 +184,8 @@ To put all three knobs on a common axis I use **intrinsic dimension** — roughl
       mode: 'markers+lines',
       type: 'scatter',
       marker: { size: 9, color: '#6366f1' },
+      text: ['subspace r=2', 'r=8', 'r=32', 'r=128', 'r=512', 'r=1024'],
+      hovertemplate: '%{text}<br>intrinsic dim %{x}<br>%{y} ms<extra></extra>',
     },
     {
       name: 'spectral decay',
@@ -192,6 +194,8 @@ To put all three knobs on a common axis I use **intrinsic dimension** — roughl
       mode: 'markers+lines',
       type: 'scatter',
       marker: { size: 9, color: '#8b5cf6' },
+      text: ['α=3.0', 'α=2.0', 'α=1.5', 'α=1.0', 'α=0.5', 'α=0.25'],
+      hovertemplate: 'spectral %{text}<br>intrinsic dim %{x}<br>%{y} ms<extra></extra>',
     },
     {
       name: 'clusters (tightening)',
@@ -200,6 +204,8 @@ To put all three knobs on a common axis I use **intrinsic dimension** — roughl
       mode: 'markers+lines',
       type: 'scatter',
       marker: { size: 9, color: '#10b981' },
+      text: ['loose c=0.25', 'c=0.5', 'c=1', 'c=2', 'c=4', 'tight c=8'],
+      hovertemplate: 'clusters %{text}<br>intrinsic dim %{x}<br>%{y} ms<extra></extra>',
     },
     {
       name: 'random (anchor)',
@@ -240,7 +246,7 @@ To put all three knobs on a common axis I use **intrinsic dimension** — roughl
 **Two mechanisms, and they're not the same:**
 
 - **Lowering effective dimensionality** (subspace rank _or_ spectral decay) helps, and the gain _tracks intrinsic dimension_ — both curves slide down-and-left together. This is the direct cure for distance concentration: collapse onto a low-dimensional surface and neighbors become meaningful again.
-- **Clustering helps through a different door.** As clusters tighten, latency drops **4–5×** (0.056 → 0.013ms) while the intrinsic dimension stays _high_ (~145). The cluster points fall almost straight down, off the dimensionality trend. Clusters don't reduce dimensionality — they create separable basins, so the greedy walk routes between blobs cheaply even though each blob is still high-dimensional. The intrinsic-dimension estimate can't even see this win.
+- **Clustering helps through a different door.** As clusters tighten, latency drops **4–5×** (0.056 → 0.013ms) while the intrinsic dimension stays _high_ (~145). The cluster points fall almost straight down, off the dimensionality trend. Think of the clusters as islands: the greedy walk ferries to the right island cheaply, then does the fine search locally. That's a different win from low dimensionality, and the intrinsic-dimension estimate can't even see it.
 
 Real mxbai (the red star) has both: a low intrinsic dimension (~14) _and_ cluster structure — which is why it sits where it does, far cheaper than random.
 
@@ -276,41 +282,13 @@ There's a second, quieter result hiding in this sweep. **Structure mostly buys c
 
 </details>
 
-## How do you measure structure?
+### For search, isotropy is the enemy
 
-I've been waving at "structure" — low intrinsic dimension, clusters, anisotropy. Can we put a single number on it? Four candidate measures, computed on every dataset (latency from the sweep above, for reference):
+Here's the part that cuts against standard advice. Random vectors are the _most_ isotropic data you can have — they fill every dimension equally — and they're the _worst_ to search. Every structured dataset above is _less_ isotropic than random. So the usual NLP framing of "isotropy good, anisotropy bad" is about a different problem ([cosine saturation in similarity scores](/blog/embedding-anisotropy)); for nearest-neighbor _search_ you actually want anisotropy, because variance piled into fewer directions is what gives the greedy walk a gradient to follow. (Which single number best measures "structure" — and why the average-cosine anisotropy the field leaned on for years barely detects it — is a rabbit hole I save for the [follow-up post](/blog/faking-embeddings).)
 
-<div style={{overflowX: 'auto'}}>
+## 🚫 You can't bolt structure on at index time
 
-| dataset         | anisotropy | IsoScore | participation ratio | intrinsic dim |  HNSW latency |
-| --------------- | ---------: | -------: | ------------------: | ------------: | ------------: |
-| random          |      +0.00 | **0.89** |                 908 |           230 |     0.0578 ms |
-| intrinsic r=8   |       0.00 |     0.01 |                   8 |             7 |     0.0242 ms |
-| intrinsic r=128 |       0.00 |     0.11 |                 113 |            65 |     0.0537 ms |
-| spectral α=0.5  |       0.00 |     0.48 |                 494 |           177 |     0.0546 ms |
-| spectral α=3    |       0.00 |     0.00 |                   2 |            12 |     0.0172 ms |
-| clusters c=0.5  |      +0.00 |     0.57 |                 582 |           154 |     0.0339 ms |
-| clusters c=8    |      +0.02 |     0.06 |                  61 |           140 | **0.0128 ms** |
-| real (mxbai)    |  **+0.39** |     0.13 |                 132 |            14 |     0.0372 ms |
-
-</div>
-
-- **Anisotropy** — the average cosine between random pairs ([Mu & Viswanath](https://arxiv.org/abs/1702.01417), [Ethayarajh](https://arxiv.org/abs/1909.00512)). 0 means random pairs are orthogonal on average.
-- **IsoScore** ([Rudman et al. 2022](https://aclanthology.org/2022.findings-acl.262/)) — how uniformly variance spreads across dimensions, PCA-reoriented and mean/scale-invariant. 1 = fully isotropic, 0 = one direction dominates.
-- **Participation ratio** — `(Σλ)² / Σλ²` over the covariance eigenvalues: the linear "effective dimension."
-- **Intrinsic dimension** (TwoNN) — the nonlinear, local version from above.
-
-Two things jump out.
-
-**Average-cosine anisotropy is almost useless here.** It's ~0 for random _and_ for every synthetic-structured dataset — even the r=8 subspace, which is as structured as data gets. It only fires for real mxbai (+0.39), and what it detects there is narrow and specific: real embeddings sit in an [off-center cone](/blog/embedding-anisotropy) (a shared "common direction"), which is a different thing from low dimensionality or clustering. This is exactly the [critique that motivated IsoScore](https://aclanthology.org/2022.findings-acl.262/) — a point cloud can be intensely structured and still look perfectly "isotropic" by average cosine.
-
-**For nearest-neighbor search, isotropy is the enemy.** Note the twist: random vectors are the _most_ isotropic thing in the table (IsoScore 0.89 — they fill every dimension equally) and the _worst_ to search. Every structured dataset has _lower_ IsoScore. So the usual NLP framing — "isotropy good, anisotropy bad" — is about a different problem (cosine saturation). For search you _want_ anisotropy: variance piled into fewer directions is exactly what gives the greedy walk a gradient to follow.
-
-Which single number best predicts whether search is cheap? Honestly, none of them nails it — and the reason is the two mechanisms from the last section. IsoScore, participation ratio, and intrinsic dimension all measure _how many dimensions the data really uses_, so they track the low-effective-dimension story well; but none cleanly captures _clustering_. Look at `clusters c=8`: intrinsic dimension stays high (~140, every cluster is locally high-dimensional) yet it's the cheapest of all to search. There's no one scalar for "structure" — but if you only get one, intrinsic dimension or IsoScore both beat the average-cosine anisotropy the field leaned on for years.
-
-## You can't add structure in the index
-
-If structure is what makes search cheap, the obvious next question is whether you can bolt it on _after_ the embeddings are fixed — at index-build time, keeping the vectors (and therefore the true neighbors, and recall) untouched. I tried the three natural levers. All three are negatives, and the negatives are the point.
+If structure is what makes search cheap, can you just bolt it on _after_ the embeddings are fixed, at index-build time, without touching the vectors (so recall stays put)? I tried the three obvious levers. All three came up empty, and the empty results are the interesting part.
 
 **Insertion order.** HNSW is built incrementally, so the order you insert vectors changes the graph. I tried inserting cluster-by-cluster, cluster-medoids-first, and densest-points-first against a random baseline. The graph changes; the cost doesn't.
 
@@ -352,12 +330,21 @@ The reassuring part: across all those different graphs, recall and latency are s
 
 </details>
 
-## Key Takeaways
+## 📌 Key takeaways
 
-- **High-dimensional random vectors have no neighbors.** The nearest of 8,000 random 1024-d vectors sits at cosine 0.12 vs 0.00 for a random pair — barely nearer than nothing. Real embeddings show a real gap (0.73 vs 0.39), and that gap is what nearest-neighbor search depends on.
-- **In high dimensions, everything is perpendicular.** The cosine between two random vectors concentrates at 0 with spread exactly 1/√d; by 1024-d, 99.9% of random pairs are within ±0.1 of orthogonal. With no direction meaningfully closer, "nearest" loses its meaning.
-- **Random embeddings are expensive to search and cap out lower.** Same index, same dimensions: real hits 0.90 recall at efSearch=32; random never beats 0.855 even at 8× the search effort.
-- **"Structure" is two things.** Low effective dimensionality (cures distance concentration; gain tracks intrinsic dim) and clustering (separable basins; 4–5× cheaper search _independent_ of dimensionality). Real embeddings have both — intrinsic dimension ~14 plus clusters.
+- **Random vectors have no neighbors.** The nearest of 8,000 random 1024-d vectors sits at cosine 0.12 vs 0.00 for a random pair. Real embeddings show a real gap (0.73 vs 0.39), and that gap is what nearest-neighbor search runs on.
+- **In 1024 dimensions, everything is perpendicular.** The cosine between two random vectors concentrates at 0 with spread 1/√d; by 1024-d, 99.9% of random pairs are within ±0.1 of orthogonal, so "nearest" barely means anything.
+- **Random embeddings are expensive to search and cap out lower.** Same index, same dims: real hits 0.90 recall at efSearch=32; random never beats 0.855 even at 8× the effort.
+- **"Structure" is two separate things.** Low effective dimensionality (cures distance concentration; the gain tracks intrinsic dim) and clustering (separable basins; 4–5× cheaper search, independent of dimensionality). Real embeddings have both: intrinsic dim ~14 plus clusters.
 - **Structure mostly buys compute, not recall.** Past the random→structured jump, recall pins at the HNSW ceiling; the big wins are all in latency.
-- **For search, isotropy is the enemy.** Random is the most isotropic data and the worst to search. Average-cosine anisotropy barely detects structure (it only flags real's off-center cone); IsoScore and intrinsic dimension capture it far better — though no single scalar fully predicts search cost, because clustering is a separate axis.
+- **For search, isotropy is the enemy.** Random is the most isotropic data and the worst to search. You want variance piled into fewer directions, not spread evenly.
+
+## 🔭 Closing thoughts
+
+The thing I keep coming back to: structure isn't something the index provides, it's the compute the encoder already did, frozen into the geometry. A trained embedding model spends a forward pass folding a sentence onto a low-dimensional, clustered surface, and the index just cashes that check at query time. Random vectors never had a forward pass, so there's nothing to cash, and no amount of `efSearch` or clever insertion order can invent it after the fact.
+
+Which raises the obvious next question: if structure is just cached compute, can we _manufacture_ it directly, without training a model? Can you write down a generator that produces vectors as searchable as real ones? I tried, and the short version is: you can match every aggregate statistic of real embeddings and _still_ fail a shape test, until you copy the geometry locally. That's the [follow-up post](/blog/faking-embeddings) — plus a look at what mxbai's own 24 layers are each doing to the geometry, from the raw word-embedding table to the final sentence vector.
+
+Thanks for reading! Feel free to DM me on [X](http://kshivendu.dev/x) or [LinkedIn](http://kshivendu.dev/linkedin) if you spot a mistake or want to nerd out about this.
+
 - **You can't add structure in the index.** Insertion order and smart entry points give nothing at this scale (the base-layer beam dominates, not the descent); `M`/`efConstruction` only trade compute for recall. The geometry is set when the embeddings are made — the index can't fake it.
