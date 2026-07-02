@@ -1,0 +1,363 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How random noise becomes an embedding</title>
+<style>
+ :root{color-scheme:dark}
+ *{box-sizing:border-box}
+ body{margin:0;background:#0a0d14;color:#dbe4f0;font:14px/1.55 ui-sans-serif,system-ui,Segoe UI,Roboto,sans-serif}
+ .wrap{max-width:1000px;margin:0 auto;padding:22px 18px 80px}
+ h1{font-size:25px;margin:0 0 4px;color:#fff}
+ h2{font-size:18px;margin:34px 0 2px;color:#fff}
+ .lead{color:#9fb0c6;font-size:14px;margin:0 0 8px}
+ .sub{color:#8a99b0;font-size:13.5px;margin:0 0 12px}
+ .prior{color:#7fb2ff;font-size:13px;margin:0 0 10px;border-left:2px solid #274468;padding-left:10px}
+ .card{background:#0e131d;border:1px solid #1c2636;border-radius:12px;padding:16px;margin-top:12px}
+ .card.task{border-color:#2c5a3a;background:#0c1712}
+ .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+ button{background:#15202f;color:#cfe0f5;border:1px solid #26344a;border-radius:7px;padding:6px 12px;font:inherit;cursor:pointer}
+ button.on{background:#2563c9;border-color:#2563c9;color:#fff}
+ button:hover{border-color:#3a76e0}
+ button.big{padding:8px 16px;font-weight:600}
+ input[type=range]{accent-color:#22c55e;width:100%}
+ canvas{display:block;width:100%;background:#080b11;border-radius:10px}
+ .muted{color:#8a99b0;font-size:12.5px}
+ .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:16px}
+ @media(max-width:780px){.grid{grid-template-columns:1fr}}
+ .sl{display:flex;align-items:center;gap:8px;margin:6px 0}
+ .sl label{width:104px;color:#aebed4;font-size:12.5px}
+ .sl .v{width:46px;text-align:right;font-variant-numeric:tabular-nums;color:#fff;font-size:12.5px}
+ .formula{font-size:20px;letter-spacing:.4px;text-align:center;margin:2px 0 12px;font-variant-numeric:tabular-nums}
+ .chip{padding:2px 8px;border-radius:6px;border:1px solid transparent;transition:.2s}
+ .chip.z{color:#f472b6}.chip.stretch{color:#f59e0b}.chip.rot{color:#60a5fa}.chip.shift{color:#34d399}.chip.norm{color:#c084fc}
+ .chip.hot{background:#1a2233;border-color:currentColor;box-shadow:0 0 0 1px currentColor inset}
+ .cap{margin-top:12px;padding:11px 13px;background:#0c1828;border:1px solid #16314e;border-radius:8px;color:#bfe0ff;font-size:13.5px;min-height:40px}
+ .stepdot{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;border-radius:50%;background:#1a2233;color:#8a99b0;font-size:12px;margin-right:6px;cursor:pointer}
+ .stepdot.hot{background:#2563c9;color:#fff}
+ .bar{height:14px;background:#16202e;border-radius:7px;overflow:hidden;flex:1}
+ .bar i{display:block;height:100%;border-radius:7px;transition:width .2s,background .3s}
+ .big-read{font-size:26px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+ code{background:#16202e;padding:1px 5px;border-radius:4px;font-size:12px}
+ .win{color:#7fe0a8;font-weight:600}
+</style></head>
+<body><div class="wrap">
+ <h1>How random noise becomes an embedding</h1>
+ <p class="lead">One formula turns a blob of random numbers into a point shaped like a real embedding:</p>
+ <div class="formula">
+   <span class="chip norm">normalize(</span>
+   <span class="chip shift">m +</span>
+   <span class="chip rot">V ·</span>
+   <span class="chip stretch">√Λ ·</span>
+   <span class="chip z">z</span>
+   <span class="chip norm">)</span>
+ </div>
+ <p class="sub">It looks opaque, so let's <b>watch it happen</b> — one piece at a time, in 2D. The maths is the same in 1024 dimensions; the picture is just flatter. We'll build up to what the actual layers of a real model look like.</p>
+
+ <!-- ============ BEAT 0: the stage ============ -->
+ <h2>0 · First, where do embeddings live?</h2>
+ <p class="sub">Embeddings are compared by <b>cosine</b> — the <em>angle</em> between two vectors, not their length. So length is throwaway, and every vector is really just <b>its tip on the unit circle</b> (a sphere, in 1024-D). That last step, <span class="chip norm">normalize</span>, is just "put the tip on the circle." Learn it first; then it's not a mystery later.</p>
+ <div class="card">
+   <div class="grid">
+     <div><canvas id="cv0" height="330"></canvas></div>
+     <div>
+       <div class="sl"><label>angle of B</label><input type="range" id="b0ang" min="0" max="170" step="1" value="55"><span class="v" id="b0angV"></span></div>
+       <div class="sl"><label>length of B</label><input type="range" id="b0len" min="0.35" max="1.5" step="0.01" value="1.3"><span class="v" id="b0lenV"></span></div>
+       <div style="margin:10px 0"><span class="muted">cosine(A, B) =</span> <span class="big-read" id="b0cos">—</span></div>
+       <button id="b0collapse" class="big">▶ collapse both to the circle</button>
+       <div class="cap" id="cap0"></div>
+     </div>
+   </div>
+ </div>
+
+ <!-- ============ BEAT 1: one point ============ -->
+ <h2>1 · Build one point from pure noise</h2>
+ <p class="prior">You just saw where points end up (the circle). Now watch <em>one</em> random point <span class="chip z">z</span> get there — step through the three operations.</p>
+ <div class="formula" id="f1">
+   <span class="chip norm" id="c_norm">normalize(</span>
+   <span class="chip shift" id="c_shift">m +</span>
+   <span class="chip rot" id="c_rot">V ·</span>
+   <span class="chip stretch" id="c_stretch">√Λ ·</span>
+   <span class="chip z">z</span>
+   <span class="chip norm">)</span>
+ </div>
+ <div class="card">
+   <div class="grid">
+     <div><canvas id="cv1" height="380"></canvas></div>
+     <div>
+       <div class="row"><button id="b1next" class="big">▶ next step</button><button id="b1reset">reset</button>
+         <button id="b1norm" class="on">on the sphere</button></div>
+       <div style="margin:10px 0">
+         <span class="stepdot" data-s="0">z</span><span class="stepdot" data-s="1">√Λ</span><span class="stepdot" data-s="2">V</span><span class="stepdot" data-s="3">+m</span>
+       </div>
+       <div class="muted">the knobs (shared with the sandbox below):</div>
+       <div class="sl"><label>√Λ₁ stretch</label><input type="range" id="l1" min="0.05" max="1.4" step="0.01" value="1.05"><span class="v" id="l1V"></span></div>
+       <div class="sl"><label>√Λ₂ stretch</label><input type="range" id="l2" min="0.05" max="1.4" step="0.01" value="0.32"><span class="v" id="l2V"></span></div>
+       <div class="sl"><label>V rotate</label><input type="range" id="th" min="0" max="360" step="1" value="35"><span class="v" id="thV"></span></div>
+       <div class="sl"><label>m shift x</label><input type="range" id="mx" min="-1.1" max="1.1" step="0.01" value="0.62"><span class="v" id="mxV"></span></div>
+       <div class="sl"><label>m shift y</label><input type="range" id="my" min="-1.1" max="1.1" step="0.01" value="0.28"><span class="v" id="myV"></span></div>
+       <div class="cap" id="cap1"></div>
+     </div>
+   </div>
+ </div>
+
+ <!-- ============ BEAT 2: the cloud ============ -->
+ <h2>2 · Now all the points at once</h2>
+ <p class="prior">One point followed the chain. A whole cloud of noise follows the <em>same</em> chain — so the round blob becomes a tilted, off-center ellipse on the circle. Drag the knobs above and watch this react.</p>
+ <div class="card">
+   <div class="grid">
+     <div><canvas id="cv2" height="360"></canvas></div>
+     <div>
+       <div class="row"><button id="b2play" class="big">▶ replay the morph</button><button id="b2norm" class="on">on the sphere</button></div>
+       <div class="cap" id="cap2" style="margin-top:12px">This green ellipse — its <b>size</b> (√Λ), <b>tilt</b> (V) and <b>position</b> (m) — is one "blob". Three knobs fully describe its shape. Change them on the left; everything here follows.</div>
+     </div>
+   </div>
+ </div>
+
+ <!-- ============ BEAT 3: match ============ -->
+ <h2>3 · Your turn — match the target</h2>
+ <p class="prior">If three knobs fully describe a blob, you should be able to <em>recreate</em> one by hand. Here's a hidden target (gray). Tune the knobs until your green blob sits on top of it.</p>
+ <div class="card task">
+   <div class="row" style="align-items:center;margin-bottom:10px"><span class="muted" style="width:56px">match</span><div class="bar"><i id="matchBar" style="width:0%;background:#e0683b"></i></div><span class="v" id="matchV" style="width:44px"></span></div>
+   <div class="grid">
+     <div><canvas id="cv3" height="340"></canvas></div>
+     <div>
+       <div class="sl"><label>√Λ₁</label><input type="range" id="t_l1" min="0.05" max="1.4" step="0.01" value="0.7"><span class="v" id="t_l1V"></span></div>
+       <div class="sl"><label>√Λ₂</label><input type="range" id="t_l2" min="0.05" max="1.4" step="0.01" value="0.7"><span class="v" id="t_l2V"></span></div>
+       <div class="sl"><label>V rotate</label><input type="range" id="t_th" min="0" max="360" step="1" value="0"><span class="v" id="t_thV"></span></div>
+       <div class="sl"><label>m shift x</label><input type="range" id="t_mx" min="-1.1" max="1.1" step="0.01" value="0"><span class="v" id="t_mxV"></span></div>
+       <div class="sl"><label>m shift y</label><input type="range" id="t_my" min="-1.1" max="1.1" step="0.01" value="0"><span class="v" id="t_myV"></span></div>
+       <button id="t_new">↻ new target</button>
+       <div class="cap" id="cap3">Slide the five knobs so the green ellipse covers the gray one.</div>
+     </div>
+   </div>
+ </div>
+
+ <!-- ============ BEAT 4+5: many patches + real layers ============ -->
+ <h2>4 · One blob isn't enough — so use many</h2>
+ <p class="prior">You matched a single tidy blob. But real data <em>curves</em>, and one ellipse can't bend. The fix: chop the cloud into <b>K patches</b> and give each its own √Λ, V, m — the same formula, once per patch. That's "local PCA".</p>
+ <div class="card">
+   <div class="grid">
+     <div><canvas id="cv4" height="380"></canvas></div>
+     <div>
+       <div class="sl"><label>patches K</label><input type="range" id="K" min="1" max="10" step="1" value="1"><span class="v" id="KV"></span></div>
+       <div class="row" style="margin:8px 0"><button id="b4patch" class="on">show patch ellipses</button><button id="b4new">↻ new target</button></div>
+       <div class="muted" style="margin:10px 0 4px"><b>What the model's real layers look like</b> — same machine, different patch sizes:</div>
+       <div class="row"><button id="preBal" class="on">balanced</button><button id="preWE">WE (word layer)</button><button id="preL24">L24 (final layer)</button></div>
+       <div class="cap" id="cap4"></div>
+     </div>
+   </div>
+ </div>
+
+ <p class="sub" style="margin-top:22px"><b>That's the whole story.</b> <span class="chip stretch">√Λ</span> stretch, <span class="chip rot">V</span> rotate, <span class="chip shift">+m</span> shift a ball of noise, <span class="chip norm">normalize</span> onto the sphere — that's one blob. Real embeddings are <b>many</b> such blobs tiling a curved surface. And the model's own layers are just different settings of the same knobs: the <b>word layer (WE)</b> shrinks every patch to a single dot (a lookup table — each word is one fixed vector), while the <b>final layer (L24)</b> fattens them into spread, overlapping clouds (context has smeared each word out).</p>
+</div>
+
+<script>
+const $=s=>document.getElementById(s);
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function randn(r){let u=0,v=0;while(!u)u=r();while(!v)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+const lerp=(a,b,f)=>[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f];
+const C_RING='rgba(96,165,250,.35)', C_GREEN='#22c55e', C_HERO='#f472b6', C_M='#34d399', C_V='#60a5fa', C_GRAY='#6b7688', C_REAL='#3b82f6';
+function frame(x,W,H,S){const cx=W/2,cy=H/2;x.strokeStyle='#141d2b';x.lineWidth=1;x.beginPath();x.moveTo(0,cy);x.lineTo(W,cy);x.moveTo(cx,0);x.lineTo(cx,H);x.stroke();return[cx,cy]}
+
+// ================= BEAT 0: cosine -> sphere =================
+let b0c=0; // collapse progress 0..1
+function drawB0(){
+  const cv=$('cv0'),W=cv.clientWidth;cv.width=W;const H=330,x=cv.getContext('2d');x.clearRect(0,0,W,H);
+  const S=Math.min(W,H)/2-26,cx=W/2,cy=H/2,wx=v=>cx+v*S,wy=v=>cy-v*S;
+  x.strokeStyle='#243247';x.beginPath();x.arc(cx,cy,S,0,7);x.stroke();
+  frame(x,W,H,S);
+  const angA=25*Math.PI/180, angB=(+$('b0ang').value+25)*Math.PI/180;
+  const lenA=1, lenB=+$('b0len').value;
+  const eLA=1*(1-b0c)+1*b0c, eLB=lenB*(1-b0c)+1*b0c;   // collapse -> both length 1
+  const A=[Math.cos(angA)*eLA,Math.sin(angA)*eLA], B=[Math.cos(angB)*eLB,Math.sin(angB)*eLB];
+  const arrow=(v,col)=>{x.strokeStyle=col;x.lineWidth=3;x.beginPath();x.moveTo(cx,cy);x.lineTo(wx(v[0]),wy(v[1]));x.stroke();
+    x.fillStyle=col;x.beginPath();x.arc(wx(v[0]),wy(v[1]),5,0,7);x.fill()};
+  arrow(A,'#f59e0b');arrow(B,C_GREEN);
+  x.fillStyle='#f59e0b';x.font='13px system-ui';x.fillText('A',wx(A[0])+8,wy(A[1]));
+  x.fillStyle=C_GREEN;x.fillText('B',wx(B[0])+8,wy(B[1]));
+  const cos=Math.cos(angB-angA);
+  $('b0cos').textContent=cos.toFixed(2);
+  $('b0angV').textContent=$('b0ang').value+'°';$('b0lenV').textContent=(+$('b0len').value).toFixed(2);
+  $('cap0').innerHTML=b0c>0.99
+    ?"Both tips are on the circle now. <b>Only the angle survived</b> — that's all cosine ever used. Every embedding is a point on this circle (a sphere in 1024-D)."
+    :"Drag <b>length of B</b>: the arrow grows, but <b>cosine doesn't budge</b> — it only sees the angle. So length is wasted; we throw it away by pushing every tip onto the circle. (Try the button.)";
+}
+$('b0ang').oninput=drawB0;$('b0len').oninput=drawB0;
+$('b0collapse').onclick=()=>{const t0=performance.now();(function an(){const p=Math.min(1,(performance.now()-t0)/700);b0c=p;drawB0();if(p<1)requestAnimationFrame(an)})()};
+
+// ================= shared knobs + transform =================
+function knobs(){return{l1:+$('l1').value,l2:+$('l2').value,th:+$('th').value*Math.PI/180,mx:+$('mx').value,my:+$('my').value}}
+function keys(z1,z2,k){
+  const P0=[z1,z2], P1=[k.l1*z1,k.l2*z2];
+  const c=Math.cos(k.th),s=Math.sin(k.th);
+  const P2=[c*P1[0]-s*P1[1],s*P1[0]+c*P1[1]];
+  const P3=[P2[0]+k.mx,P2[1]+k.my];
+  const n=Math.hypot(P3[0],P3[1])||1, P4=[P3[0]/n,P3[1]/n];
+  return[P0,P1,P2,P3,P4];
+}
+function syncKnobLabels(){$('l1V').textContent=(+$('l1').value).toFixed(2);$('l2V').textContent=(+$('l2').value).toFixed(2);
+  $('thV').textContent=$('th').value+'°';$('mxV').textContent=(+$('mx').value).toFixed(2);$('myV').textContent=(+$('my').value).toFixed(2);}
+
+// ================= BEAT 1: one hero point =================
+let b1step=0, b1norm=true;
+const WIT=[[1,0],[0,1],[-1,0],[0,-1],[0.7,0.7],[-0.7,0.7],[-0.7,-0.7],[0.7,-0.7]]; // ring witnesses -> ellipse
+const HERO=[0.9,0.55];
+const CAP1=[
+ "① <b>z</b> — a single random point (pink). The faint blue ring is where all the noise starts: |z|=1. Press <b>next</b>.",
+ "① <span class='chip stretch'>√Λ</span> <b>stretch</b> — scale the point's two coordinates. The blue ring becomes an ellipse: the axis with bigger √Λ gets longer. (Still centred at the origin.)",
+ "② <span class='chip rot'>V</span> <b>rotate</b> — spin those stretched axes (the blue cross) to point where the real data varies. The ellipse tilts.",
+ "③ <span class='chip shift'>+m</span> <b>shift</b> — the centre leaves the origin and slides to <b>m</b> (green). Off-centre = anisotropic. Toggle <b>on the sphere</b> to project onto the circle — the move you learned in step 0.",
+];
+function drawB1(){
+  const cv=$('cv1'),W=cv.clientWidth;cv.width=W;const H=380,x=cv.getContext('2d');x.clearRect(0,0,W,H);
+  const S=Math.min(W,H)/2-30,cx=W/2,cy=H/2,wx=v=>cx+v*S/1.7,wy=v=>cy-v*S/1.7;
+  x.strokeStyle='#243247';x.beginPath();x.arc(cx,cy,S/1.7,0,7);x.stroke(); frame(x,W,H,S);
+  x.strokeStyle=C_RING;x.lineWidth=1.5;x.beginPath();x.arc(cx,cy,S/1.7,0,7);x.stroke(); // persistent |z|=1 ring
+  const k=knobs(); const useNorm=(b1step>=3&&b1norm);
+  const pos=(z1,z2)=>{const K=keys(z1,z2,k);return useNorm?K[4]:K[b1step]};
+  // 1σ ellipse from witnesses
+  x.strokeStyle=C_GREEN;x.lineWidth=1.6;x.beginPath();
+  for(let i=0;i<=64;i++){const a=i/64*2*Math.PI,q=pos(Math.cos(a),Math.sin(a));i?x.lineTo(wx(q[0]),wy(q[1])):x.moveTo(wx(q[0]),wy(q[1]))}
+  x.closePath();x.stroke();
+  // V basis cross (from step1 on)
+  if(b1step>=1){const cen=pos(0,0);const ax=(vx,vy)=>{const q=pos(vx,vy);x.strokeStyle=C_V;x.lineWidth=1.5;x.beginPath();x.moveTo(wx(cen[0]),wy(cen[1]));x.lineTo(wx(q[0]),wy(q[1]));x.stroke()};
+    ax(1,0);ax(0,1);ax(-1,0);ax(0,-1);}
+  // witness points
+  for(const w of WIT){const q=pos(w[0],w[1]);x.fillStyle='#7a879b';x.globalAlpha=.7;x.beginPath();x.arc(wx(q[0]),wy(q[1]),2.4,0,7);x.fill()}
+  x.globalAlpha=1;
+  // center m
+  const cen=pos(0,0);x.fillStyle=C_M;x.beginPath();x.arc(wx(cen[0]),wy(cen[1]),5,0,7);x.fill();x.strokeStyle='#0a0d14';x.lineWidth=1.5;x.stroke();
+  if(b1step>=3){x.fillStyle=C_M;x.font='12px system-ui';x.fillText('m',wx(cen[0])+8,wy(cen[1])-6)}
+  // hero point + arrow from origin
+  const h=pos(HERO[0],HERO[1]);
+  x.strokeStyle=C_HERO;x.lineWidth=2;x.beginPath();x.moveTo(wx(cen[0]),wy(cen[1]));x.lineTo(wx(h[0]),wy(h[1]));x.stroke();
+  x.fillStyle=C_HERO;x.beginPath();x.arc(wx(h[0]),wy(h[1]),5.5,0,7);x.fill();
+  // formula highlight + dots
+  ['c_stretch','c_rot','c_shift','c_norm'].forEach((id,i)=>$(id).classList.toggle('hot',(i===b1step-1)||(i===3&&useNorm)));
+  document.querySelectorAll('#cv1 ~ * .stepdot, .stepdot').forEach(d=>{if(d.dataset.s!==undefined)d.classList.toggle('hot',+d.dataset.s===b1step)});
+  $('cap1').innerHTML=CAP1[b1step];
+  syncKnobLabels();
+}
+$('b1next').onclick=()=>{b1step=(b1step+1)%4;drawB1()};
+$('b1reset').onclick=()=>{b1step=0;drawB1()};
+$('b1norm').onclick=()=>{b1norm=!b1norm;$('b1norm').classList.toggle('on',b1norm);$('b1norm').textContent=b1norm?'on the sphere':'in the plane';drawB1()};
+document.querySelectorAll('.stepdot').forEach(d=>{if(d.dataset.s!==undefined)d.onclick=()=>{b1step=+d.dataset.s;drawB1()}});
+['l1','l2','th','mx','my'].forEach(id=>$(id).oninput=()=>{drawB1();drawB2()});
+
+// ================= BEAT 2: the cloud =================
+let CLOUD=[],b2norm=true,b2p=4;
+(function(){const r=mulberry32(11);for(let i=0;i<420;i++)CLOUD.push([randn(r),randn(r)])})();
+function drawB2(){
+  const cv=$('cv2'),W=cv.clientWidth;cv.width=W;const H=360,x=cv.getContext('2d');x.clearRect(0,0,W,H);
+  const S=Math.min(W,H)/2-24,cx=W/2,cy=H/2,wx=v=>cx+v*S/1.7,wy=v=>cy-v*S/1.7;
+  x.strokeStyle='#243247';x.beginPath();x.arc(cx,cy,S/1.7,0,7);x.stroke();frame(x,W,H,S);
+  x.strokeStyle=C_RING;x.beginPath();x.arc(cx,cy,S/1.7,0,7);x.stroke();
+  const k=knobs();const seg=Math.max(0,Math.min(3,Math.floor(b2p))),f=Math.min(1,b2p-seg);
+  const pos=(z1,z2)=>{const K=keys(z1,z2,k);let p=lerp(K[seg],K[seg+1],f);if(b2p>=4&&!b2norm)p=K[3];return p};
+  for(const z of CLOUD){const q=pos(z[0],z[1]);x.fillStyle=C_GREEN;x.globalAlpha=.5;x.beginPath();x.arc(wx(q[0]),wy(q[1]),2.2,0,7);x.fill()}
+  x.globalAlpha=1;
+  x.strokeStyle='rgba(34,197,94,.9)';x.lineWidth=1.4;x.beginPath();
+  for(let i=0;i<=64;i++){const a=i/64*2*Math.PI,q=pos(Math.cos(a),Math.sin(a));i?x.lineTo(wx(q[0]),wy(q[1])):x.moveTo(wx(q[0]),wy(q[1]))}x.closePath();x.stroke();
+}
+$('b2play').onclick=()=>{const t0=performance.now();(function an(){const p=Math.min(4,(performance.now()-t0)/450);b2p=p;drawB2();if(p<4)requestAnimationFrame(an)})()};
+$('b2norm').onclick=()=>{b2norm=!b2norm;$('b2norm').classList.toggle('on',b2norm);$('b2norm').textContent=b2norm?'on the sphere':'in the plane';drawB2()};
+
+// ================= BEAT 3: match the target =================
+let TGT=null;
+function newTarget(){const r=mulberry32((Math.random()*1e6)|0);
+  TGT={l1:0.35+r()*0.9,l2:0.15+r()*0.5,th:r()*Math.PI,mx:(r()-0.5)*1.4,my:(r()-0.5)*1.4};}
+newTarget();
+function covOf(l1,l2,th){const c=Math.cos(th),s=Math.sin(th);const a=l1*l1,b=l2*l2;
+  return[c*c*a+s*s*b, c*s*(a-b), c*c*b+s*s*a];} // [Σxx, Σxy, Σyy]
+function ellipsePts(k){const c=Math.cos(k.th),s=Math.sin(k.th),o=[];
+  for(let i=0;i<=64;i++){const a=i/64*2*Math.PI,e1=k.l1*Math.cos(a),e2=k.l2*Math.sin(a);
+    o.push([c*e1-s*e2+k.mx, s*e1+c*e2+k.my])}return o;}
+function drawB3(){
+  const cv=$('cv3'),W=cv.clientWidth;cv.width=W;const H=340,x=cv.getContext('2d');x.clearRect(0,0,W,H);
+  const S=Math.min(W,H)/2-20,cx=W/2,cy=H/2,wx=v=>cx+v*S/1.6,wy=v=>cy-v*S/1.6;
+  frame(x,W,H,S);x.strokeStyle='#1b2636';x.beginPath();x.arc(cx,cy,S/1.6,0,7);x.stroke();
+  const u={l1:+$('t_l1').value,l2:+$('t_l2').value,th:+$('t_th').value*Math.PI/180,mx:+$('t_mx').value,my:+$('t_my').value};
+  const drawE=(k,col,w,fill)=>{const P=ellipsePts(k);x.beginPath();P.forEach((p,i)=>i?x.lineTo(wx(p[0]),wy(p[1])):x.moveTo(wx(p[0]),wy(p[1])));x.closePath();
+    if(fill){x.fillStyle=fill;x.fill()}x.strokeStyle=col;x.lineWidth=w;x.stroke();
+    x.fillStyle=col;x.beginPath();x.arc(wx(k.mx),wy(k.my),3.5,0,7);x.fill()};
+  drawE(TGT,C_GRAY,2.5,'rgba(107,118,136,.18)');
+  drawE(u,C_GREEN,2,'rgba(34,197,94,.14)');
+  // match metric: normalized cov Frobenius + mean dist
+  const Su=covOf(u.l1,u.l2,u.th),St=covOf(TGT.l1,TGT.l2,TGT.th);
+  const dS=Math.hypot(Su[0]-St[0],2*(Su[1]-St[1]),Su[2]-St[2]);
+  const nS=Math.hypot(St[0],2*St[1],St[2])+1e-6;
+  const rad=Math.max(0.3,Math.hypot(TGT.l1,TGT.l2));
+  const dM=Math.hypot(u.mx-TGT.mx,u.my-TGT.my)/rad;
+  const err=0.65*(dS/nS)+0.35*dM;
+  const match=Math.max(0,Math.min(100, 100*(1-err/1.1)));   // tuned so rough match already reads ~50-60%
+  const bar=$('matchBar');bar.style.width=match.toFixed(0)+'%';
+  bar.style.background=match>90?'#22c55e':match>55?'#eab308':'#e0683b';
+  $('matchV').textContent=Math.round(match)+'%';
+  ['t_l1','t_l2','t_th','t_mx','t_my'].forEach(id=>{const e=$(id+'V');if(e)e.textContent=(id==='t_th')?$(id).value+'°':(+$(id).value).toFixed(2)});
+  $('cap3').innerHTML = match>90
+    ? "<span class='win'>Matched!</span> You just fit a Gaussian blob by hand — three knobs (√Λ, V, m) were enough. But real data isn't one tidy blob… (keep scrolling)."
+    : (match>55?"Close — nudge the tilt (V) and centre (m).":"Slide the five knobs so the green ellipse covers the gray one. The bar rewards getting the <b>shape</b> and <b>position</b> right.");
+}
+['t_l1','t_l2','t_th','t_mx','t_my'].forEach(id=>$(id).oninput=drawB3);
+$('t_new').onclick=()=>{newTarget();drawB3()};
+
+// ================= BEAT 4+5: many patches + presets =================
+let TN=560,TZ=[],tseed=3,showP=true,preset='bal';
+function genTarget(){const r=mulberry32(tseed);TZ=[];
+  for(let i=0;i<TN;i++){const t=r()*Math.PI*0.92-0.1;const bx=Math.cos(t)*0.95,by=Math.sin(t)*0.95-0.4;
+    const tg=[-Math.sin(t),Math.cos(t)];const a=randn(r)*0.17,b=randn(r)*0.04;
+    TZ.push([bx+tg[0]*a-tg[1]*b, by+tg[1]*a+tg[0]*b])}}
+genTarget();
+function kmeans(P,K,it=12){const r=mulberry32(99);let C=[],used=new Set();
+  while(C.length<K){const i=(r()*P.length)|0;if(!used.has(i)){used.add(i);C.push(P[i].slice())}}
+  let a=new Array(P.length).fill(0);
+  for(let t=0;t<it;t++){for(let i=0;i<P.length;i++){let bd=1e9,bj=0;for(let j=0;j<K;j++){const dx=P[i][0]-C[j][0],dy=P[i][1]-C[j][1],d=dx*dx+dy*dy;if(d<bd){bd=d;bj=j}}a[i]=bj}
+    const sx=Array(K).fill(0),sy=Array(K).fill(0),n=Array(K).fill(0);
+    for(let i=0;i<P.length;i++){sx[a[i]]+=P[i][0];sy[a[i]]+=P[i][1];n[a[i]]++}
+    for(let j=0;j<K;j++)if(n[j]){C[j]=[sx[j]/n[j],sy[j]/n[j]]}}
+  return a;}
+function fit(P){const n=P.length;let mx=0,my=0;for(const q of P){mx+=q[0];my+=q[1]}mx/=n;my/=n;
+  let a=0,b=0,c=0;for(const q of P){const dx=q[0]-mx,dy=q[1]-my;a+=dx*dx;b+=dx*dy;c+=dy*dy}a/=n;b/=n;c/=n;
+  const T=a+c,d=Math.sqrt(Math.max(0,((a-c)/2)**2+b*b)),l1=T/2+d,l2=Math.max(1e-7,T/2-d);
+  let v1=Math.abs(b)>1e-9?[l1-c,b]:(a>=c?[1,0]:[0,1]);const nn=Math.hypot(v1[0],v1[1])||1;v1=[v1[0]/nn,v1[1]/nn];
+  return{m:[mx,my],v1,v2:[-v1[1],v1[0]],s1:Math.sqrt(l1),s2:Math.sqrt(l2)};}
+function drawB4(){
+  const K=+$('K').value;$('KV').textContent=K;
+  const asg=kmeans(TZ,K),g=Array.from({length:K},()=>[]);TZ.forEach((q,i)=>g[asg[i]].push(q));
+  const fits=g.filter(x=>x.length>2).map(fit);
+  const sc=preset==='we'?0.06:preset==='l24'?1.5:1.0;
+  const r=mulberry32(7),syn=[];
+  for(let i=0;i<TN;i++){const f=fits[(r()*fits.length)|0];const z1=randn(r)*sc,z2=randn(r)*sc;
+    syn.push([f.m[0]+f.v1[0]*f.s1*z1+f.v2[0]*f.s2*z2, f.m[1]+f.v1[1]*f.s1*z1+f.v2[1]*f.s2*z2])}
+  const cv=$('cv4'),W=cv.clientWidth;cv.width=W;const H=380,x=cv.getContext('2d');x.clearRect(0,0,W,H);
+  const S=Math.min(W,H)/2.4,cx=W/2,cy=H*0.6,wx=v=>cx+v*S,wy=v=>cy-v*S;
+  for(const q of TZ){x.fillStyle=C_REAL;x.globalAlpha=.5;x.beginPath();x.arc(wx(q[0]),wy(q[1]),2.1,0,7);x.fill()}
+  for(const q of syn){x.fillStyle=C_GREEN;x.globalAlpha=.55;x.beginPath();x.arc(wx(q[0]),wy(q[1]),2.1,0,7);x.fill()}
+  x.globalAlpha=1;
+  if(showP&&preset!=='we')for(const f of fits){x.strokeStyle='rgba(255,255,255,.4)';x.lineWidth=1.1;x.beginPath();
+    for(let i=0;i<=48;i++){const a=i/48*2*Math.PI,c1=Math.cos(a)*sc,s1=Math.sin(a)*sc;
+      const px=f.m[0]+f.v1[0]*f.s1*c1+f.v2[0]*f.s2*s1,py=f.m[1]+f.v1[1]*f.s1*c1+f.v2[1]*f.s2*s1;
+      i?x.lineTo(wx(px),wy(py)):x.moveTo(wx(px),wy(py))}x.stroke()}
+  let cap;
+  if(preset==='we')cap="<b>WE (word layer).</b> √Λ→0: every patch collapses to a single dot. That's a lookup table — each word type is one fixed vector, so there's nothing for the random ball to fill. Structure = <b>which dot</b>.";
+  else if(preset==='l24')cap="<b>L24 (final layer).</b> Fat, tilted patches: context has spread every word into its own little cloud, and they overlap into a smooth continuous manifold. Structure = <b>shape + orientation</b>.";
+  else cap=(K===1)?"<b style='color:#e0683b'>K=1</b> — one global blob (the \"flat GMM\"). It bulges into empty space; it can't bend around the curve."
+    :(K<=3?`<b style='color:#22c55e'>K=${K}</b> patches start to follow the bend, but each still overshoots.`
+    :`<b style='color:#22c55e'>K=${K}</b> patches each hug their slice — green sits on blue. This is local-PCA: the four-step formula, once per patch.`);
+  $('cap4').innerHTML=cap;
+}
+$('K').oninput=()=>{preset='bal';setPre();drawB4()};
+$('b4patch').onclick=()=>{showP=!showP;$('b4patch').classList.toggle('on',showP);drawB4()};
+$('b4new').onclick=()=>{tseed++;genTarget();drawB4()};
+function setPre(){$('preBal').classList.toggle('on',preset==='bal');$('preWE').classList.toggle('on',preset==='we');$('preL24').classList.toggle('on',preset==='l24')}
+$('preBal').onclick=()=>{preset='bal';setPre();drawB4()};
+$('preWE').onclick=()=>{preset='we';setPre();drawB4()};
+$('preL24').onclick=()=>{preset='l24';setPre();drawB4()};
+
+// boot
+drawB0();drawB1();drawB2();drawB3();drawB4();
+window.addEventListener('resize',()=>{drawB0();drawB1();drawB2();drawB3();drawB4()});
+// report height for seamless iframe embedding (no internal scroll -> no scroll-trap)
+(function(){function s(){try{parent.postMessage({type:'ifh',height:document.documentElement.scrollHeight},'*')}catch(e){}}
+window.addEventListener('load',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);setInterval(s,1200)})();
+</script>
+</body></html>
