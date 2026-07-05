@@ -10,7 +10,6 @@ import PlotlyChart from './PlotlyChart'
 import SpladeVsIF from './SpladeVsIF'
 import TokenCompressionPipeline from './TokenCompressionPipeline'
 import CompressionWidget from './CompressionWidget'
-import HighDimOrthogonality from './HighDimOrthogonality'
 import PerpendicularCircle from './PerpendicularCircle'
 import NSphereGlobe from './NSphereGlobe'
 import ResizingIframe from './ResizingIframe'
@@ -27,7 +26,6 @@ export const MDXComponents = {
   SpladeVsIF,
   TokenCompressionPipeline,
   CompressionWidget,
-  HighDimOrthogonality,
   PerpendicularCircle,
   NSphereGlobe,
   ResizingIframe,
