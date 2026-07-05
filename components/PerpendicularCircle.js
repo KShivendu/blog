@@ -22,80 +22,66 @@ const DIMS = [2, 8, 32, 64, 128, 256, 512, 1024]
 const REAL_DIMS = [32, 64, 128, 256, 512, 1024]
 const M = 250 // random vectors sampled
 const DATA_URL = '/static/interactives/data/perp_circle.json'
-const MODES = [
-  ['angle', '∡ angle'],
-  ['project', '⊕ PC1 map'],
-  ['density', '◎ density'],
-]
 
-// Random baseline computed in-browser: for M unit vectors, relative to anchor a and a second
-// reference b (both random), return each other point's cos-to-a, its component along b⊥, and its
-// nearest-neighbour cosine within the sample. Mirrors the three quantities stored for real data.
-function computeRandom(d, seed) {
+// cosines of M-1 random unit vectors to a fixed random anchor, in d dims
+function randomCosines(d, seed) {
   const rng = mulberry32((seed * 2654435761 + d * 40503) >>> 0)
-  const vecs = []
-  for (let n = 0; n < M; n++) {
+  const mk = () => {
     const x = new Float64Array(d)
-    let s = 0
+    let n = 0
     for (let k = 0; k < d; k++) {
       x[k] = randn(rng)
-      s += x[k] * x[k]
+      n += x[k] * x[k]
     }
-    s = Math.sqrt(s) || 1
-    for (let k = 0; k < d; k++) x[k] /= s
-    vecs.push(x)
+    n = Math.sqrt(n) || 1
+    for (let k = 0; k < d; k++) x[k] /= n
+    return x
   }
-  const a = vecs[0]
-  const b = vecs[1]
-  let ba = 0
-  for (let k = 0; k < d; k++) ba += b[k] * a[k]
-  const bperp = new Float64Array(d)
-  let bn = 0
-  for (let k = 0; k < d; k++) {
-    bperp[k] = b[k] - ba * a[k]
-    bn += bperp[k] * bperp[k]
+  const a = mk()
+  const cos = []
+  for (let i = 0; i < M - 1; i++) {
+    const b = mk()
+    let c = 0
+    for (let k = 0; k < d; k++) c += a[k] * b[k]
+    cos.push(c)
   }
-  bn = Math.sqrt(bn) || 1
-  for (let k = 0; k < d; k++) bperp[k] /= bn
-  const others = vecs.slice(2)
-  const cos = [],
-    y1 = []
-  for (const v of others) {
-    let ca = 0,
-      cb = 0
-    for (let k = 0; k < d; k++) {
-      ca += v[k] * a[k]
-      cb += v[k] * bperp[k]
-    }
-    cos.push(ca)
-    y1.push(cb)
-  }
-  const nn = others.map((v, i) => {
-    let best = -2
-    for (let j = 0; j < others.length; j++) {
-      if (j === i) continue
-      const w = others[j]
-      let c = 0
-      for (let k = 0; k < d; k++) c += v[k] * w[k]
-      if (c > best) best = c
-    }
-    return best
-  })
-  return { cos, y1, nn }
+  return cos
 }
 
 const W = 620,
-  H = 360
+  H = 360,
+  cx = W / 2,
+  cy = H - 46,
+  R = Math.min(W / 2 - 40, H - 96)
 const rnd = (v) => Math.round(v * 100) / 100
-const c1 = (v) => Math.max(-1, Math.min(1, v))
-const c01 = (v) => Math.max(0, Math.min(1, v))
-const mean = (a) => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0)
+
+// Angle mode: angle from the 0° axis = arccos(cosine to the anchor). The radius is deliberately
+// a decorative jitter (a golden-ratio hash of the point index) so overlapping dots stay visible —
+// it carries no data.
+function place(cos, i) {
+  const th = Math.acos(Math.max(-1, Math.min(1, cos)))
+  const jit = (i * 0.61803989) % 1
+  const r = R * (0.66 + 0.3 * jit)
+  return { x: rnd(cx + r * Math.cos(th)), y: rnd(cy - r * Math.sin(th)) }
+}
+
+// rim tick at a given angle (degrees), just outside the arc
+function rimTick(deg) {
+  const th = (deg * Math.PI) / 180
+  return {
+    x1: rnd(cx + R * Math.cos(th)),
+    y1: rnd(cy - R * Math.sin(th)),
+    x2: rnd(cx + (R + 7) * Math.cos(th)),
+    y2: rnd(cy - (R + 7) * Math.sin(th)),
+    lx: rnd(cx + (R + 22) * Math.cos(th)),
+    ly: rnd(cy - (R + 22) * Math.sin(th)),
+  }
+}
 
 export default function PerpendicularCircle() {
   const [d, setD] = useState(1024)
   const [seed, setSeed] = useState(1)
   const [anchor, setAnchor] = useState(0)
-  const [mode, setMode] = useState('angle')
   const [real, setReal] = useState(null)
 
   useEffect(() => {
@@ -109,50 +95,23 @@ export default function PerpendicularCircle() {
     }
   }, [])
 
-  const rand = useMemo(() => computeRandom(d, seed), [d, seed])
-  const realData =
+  const randCos = useMemo(() => randomCosines(d, seed), [d, seed])
+  const realCos =
     real && REAL_DIMS.includes(d) ? real.anchors[anchor % real.anchors.length][d] : null
   const nnear = real ? real.nnear : 0
 
-  // geometry — projection is a centred full disc; angle/density are an upper semicircle
-  const proj = mode === 'project'
-  const cx = W / 2
-  const cy = proj ? H / 2 : H - 46
-  const R = proj ? Math.min(W, H) / 2 - 34 : Math.min(W / 2 - 40, H - 96)
-
-  function place(pt, i) {
-    if (mode === 'project') return { x: rnd(cx + R * c1(pt.cos)), y: rnd(cy - R * c1(pt.y1)) }
-    const th = Math.acos(c1(pt.cos))
-    let r
-    if (mode === 'density') r = R * (0.3 + 0.65 * c01(pt.nn))
-    else {
-      const jit = (i * 0.61803989) % 1
-      r = R * (0.66 + 0.3 * jit)
-    }
-    return { x: rnd(cx + r * Math.cos(th)), y: rnd(cy - r * Math.sin(th)) }
-  }
-  const pts = (obj) =>
-    obj ? obj.cos.map((c, i) => ({ cos: c, y1: obj.y1[i], nn: obj.nn[i], i })) : []
+  const near = (arr) => (100 * arr.filter((c) => Math.abs(c) < 0.1).length) / arr.length
+  const randPerp = near(randCos).toFixed(0)
+  const realPerp = realCos ? near(realCos).toFixed(0) : null
 
   const dot = (p, i, fill, op) => (
     <circle key={i} cx={p.x} cy={p.y} r={2.6} fill={fill} opacity={op} />
   )
   const topY = cy - R
-  const anchorPt = { x: cx + R, y: cy }
-
-  // readout stats
-  const near = (arr) => (100 * arr.filter((c) => Math.abs(c) < 0.1).length) / arr.length
-  const randPerp = near(rand.cos).toFixed(0)
-  const realPerp = realData ? near(realData.cos).toFixed(0) : null
-  const randNN = mean(rand.nn).toFixed(2)
-  const realNN = realData ? mean(realData.nn).toFixed(2) : null
-  const radOf = (o) => o.cos.map((c, i) => Math.hypot(c, o.y1[i]))
-  const randRad = mean(radOf(rand)).toFixed(2)
-  const realRad = realData ? mean(radOf(realData)).toFixed(2) : null
 
   return (
     <div className="my-6 rounded-lg border border-gray-200 p-4 text-gray-900 dark:border-gray-700 dark:text-gray-100">
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         <span className="text-gray-500 dark:text-gray-400">dimension d =</span>
         {DIMS.map((dd) => {
           const hasReal = REAL_DIMS.includes(dd)
@@ -186,42 +145,41 @@ export default function PerpendicularCircle() {
           ↻ new point
         </button>
       </div>
-      <div className="mb-3 inline-flex overflow-hidden rounded border border-gray-300 dark:border-gray-600">
-        {MODES.map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setMode(k)}
-            className={`px-2.5 py-1 text-xs transition ${
-              mode === k
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
 
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 380 }}>
         {/* axes */}
         <line
-          x1={cx - R - 16}
-          x2={cx + R + 16}
+          x1={cx - R - 26}
+          x2={cx + R + 26}
           y1={cy}
           y2={cy}
           stroke="#9ca3af"
           strokeOpacity="0.25"
         />
-        <line
-          x1={cx}
-          x2={cx}
-          y1={proj ? cy + R + 14 : cy + 10}
-          y2={cy - R - 18}
+        <line x1={cx} x2={cx} y1={cy + 10} y2={cy - R - 26} stroke="#9ca3af" strokeOpacity="0.25" />
+        {/* upper semicircle rim */}
+        <path
+          d={`M ${cx - R} ${cy} A ${R} ${R} 0 0 1 ${cx + R} ${cy}`}
+          fill="none"
           stroke="#9ca3af"
-          strokeOpacity="0.25"
+          strokeOpacity="0.3"
         />
-        <circle cx={cx} cy={cy} r={R} fill="none" stroke="#9ca3af" strokeOpacity="0.3" />
-        {/* 90° reference (perpendicular-to-anchor axis) */}
+        {/* angle ticks + labels along the rim */}
+        {[
+          [45, '45°'],
+          [135, '135°'],
+        ].map(([deg, lbl]) => {
+          const t = rimTick(deg)
+          return (
+            <g key={deg}>
+              <line x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} stroke="#9ca3af" strokeOpacity="0.5" />
+              <text x={t.lx} y={t.ly + 3} textAnchor="middle" fontSize="10" fill="#9ca3af">
+                {lbl}
+              </text>
+            </g>
+          )
+        })}
+        {/* 90° perpendicular reference */}
         <line
           x1={cx}
           x2={cx}
@@ -233,42 +191,28 @@ export default function PerpendicularCircle() {
         />
         <text
           x={cx}
-          y={topY - 8}
+          y={topY - 10}
           textAnchor="middle"
           fontSize="12"
           fill="#f59e0b"
           fillOpacity="0.9"
         >
-          {proj ? 'x = 0 ⟂ to your point' : '90° ⟂ orthogonal'}
+          90° ⟂ orthogonal (cos 0)
         </text>
-        {!proj && (
-          <text x={cx - R} y={cy + 18} textAnchor="start" fontSize="11" fill="#9ca3af">
-            180° opposite
-          </text>
-        )}
-        {/* real (green) behind, random (amber) in front */}
-        {realData &&
-          pts(realData).map((p) =>
-            dot(place(p, p.i), 'r' + p.i, '#10b981', p.i < nnear ? 0.95 : 0.6)
-          )}
-        {pts(rand).map((p) => dot(place(p, p.i), 'a' + p.i, '#f59e0b', 0.75))}
-        {/* anchor = your point */}
-        <circle cx={anchorPt.x} cy={anchorPt.y} r={6} fill="currentColor" />
-        <text
-          x={anchorPt.x - 10}
-          y={anchorPt.y - 10}
-          textAnchor="end"
-          fontSize="12"
-          fill="currentColor"
-        >
-          your point{proj ? '' : ' (0°)'}
+        <text x={cx - R - 4} y={cy + 16} textAnchor="start" fontSize="10.5" fill="#9ca3af">
+          180° opposite (cos −1)
+        </text>
+        {/* points: real (green) behind, random (amber) in front */}
+        {realCos &&
+          realCos.map((c, i) => dot(place(c, i), 'r' + i, '#10b981', i < nnear ? 0.95 : 0.6))}
+        {randCos.map((c, i) => dot(place(c, i), 'a' + i, '#f59e0b', 0.75))}
+        {/* anchor = your point at 0° */}
+        <circle cx={cx + R} cy={cy} r={6} fill="currentColor" />
+        <text x={cx + R} y={cy + 18} textAnchor="end" fontSize="11" fill="currentColor">
+          your point (0°, cos 1)
         </text>
         <text x={cx} y={H - 4} textAnchor="middle" fontSize="10" fill="#9ca3af">
-          {mode === 'project'
-            ? 'x = cosine to your point (exact) · y = component along the cloud’s top axis (PC1)'
-            : mode === 'density'
-            ? 'angle = cosine to your point · radius = the point’s own nearest-neighbour cosine'
-            : 'each dot = a vector at its true angle to yours · radius is only spacing'}
+          each dot = another vector, at its true angle to yours (angle = arccos of the cosine)
         </text>
       </svg>
 
@@ -280,7 +224,7 @@ export default function PerpendicularCircle() {
           />
           random (d = {d})
         </span>
-        {realData && (
+        {realCos && (
           <span>
             <span
               style={{ background: '#10b981' }}
@@ -289,60 +233,27 @@ export default function PerpendicularCircle() {
             real jina sentences (d = {d})
           </span>
         )}
+        <span className="ml-auto italic">radius = jitter (spacing only), not data</span>
       </div>
 
       <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-        {mode === 'angle' && (
+        The angle from the <b>0°</b> axis (your point) is the vector&apos;s true angle to yours —
+        straight up is <b style={{ color: '#f59e0b' }}>90°, perpendicular</b> (cosine 0). At{' '}
+        <span className="font-mono">d = {d}</span>, <b>{randPerp}%</b> of random vectors sit within
+        ±0.1 cosine of that 90° line.{' '}
+        {realCos ? (
           <>
-            At <span className="font-mono">d = {d}</span>, <b>{randPerp}%</b> of random vectors land
-            within ±0.1 cosine of the <b style={{ color: '#f59e0b' }}>90° perpendicular</b> line.{' '}
-            {realData ? (
-              <>
-                The <b style={{ color: '#10b981' }}>real jina</b> cloud crowds the same line —{' '}
-                <b>{realPerp}%</b> of it is within ±0.1 of 90° too — but unlike random it trails a
-                warm tail of genuine nearest neighbours reaching down toward 0°. That tail, not the
-                average, is the structure.
-              </>
-            ) : (
-              <>Pick a ringed green ● dimension to overlay real embeddings.</>
-            )}
+            The <b style={{ color: '#10b981' }}>real jina</b> cloud crowds it too —{' '}
+            <b>{realPerp}%</b> within ±0.1 of 90° — but unlike random it trails a warm tail of
+            genuine nearest neighbours peeling toward 0°. That tail, not the average, is the
+            structure, and it barely fades as you truncate the dimension. (Distance from the centre
+            is only jitter so the dots don&apos;t overlap — read the angle, not the radius.)
           </>
-        )}
-        {mode === 'project' && (
+        ) : (
           <>
-            A genuine 2-D map: <b>x = cosine to your point</b> (exact),{' '}
-            <b>y = component along the cloud’s top axis</b> (PC1, with the anchor direction removed)
-            — both real dot products.{' '}
-            {realData ? (
-              <>
-                Random collapses toward the <b>centre</b> (mean projected radius <b>{randRad}</b>):
-                a random vector has almost no component in any fixed plane. The{' '}
-                <b style={{ color: '#10b981' }}>real</b> cloud spreads out (radius <b>{realRad}</b>
-                ), and its true neighbours shoot toward your point along the x-axis. The catch: this
-                radius is real but relative to an <em>arbitrary</em> second axis — pick a different
-                one and the spread changes.
-              </>
-            ) : (
-              <>Pick a ringed green ● dimension to overlay real embeddings.</>
-            )}
-          </>
-        )}
-        {mode === 'density' && (
-          <>
-            Same angle as before (cosine to your point), but now{' '}
-            <b>radius = each point’s own nearest- neighbour cosine</b> — rim = has a close
-            neighbour, centre = isolated.{' '}
-            {realData ? (
-              <>
-                <b style={{ color: '#10b981' }}>Real</b> points ride the rim (mean nn{' '}
-                <b>{realNN}</b>) — nearly every one has a genuine neighbour.{' '}
-                <b style={{ color: '#f59e0b' }}>Random</b> huddles near the centre (mean nn{' '}
-                <b>{randNN}</b>): no point has anyone close. This is the structure the angle can’t
-                show — and it needs no second reference.
-              </>
-            ) : (
-              <>Pick a ringed green ● dimension to overlay real embeddings.</>
-            )}
+            Pick a ringed <b className="text-emerald-600 dark:text-emerald-400">green ●</b>{' '}
+            dimension to overlay real embeddings. (Distance from the centre is only jitter so the
+            dots don&apos;t overlap — read the angle, not the radius.)
           </>
         )}
       </div>
