@@ -11,11 +11,39 @@ authors: ['default']
 
 > Looking for TL;DR? Skip to [key takeaways](#key-takeaways). And feel free to DM me on [X](http://kshivendu.dev/x) or [LinkedIn](http://kshivendu.dev/linkedin) if I got something wrong :)
 
-I've always noticed and heard that random vectors degrade vector search, but I wanted to actually see and understand why. So I generated 10,000 random 1024-dimensional unit vectors and asked the simplest question I could: for any given vector, which one is its nearest neighbor, and how near is it?
+I've always noticed that random vectors degrade vector search, but almost nobody (including me) truly understood why. So I decided to investigate with 1024-dimensional 10,000 random vs real embeddings ([`jina-embeddings-v3`](https://huggingface.co/jinaai/jina-embeddings-v3)). Why this model? Because it has MRL support which forms reals embeddings at slices of the full embedding too. It was really eye opening and I've tried my best to make it intuitive!
 
 The closest of all 10,000 sits at cosine **0.12**. A random pair sits at **0.00**. So the "nearest neighbor" is basically the least-far of 10,000 roughly-equidistant points — there's nothing special about it.
 
-Now the same test with real embeddings ([`jina-embeddings-v3`](https://huggingface.co/jinaai/jina-embeddings-v3) over 10,000 sentences, same count, same 1024 dims): the nearest neighbor sits at **0.55**, the median pair at just **0.10**. Look at that for a second — a real embedding's _nearest_ neighbor (0.55) towers over both its own typical pair (0.10) and random's best-of-10,000 (0.12). The whole distribution has a tail random barely has. That 0.12-vs-0.55 gap is what this whole post is about — why random vectors don't have it, what "structure" is as the cure, and what that structure actually buys you (mostly compute, it turns out, not recall).
+Now the same test with real jina embeddings over 10,000 sentences, same count, same 1024 dims — the nearest neighbor sits at **0.55**, the median pair at just **0.10**. Look at that for a second — a real embedding's _nearest_ neighbor (0.55) towers over both its own typical pair (0.10) and random's best-of-10,000 (0.12). The whole distribution has a tail random barely has. That 0.12-vs-0.55 gap is what this whole post is about — why random vectors don't have it, what "structure" is as the cure, and what that structure actually buys you (mostly compute, it turns out, not recall).
+
+### What is an embedding and cosine similarity anyways?
+
+Any set of extracted features can act like embedding dimensions — `(height, weight, age)` is a 3-dim embedding. Some features carry their own information; others are partly redundant, predictable from the rest (`weight ≈ f(height)`); some are basically independent. A good learned embedding leans hard on the redundant kind — it packs a lot of _correlated_ structure into its numbers.
+
+Now watch what **cosine similarity** does to this. To compare two embeddings you divide each by its length, pinning every vector onto the unit sphere `x² + y² + z² + … = 1`. That quietly does two things:
+
+1. **It throws away magnitude** — only direction survives.
+2. **It gives every axis equal weight**, treating them as independent, orthogonal directions — even the ones that were redundant. So two correlated coordinates (`y ≈ f(x)`) get _double-counted_: their shared signal sits in both, and the dot product adds it twice. Packing the real information into as _few_ independent directions as possible — so that double-counting can't happen — turns out to be exactly what "structure" means later.
+
+And the sphere is a constraint, not a free space: `x² + y² + z² = 1` is a **fixed budget** — push one coordinate up and the rest must shrink; the axes can't all grow at once. Across a dataset it's exact — the total variance over all coordinates is pinned to 1.
+
+The punchline: **once you center each vector, cosine similarity is just the Pearson correlation between the two coordinate lists.** "Are these embeddings similar?" is literally "are their coordinate patterns correlated?" — so the rest of this post is really a story about correlation: when it vanishes (random), when it survives (real neighbours), and what it costs to search for.
+
+<details>
+<summary>Why is E[cosine] = 0 for random vectors — and what moves it? (the derivation)</summary>
+
+Write it as `a·b / (‖a‖‖b‖) = Σᵢ aᵢbᵢ / (‖a‖‖b‖)`.
+
+- **Independent, zero-mean coordinates ⇒ E[cos] = 0.** If the two vectors are independent and at least one has zero-mean coordinates, `E[Σ aᵢbᵢ] = Σ E[aᵢ]·E[bᵢ] = 0`; and since a random _direction_ is symmetric about any plane, the whole cosine distribution is symmetric about 0, so its mean is exactly 0. Dependence _within_ a vector (`y ≈ f(x)`) doesn't change this — two independent draws still average to 0.
+- **A shared mean is the only thing that shifts it.** If the coordinates have a nonzero mean vector `μ`, then `E[a·b] = ‖μ‖²`, so `E[cos] ≈ ‖μ‖² / tr(Σ) > 0`. That is exactly the +0.11 background: real jina has `‖μ‖² ≈ 0.11`.
+- **What creates neighbours is the _variance_, not the mean.** `Var[cos] ≈ tr(Σ²)/tr(Σ)² = 1/(effective dimension)`. Isotropic random spreads its variance evenly (effective dim ≈ `d`), so `Var[cos] ≈ 1/d` — a razor-thin spike at 0, no neighbours. Concentrate that fixed budget into few directions (low effective dim — lots of `y ≈ f(x)`) and the spread widens: that's the tail of real neighbours.
+
+So a shared mean just tilts _everything_ up by a constant (the anisotropy the field frets over — largely cosmetic for ranking); the searchable signal is the widened variance that correlated, redundant dimensions create.
+
+**Verified on random vs real jina:** the variance budget `Σ Var + ‖μ‖² = 1` holds exactly (random `1.00 + 0.00`, real `0.89 + 0.11`); per-vector-centered cosine equals Pearson `r` to machine precision; and the mean squared correlation between two coordinates across the corpus is ~`0.0001` for random (the noise floor) versus ~`0.007` for real — real dimensions genuinely predict one another.
+
+</details>
 
 ## 🎲 In random 1024-d, there is no neighbour
 
@@ -25,7 +53,7 @@ Why is a random vector's nearest neighbour so far away? Think of every other vec
 
 As `d` climbs, the yellow (random) cloud collapses onto the vertical **90° line** — every other vector's vote gets **neutralized**. That's the cancellation counted up: a unit vector spreads its length across `d` axes at about `1/√d` each, so the cosine of two of them sums `d` coin-flip votes that mostly cancel, landing near 0 with spread `1/√d`. More dimensions, tighter to zero — the share of random pairs within ±0.1 of neutral climbs from **6.5%** in 2D to **99.9%** by 1024-d.
 
-You can read that vote exactly: the share of coordinates voting **with** you is `½ + arcsin(cos)/π` — **100% at 0° (fully with you), a 50/50 coin toss at neutral (90°), 0% at 180° (fully against)**. So "neutralized" is literal — at 90° a vector's coordinates split evenly for and against, and cancel to nothing.
+You can read that vote exactly: the share of coordinates voting **with** you is `½ + arcsin(cos)/π` — **100% at 0° (fully with you), a 50/50 coin toss at neutral (90°), 0% at 180° (fully against)**. So "neutralized" is literal — at 90° a vector's coordinates split evenly for and against, and cancel to nothing. (That net vote — with minus against — is exactly **Kendall's τ = (2/π)·arcsin(cos)**: the _rank_-correlation twin of the Pearson correlation from the intro. Cosine and the vote are two faces of the same correlation.)
 
 <details>
 <summary>Does this hold for real embeddings? (yes — with one wrinkle)</summary>
