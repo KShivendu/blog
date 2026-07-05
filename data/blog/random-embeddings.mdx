@@ -143,6 +143,63 @@ Random's line is almost flat — every cluster holds ~110–150 points, because 
 
 That structure — real neighbourhoods versus structureless confetti — is the whole thing search runs on, and it's the geometry the rest of the post is about.
 
+## 🧲 The flip side of clusters: hubs and orphans
+
+Clusters buy you neighbours — but they smuggle in a subtle problem that is almost the _opposite_ of random's "no neighbours." Ask every vector _who's in my 10 nearest?_ and count how often each point gets **named back**. In a perfectly fair world every point is named ~10 times. It isn't:
+
+- **Random**: the most-named point is named just **2.6× its fair share**, and _nobody_ goes unnamed. Boringly even.
+- **Real jina**: the biggest **hub** is named **11× its fair share**, and **~1% of points are orphans** — nobody's nearest neighbour at all.
+
+<PlotlyChart
+  data={[
+    {
+      name: 'random',
+      x: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40],
+      y: [
+        0.08, 0.93, 5.31, 14.82, 24.69, 24.31, 16.62, 8.75, 3.1, 1.05, 0.28, 0.03, 0.02, 0.01, 0, 0,
+        0, 0, 0, 0, 0,
+      ],
+      type: 'bar',
+      marker: { color: '#f59e0b' },
+      opacity: 0.6,
+    },
+    {
+      name: 'real jina',
+      x: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40],
+      y: [
+        4.28, 10.24, 14.1, 14.78, 12.41, 10.29, 8.96, 6.88, 5.27, 3.6, 2.57, 1.82, 1.44, 1.11, 0.63,
+        0.51, 0.29, 0.29, 0.15, 0.15, 0.06,
+      ],
+      type: 'bar',
+      marker: { color: '#10b981' },
+      opacity: 0.6,
+    },
+  ]}
+  layout={{
+    title: {
+      text: 'How often is each point picked as a top-10 neighbour? (fair share = 10)',
+      font: { size: 14 },
+    },
+    barmode: 'overlay',
+    xaxis: { title: 'times named someone’s neighbour' },
+    yaxis: { title: '% of points (log)', type: 'log' },
+    height: 320,
+    margin: { t: 44, r: 24, b: 46, l: 56 },
+    legend: { orientation: 'h', y: -0.24 },
+  }}
+/>
+
+Random is a tight bump that stops dead by ~26; real has a **spike at 0** (the orphans) and a **long right tail** — its worst hubs run all the way out to 107, far off the right edge here. Here's the twist: the **structureless** cloud is the _fair_ one, and it's the **real, clustered** embeddings that grow hubs. This is [hubness](https://www.jmlr.org/papers/v11/radovanovic10a.html), and the intuition runs backwards from what you'd guess:
+
+- Uniform random points sit evenly on the sphere with no dense clumps, so no point is placed to be lots of others' "closest" — everyone's an equally-mediocre neighbour. (It's "fair" only the way a lottery nobody wins is fair: there are no real neighbours to hand out.)
+- Real embeddings clump into topic clusters of uneven density. A point in the **middle of a dense clump** lands in the top-10 of everyone around it → a **hub** that shows up in far more result lists than its share. A point on a sparse fringe is nobody's top-10 → an **orphan** that never surfaces.
+
+So hubness isn't the _absence_ of structure — it's a **tax that rides on structure**: uneven density (a point's neighbour-count tracks how dense its neighbourhood is, correlation 0.57), plus the cloud's overall lean toward its own centre (correlation 0.33). It's mild for a clean, roughly-centred model like jina (worst hub ~11×, ~1% orphans) and eases as you truncate (worst hub ~6× at a 32-dim slice vs ~11× at full 1024) — hubness is a known side-effect of **high dimensionality**, so trimming dimensions relieves it. The classic severe cases come from high dimensionality plus a strong pull toward the data's centre — points near the mean become everyone's neighbour — the setting the hubness literature grew up in; strongly anisotropic embeddings make it worse still (we didn't test a bad one here).
+
+And this is the one spot where the **centering** almost nobody bothers with earns its keep: subtracting the shared mean removes that lean toward the centre, roughly halving jina's worst hub (**11× → 6×**, orphans 1.2% → 0.9%). Unlike whitening it leaves the ranking essentially untouched — which is why almost nobody bothers — but it pays off once you quantize, or when an embedding sits badly off-centre. And notice: even centred, jina's worst hub (6×) still towers over random's 2.6× — proof that the **clustering itself**, not just the mean, is what breeds the hubs.
+
+The through-line: "everything is perpendicular" and "no neighbourhood to find" are what you get with **too little** structure; "a few points hog the neighbourhood" is the mild price of **having** it. Same geometry, opposite ends.
+
 ## 🔍 What that costs a search index
 
 So what does this cost an actual index? [HNSW](https://arxiv.org/abs/1603.09320) finds nearest neighbors by greedily walking a graph: from some entry node, hop to whichever neighbor is closer to the query, repeat. That only works if there's a distance _gradient_ to follow, i.e. each step has to get you meaningfully closer. Random vectors have no gradient (every direction is ~equidistant), so the walk wanders and the index has to explore far more candidates to compensate.
