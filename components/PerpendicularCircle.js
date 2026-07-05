@@ -197,10 +197,10 @@ export default function PerpendicularCircle() {
           fill="#f59e0b"
           fillOpacity="0.9"
         >
-          90° ⟂ orthogonal (cos 0)
+          90° ⟂ orthogonal (cos = 0)
         </text>
         <text x={cx - R - 4} y={cy + 16} textAnchor="start" fontSize="10.5" fill="#9ca3af">
-          180° opposite (cos −1)
+          180° opposite (cos = −1)
         </text>
         {/* points: real (green) behind, random (amber) in front */}
         {realCos &&
@@ -209,7 +209,7 @@ export default function PerpendicularCircle() {
         {/* anchor = your point at 0° */}
         <circle cx={cx + R} cy={cy} r={6} fill="currentColor" />
         <text x={cx + R} y={cy + 18} textAnchor="end" fontSize="11" fill="currentColor">
-          your point (0°, cos 1)
+          your point (0°, cos = 1)
         </text>
         <text x={cx} y={H - 4} textAnchor="middle" fontSize="10" fill="#9ca3af">
           each dot = another vector, at its true angle to yours (angle = arccos of the cosine)
