@@ -22,6 +22,24 @@ const DIMS = [2, 8, 32, 64, 128, 256, 512, 1024]
 const REAL_DIMS = [32, 64, 128, 256, 512, 1024]
 const M = 250 // random vectors sampled
 const DATA_URL = '/static/interactives/data/perp_circle.json'
+const MODES = [
+  ['dots', '• dots'],
+  ['hist', '▟ angle bars'],
+]
+const NB = 30 // angular bins for the histogram mode (6° each over 0–180°)
+
+// density per angular bin: fraction of vectors whose angle-to-anchor falls in each 6° bin
+function angleHist(cosArr) {
+  const bins = new Array(NB).fill(0)
+  for (const c of cosArr) {
+    const th = Math.acos(Math.max(-1, Math.min(1, c)))
+    let b = Math.floor((th / Math.PI) * NB)
+    if (b < 0) b = 0
+    if (b >= NB) b = NB - 1
+    bins[b]++
+  }
+  return bins.map((v) => v / (cosArr.length || 1))
+}
 
 // cosines of M-1 random unit vectors to a fixed random anchor, in d dims
 function randomCosines(d, seed) {
@@ -82,6 +100,7 @@ export default function PerpendicularCircle() {
   const [d, setD] = useState(1024)
   const [seed, setSeed] = useState(1)
   const [anchor, setAnchor] = useState(0)
+  const [mode, setMode] = useState('dots')
   const [real, setReal] = useState(null)
 
   useEffect(() => {
@@ -103,11 +122,42 @@ export default function PerpendicularCircle() {
   const near = (arr) => (100 * arr.filter((c) => Math.abs(c) < 0.1).length) / arr.length
   const randPerp = near(randCos).toFixed(0)
   const realPerp = realCos ? near(realCos).toFixed(0) : null
+  const spacingNote =
+    mode === 'hist'
+      ? 'Bar length is the share of vectors in each 6° angular bin.'
+      : 'Distance from the centre is only jitter so the dots don’t overlap — read the angle, not the radius.'
 
   const dot = (p, i, fill, op) => (
     <circle key={i} cx={p.x} cy={p.y} r={2.6} fill={fill} opacity={op} />
   )
   const topY = cy - R
+
+  // histogram mode: radial bars, length = share of vectors in each 6° angular bin
+  const ri = R * 0.14
+  const rHist = mode === 'hist' ? angleHist(randCos) : null
+  const gHist = mode === 'hist' && realCos ? angleHist(realCos) : null
+  const maxD = mode === 'hist' ? Math.max(1e-9, ...(rHist || [0]), ...(gHist || [0])) : 1
+  const bars = (hist, color, w, op) =>
+    hist
+      ? hist.map((di, i) => {
+          if (di <= 0) return null
+          const th = ((i + 0.5) / NB) * Math.PI
+          const ro = ri + (R - ri - 2) * (di / maxD)
+          return (
+            <line
+              key={color + i}
+              x1={rnd(cx + ri * Math.cos(th))}
+              y1={rnd(cy - ri * Math.sin(th))}
+              x2={rnd(cx + ro * Math.cos(th))}
+              y2={rnd(cy - ro * Math.sin(th))}
+              stroke={color}
+              strokeWidth={w}
+              strokeLinecap="round"
+              opacity={op}
+            />
+          )
+        })
+      : null
 
   return (
     <div className="my-6 rounded-lg border border-gray-200 p-4 text-gray-900 dark:border-gray-700 dark:text-gray-100">
@@ -144,6 +194,21 @@ export default function PerpendicularCircle() {
         >
           ↻ new point
         </button>
+      </div>
+      <div className="mb-3 inline-flex overflow-hidden rounded border border-gray-300 dark:border-gray-600">
+        {MODES.map(([k, label]) => (
+          <button
+            key={k}
+            onClick={() => setMode(k)}
+            className={`px-2.5 py-1 text-xs transition ${
+              mode === k
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 380 }}>
@@ -202,17 +267,28 @@ export default function PerpendicularCircle() {
         <text x={cx - R - 4} y={cy + 16} textAnchor="start" fontSize="10.5" fill="#9ca3af">
           180° opposite (cos = −1)
         </text>
-        {/* points: real (green) behind, random (amber) in front */}
-        {realCos &&
-          realCos.map((c, i) => dot(place(c, i), 'r' + i, '#10b981', i < nnear ? 0.95 : 0.6))}
-        {randCos.map((c, i) => dot(place(c, i), 'a' + i, '#f59e0b', 0.75))}
+        {/* real (green) behind, random (amber) in front — dots, or radial bars in histogram mode */}
+        {mode === 'hist' ? (
+          <>
+            {bars(gHist, '#10b981', 7, 0.55)}
+            {bars(rHist, '#f59e0b', 5, 0.85)}
+          </>
+        ) : (
+          <>
+            {realCos &&
+              realCos.map((c, i) => dot(place(c, i), 'r' + i, '#10b981', i < nnear ? 0.95 : 0.6))}
+            {randCos.map((c, i) => dot(place(c, i), 'a' + i, '#f59e0b', 0.75))}
+          </>
+        )}
         {/* anchor = your point at 0° */}
         <circle cx={cx + R} cy={cy} r={6} fill="currentColor" />
         <text x={cx + R} y={cy + 18} textAnchor="end" fontSize="11" fill="currentColor">
           your point (0°, cos = 1)
         </text>
         <text x={cx} y={H - 4} textAnchor="middle" fontSize="10" fill="#9ca3af">
-          each dot = another vector, at its true angle to yours (angle = arccos of the cosine)
+          {mode === 'hist'
+            ? 'each bar sits at an angle to your point · bar length = share of vectors at that angle'
+            : 'each dot = another vector, at its true angle to yours (angle = arccos of the cosine)'}
         </text>
       </svg>
 
@@ -233,7 +309,11 @@ export default function PerpendicularCircle() {
             real jina sentences (d = {d})
           </span>
         )}
-        <span className="ml-auto italic">radius = jitter (spacing only), not data</span>
+        <span className="ml-auto italic">
+          {mode === 'hist'
+            ? 'bar length = share of pairs (density)'
+            : 'radius = jitter (spacing only), not data'}
+        </span>
       </div>
 
       <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">
@@ -246,14 +326,12 @@ export default function PerpendicularCircle() {
             The <b style={{ color: '#10b981' }}>real jina</b> cloud crowds it too —{' '}
             <b>{realPerp}%</b> within ±0.1 of 90° — but unlike random it trails a warm tail of
             genuine nearest neighbours peeling toward 0°. That tail, not the average, is the
-            structure, and it barely fades as you truncate the dimension. (Distance from the centre
-            is only jitter so the dots don&apos;t overlap — read the angle, not the radius.)
+            structure, and it barely fades as you truncate the dimension. ({spacingNote})
           </>
         ) : (
           <>
             Pick a ringed <b className="text-emerald-600 dark:text-emerald-400">green ●</b>{' '}
-            dimension to overlay real embeddings. (Distance from the centre is only jitter so the
-            dots don&apos;t overlap — read the angle, not the radius.)
+            dimension to overlay real embeddings. ({spacingNote})
           </>
         )}
       </div>
