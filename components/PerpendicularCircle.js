@@ -26,17 +26,20 @@ const MODES = [
   ['dots', '• dots'],
   ['hist', '▟ angle bars'],
 ]
-const NB = 30 // angular bins for the histogram mode (6° each over 0–180°)
+// Bars point along 31 directions: 0°, 6°, 12°, …, 90°, …, 180°. Anchoring a direction exactly
+// on 90° means the (symmetric) random mass forms one tall bar on the perpendicular, not a split V.
+const NC = 31
+const STEP = Math.PI / (NC - 1) // 6°
 
-// density per angular bin: fraction of vectors whose angle-to-anchor falls in each 6° bin
+// density per direction: fraction of vectors whose angle-to-anchor rounds to each 6° direction
 function angleHist(cosArr) {
-  const bins = new Array(NB).fill(0)
+  const bins = new Array(NC).fill(0)
   for (const c of cosArr) {
     const th = Math.acos(Math.max(-1, Math.min(1, c)))
-    let b = Math.floor((th / Math.PI) * NB)
-    if (b < 0) b = 0
-    if (b >= NB) b = NB - 1
-    bins[b]++
+    let k = Math.round(th / STEP)
+    if (k < 0) k = 0
+    if (k >= NC) k = NC - 1
+    bins[k]++
   }
   return bins.map((v) => v / (cosArr.length || 1))
 }
@@ -141,7 +144,7 @@ export default function PerpendicularCircle() {
     hist
       ? hist.map((di, i) => {
           if (di <= 0) return null
-          const th = ((i + 0.5) / NB) * Math.PI
+          const th = i * STEP
           const ro = ri + (R - ri - 2) * (di / maxD)
           return (
             <line
