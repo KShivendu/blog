@@ -60,7 +60,7 @@ Why is the random "nearest neighbor" so far away? Because in high dimensions, al
 
 ## 📐 In 1024 dimensions, everything is perpendicular
 
-Here's the part I found genuinely unintuitive. Pick two random directions in `d` dimensions and measure the cosine between them. In 2D or 3D they're often fairly aligned. But as `d` grows, the cosine concentrates around 0, so two random unit vectors are almost always nearly orthogonal. Drag the dimension below and hit resample to watch the distribution of pairwise cosines collapse onto 0:
+Here's the part I found genuinely unintuitive. Pick two random directions in `d` dimensions and measure the cosine between them. In 2D or 3D they're often fairly aligned. But as `d` grows, the cosine concentrates around 0, so two random unit vectors are almost always nearly orthogonal. Drag the dimension below to watch the random distribution collapse onto 0. The **green ● dimensions** have a real mxbai slice — click one and it overlays real embeddings at the _same_ dimension, which stay a hump near +0.35 no matter how far you truncate:
 
 <HighDimOrthogonality />
 
@@ -114,7 +114,66 @@ This is what wrecks search. In 2D, only **6.5%** of random pairs are near-perpen
 
 </div>
 
-When everything is perpendicular to everything else, "nearest" stops meaning much: no direction is meaningfully closer than any other. That's the geometry real embeddings escape — the rest of the post is how.
+When everything is perpendicular to everything else, "nearest" stops meaning much: no direction is meaningfully closer than any other.
+
+## 🌐 Haze vs continents, on a globe
+
+So far this has been pairs of vectors and cosines. Here's the same conclusion as a picture you can spin. I run the _exact same pipeline_ on both random and real vectors — cluster them into 8 groups with k-means, project to a 3D globe with UMAP (the same tool people use to map real embeddings), colour by cluster — so any difference is the data, not the method:
+
+<NSphereGlobe />
+
+k-means always hands you 8 groups, so the fair question is whether they _mean_ anything. On random vectors they don't: the colours come out as **confetti**, scattered evenly across the globe with no coherent regions, at _every_ dimension. There's nothing to pull together because every point is ~equidistant from every other.
+
+Flip the toggle to **real embeddings** and the identical clustering does the opposite: it finds distinct **continents** that hold together even truncated to a 64-dim [Matryoshka](/blog/mrl-cliff) slice. Same method, opposite result — the difference is entirely in the data.
+
+The clusters differ in one more way: their **sizes**. Sort the 64 clusters biggest-to-smallest and the shapes couldn't be more different:
+
+<PlotlyChart
+  data={[
+    {
+      name: 'real mxbai',
+      x: Array.from({ length: 64 }, (_, i) => i + 1),
+      y: [
+        246, 238, 230, 220, 214, 209, 200, 197, 195, 192, 192, 185, 182, 172, 170, 154, 152, 147,
+        146, 139, 139, 139, 137, 136, 134, 133, 132, 129, 129, 124, 123, 121, 116, 113, 108, 104,
+        103, 101, 97, 97, 95, 94, 93, 91, 90, 89, 88, 87, 86, 84, 81, 80, 78, 73, 68, 68, 68, 68,
+        64, 61, 59, 55, 54, 31,
+      ],
+      type: 'scatter',
+      mode: 'lines',
+      line: { color: '#10b981', width: 2 },
+      fill: 'tozeroy',
+      fillcolor: 'rgba(16,185,129,0.12)',
+    },
+    {
+      name: 'random',
+      x: Array.from({ length: 64 }, (_, i) => i + 1),
+      y: [
+        150, 145, 144, 143, 140, 140, 138, 138, 137, 137, 137, 134, 134, 133, 133, 132, 132, 132,
+        131, 131, 131, 131, 129, 129, 129, 128, 128, 127, 127, 126, 126, 126, 125, 124, 124, 124,
+        123, 122, 122, 122, 122, 121, 121, 120, 119, 118, 118, 117, 117, 116, 116, 115, 115, 113,
+        112, 112, 112, 111, 111, 111, 110, 106, 102, 101,
+      ],
+      type: 'scatter',
+      mode: 'lines',
+      line: { color: '#f59e0b', width: 2 },
+      fill: 'tozeroy',
+      fillcolor: 'rgba(245,158,11,0.12)',
+    },
+  ]}
+  layout={{
+    title: { text: 'Cluster sizes (k-means, k=64), largest → smallest', font: { size: 15 } },
+    xaxis: { title: 'cluster rank' },
+    yaxis: { title: 'points in cluster', rangemode: 'tozero' },
+    height: 340,
+    margin: { t: 48, r: 24, b: 48, l: 56 },
+    legend: { orientation: 'h', y: -0.22 },
+  }}
+/>
+
+Random's line is almost flat — every cluster holds ~110–150 points, because k-means slices a uniform cloud into near-equal cells. Real's falls off a cliff: from 246 points down to 31, an **~8× spread** (Gini 0.23 vs 0.05 for random). Real embedding density is _lumpy_ — common topics pack together into big clusters, rare ones sit sparse — so even the cluster _sizes_ carry the frequency structure of language. Random has none to carry.
+
+That structure — real neighbourhoods versus structureless confetti — is the whole thing search runs on, and it's the geometry the rest of the post is about.
 
 ## 🔍 What that costs a search index
 

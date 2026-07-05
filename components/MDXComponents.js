@@ -11,6 +11,7 @@ import SpladeVsIF from './SpladeVsIF'
 import TokenCompressionPipeline from './TokenCompressionPipeline'
 import CompressionWidget from './CompressionWidget'
 import HighDimOrthogonality from './HighDimOrthogonality'
+import NSphereGlobe from './NSphereGlobe'
 import ResizingIframe from './ResizingIframe'
 import StaticEmbeddingDemo from './StaticEmbeddingDemo'
 import StaticPipeline from './StaticPipeline'
@@ -26,6 +27,7 @@ export const MDXComponents = {
   TokenCompressionPipeline,
   CompressionWidget,
   HighDimOrthogonality,
+  NSphereGlobe,
   ResizingIframe,
   StaticEmbeddingDemo,
   StaticPipeline,
