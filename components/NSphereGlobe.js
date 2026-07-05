@@ -2,10 +2,26 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 
 // Same projection for both: high-dim vectors -> UMAP-3D -> unit sphere -> globe. Random
-// spreads into a featureless even globe at every dimension; real mxbai breaks into clusters.
+// spreads into a featureless even globe at every dimension; real jina embeddings break into clusters.
 // Coordinates are precomputed (UMAP can't run in-browser); the component just renders them.
-const DIMS = [64, 128, 256, 512, 1024] // shared: genuine mxbai Matryoshka slices, valid sphere dims
-const PAL = ['#60a5fa', '#f59e0b', '#34d399', '#f472b6', '#a78bfa', '#22d3ee', '#fb7185', '#a3e635']
+const DIMS = [32, 64, 128, 256, 512, 1024] // shared: genuine jina-v3 Matryoshka slices (down to 32)
+// 14 hues — one per DBpedia-14 topic (k-means k=14)
+const PAL = [
+  '#60a5fa',
+  '#f59e0b',
+  '#34d399',
+  '#f472b6',
+  '#a78bfa',
+  '#22d3ee',
+  '#fb7185',
+  '#a3e635',
+  '#fbbf24',
+  '#38bdf8',
+  '#4ade80',
+  '#e879f9',
+  '#fb923c',
+  '#2dd4bf',
+]
 const DATA_URL = '/static/interactives/data/nsphere_globe.json'
 
 export default function NSphereGlobe() {
@@ -31,7 +47,12 @@ export default function NSphereGlobe() {
   const scene = useMemo(() => {
     if (!data) return null
     const P = (data[mode] && data[mode][String(d)]) || []
-    const lab = (mode === 'real' ? data.labels : data.random_labels) || []
+    const lab =
+      (mode === 'real'
+        ? data.labels
+        : mode === 'tokens'
+        ? data.token_labels
+        : data.random_labels) || []
     return P.map((p, i) => ({ p, c: PAL[(lab[i] ?? 0) % PAL.length] }))
   }, [data, mode, d])
 
@@ -127,7 +148,7 @@ export default function NSphereGlobe() {
     <div className="my-6 rounded-lg border border-gray-200 p-4 dark:border-gray-700">
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         <span className="text-gray-500 dark:text-gray-400">
-          {mode === 'real' ? 'MRL slice' : 'sphere'} d =
+          {mode === 'random' ? 'sphere' : 'MRL slice'} d =
         </span>
         {DIMS.map((dd) => (
           <button
@@ -143,7 +164,7 @@ export default function NSphereGlobe() {
           </button>
         ))}
         <span className="ml-auto inline-flex overflow-hidden rounded border border-gray-300 dark:border-gray-600">
-          {['random', 'real'].map((mm) => (
+          {['random', 'tokens', 'real'].map((mm) => (
             <button
               key={mm}
               onClick={() => setMode(mm)}
@@ -153,7 +174,7 @@ export default function NSphereGlobe() {
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
               }`}
             >
-              {mm === 'random' ? 'random' : 'real embeddings'}
+              {mm === 'random' ? 'random' : mm === 'tokens' ? 'real tokens' : 'real sentences'}
             </button>
           ))}
         </span>
@@ -168,29 +189,37 @@ export default function NSphereGlobe() {
       <canvas ref={canvasRef} style={{ width: '100%', height: 380, display: 'block' }} />
 
       <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-        {mode === 'random' ? (
+        {!data ? (
+          <>Loading…</>
+        ) : mode === 'random' ? (
           <>
             Random unit vectors — same pipeline as the real embeddings: projected to the globe
-            (UMAP) and coloured by k-means. k-means still hands you 8 "clusters", but they're{' '}
+            (UMAP) and coloured by k-means. k-means still hands you 14 "clusters", but they're{' '}
             <b>confetti</b> — arbitrary slices of a structureless cloud, scattered all over with no
             coherent regions, at <em>every</em> dimension. That's what "no structure" looks like:
             nothing for search to grab onto.
           </>
-        ) : data ? (
+        ) : mode === 'tokens' ? (
           <>
-            Real <span className="font-mono">mxbai</span> embeddings — same projection and the same
-            k-means as the random case — truncated to their <span className="font-mono">{d}</span>
-            -dim Matryoshka slice. Here the clusters are real: they form distinct <b>
-              continents
-            </b>{' '}
-            that hold together as you cut dimensions, which is why{' '}
+            jina-embeddings-v3's <b>input token</b> embeddings (its word-embedding matrix, before
+            any transformer layer), same projection + k-means. Words <em>do</em> group by meaning —
+            so unlike random, there's real structure — but into <b>lumpier</b> clusters than
+            sentences (size Gini 0.29 vs 0.23): a few large groups and a long tail of small ones
+            (the vocabulary's frequency structure). The transformer's job is to reshape this into
+            the smoother sentence space.
+          </>
+        ) : (
+          <>
+            jina-embeddings-v3 <b>sentence</b> embeddings — same projection and the same k-means —
+            truncated to their <span className="font-mono">{d}</span>-dim Matryoshka slice. The
+            clusters form distinct <b>continents</b> — and they line up with the real topics:
+            k-means recovers the 14 DBpedia categories almost exactly (cluster↔topic agreement
+            0.87). They hold together even truncated to a 32-dim slice (still 0.64), which is why{' '}
             <Link href="/blog/mrl-cliff" className="text-blue-500">
               Matryoshka
             </Link>{' '}
             embeddings work. That structure is the whole difference.
           </>
-        ) : (
-          <>Loading…</>
         )}
       </div>
     </div>
