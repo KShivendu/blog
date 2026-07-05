@@ -60,45 +60,13 @@ Why is the random "nearest neighbor" so far away? Because in high dimensions, al
 
 ## 📐 In 1024 dimensions, everything is perpendicular
 
-Here's the part I found genuinely unintuitive. Pick two random directions in `d` dimensions and measure the cosine between them. In 2D or 3D they're often fairly aligned. But as `d` grows, the cosine concentrates around 0, so two random unit vectors are almost always nearly orthogonal. Drag the dimension below to watch the random distribution collapse onto 0. The **green ● dimensions** have a real jina slice — click one to overlay real sentence embeddings at the _same_ dimension. Here's the twist I didn't expect: real embeddings sit in a hump near **+0.11** too — barely off orthogonal. A random pair of _unrelated_ sentences (say a company and a plant) genuinely _should_ point in near-perpendicular directions, so a near-zero average is correct, not a defect. The structure that makes them searchable isn't in this average — it's in the **tail** (a real vector's nearest neighbor is ~0.55, not 0.10) and in the **clusters** (next section). Random has neither:
+Here's the part I found genuinely unintuitive. Pick two random directions in `d` dimensions and measure the cosine between them. In 2D or 3D they're often fairly aligned — but as `d` grows the cosine concentrates around 0, so two random unit vectors are almost always nearly orthogonal. The cleanest way to _feel_ this is from a single vector's point of view. Put your point where the x-axis meets the circle (0°), then place every other vector on the circle at its true angle to it — so a dot's **horizontal position is literally its cosine**. Bump the dimension buttons and watch:
 
-<HighDimOrthogonality />
+<PerpendicularCircle />
 
-The width of that distribution shrinks as exactly **1/√d**. The intuition: a unit vector spreads its length across `d` coordinates, so each is about `1/√d` in size; the dot product of two independent unit vectors sums `d` such terms with random signs, landing near 0 with standard deviation `1/√d`. Measured against theory, it's a near-perfect match:
+As `d` climbs, the amber (random) cloud collapses onto the vertical **90° line** — every other vector becomes perpendicular to yours. Why so relentlessly? A unit vector spreads its length across `d` axes at about `1/√d` each, so the cosine of two of them sums `d` random-sign terms and lands near 0 with spread `1/√d`: the more dimensions, the tighter everything hugs 90°.
 
-<PlotlyChart
-  data={[
-    {
-      name: 'measured (random unit vectors)',
-      x: [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],
-      y: [0.7078, 0.5001, 0.3533, 0.2495, 0.1766, 0.1248, 0.0884, 0.0625, 0.0443, 0.0312],
-      mode: 'markers',
-      type: 'scatter',
-      marker: { size: 10, color: '#10b981' },
-    },
-    {
-      name: '1/√d (theory)',
-      x: [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],
-      y: [0.7071, 0.5, 0.3536, 0.25, 0.1768, 0.125, 0.0884, 0.0625, 0.0442, 0.0312],
-      mode: 'lines',
-      type: 'scatter',
-      line: { color: '#6366f1', dash: 'dot' },
-    },
-  ]}
-  layout={{
-    title: { text: 'Spread of pairwise cosine vs dimension', font: { size: 15 } },
-    xaxis: {
-      title: 'dimension d',
-      type: 'log',
-      tickvals: [2, 8, 32, 128, 512, 1024],
-      ticktext: ['2', '8', '32', '128', '512', '1024'],
-    },
-    yaxis: { title: 'std of pairwise cosine', type: 'log' },
-    height: 360,
-    margin: { t: 48, r: 24, b: 48, l: 64 },
-    legend: { orientation: 'h', y: -0.22 },
-  }}
-/>
+The green **real jina** overlay is the twist I didn't expect. Its bulk sits close to that same 90° line — real sentences are _also_ near-orthogonal on average (that +0.11 hump), and they should be: a random pair of _unrelated_ sentences (a company and a plant) genuinely _is_ perpendicular. Real embeddings aren't searchable because their average pair is similar. They're searchable because of the **tail** — a vector's true nearest neighbours peel off the 90° line toward 0° (nearest ~0.55, not the ~0.10 background) — and because of **clusters** (next section). Random has neither, at any dimension, and the real tail barely fades even at a 32-dim slice.
 
 This is what wrecks search. In 2D, only **6.5%** of random pairs are near-perpendicular (within ±0.1 cosine of orthogonal) — you can picture that. By 1024-d it's **99.9%**:
 
@@ -114,15 +82,7 @@ This is what wrecks search. In 2D, only **6.5%** of random pairs are near-perpen
 
 </div>
 
-When everything is perpendicular to everything else, "nearest" stops meaning much: no direction is meaningfully closer than any other.
-
-### The same fact, seen from one vector
-
-The histogram above counts _all_ pairs at once. Here's the identical fact from the point of view of a _single_ vector. Put your point where the x-axis meets the circle (0°), then drop every other vector onto the circle at its true angle to yours — so a dot's **horizontal position is literally its cosine**. A cosine near 0 _is_ an angle near 90°, so the two pictures say the same thing: **when the histogram piles up at 0, the circle piles up on the vertical 90° axis.**
-
-<PerpendicularCircle />
-
-Watch the amber (random) cloud climb onto the 90° line as `d` grows — the spatial twin of the histogram's spike collapsing onto 0. The green **real jina** overlay sits close to that same line on average (its bulk is near-orthogonal too — that +0.11 hump), but unlike random it trails a **warm tail of genuine nearest neighbours** reaching down toward 0°. Same dimension, same axes: random has _only_ the perpendicular bulk, real has the bulk **plus** a tail of real neighbours. That tail — not the average position — is the structure, and it barely fades as you truncate the dimension all the way down to 32.
+When everything is perpendicular to everything else, no direction is meaningfully closer than any other — so whatever makes real embeddings searchable has to come from somewhere other than raw distance. That's what the rest of this post is about.
 
 ## 🌐 Haze vs continents, on a globe
 

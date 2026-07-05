@@ -91,6 +91,9 @@ export default function PerpendicularCircle() {
     return ((100 * n) / randCos.length).toFixed(n === randCos.length ? 0 : 1)
   }, [randCos])
   const realMean = realCos ? (realCos.reduce((s, c) => s + c, 0) / realCos.length).toFixed(2) : null
+  const realPerp = realCos
+    ? ((100 * realCos.filter((c) => Math.abs(c) < 0.1).length) / realCos.length).toFixed(0)
+    : null
 
   const dot = (p, i, fill, op) => (
     <circle key={i} cx={p.x} cy={p.y} r={2.6} fill={fill} opacity={op} />
@@ -216,11 +219,11 @@ export default function PerpendicularCircle() {
         crowd the y-axis, all equally unlike your point.{' '}
         {realCos ? (
           <>
-            The <b style={{ color: '#10b981' }}>real jina</b> cloud sits close to that same 90° line
-            on average (mean cosine only <b>+{realMean}</b> — real sentences are mostly
-            near-orthogonal too), but unlike random it trails a warm tail of genuine nearest
-            neighbours reaching down toward 0°. That tail — not the average — is the structure, and
-            it barely fades as you truncate the dimension.
+            The <b style={{ color: '#10b981' }}>real jina</b> cloud crowds the same line —{' '}
+            <b>{realPerp}%</b> of it is within ±0.1 of 90° too (mean cosine only <b>+{realMean}</b>
+            ): real sentences are mostly near-orthogonal as well. But unlike random it trails a warm
+            tail of genuine nearest neighbours reaching down toward 0°. That tail — not the average
+            — is the structure, and it barely fades as you truncate the dimension.
           </>
         ) : (
           <>
