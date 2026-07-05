@@ -11,78 +11,23 @@ authors: ['default']
 
 > Looking for TL;DR? Skip to [key takeaways](#key-takeaways). And feel free to DM me on [X](http://kshivendu.dev/x) or [LinkedIn](http://kshivendu.dev/linkedin) if I got something wrong :)
 
-I've always heard that random vectors are useless for search, but I wanted to actually see it. So I generated 10,000 random 1024-dimensional unit vectors and asked the simplest question I could: for any given vector, which one is its nearest neighbor, and how near is it?
+I've always noticed and heard that random vectors degrade vector search, but I wanted to actually see and understand why. So I generated 10,000 random 1024-dimensional unit vectors and asked the simplest question I could: for any given vector, which one is its nearest neighbor, and how near is it?
 
 The closest of all 10,000 sits at cosine **0.12**. A random pair sits at **0.00**. So the "nearest neighbor" is basically the least-far of 10,000 roughly-equidistant points — there's nothing special about it.
 
 Now the same test with real embeddings ([`jina-embeddings-v3`](https://huggingface.co/jinaai/jina-embeddings-v3) over 10,000 sentences, same count, same 1024 dims): the nearest neighbor sits at **0.55**, the median pair at just **0.10**. Look at that for a second — a real embedding's _nearest_ neighbor (0.55) towers over both its own typical pair (0.10) and random's best-of-10,000 (0.12). The whole distribution has a tail that random simply doesn't. That 0.12-vs-0.55 gap is what this whole post is about — why random vectors don't have it, what "structure" is as the cure, and what that structure actually buys you (mostly compute, it turns out, not recall).
 
-## 🎲 Random vectors don't have neighbors
+## 🎲 In random 1024-d, there is no neighbour
 
-In high dimensions, random points concentrate: nearly all pairwise distances pile up around the same value. This is the [concentration of distances](https://en.wikipedia.org/wiki/Curse_of_dimensionality#Nearest_neighbor_search), and it's been known to break nearest-neighbor search since [Beyer et al. (1999)](https://link.springer.com/chapter/10.1007/3-540-49257-7_15) asked "when is nearest neighbor meaningful?". For random unit vectors the answer is: essentially never. Two random directions in 1024-d are almost always orthogonal (cosine ≈ 0), and even the closest of 10,000 only gets nudged to 0.12.
-
-Here's the contrast directly — the cosine to a vector's nearest neighbor, its 10th neighbor, and a typical (median) pair:
-
-<PlotlyChart
-  data={[
-    {
-      name: 'real (jina)',
-      x: ['nearest (top-1)', '10th nearest', 'median pair'],
-      y: [0.552, 0.458, 0.104],
-      type: 'bar',
-      marker: { color: '#10b981' },
-      text: ['0.55', '0.46', '0.10'],
-      textposition: 'outside',
-    },
-    {
-      name: 'random',
-      x: ['nearest (top-1)', '10th nearest', 'median pair'],
-      y: [0.12, 0.097, 0.0],
-      type: 'bar',
-      marker: { color: '#f59e0b' },
-      text: ['0.12', '0.10', '0.00'],
-      textposition: 'outside',
-    },
-  ]}
-  layout={{
-    title: { text: 'How much nearer is "nearest"? (cosine similarity)', font: { size: 15 } },
-    barmode: 'group',
-    yaxis: { title: 'cosine similarity', range: [-0.02, 0.65] },
-    height: 380,
-    margin: { t: 48, r: 24, b: 48, l: 64 },
-    legend: { orientation: 'h', y: -0.18 },
-  }}
-/>
-
-For real embeddings the bars fall off a cliff: the nearest is much closer than typical, and there's a clear ordering among the top neighbors. For random vectors the bars are flat and low — the nearest neighbor (0.12) is barely distinguishable from a coin-flip pair (0.00). **There is no neighborhood to find.**
-
-Why is the random "nearest neighbor" so far away? Because in high dimensions, almost every pair of vectors is **perpendicular**.
-
-## 📐 In 1024 dimensions, everything is perpendicular
-
-Here's the part I found genuinely unintuitive. Pick two random directions in `d` dimensions and measure the cosine between them. In 2D or 3D they're often fairly aligned — but as `d` grows the cosine concentrates around 0, so two random unit vectors are almost always nearly orthogonal. The cleanest way to _feel_ this is from a single vector's point of view. Put your point where the x-axis meets the circle (0°), then place every other vector on the circle at its true angle to it — so a dot's **horizontal position is literally its cosine**. Bump the dimension buttons and watch:
+Why is a random vector's nearest neighbour so far away? Because in high dimensions points _concentrate_: nearly all pairwise distances pile up around the same value. This [concentration of distances](https://en.wikipedia.org/wiki/Curse_of_dimensionality#Nearest_neighbor_search) has been known to break nearest-neighbor search since [Beyer et al. (1999)](https://link.springer.com/chapter/10.1007/3-540-49257-7_15) asked "when is nearest neighbor meaningful?". For unit vectors the symptom is geometric — two random directions in 1024-d are almost always **perpendicular**. It's easiest to see from a single vector's point of view: put your point where the x-axis meets the circle (0°), then place every other vector at its true angle to it, so a dot's **horizontal position is literally its cosine**. Bump the dimension buttons from 2 up to 1024 and watch:
 
 <PerpendicularCircle />
 
-As `d` climbs, the amber (random) cloud collapses onto the vertical **90° line** — every other vector becomes perpendicular to yours. Why so relentlessly? A unit vector spreads its length across `d` axes at about `1/√d` each, so the cosine of two of them sums `d` random-sign terms and lands near 0 with spread `1/√d`: the more dimensions, the tighter everything hugs 90°.
+As `d` climbs, the amber (random) cloud collapses onto the vertical **90° line** — every other vector becomes perpendicular to yours. A unit vector spreads its length across `d` axes at about `1/√d` each, so the cosine of two of them sums `d` random-sign terms and lands near 0 with spread `1/√d`. That's the concentration made visible, and it's what wrecks search: the share of random pairs within ±0.1 cosine of orthogonal climbs from **6.5%** in 2D to **99.9%** by 1024-d — nearly every pair is pinned to the vertical, so no direction is meaningfully closer than any other.
 
-The green **real jina** overlay is the twist I didn't expect. Its bulk sits close to that same 90° line — real sentences are _also_ near-orthogonal on average (that +0.11 hump), and they should be: a random pair of _unrelated_ sentences (a company and a plant) genuinely _is_ perpendicular. Real embeddings aren't searchable because their average pair is similar. They're searchable because of the **tail** — a vector's true nearest neighbours peel off the 90° line toward 0° (nearest ~0.55, not the ~0.10 background) — and because of **clusters** (next section). Random has neither, at any dimension, and the real tail barely fades even at a 32-dim slice.
+The green **real jina** overlay is the twist I didn't expect. Its bulk sits near that same 90° line — real sentences are _also_ near-orthogonal on average (that +0.11 hump), and unrelated sentences (a company and a plant) genuinely _should_ be. But it trails a warm **tail** of true nearest neighbours toward 0°: not one lucky hit but a whole neighbourhood (nearest ~0.55, even the 10th-nearest ~0.46, against a ~0.10 background), plus **clusters** (next section). Random has neither — its nearest is no different from its median. **There is no neighbourhood to find.** (The real tail barely fades even truncated to a 32-dim slice.)
 
-This is what wrecks search. In 2D, only **6.5%** of random pairs are near-perpendicular (within ±0.1 cosine of orthogonal) — you can picture that. By 1024-d it's **99.9%**:
-
-<div style={{overflowX: 'auto'}}>
-
-| dimension | random pairs within ±0.1 of orthogonal |
-| --------- | -------------------------------------: |
-| 2         |                                   6.5% |
-| 8         |                                    20% |
-| 64        |                                    57% |
-| 256       |                                    89% |
-| 1024      |                              **99.9%** |
-
-</div>
-
-When everything is perpendicular to everything else, no direction is meaningfully closer than any other — so whatever makes real embeddings searchable has to come from somewhere other than raw distance. That's what the rest of this post is about.
+So searchability can't come from raw distance — in high dimensions there's barely any distance contrast left. It comes from the tail and the clusters you just saw leaning off the vertical. What that structure _is_ takes up the rest of the post.
 
 ## 🌐 Haze vs continents, on a globe
 
