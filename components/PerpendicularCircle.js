@@ -202,7 +202,7 @@ export default function PerpendicularCircle() {
         <text x={cx - R - 4} y={cy + 16} textAnchor="start" fontSize="10.5" fill="#9ca3af">
           180° opposite (cos = −1)
         </text>
-        {/* points: real (green) behind, random (amber) in front */}
+        {/* points: real (green) behind, random (yellow) in front */}
         {realCos &&
           realCos.map((c, i) => dot(place(c, i), 'r' + i, '#10b981', i < nnear ? 0.95 : 0.6))}
         {randCos.map((c, i) => dot(place(c, i), 'a' + i, '#f59e0b', 0.75))}
