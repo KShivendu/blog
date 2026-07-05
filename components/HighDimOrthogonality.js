@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 // Deterministic PRNG so server and client render identically (no hydration mismatch).
 function mulberry32(a) {
@@ -20,57 +20,8 @@ function randn(rng) {
 
 const NBINS = 49
 const M = 300 // sampled vectors -> ~45k pairwise cosines
-
-// Real mxbai pairwise-cosine distributions at its genuine Matryoshka slices (density over the
-// same 49 bins, from 1,500 embeddings). Real pairs stay a broad hump at +0.35–0.39 at EVERY
-// slice; the spread just narrows with dimension. Random, at the same dim, sits at 0.
-const REAL_SLICES = {
-  64: {
-    mean: 0.357,
-    std: 0.121,
-    dens: [
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0001, 0.0003, 0.0009, 0.0025,
-      0.0055, 0.0113, 0.0218, 0.037, 0.0585, 0.0828, 0.108, 0.1266, 0.1337, 0.1261, 0.1065, 0.0793,
-      0.0508, 0.0279, 0.0128, 0.0051, 0.0017, 0.0005, 0.0001, 0, 0, 0, 0, 0,
-    ],
-  },
-  128: {
-    mean: 0.354,
-    std: 0.093,
-    dens: [
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0002, 0.0007,
-      0.0026, 0.0081, 0.0217, 0.0471, 0.0874, 0.1341, 0.1696, 0.1751, 0.1482, 0.1023, 0.0578,
-      0.0274, 0.0111, 0.0041, 0.0017, 0.0006, 0.0002, 0, 0, 0, 0, 0, 0,
-    ],
-  },
-  256: {
-    mean: 0.347,
-    std: 0.078,
-    dens: [
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0004, 0.0027,
-      0.0116, 0.0374, 0.0892, 0.1582, 0.2079, 0.2032, 0.1478, 0.0822, 0.0363, 0.0142, 0.0053,
-      0.0022, 0.0009, 0.0003, 0.0001, 0, 0, 0, 0, 0, 0,
-    ],
-  },
-  512: {
-    mean: 0.35,
-    std: 0.069,
-    dens: [
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0005,
-      0.004, 0.021, 0.074, 0.163, 0.2375, 0.2279, 0.1506, 0.0739, 0.0292, 0.0107, 0.0044, 0.002,
-      0.0008, 0.0003, 0.0001, 0, 0, 0, 0, 0, 0,
-    ],
-  },
-  1024: {
-    mean: 0.389,
-    std: 0.06,
-    dens: [
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.001,
-      0.0102, 0.0575, 0.1709, 0.276, 0.2532, 0.1429, 0.0575, 0.019, 0.007, 0.003, 0.0012, 0.0004,
-      0.0001, 0, 0, 0, 0, 0, 0,
-    ],
-  },
-}
+// Real jina-embeddings-v3 slices are fetched (reproduced by gen_blog_stats_jina.py):
+const DATA_URL = '/static/interactives/data/blog_stats.json'
 
 function experiment(d, seed) {
   const rng = mulberry32((seed * 2654435761 + d * 40503) >>> 0)
@@ -88,7 +39,6 @@ function experiment(d, seed) {
   }
   const hist = new Array(NBINS).fill(0)
   let sumsq = 0,
-    near = 0,
     cnt = 0
   for (let i = 0; i < M; i++)
     for (let j = i + 1; j < M; j++) {
@@ -99,7 +49,6 @@ function experiment(d, seed) {
       const bin = Math.min(NBINS - 1, Math.max(0, Math.floor(((c + 1) / 2) * NBINS)))
       hist[bin]++
       sumsq += c * c
-      if (Math.abs(c) < 0.1) near++
       cnt++
     }
   return { hist, cnt, std: Math.sqrt(sumsq / cnt), invSqrtD: 1 / Math.sqrt(d) }
@@ -109,7 +58,7 @@ const DIMS = [2, 8, 32, 64, 128, 256, 512, 1024]
 
 // round y-axis tick values from 0 up to max
 function niceTicks(max, n = 4) {
-  if (!(max > 0)) return [0]
+  if (!(max > 0)) return { ticks: [0], step: 1 }
   const raw = max / n
   const mag = Math.pow(10, Math.floor(Math.log10(raw)))
   const norm = raw / mag
@@ -120,10 +69,23 @@ function niceTicks(max, n = 4) {
 }
 
 export default function HighDimOrthogonality() {
-  const [d, setD] = useState(64) // default to a real slice so the overlay is discovered
+  const [d, setD] = useState(64) // default to a real slice so the overlay is visible
   const [seed, setSeed] = useState(1)
+  const [realSlices, setRealSlices] = useState(null)
   const r = useMemo(() => experiment(d, seed), [d, seed])
-  const real = REAL_SLICES[d]
+
+  useEffect(() => {
+    let ok = true
+    fetch(DATA_URL)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((j) => ok && j && setRealSlices(j.real_slices))
+      .catch(() => {})
+    return () => {
+      ok = false
+    }
+  }, [])
+
+  const real = realSlices ? realSlices[String(d)] : null
 
   const W = 620,
     H = 230,
@@ -136,9 +98,9 @@ export default function HighDimOrthogonality() {
   const randDens = r.hist.map((h) => h / r.cnt)
   const yMax = Math.max(...randDens, ...(real ? real.dens : [0])) || 1
   const y = (dens) => padT + (1 - dens / yMax) * (H - padT - padB)
-  const { ticks: yticks, step: ystep } = niceTicks(yMax)
-  const pstep = ystep * 100 // ticks shown as % of pairs (densities sum to 1 -> ×100 = percent)
-  const pdec = pstep >= 1 ? 0 : pstep >= 0.1 ? 1 : 2
+  const { ticks: yticks } = niceTicks(yMax)
+  const pstep = 1
+  const pdec = pstep >= 1 ? 0 : 1
   const bars = (dens, fill, opacity) =>
     dens.map((v, i) =>
       v <= 0 ? null : (
@@ -159,12 +121,14 @@ export default function HighDimOrthogonality() {
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         <span className="text-gray-500 dark:text-gray-400">dimension d =</span>
         {DIMS.map((dd) => {
-          const hasReal = !!REAL_SLICES[dd]
+          const hasReal = realSlices
+            ? !!realSlices[String(dd)]
+            : [32, 64, 128, 256, 512, 1024].includes(dd)
           return (
             <button
               key={dd}
               onClick={() => setD(dd)}
-              title={hasReal ? 'has a real mxbai slice — click to overlay' : undefined}
+              title={hasReal ? 'has a real jina slice — click to overlay' : undefined}
               className={`rounded px-2.5 py-1 font-mono text-xs transition ${
                 hasReal ? 'ring-1 ring-emerald-400/70' : ''
               } ${
@@ -207,7 +171,7 @@ export default function HighDimOrthogonality() {
         ))}
         <line x1={x(0)} x2={x(0)} y1={padT} y2={H - padB} stroke="#9ca3af" strokeDasharray="3 3" />
         {real && bars(real.dens, '#10b981', 0.55)}
-        {bars(randDens, '#f59e0b', 0.85)}
+        {bars(randDens, '#f59e0b', 0.8)}
         <text x={padL} y={H - 2} fontSize="10" fill="#9ca3af">
           cosine similarity between two vectors →
         </text>
@@ -227,7 +191,7 @@ export default function HighDimOrthogonality() {
               style={{ background: '#10b981' }}
               className="mr-1 inline-block h-2.5 w-2.5 rounded-sm align-middle"
             />
-            real mxbai (d = {d} slice)
+            real sentences (d = {d})
           </span>
         )}
         <span className="ml-auto">y = % of pairs per bin</span>
@@ -239,18 +203,18 @@ export default function HighDimOrthogonality() {
         <span className="font-mono">{r.invSqrtD.toFixed(3)}</span>).{' '}
         {real ? (
           <>
-            Real mxbai at the very same dimension sits at{' '}
-            <b>
-              +{real.mean} ± {real.std}
-            </b>{' '}
-            — a whole different distribution, shifted right and nowhere near orthogonal. Random
-            collapses onto 0 as <span className="font-mono">d</span> grows; real stays a hump at
-            ~+0.35 at <em>every</em> slice. That gap is what search runs on.
+            And real jina sentence embeddings? Also a hump close to 0 — mean cosine just{' '}
+            <b style={{ color: '#10b981' }}>+{real.mean}</b> at this slice. A random pair of{' '}
+            <em>unrelated</em> sentences (a company and a plant) <em>should</em> be ~perpendicular,
+            so near-zero average similarity isn&apos;t a flaw — it&apos;s correct. The structure
+            isn&apos;t in this average at all; it&apos;s in the <b>tail</b> (a real vector&apos;s
+            nearest neighbour sits at ~0.55, not 0.10 — the bar above) and in the <b>clusters</b>{' '}
+            (the globe below). Random has neither.
           </>
         ) : (
           <>
-            No real mxbai slice at this dimension — click a ringed{' '}
-            <b className="text-emerald-600 dark:text-emerald-400">green ●</b> dimension (64–1024) to
+            No real jina slice at this dimension — click a ringed{' '}
+            <b className="text-emerald-600 dark:text-emerald-400">green ●</b> dimension (32–1024) to
             overlay real embeddings at the same d.
           </>
         )}

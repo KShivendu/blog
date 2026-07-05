@@ -11,33 +11,33 @@ authors: ['default']
 
 > Looking for TL;DR? Skip to [key takeaways](#key-takeaways). And feel free to DM me on [X](http://kshivendu.dev/x) or [LinkedIn](http://kshivendu.dev/linkedin) if I got something wrong :)
 
-I've always heard that random vectors are useless for search, but I wanted to actually see it. So I generated 8,000 random 1024-dimensional unit vectors and asked the simplest question I could: for any given vector, which one is its nearest neighbor, and how near is it?
+I've always heard that random vectors are useless for search, but I wanted to actually see it. So I generated 10,000 random 1024-dimensional unit vectors and asked the simplest question I could: for any given vector, which one is its nearest neighbor, and how near is it?
 
-The closest of all 8,000 sits at cosine **0.12**. A random pair sits at **0.00**. So the "nearest neighbor" is basically the least-far of 8,000 roughly-equidistant points — there's nothing special about it.
+The closest of all 10,000 sits at cosine **0.12**. A random pair sits at **0.00**. So the "nearest neighbor" is basically the least-far of 10,000 roughly-equidistant points — there's nothing special about it.
 
-Now the same test with real embeddings ([`mxbai-embed-large-v1`](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1) over 8,000 short text strings, same count, same 1024 dims): the nearest neighbor sits at **0.73**, the median pair at **0.39**. Look at that for a second — a real embedding's _typical_ pair (0.39) is already closer than random's _best_ neighbor of 8,000 (0.12). The whole distribution is shifted. That 0.12-vs-0.73 gap is what this whole post is about — why random vectors don't have it, what "structure" is as the cure, and what that structure actually buys you (mostly compute, it turns out, not recall).
+Now the same test with real embeddings ([`jina-embeddings-v3`](https://huggingface.co/jinaai/jina-embeddings-v3) over 10,000 sentences, same count, same 1024 dims): the nearest neighbor sits at **0.55**, the median pair at just **0.10**. Look at that for a second — a real embedding's _nearest_ neighbor (0.55) towers over both its own typical pair (0.10) and random's best-of-10,000 (0.12). The whole distribution has a tail that random simply doesn't. That 0.12-vs-0.55 gap is what this whole post is about — why random vectors don't have it, what "structure" is as the cure, and what that structure actually buys you (mostly compute, it turns out, not recall).
 
 ## 🎲 Random vectors don't have neighbors
 
-In high dimensions, random points concentrate: nearly all pairwise distances pile up around the same value. This is the [concentration of distances](https://en.wikipedia.org/wiki/Curse_of_dimensionality#Nearest_neighbor_search), and it's been known to break nearest-neighbor search since [Beyer et al. (1999)](https://link.springer.com/chapter/10.1007/3-540-49257-7_15) asked "when is nearest neighbor meaningful?". For random unit vectors the answer is: essentially never. Two random directions in 1024-d are almost always orthogonal (cosine ≈ 0), and even the closest of 8,000 only gets nudged to 0.12.
+In high dimensions, random points concentrate: nearly all pairwise distances pile up around the same value. This is the [concentration of distances](https://en.wikipedia.org/wiki/Curse_of_dimensionality#Nearest_neighbor_search), and it's been known to break nearest-neighbor search since [Beyer et al. (1999)](https://link.springer.com/chapter/10.1007/3-540-49257-7_15) asked "when is nearest neighbor meaningful?". For random unit vectors the answer is: essentially never. Two random directions in 1024-d are almost always orthogonal (cosine ≈ 0), and even the closest of 10,000 only gets nudged to 0.12.
 
 Here's the contrast directly — the cosine to a vector's nearest neighbor, its 10th neighbor, and a typical (median) pair:
 
 <PlotlyChart
   data={[
     {
-      name: 'real (mxbai)',
+      name: 'real (jina)',
       x: ['nearest (top-1)', '10th nearest', 'median pair'],
-      y: [0.732, 0.638, 0.385],
+      y: [0.552, 0.458, 0.104],
       type: 'bar',
       marker: { color: '#10b981' },
-      text: ['0.73', '0.64', '0.39'],
+      text: ['0.55', '0.46', '0.10'],
       textposition: 'outside',
     },
     {
       name: 'random',
       x: ['nearest (top-1)', '10th nearest', 'median pair'],
-      y: [0.119, 0.095, 0.0],
+      y: [0.12, 0.097, 0.0],
       type: 'bar',
       marker: { color: '#f59e0b' },
       text: ['0.12', '0.10', '0.00'],
@@ -47,7 +47,7 @@ Here's the contrast directly — the cosine to a vector's nearest neighbor, its 
   layout={{
     title: { text: 'How much nearer is "nearest"? (cosine similarity)', font: { size: 15 } },
     barmode: 'group',
-    yaxis: { title: 'cosine similarity', range: [-0.02, 0.85] },
+    yaxis: { title: 'cosine similarity', range: [-0.02, 0.65] },
     height: 380,
     margin: { t: 48, r: 24, b: 48, l: 64 },
     legend: { orientation: 'h', y: -0.18 },
@@ -60,7 +60,7 @@ Why is the random "nearest neighbor" so far away? Because in high dimensions, al
 
 ## 📐 In 1024 dimensions, everything is perpendicular
 
-Here's the part I found genuinely unintuitive. Pick two random directions in `d` dimensions and measure the cosine between them. In 2D or 3D they're often fairly aligned. But as `d` grows, the cosine concentrates around 0, so two random unit vectors are almost always nearly orthogonal. Drag the dimension below to watch the random distribution collapse onto 0. The **green ● dimensions** have a real mxbai slice — click one and it overlays real embeddings at the _same_ dimension, which stay a hump near +0.35 no matter how far you truncate:
+Here's the part I found genuinely unintuitive. Pick two random directions in `d` dimensions and measure the cosine between them. In 2D or 3D they're often fairly aligned. But as `d` grows, the cosine concentrates around 0, so two random unit vectors are almost always nearly orthogonal. Drag the dimension below to watch the random distribution collapse onto 0. The **green ● dimensions** have a real jina slice — click one to overlay real sentence embeddings at the _same_ dimension. Here's the twist I didn't expect: real embeddings sit in a hump near **+0.11** too — barely off orthogonal. A random pair of _unrelated_ sentences (say a company and a plant) genuinely _should_ point in near-perpendicular directions, so a near-zero average is correct, not a defect. The structure that makes them searchable isn't in this average — it's in the **tail** (a real vector's nearest neighbor is ~0.55, not 0.10) and in the **clusters** (next section). Random has neither:
 
 <HighDimOrthogonality />
 
@@ -116,28 +116,51 @@ This is what wrecks search. In 2D, only **6.5%** of random pairs are near-perpen
 
 When everything is perpendicular to everything else, "nearest" stops meaning much: no direction is meaningfully closer than any other.
 
+### The same fact, seen from one vector
+
+The histogram above counts _all_ pairs at once. Here's the identical fact from the point of view of a _single_ vector. Put your point where the x-axis meets the circle (0°), then drop every other vector onto the circle at its true angle to yours — so a dot's **horizontal position is literally its cosine**. A cosine near 0 _is_ an angle near 90°, so the two pictures say the same thing: **when the histogram piles up at 0, the circle piles up on the vertical 90° axis.**
+
+<PerpendicularCircle />
+
+Watch the amber (random) cloud climb onto the 90° line as `d` grows — the spatial twin of the histogram's spike collapsing onto 0. The green **real jina** overlay sits close to that same line on average (its bulk is near-orthogonal too — that +0.11 hump), but unlike random it trails a **warm tail of genuine nearest neighbours** reaching down toward 0°. Same dimension, same axes: random has _only_ the perpendicular bulk, real has the bulk **plus** a tail of real neighbours. That tail — not the average position — is the structure, and it barely fades as you truncate the dimension all the way down to 32.
+
 ## 🌐 Haze vs continents, on a globe
 
-So far this has been pairs of vectors and cosines. Here's the same conclusion as a picture you can spin. I run the _exact same pipeline_ on both random and real vectors — cluster them into 8 groups with k-means, project to a 3D globe with UMAP (the same tool people use to map real embeddings), colour by cluster — so any difference is the data, not the method:
+So far this has been pairs of vectors and cosines. Here's the same conclusion as a picture you can spin. I run the _exact same pipeline_ on both random and real vectors — cluster them into 14 groups with k-means, project to a 3D globe with UMAP (the same tool people use to map real embeddings), colour by cluster — so any difference is the data, not the method:
 
 <NSphereGlobe />
 
-k-means always hands you 8 groups, so the fair question is whether they _mean_ anything. On random vectors they don't: the colours come out as **confetti**, scattered evenly across the globe with no coherent regions, at _every_ dimension. There's nothing to pull together because every point is ~equidistant from every other.
+k-means always hands you 14 groups, so the fair question is whether they _mean_ anything. On random vectors they don't: the colours come out as **confetti**, scattered evenly across the globe with no coherent regions, at _every_ dimension. There's nothing to pull together because every point is ~equidistant from every other.
 
-Flip the toggle to **real embeddings** and the identical clustering does the opposite: it finds distinct **continents** that hold together even truncated to a 64-dim [Matryoshka](/blog/mrl-cliff) slice. Same method, opposite result — the difference is entirely in the data.
+Flip the toggle to **real embeddings** and the identical clustering does the opposite: it finds distinct **continents**. And they aren't arbitrary — the 10,000 sentences come from 14 topics (companies, athletes, animals, films…), and k-means recovers those topics almost exactly (cluster↔topic agreement 0.87). The continents even hold together truncated to a 32-dim [Matryoshka](/blog/mrl-cliff) slice (still 0.64). Same method, opposite result — the difference is entirely in the data.
 
 The clusters differ in one more way: their **sizes**. Sort the 64 clusters biggest-to-smallest and the shapes couldn't be more different:
 
 <PlotlyChart
   data={[
     {
-      name: 'real mxbai',
+      name: 'real tokens (input)',
       x: Array.from({ length: 64 }, (_, i) => i + 1),
       y: [
-        246, 238, 230, 220, 214, 209, 200, 197, 195, 192, 192, 185, 182, 172, 170, 154, 152, 147,
-        146, 139, 139, 139, 137, 136, 134, 133, 132, 129, 129, 124, 123, 121, 116, 113, 108, 104,
-        103, 101, 97, 97, 95, 94, 93, 91, 90, 89, 88, 87, 86, 84, 81, 80, 78, 73, 68, 68, 68, 68,
-        64, 61, 59, 55, 54, 31,
+        383, 359, 265, 219, 211, 210, 202, 202, 195, 190, 188, 180, 178, 168, 166, 161, 159, 158,
+        155, 149, 148, 147, 147, 147, 143, 128, 128, 116, 115, 115, 115, 113, 112, 111, 110, 106,
+        102, 100, 99, 96, 93, 93, 83, 77, 76, 75, 71, 70, 69, 68, 61, 60, 59, 58, 58, 56, 56, 55,
+        50, 49, 47, 43, 42, 35,
+      ],
+      type: 'scatter',
+      mode: 'lines',
+      line: { color: '#3b82f6', width: 2 },
+      fill: 'tozeroy',
+      fillcolor: 'rgba(59,130,246,0.12)',
+    },
+    {
+      name: 'real sentences',
+      x: Array.from({ length: 64 }, (_, i) => i + 1),
+      y: [
+        296, 247, 227, 214, 207, 198, 192, 187, 185, 174, 172, 166, 165, 164, 164, 163, 154, 152,
+        152, 152, 151, 147, 145, 137, 137, 123, 122, 122, 119, 119, 118, 117, 109, 109, 106, 106,
+        106, 105, 104, 104, 103, 101, 100, 99, 97, 95, 93, 92, 90, 89, 86, 86, 84, 80, 75, 74, 72,
+        61, 54, 54, 50, 45, 43, 40,
       ],
       type: 'scatter',
       mode: 'lines',
@@ -149,10 +172,10 @@ The clusters differ in one more way: their **sizes**. Sort the 64 clusters bigge
       name: 'random',
       x: Array.from({ length: 64 }, (_, i) => i + 1),
       y: [
-        150, 145, 144, 143, 140, 140, 138, 138, 137, 137, 137, 134, 134, 133, 133, 132, 132, 132,
-        131, 131, 131, 131, 129, 129, 129, 128, 128, 127, 127, 126, 126, 126, 125, 124, 124, 124,
-        123, 122, 122, 122, 122, 121, 121, 120, 119, 118, 118, 117, 117, 116, 116, 115, 115, 113,
-        112, 112, 112, 111, 111, 111, 110, 106, 102, 101,
+        149, 144, 140, 139, 137, 137, 137, 136, 136, 135, 135, 135, 133, 133, 133, 132, 132, 130,
+        130, 130, 129, 127, 127, 127, 127, 127, 126, 126, 125, 125, 125, 125, 125, 125, 125, 125,
+        124, 124, 123, 123, 121, 121, 120, 120, 119, 119, 119, 119, 118, 117, 117, 117, 116, 116,
+        116, 114, 114, 113, 113, 113, 110, 109, 109, 107,
       ],
       type: 'scatter',
       mode: 'lines',
@@ -171,7 +194,7 @@ The clusters differ in one more way: their **sizes**. Sort the 64 clusters bigge
   }}
 />
 
-Random's line is almost flat — every cluster holds ~110–150 points, because k-means slices a uniform cloud into near-equal cells. Real's falls off a cliff: from 246 points down to 31, an **~8× spread** (Gini 0.23 vs 0.05 for random). Real embedding density is _lumpy_ — common topics pack together into big clusters, rare ones sit sparse — so even the cluster _sizes_ carry the frequency structure of language. Random has none to carry.
+Random's line is almost flat — every cluster holds ~110–150 points, because k-means slices a uniform cloud into near-equal cells (Gini 0.04). Real **sentence** embeddings fall off a cliff: 296 down to 40, a ~7× spread (Gini 0.23) — some topics are dense, others sparse. And real **input tokens** are lumpier still — 383 down to 35, an ~11× spread (Gini 0.29): the vocabulary's frequency structure, a few big groups and a long tail of small ones. Real embeddings, tokens or sentences, carve the sphere unevenly; random can't (Gini 0.04) because there's no skew to carry. (This is where the token vs sentence contrast lives now — on the pairwise-cosine histogram above, jina's tokens and sentences both sit near +0.11 and overlap, so I left tokens off that chart.)
 
 That structure — real neighbourhoods versus structureless confetti — is the whole thing search runs on, and it's the geometry the rest of the post is about.
 
