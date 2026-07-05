@@ -143,12 +143,28 @@ Random's line is almost flat — every cluster holds ~110–150 points, because 
 
 That structure — real neighbourhoods versus structureless confetti — is the whole thing search runs on, and it's the geometry the rest of the post is about.
 
-## 🧲 The flip side of clusters: hubs and orphans
+## 🧮 Anatomy of a cosine: clusters, centering, and hubs
 
-Clusters buy you neighbours — but they smuggle in a subtle problem that is almost the _opposite_ of random's "no neighbours." Ask every vector _who's in my 10 nearest?_ and count how often each point gets **named back**. In a perfectly fair world every point is named ~10 times. It isn't:
+A cosine between two unit vectors is just a sum: `cos(a,b) = a₁b₁ + a₂b₂ + … + a₁₀₂₄b₁₀₂₄` — 1024 little products, added up. So everything this post has shown fits in one question: **what do those 1024 products do differently** for a random pair (cos 0.00), a different-topic pair (+0.10), a same-topic pair (+0.25), and true nearest neighbours (+0.55)? Watch them add up — these are real sentence pairs from the corpus, products summed left to right (↻ draws new ones):
 
-- **Random**: the most-named point is named just **2.6× its fair share**, and _nobody_ goes unnamed. Boringly even.
-- **Real jina**: the biggest **hub** is named **11× its fair share**, and **~1% of points are orphans** — nobody's nearest neighbour at all.
+<CosineWalk />
+
+Three things to see, all measured:
+
+**Every pair starts with the same raw material.** Multiply any two of these vectors component by component and the products total ~0.65–0.75 in absolute size — random pairs included. The entire difference is **cancellation**. A random pair's products split 50/50 between positive and negative, so the walk wiggles inside the shaded band and ends at ~0 — only ~4% of the gross survives. A nearest-neighbour pair's products are ~67% positive: the walk climbs, and ~71% survives. A cosine doesn't measure how _big_ two vectors are together — it measures how _consistently_ their products point the same way.
+
+**A cluster is a set of sentences whose products keep pointing up.** That's what training does, mechanically: it adjusts same-topic sentences to be large on the **same components with the same signs**, so their pairwise products come out positive and stack instead of cancelling. Nothing more is meant by "cluster" — and the clusters this recipe builds are the topics themselves: k-means on these vectors recovers the 14 DBpedia categories almost exactly (agreement 0.87). The ladder in the chart _is_ cluster structure: the more components a pair shares with matching signs, the higher its walk climbs.
+
+**Part of every real walk is the same escalator.** Click **center vectors**. All three real traces sag together — the different-topic pair collapses from +0.10 to ~+0.04 — while random doesn't move. What got removed is the **shared component**: every real vector contains a copy of the corpus-average vector μ, and that copy adds ‖μ‖² ≈ +0.11 to _every_ pair's sum, whatever the topics (that's the E[cos] = ‖μ‖² identity from the intro). A term that appears in every cosine distinguishes nothing — so deleting it (**centering** = subtracting the average vector, nothing more) barely changes search results (precision@10: 0.878 → 0.880). The component-level receipt: real pairs' products are 53.8% positive before centering and exactly 50.0% after. The +0.11 background _was_ the shared component; the climb above it is the clusters.
+
+One paragraph of jargon-decoding, because every embedding paper will throw this word at you: **anisotropy** ("not the same in all directions") gets used for two _different_ measurements of what you just watched. Sometimes it means the _average pairwise cosine_ — which, as the centering click showed, measures only the shared component (≈ 0.11 here) and vanishes with it. Sometimes it means _variance concentrated into few directions_ — which is the cluster structure itself (real vectors effectively use ~25 of their 1024 dimensions, random ~230), survives centering, and is what search runs on. Same word, two referents: one a removable constant, the other the signal. When a paper says "embeddings are anisotropic and that's bad," check which one it measured.
+
+### Hubs and orphans: clusters' odd side-effect
+
+The stacking has one strange consequence. Ask every vector _who's in my 10 nearest?_ and count how often each point gets named. Fair share is ~10 mentions each:
+
+- **Random**: the most-named point is named just **2.6× its fair share**, and _nobody_ goes unnamed — but only because there are no real neighbours to hand out.
+- **Real jina**: the biggest **hub** is named **11× its fair share**, and **~1% of points are orphans** — named by nobody.
 
 <PlotlyChart
   data={[
@@ -189,16 +205,15 @@ Clusters buy you neighbours — but they smuggle in a subtle problem that is alm
   }}
 />
 
-Random is a tight bump that stops dead by ~26; real has a **spike at 0** (the orphans) and a **long right tail** — its worst hubs run all the way out to 107, far off the right edge here. Here's the twist: the **structureless** cloud is the _fair_ one, and it's the **real, clustered** embeddings that grow hubs. This is [hubness](https://www.jmlr.org/papers/v11/radovanovic10a.html), and the intuition runs backwards from what you'd guess:
+Random is a tight bump that stops dead by ~26; real has a **spike at 0** (the orphans) and a **long right tail** — its worst hubs run out to 107, far off the right edge here. Notice which cloud is lopsided: the **structureless** one is even, and it's the **real, clustered** embeddings that grow hubs. This is [hubness](https://www.jmlr.org/papers/v11/radovanovic10a.html), and it follows from the walk above:
 
-- Uniform random points sit evenly on the sphere with no dense clumps, so no point is placed to be lots of others' "closest" — everyone's an equally-mediocre neighbour. (It's "fair" only the way a lottery nobody wins is fair: there are no real neighbours to hand out.)
-- Real embeddings clump into topic clusters of uneven density. A point in the **middle of a dense clump** lands in the top-10 of everyone around it → a **hub** that shows up in far more result lists than its share. A point on a sparse fringe is nobody's top-10 → an **orphan** that never surfaces.
+- A point near the **middle of its cluster** shares many same-sign components with _every_ cluster-mate, so its product-sums run above average with all of them at once — it lands in everyone's top-10. Measured: a point's named-count tracks the density of its neighbourhood (rank correlation 0.57).
+- A point aligned with the **shared component** collects that +0.11 escalator with everyone on top (rank correlation 0.33).
+- A fringe point whose components match nobody's strongly becomes an **orphan** — it never surfaces in anyone's results.
 
-So hubness isn't the _absence_ of structure — it's a **tax that rides on structure**: uneven density (a point's neighbour-count tracks how dense its neighbourhood is — rank correlation 0.57), plus the cloud's overall lean toward its own centre (0.33). It's mild for a clean, roughly-centred model like jina (worst hub ~11×, ~1% orphans) and eases as you truncate (worst hub ~6× at a 32-dim slice vs ~11× at full 1024) — hubness is a known side-effect of **high dimensionality**, so trimming dimensions relieves it. The classic severe cases come from high dimensionality plus a strong pull toward the data's centre — points near the mean become everyone's neighbour — the setting the hubness literature grew up in; strongly anisotropic embeddings make it worse still (we didn't test a bad one here).
+Centering removes the second cause but not the first: the worst hub drops **11× → 6×** (orphans 1.2% → 0.9%), and the remaining 6× still towers over random's 2.6× — the clusters themselves, not the shared component, do most of the hub-making. That residue can't be removed, and you wouldn't want to: it _is_ the structure.
 
-And this is the one spot where the **centering** almost nobody bothers with earns its keep: subtracting the shared mean removes that lean toward the centre, roughly halving jina's worst hub (**11× → 6×**, orphans 1.2% → 0.9%). Unlike whitening it leaves the ranking essentially untouched — which is why almost nobody bothers — but it pays off once you quantize, or when an embedding sits badly off-centre. And notice: even centred, jina's worst hub (6×) still towers over random's 2.6× — proof that the **clustering itself**, not just the mean, is what breeds the hubs.
-
-The through-line: "everything is perpendicular" and "no neighbourhood to find" are what you get with **too little** structure; "a few points hog the neighbourhood" is the mild price of **having** it. Same geometry, opposite ends.
+The through-line: with no structure the products cancel and nothing is anyone's neighbour; with structure they stack — and a few well-placed points collect more than their share. What both facts cost a search index is next.
 
 ## 🔍 What that costs a search index
 
