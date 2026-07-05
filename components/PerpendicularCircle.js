@@ -197,10 +197,10 @@ export default function PerpendicularCircle() {
           fill="#f59e0b"
           fillOpacity="0.9"
         >
-          90° ⟂ orthogonal (cos = 0)
+          90° · unrelated (⟂, cos = 0)
         </text>
         <text x={cx - R - 4} y={cy + 16} textAnchor="start" fontSize="10.5" fill="#9ca3af">
-          180° opposite (cos = −1)
+          180° · disagree (opposite, cos = −1)
         </text>
         {/* points: real (green) behind, random (yellow) in front */}
         {realCos &&
@@ -209,10 +209,11 @@ export default function PerpendicularCircle() {
         {/* anchor = your point at 0° */}
         <circle cx={cx + R} cy={cy} r={6} fill="currentColor" />
         <text x={cx + R} y={cy + 18} textAnchor="end" fontSize="11" fill="currentColor">
-          your point (0°, cos = 1)
+          your point · agree (0°, cos = 1)
         </text>
         <text x={cx} y={H - 4} textAnchor="middle" fontSize="10" fill="#9ca3af">
-          each dot = another vector, at its true angle to yours (angle = arccos of the cosine)
+          each dot = another vector at its true angle to yours — 0° agrees, 90° unrelated, 180°
+          disagrees
         </text>
       </svg>
 
@@ -238,16 +239,17 @@ export default function PerpendicularCircle() {
 
       <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">
         The angle from the <b>0°</b> axis (your point) is the vector&apos;s true angle to yours —
-        straight up is <b style={{ color: '#f59e0b' }}>90°, perpendicular</b> (cosine 0). At{' '}
-        <span className="font-mono">d = {d}</span>, <b>{randPerp}%</b> of random vectors sit within
-        ±0.1 cosine of that 90° line.{' '}
+        straight up at <b style={{ color: '#f59e0b' }}>90°</b> means <b>unrelated</b>{' '}
+        (perpendicular, cosine 0). At <span className="font-mono">d = {d}</span>, <b>{randPerp}%</b>{' '}
+        of random vectors sit within ±0.1 of that 90° line — effectively unrelated to your point.{' '}
         {realCos ? (
           <>
             The <b style={{ color: '#10b981' }}>real jina</b> cloud crowds it too —{' '}
-            <b>{realPerp}%</b> within ±0.1 of 90° — but unlike random it trails a warm tail of
-            genuine nearest neighbours peeling toward 0°. That tail, not the average, is the
-            structure, and it barely fades as you truncate the dimension. (Distance from the centre
-            is only jitter so the dots don&apos;t overlap — read the angle, not the radius.)
+            <b>{realPerp}%</b> within ±0.1 of 90°, so real sentences are mostly unrelated on average
+            as well — but unlike random it trails a warm tail of genuine nearest neighbours peeling
+            toward 0° (agreement). That tail, not the average, is the structure, and it barely fades
+            as you truncate the dimension. (Distance from the centre is only jitter so the dots
+            don&apos;t overlap — read the angle, not the radius.)
           </>
         ) : (
           <>
