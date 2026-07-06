@@ -194,6 +194,33 @@ export default function CosineWalk() {
             </text>
           </g>
         ))}
+        {/* Matryoshka (MRL) cut-points: the walk's value at k is the k-dim slices' dot product */}
+        {[32, 64, 128, 256, 512].map((m) => (
+          <g key={m}>
+            <line
+              x1={x(m)}
+              x2={x(m)}
+              y1={padT + 12}
+              y2={H - padB}
+              stroke="#10b981"
+              strokeOpacity="0.3"
+              strokeDasharray="3 4"
+            />
+            <text
+              x={x(m)}
+              y={padT + 8}
+              textAnchor="middle"
+              fontSize="8.5"
+              fill="#10b981"
+              fillOpacity="0.8"
+            >
+              {m}
+            </text>
+          </g>
+        ))}
+        <text x={x(512) + 14} y={padT + 8} fontSize="8.5" fill="#10b981" fillOpacity="0.8">
+          ← Matryoshka (MRL) cut-points
+        </text>
         {/* ±2σ random-walk noise band */}
         <path d={BAND} fill="#f59e0b" opacity="0.12" />
         <text x={x(430)} y={y(0) + 12} fontSize="9" fill="#b45309" opacity="0.8">
