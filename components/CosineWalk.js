@@ -89,19 +89,24 @@ const W = 660,
 const rnd = (v) => Math.round(v * 100) / 100
 const x = (k) => rnd(padL + (k / D) * (W - padL - padR)) // k = component count 0..1024
 
-// y domains per mode: raw running sum vs renormalized slice cosine
+// y domains per mode: raw running sum · renormalized slice cosine · slice angle in degrees
+// (deg flips the axis: 0° = identical at the top, 90° = unrelated in the middle)
 const DOM = {
-  sum: { min: -0.1, max: 0.62, grid: [0, 0.2, 0.4, 0.6] },
-  norm: { min: -0.75, max: 1.0, grid: [-0.5, 0, 0.5, 1] },
+  sum: { min: -0.1, max: 0.62, grid: [0, 0.2, 0.4, 0.6], zero: 0, flip: false },
+  norm: { min: -0.75, max: 1.0, grid: [-0.5, 0, 0.5, 1], zero: 0, flip: false },
+  deg: { min: 0, max: 155, grid: [0, 45, 90, 135], zero: 90, flip: true },
 }
+const toDeg = (c) => (Math.acos(Math.max(-1, Math.min(1, c))) * 180) / Math.PI
+const val = (m, c) => (m === 'deg' ? toDeg(c) : c) // walk values are cosines; deg mode maps them
 const yFor = (m) => (v) => {
-  const { min, max } = DOM[m]
+  const { min, max, flip } = DOM[m]
   const vv = Math.max(min, Math.min(max, v))
-  return rnd(padT + ((max - vv) / (max - min)) * (H - padT - padB))
+  const pos = flip ? (vv - min) / (max - min) : (max - vv) / (max - min)
+  return rnd(padT + pos * (H - padT - padB))
 }
 const pathFor = (m, walk) => {
   const y = yFor(m)
-  return 'M' + walk.map((v, i) => `${x((i + 1) * STEP)} ${y(v)}`).join(' L')
+  return 'M' + walk.map((v, i) => `${x((i + 1) * STEP)} ${y(val(m, v))}`).join(' L')
 }
 // ±2σ envelope of a random pair: raw partial sum σ = √k/d; renormalized slice cosine σ ≈ 1/√k
 function bandFor(m) {
@@ -110,17 +115,18 @@ function bandFor(m) {
     dn = []
   for (let k = STEP; k <= D; k += 32) {
     const s = m === 'sum' ? (2 * Math.sqrt(k)) / D : Math.min(1, 2 / Math.sqrt(k))
-    up.push(`${x(k)} ${y(s)}`)
-    dn.unshift(`${x(k)} ${y(-s)}`)
+    up.push(`${x(k)} ${y(val(m, s))}`)
+    dn.unshift(`${x(k)} ${y(val(m, -s))}`)
   }
   return `M${up.join(' L')} L${dn.join(' L')} Z`
 }
-const BANDS = { sum: bandFor('sum'), norm: bandFor('norm') }
+const BANDS = { sum: bandFor('sum'), norm: bandFor('norm'), deg: bandFor('deg') }
 
 export default function CosineWalk() {
   const [sel, setSel] = useState('nn')
   const [centered, setCentered] = useState(false)
   const [renorm, setRenorm] = useState(false)
+  const [degrees, setDegrees] = useState(false) // angle needs a true cosine → implies renorm
   const [ex, setEx] = useState(0) // example index (real) — also reseeds random
   const [real, setReal] = useState(null)
 
@@ -136,15 +142,16 @@ export default function CosineWalk() {
   }, [])
 
   const rand = useMemo(() => randomWalk(ex + 1), [ex])
-  const mode = renorm ? 'norm' : 'sum'
+  const effRenorm = renorm || degrees // degrees only makes sense on true slice cosines
+  const mode = degrees ? 'deg' : effRenorm ? 'norm' : 'sum'
   const y = yFor(mode)
 
   // per-type current walk + stats (centering only affects real pairs; random has no shared mean)
   const cur = (t) => {
-    if (t === 'random') return { walk: renorm ? rand.walk_n : rand.walk, stats: rand.stats }
+    if (t === 'random') return { walk: effRenorm ? rand.walk_n : rand.walk, stats: rand.stats }
     if (!real) return null
     const e = real.types[t][ex % real.types[t].length]
-    const w = renorm ? (centered ? e.walk_cn : e.walk_n) : centered ? e.walk_c : e.walk
+    const w = effRenorm ? (centered ? e.walk_cn : e.walk_n) : centered ? e.walk_c : e.walk
     return { walk: w, stats: centered ? e.stats_c : e.stats, e }
   }
   const selCur = cur(sel)
@@ -182,8 +189,26 @@ export default function CosineWalk() {
           center vectors
         </label>
         <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
-          <input type="checkbox" checked={renorm} onChange={(e) => setRenorm(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={effRenorm}
+            onChange={(e) => {
+              setRenorm(e.target.checked)
+              if (!e.target.checked) setDegrees(false) // angles need true slice cosines
+            }}
+          />
           renormalize each slice
+        </label>
+        <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+          <input
+            type="checkbox"
+            checked={degrees}
+            onChange={(e) => {
+              setDegrees(e.target.checked)
+              if (e.target.checked) setRenorm(true)
+            }}
+          />
+          show angle (°)
         </label>
         <button
           onClick={() => setEx((v) => v + 1)}
@@ -217,10 +242,10 @@ export default function CosineWalk() {
               y1={y(v)}
               y2={y(v)}
               stroke="#9ca3af"
-              strokeOpacity={v === 0 ? 0.45 : 0.15}
+              strokeOpacity={v === DOM[mode].zero ? 0.45 : 0.15}
             />
             <text x={padL - 5} y={y(v) + 3} textAnchor="end" fontSize="9" fill="#9ca3af">
-              {v.toFixed(1)}
+              {mode === 'deg' ? `${v}°` : v.toFixed(1)}
             </text>
           </g>
         ))}
@@ -255,20 +280,23 @@ export default function CosineWalk() {
         <path d={BANDS[mode]} fill="#f59e0b" opacity="0.12" />
         <text
           x={x(mode === 'sum' ? 430 : 500)}
-          y={y(0) + 12}
+          y={y(DOM[mode].zero) + 12}
           fontSize="9"
           fill="#b45309"
           opacity="0.8"
         >
           {mode === 'sum'
             ? '±2σ band: where a random walk stays'
-            : '±2σ band: a random k-dim slice ~ ±2/√k'}
+            : mode === 'norm'
+            ? '±2σ band: a random k-dim slice ~ ±2/√k'
+            : '±2σ band: a random k-dim slice hugs 90°'}
         </text>
         {/* walks */}
         {TYPES.map(([k]) => {
           const c = cur(k)
           if (!c) return null
           const last = c.walk[c.walk.length - 1]
+          const lastV = val(mode, last)
           const on = sel === k
           return (
             <g key={k}>
@@ -279,16 +307,17 @@ export default function CosineWalk() {
                 strokeWidth={on ? 2.4 : 1.3}
                 opacity={on ? 1 : 0.45}
               />
-              <circle cx={x(D)} cy={y(last)} r={on ? 3.5 : 2.5} fill={COL[k]} />
+              <circle cx={x(D)} cy={y(lastV)} r={on ? 3.5 : 2.5} fill={COL[k]} />
               <text
                 x={x(D) + 6}
-                y={y(last) + 3}
+                y={y(lastV) + 3}
                 fontSize="10"
                 fill={COL[k]}
                 fontWeight={on ? 700 : 400}
               >
-                {last >= 0 ? '+' : ''}
-                {last.toFixed(2)}{' '}
+                {mode === 'deg'
+                  ? `${lastV.toFixed(0)}°`
+                  : `${last >= 0 ? '+' : ''}${last.toFixed(2)}`}{' '}
                 {k === 'nn'
                   ? 'neighbours'
                   : k === 'same'
@@ -303,7 +332,9 @@ export default function CosineWalk() {
         <text x={(padL + W - padR) / 2} y={H - 6} textAnchor="middle" fontSize="10" fill="#9ca3af">
           {mode === 'sum'
             ? 'running total of the 1024 products a₁b₁ + a₂b₂ + … (left → right); the endpoint is the cosine'
-            : 'true cosine of the two k-dim slices, each renormalized at k dims — what a k-dim MRL index would score'}
+            : mode === 'norm'
+            ? 'true cosine of the two k-dim slices, each renormalized at k dims — what a k-dim MRL index would score'
+            : 'angle between the two k-dim slices (arccos of their cosine) — 0° identical · 90° unrelated'}
         </text>
       </svg>
 
