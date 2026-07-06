@@ -195,7 +195,7 @@ export default function CosineWalk() {
           </g>
         ))}
         {/* Matryoshka (MRL) cut-points: the walk's value at k is the k-dim slices' dot product */}
-        {[32, 64, 128, 256, 512].map((m) => (
+        {[32, 64, 128, 256, 512, 1024].map((m) => (
           <g key={m}>
             <line
               x1={x(m)}
