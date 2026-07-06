@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 
 // A cosine is the running sum of 1024 component products. This draws that walk for a live
-// random pair plus measured real pairs (cross-topic / same-topic / nearest-neighbour), with a
-// "center vectors" toggle. Real data from gen_cosine_walk.py; random computed here (seeded).
+// random pair plus measured real pairs (cross-topic / same-topic / nearest-neighbour), with
+// "center vectors" and "renormalize each slice" toggles (the latter shows the TRUE cosine of
+// the k-dim MRL prefixes, each renormalized at k dims). Real data from gen_cosine_walk.py.
 function mulberry32(a) {
   return function () {
     a |= 0
@@ -30,8 +31,9 @@ const TYPES = [
   ['nn', 'nearest neighbours', '#059669'],
 ]
 const COL = Object.fromEntries(TYPES.map(([k, , c]) => [k, c]))
+const MRL = [32, 64, 128, 256, 512, 1024]
 
-// random pair: two unit vectors, cumulative product sum sampled every STEP + stats
+// random pair: cumulative product sum + renormalized prefix cosine, sampled every STEP
 function randomWalk(seed) {
   const rng = mulberry32((seed * 2654435761 + 99991) >>> 0)
   const mk = () => {
@@ -47,19 +49,28 @@ function randomWalk(seed) {
   }
   const a = mk(),
     b = mk()
-  const walk = []
+  const walk = [],
+    walkN = []
   let c = 0,
     g = 0,
-    pos = 0
+    pos = 0,
+    na = 0,
+    nb = 0
   for (let k = 0; k < D; k++) {
     const p = a[k] * b[k]
     c += p
     g += Math.abs(p)
+    na += a[k] * a[k]
+    nb += b[k] * b[k]
     if (p > 0) pos++
-    if ((k + 1) % STEP === 0) walk.push(c)
+    if ((k + 1) % STEP === 0) {
+      walk.push(c)
+      walkN.push(c / Math.max(Math.sqrt(na * nb), 1e-12))
+    }
   }
   return {
     walk,
+    walk_n: walkN,
     stats: {
       cos: Math.round(c * 1000) / 1000,
       gross: Math.round(g * 1000) / 1000,
@@ -75,29 +86,41 @@ const W = 660,
   padR = 132,
   padT = 12,
   padB = 30
-const YMIN = -0.1,
-  YMAX = 0.62
 const rnd = (v) => Math.round(v * 100) / 100
 const x = (k) => rnd(padL + (k / D) * (W - padL - padR)) // k = component count 0..1024
-const y = (v) => rnd(padT + ((YMAX - v) / (YMAX - YMIN)) * (H - padT - padB))
-const path = (walk) => 'M' + walk.map((v, i) => `${x((i + 1) * STEP)} ${y(v)}`).join(' L')
 
-// ±2σ envelope of a random walk: partial sum of k products has σ = √k / d
-function noiseBand() {
+// y domains per mode: raw running sum vs renormalized slice cosine
+const DOM = {
+  sum: { min: -0.1, max: 0.62, grid: [0, 0.2, 0.4, 0.6] },
+  norm: { min: -0.75, max: 1.0, grid: [-0.5, 0, 0.5, 1] },
+}
+const yFor = (m) => (v) => {
+  const { min, max } = DOM[m]
+  const vv = Math.max(min, Math.min(max, v))
+  return rnd(padT + ((max - vv) / (max - min)) * (H - padT - padB))
+}
+const pathFor = (m, walk) => {
+  const y = yFor(m)
+  return 'M' + walk.map((v, i) => `${x((i + 1) * STEP)} ${y(v)}`).join(' L')
+}
+// ±2σ envelope of a random pair: raw partial sum σ = √k/d; renormalized slice cosine σ ≈ 1/√k
+function bandFor(m) {
+  const y = yFor(m)
   const up = [],
     dn = []
-  for (let k = 0; k <= D; k += 32) {
-    const s = (2 * Math.sqrt(k)) / D
+  for (let k = STEP; k <= D; k += 32) {
+    const s = m === 'sum' ? (2 * Math.sqrt(k)) / D : Math.min(1, 2 / Math.sqrt(k))
     up.push(`${x(k)} ${y(s)}`)
     dn.unshift(`${x(k)} ${y(-s)}`)
   }
   return `M${up.join(' L')} L${dn.join(' L')} Z`
 }
-const BAND = noiseBand()
+const BANDS = { sum: bandFor('sum'), norm: bandFor('norm') }
 
 export default function CosineWalk() {
   const [sel, setSel] = useState('nn')
   const [centered, setCentered] = useState(false)
+  const [renorm, setRenorm] = useState(false)
   const [ex, setEx] = useState(0) // example index (real) — also reseeds random
   const [real, setReal] = useState(null)
 
@@ -113,18 +136,21 @@ export default function CosineWalk() {
   }, [])
 
   const rand = useMemo(() => randomWalk(ex + 1), [ex])
+  const mode = renorm ? 'norm' : 'sum'
+  const y = yFor(mode)
 
-  // per-type current walk + stats (centered only affects real pairs; random has no shared mean)
+  // per-type current walk + stats (centering only affects real pairs; random has no shared mean)
   const cur = (t) => {
-    if (t === 'random') return { walk: rand.walk, stats: rand.stats }
+    if (t === 'random') return { walk: renorm ? rand.walk_n : rand.walk, stats: rand.stats }
     if (!real) return null
     const e = real.types[t][ex % real.types[t].length]
-    return centered ? { walk: e.walk_c, stats: e.stats_c, e } : { walk: e.walk, stats: e.stats, e }
+    const w = renorm ? (centered ? e.walk_cn : e.walk_n) : centered ? e.walk_c : e.walk
+    return { walk: w, stats: centered ? e.stats_c : e.stats, e }
   }
   const selCur = cur(sel)
   const selE = selCur && selCur.e
 
-  // gauge numbers for the selected pair: pos-sum and neg-sum from gross & net
+  // gauge numbers for the selected pair: pos-sum and neg-sum from gross & net (raw products)
   const gaugeMax = 0.8
   const g = selCur ? selCur.stats : null
   const posSum = g ? (g.gross + g.cos) / 2 : 0
@@ -155,6 +181,10 @@ export default function CosineWalk() {
           />
           center vectors
         </label>
+        <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+          <input type="checkbox" checked={renorm} onChange={(e) => setRenorm(e.target.checked)} />
+          renormalize each slice
+        </label>
         <button
           onClick={() => setEx((v) => v + 1)}
           className="ml-auto rounded border border-gray-300 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
@@ -179,7 +209,7 @@ export default function CosineWalk() {
 
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 340 }}>
         {/* y gridlines */}
-        {[0, 0.2, 0.4, 0.6].map((v) => (
+        {DOM[mode].grid.map((v) => (
           <g key={v}>
             <line
               x1={padL}
@@ -194,8 +224,8 @@ export default function CosineWalk() {
             </text>
           </g>
         ))}
-        {/* Matryoshka (MRL) cut-points: the walk's value at k is the k-dim slices' dot product */}
-        {[32, 64, 128, 256, 512, 1024].map((m) => (
+        {/* Matryoshka (MRL) cut-points */}
+        {MRL.map((m) => (
           <g key={m}>
             <line
               x1={x(m)}
@@ -221,10 +251,18 @@ export default function CosineWalk() {
         <text x={x(512) + 14} y={padT + 8} fontSize="8.5" fill="#10b981" fillOpacity="0.8">
           ← Matryoshka (MRL) cut-points
         </text>
-        {/* ±2σ random-walk noise band */}
-        <path d={BAND} fill="#f59e0b" opacity="0.12" />
-        <text x={x(430)} y={y(0) + 12} fontSize="9" fill="#b45309" opacity="0.8">
-          ±2σ band: where a random walk stays
+        {/* ±2σ random-pair band */}
+        <path d={BANDS[mode]} fill="#f59e0b" opacity="0.12" />
+        <text
+          x={x(mode === 'sum' ? 430 : 500)}
+          y={y(0) + 12}
+          fontSize="9"
+          fill="#b45309"
+          opacity="0.8"
+        >
+          {mode === 'sum'
+            ? '±2σ band: where a random walk stays'
+            : '±2σ band: a random k-dim slice ~ ±2/√k'}
         </text>
         {/* walks */}
         {TYPES.map(([k]) => {
@@ -235,7 +273,7 @@ export default function CosineWalk() {
           return (
             <g key={k}>
               <path
-                d={path(c.walk)}
+                d={pathFor(mode, c.walk)}
                 fill="none"
                 stroke={COL[k]}
                 strokeWidth={on ? 2.4 : 1.3}
@@ -263,12 +301,13 @@ export default function CosineWalk() {
           )
         })}
         <text x={(padL + W - padR) / 2} y={H - 6} textAnchor="middle" fontSize="10" fill="#9ca3af">
-          running total of the 1024 products a₁b₁ + a₂b₂ + … (left → right); the endpoint is the
-          cosine
+          {mode === 'sum'
+            ? 'running total of the 1024 products a₁b₁ + a₂b₂ + … (left → right); the endpoint is the cosine'
+            : 'true cosine of the two k-dim slices, each renormalized at k dims — what a k-dim MRL index would score'}
         </text>
       </svg>
 
-      {/* gauge: where the selected cosine comes from */}
+      {/* gauge: where the selected cosine comes from (raw component products) */}
       {g && (
         <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
           <span className="inline-flex items-center gap-1.5">
