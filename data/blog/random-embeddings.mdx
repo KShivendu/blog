@@ -145,7 +145,7 @@ That structure — real neighbourhoods versus structureless confetti — is the 
 
 ## 🧮 Anatomy of a cosine: clusters, centering, and hubs
 
-A cosine between two unit vectors is just a sum: `cos(a,b) = a₁b₁ + a₂b₂ + … + a₁₀₂₄b₁₀₂₄` — 1024 little products, added up. So everything this post has shown fits in one question: **what do those 1024 products do differently** for a random pair (cos 0.00), a different-topic pair (+0.10), a same-topic pair (+0.25), and true nearest neighbours (+0.55)? Watch them add up — these are real sentence pairs from the corpus, products summed left to right (↻ draws new ones):
+A cosine between two unit vectors is just a sum: `cos(a,b) = a₁b₁ + a₂b₂ + … + a₁₀₂₄b₁₀₂₄` — 1024 little products, added up. So everything this post has shown fits in one question: **what do those 1024 products do differently** for a random pair (cos 0.00), a different-topic pair (+0.10), a same-topic pair (+0.25), and a vector with its single closest neighbour out of all 10,000 (top-1, +0.55)? Watch them add up — these are real sentence pairs from the corpus, products summed left to right (↻ draws new ones):
 
 <CosineWalk />
 
