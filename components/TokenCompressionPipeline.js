@@ -1,4 +1,5 @@
 import { useTheme } from 'next-themes'
+import { useEffect, useState } from 'react'
 
 // First 20 chars of the reference doc + ellipsis marker
 const CHARS = 'Retrieval-Augmented '.split('').concat(['…'])
@@ -19,7 +20,9 @@ const TOKENS = [
 
 export default function TokenCompressionPipeline() {
   const { resolvedTheme } = useTheme()
-  const dark = resolvedTheme === 'dark'
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  const dark = mounted && resolvedTheme === 'dark'
 
   const bg = dark ? '#1e293b' : '#f8fafc'
   const divider = dark ? '#334155' : '#e2e8f0'
@@ -55,10 +58,12 @@ export default function TokenCompressionPipeline() {
   const R1_TOP = 48,
     R1_CY = R1_TOP + BYTE_H / 2
 
-  // Row 2 — token boxes
-  const TOK_H = 36,
-    TOK_G = 3
-  const R2_TOP = 182,
+  // Row 2 — token boxes: each token = 2 byte-boxes (uint16 = 2 bytes per r50k token ID)
+  const TOK_BYTE_W = BYTE_W,
+    TOK_BYTE_G = 1, // gap between the 2 bytes of one token
+    TOK_GROUP_GAP = 8, // gap between different tokens
+    TOK_H = BYTE_H // same box height as row 1 — a byte is a byte
+  const R2_TOP = 190,
     R2_CY = R2_TOP + TOK_H / 2
 
   // Build byte box positions
@@ -70,15 +75,15 @@ export default function TokenCompressionPipeline() {
   })
   const byteEndX = bx - BYTE_G
 
-  // Build token box positions — width from text length
+  // Build token box positions — each token renders as 2 fixed-width byte boxes
+  const GROUP_W = TOK_BYTE_W * 2 + TOK_BYTE_G
   let tx = REP_X
   const tokenBoxes = TOKENS.map(({ t }) => {
-    const w = Math.round(t.length * 5.0 + 8)
-    const box = { x: tx, w, t }
-    tx += w + TOK_G
+    const box = { x: tx, t }
+    tx += GROUP_W + TOK_GROUP_GAP
     return box
   })
-  const tokEndX = tx - TOK_G
+  const tokEndX = tx - TOK_GROUP_GAP
 
   return (
     <div style={{ margin: '1.5rem 0' }}>
@@ -247,21 +252,32 @@ export default function TokenCompressionPipeline() {
 
         {tokenBoxes.map((tok, i) => (
           <g key={i}>
+            {/* 2 byte-boxes per token = uint16 token ID */}
             <rect
               x={tok.x}
               y={R2_TOP}
-              width={tok.w}
+              width={TOK_BYTE_W}
               height={TOK_H}
-              rx="4"
+              rx="2"
+              fill={tokFill}
+              stroke={tokStroke}
+              strokeWidth="1"
+            />
+            <rect
+              x={tok.x + TOK_BYTE_W + TOK_BYTE_G}
+              y={R2_TOP}
+              width={TOK_BYTE_W}
+              height={TOK_H}
+              rx="2"
               fill={tokFill}
               stroke={tokStroke}
               strokeWidth="1"
             />
             <text
-              x={tok.x + tok.w / 2}
-              y={R2_CY + 4}
+              x={tok.x + GROUP_W / 2}
+              y={i % 2 === 0 ? R2_TOP - 16 : R2_TOP - 6}
               textAnchor="middle"
-              fontSize="8.5"
+              fontSize="7"
               fontFamily="monospace"
               fontWeight="600"
               fill={tokText}
@@ -278,7 +294,7 @@ export default function TokenCompressionPipeline() {
           fontSize="9"
           fill={textMuted}
         >
-          392 tokens · static ANS table (WikiText-103)
+          392 tokens × 2 bytes = 784 bytes (uint16 r50k)
         </text>
 
         <line
