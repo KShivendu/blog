@@ -17,7 +17,7 @@ Every vector search engine (aka vector DB) stores two things for each point: the
 
 This post makes one claim: **tokenize that text before compressing it, and you roughly double what generic byte codecs achieve**. I'll show the benchmark, the latency cost (small), and what it would take to add this to a real database.
 
-There's another reason to care than the compression ratio: agents, not humans, are increasingly the ones reading unstructured data, and agents think in tokens. A **token-native storage format** for text speaks their language directly and gets the compression win for free.
+There's another reason to care than the compression ratio: agents, not humans, are increasingly the ones reading unstructured data, and agents read and write in tokens. A **token-native storage format** for text speaks their language directly and gets the compression win for free.
 
 ## The Forgotten Layer
 
@@ -53,7 +53,7 @@ BPE merges frequent byte sequences into single tokens. `"language"` is one token
 ratio: ~2.25x
 ```
 
-With this napkin math, we see that just packing token IDs into uint16 already compresses, before any actual compression algorithm runs.
+With this napkin math, we see that just packing token IDs into uint16 already compresses, before any actual compression algorithm runs. This is the napkin math that started my whole investigation: if packing alone gets ~2.25x for free, an actual entropy coder on top of it should do even better, which is what the rest of this post sets out to measure.
 
 **Step 2: ANS entropy coding.** gzip and LZ4 see opaque bytes and can't know that `[0x01, 0x7F]` is token 383. An entropy coder working directly on token IDs can give frequent tokens short codes: `"the"` is 40x more common than `"embeddings"`, so it gets a much shorter code. I used ANS (Asymmetric Numeral Systems, the entropy coder inside zstd) via the [constriction](https://github.com/bamler-lab/constriction) library.
 
@@ -95,24 +95,24 @@ def decompress(data):
 
 Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/wikitext) test articles (≥30 words). The ANS frequency table was trained on the WikiText-103 train split, a shared static model with no per-document overhead.
 
-| Method                      |       min |    median |       max |
-| --------------------------- | --------: | --------: | --------: |
-| LZ4, per-document (Qdrant)  |     0.88x |     1.15x |     1.78x |
-| LZ4, 16KB blocks (ES-style) |     1.35x |     1.85x |     2.33x |
-| gzip -9                     |     0.99x |     1.66x |     2.34x |
-| zstd -22                    |     1.11x |     1.68x |     2.39x |
-| brotli q=11                 |     1.22x |     2.26x |     3.13x |
-| r50k BPE uint16 (raw)       |     1.04x |     2.33x |     3.34x |
-| cl100k BPE uint32 (raw)     |     0.45x |     1.13x |     1.62x |
-| zstd dict 112KB (WikiText)  |     1.51x |     2.61x |     3.63x |
-| **r50k BPE + static ANS**   | **1.68x** | **3.37x** | **4.30x** |
-| **cl100k BPE + static ANS** | **1.68x** | **3.30x** | **4.14x** |
+| Method                             |       min |    median |       max |
+| ---------------------------------- | --------: | --------: | --------: |
+| LZ4, per-document (Qdrant)         |     0.88x |     1.15x |     1.78x |
+| LZ4, 16KB blocks (ES-style)        |     1.35x |     1.85x |     2.33x |
+| gzip -9                            |     0.99x |     1.66x |     2.34x |
+| zstd -22                           |     1.11x |     1.68x |     2.39x |
+| brotli q=11                        |     1.22x |     2.26x |     3.13x |
+| r50k BPE uint16 (raw)              |     1.04x |     2.33x |     3.34x |
+| cl100k BPE uint32 (raw)            |     0.45x |     1.13x |     1.62x |
+| zstd trained dict 112KB (WikiText) |     1.51x |     2.61x |     3.63x |
+| **r50k BPE + static ANS**          | **1.68x** | **3.37x** | **4.30x** |
+| **cl100k BPE + static ANS**        | **1.68x** | **3.30x** | **4.14x** |
 
 All methods above are lossless (0% character error rate on full round trip).
 
 The single-document LZ4 row is what a naive per-document codec gets. The 16KB-block row is the fairer real-world number: Elasticsearch packs ~20 documents per block and compresses them together, so LZ4 gets to back-reference across documents, not just within one.
 
-<CompressionWidget />
+{/* <CompressionWidget /> */}
 
 <details>
 <summary>Method glossary: what the names mean</summary>
@@ -123,7 +123,7 @@ The single-document LZ4 row is what a naive per-document codec gets. The 16KB-bl
 - **brotli q=11**: Google's codec at max quality. Best ratio of the byte codecs, but slow.
 - **r50k BPE uint16 (raw)**: r50k has 50,257 tokens, which fits in uint16 (max 65,535), so 2 bytes per token ID.
 - **cl100k BPE uint32 (raw)**: cl100k has 100,277 tokens, which exceeds uint16 and requires uint32 (4 bytes per token). It produces fewer tokens per document than r50k (larger vocab = longer merges), but 4 bytes × fewer tokens still comes out worse than 2 bytes × more tokens. Hence 1.13x vs 2.33x.
-- **zstd dict 112KB**: zstd with a 112KB dictionary trained on WikiText-103 (`zstd --train`). The fairest byte-codec comparison since it also learns from the corpus.
+- **zstd trained dict 112KB**: zstd with a 112KB dictionary trained on WikiText-103 (`zstd --train`), a global dictionary shared across all documents, same design as the static ANS table. The fairest byte-codec comparison since it also learns from the corpus.
 - **r50k / cl100k BPE + static ANS**: ANS allocates bits based on token frequency, not a fixed byte width. A common token gets ~1 bit and a rare one gets ~16 bits, regardless of vocab size. So the uint32 penalty that crushes cl100k raw disappears entirely, and both tokenizers land near 3.3x.
 
 </details>
@@ -146,7 +146,7 @@ The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`)
         'LZ4, 16KB blocks (ES-style)',
         'brotli q=11',
         'r50k uint16 raw',
-        'zstd dict 112KB',
+        'zstd trained dict 112KB',
         'r50k + static ANS',
       ],
       marker: {
@@ -194,7 +194,7 @@ The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`)
       opacity: 0.75,
     },
     {
-      name: 'zstd dict 112KB',
+      name: 'zstd trained dict 112KB',
       type: 'bar',
       x: [
         0.95, 1.05, 1.15, 1.25, 1.35, 1.45, 1.55, 1.65, 1.75, 1.85, 1.95, 2.05, 2.15, 2.25, 2.35,
@@ -277,10 +277,12 @@ The mixedbread embedding model (`mxbai-embed-large-v1`) uses BERT's WordPiece to
 
 | Method                       |   min | median |   max |
 | ---------------------------- | ----: | -----: | ----: |
+| r50k BPE uint16 (raw)        | 1.04x |  2.33x | 3.34x |
+| mxbai WordPiece uint16 (raw) | 0.88x |  2.35x | 3.34x |
 | r50k BPE + static ANS        | 1.68x |  3.37x | 4.30x |
 | mxbai WordPiece + static ANS | 1.63x |  3.56x | 4.54x |
 
-~5% better compression at the median. The problem is **character error rate (CER)**: 80.4% on average, every single article affected. After applying punctuation-spacing fixes (regex for `( x )` → `(x)`, etc.), CER stays at 81.3%, so the fix is noise. The damage is overwhelmingly BERT's lowercasing: `"Qdrant"` → `"qdrant"`, `"Wikipedia"` → `"wikipedia"`. WikiText is dense with capitalized words (titles, proper nouns, sentence starts), so virtually every article is corrupted. Case is gone and unrecoverable. mxbai is not a viable lossless codec for real text.
+Raw uint16 packing is basically a wash between the two (2.35x vs 2.33x): mxbai's smaller vocabulary barely matters before any entropy coding runs. The gap only opens up once ANS is applied, ~5% better compression at the median. The problem is **character error rate (CER)**: 80.4% on average, every single article affected. Punctuation-spacing errors (regex-fixable, `( x )` → `(x)`) are a minor, acceptable cost, but they aren't the bulk of it: fixing them only brings CER down to 81.3%, statistically the same. The real damage is BERT's lowercasing: `"Qdrant"` → `"qdrant"`, `"Wikipedia"` → `"wikipedia"`. WikiText is dense with capitalized words (titles, proper nouns, sentence starts), so virtually every article is corrupted, and case, unlike punctuation spacing, isn't recoverable after the fact. mxbai isn't a viable _lossless_ codec for real text, though if lowercase-everywhere is acceptable for your use case, the compression is genuinely better.
 
 </details>
 
@@ -312,14 +314,14 @@ The static frequency table only knows how often each token appears globally. The
 <details>
 <summary>How can a probabilistic model recover the exact text?</summary>
 
-The probability model only controls how many bits each token gets. The token IDs themselves are always stored and recovered exactly — nothing is approximated.
+The probability model only controls how many bits each token gets. The token IDs themselves are always stored and recovered exactly. Nothing is approximated.
 
 Take the sequence `" language" → " model" → " retrieval"`:
 
 - **Unigram ANS**: `" model"` appears in 0.3% of all tokens → ~8 bits
 - **Bigram ANS**: `" model"` after `" language"` is very common → maybe ~4 bits
 
-The decoder recovers `" model"` exactly either way. It just decoded `" language"` first, so it knows to use `P(· | " language")` as the ruler for the next token — and gets the exact same ID back.
+The decoder recovers `" model"` exactly either way. It just decoded `" language"` first, so it knows to use `P(· | " language")` as the ruler for the next token, and gets the exact same ID back.
 
 Think of it as Morse code with a smarter codebook. E gets one dot not because "E" is approximate, but because it's frequent. A better frequency estimate means shorter codes, not lossy data.
 
@@ -337,13 +339,13 @@ And because the stored format is just token IDs, swapping the unigram table for 
 
 ## What Would a Database Need to Do?
 
-Nothing exotic. For Qdrant specifically:
+Nothing exotic. Any store that compresses text payloads on write and decompresses on read can slot this in as an alternative codec:
 
-1. Accept `encoding: "r50k"` as a payload storage option
+1. Accept a token-native encoding (e.g. `encoding: "r50k"`) as a payload storage option
 2. Tokenize on insert, pack IDs as uint16, run ANS with the shared static table
 3. Decompress transparently on read
 
-The index, vectors, and query pipeline don't change at all.
+The index, vectors, and query pipeline don't change at all, since this only touches how the payload bytes are stored and retrieved.
 
 ```
 Current                          Proposed
@@ -352,13 +354,13 @@ INSERT                           INSERT
   payload: {"text": "..."}         payload: {"text": "..."}
        │                                  │
        ▼                                  ▼
-  JSON → Gridstore (LZ4)         tokenize → uint16 IDs → ANS
+  JSON → generic codec (LZ4)     tokenize → uint16 IDs → ANS
                                         │
                                         ▼
-                                  Gridstore (ANS)
+                                  store (ANS)
 
 READ                             READ
-  fetch LZ4 JSON bytes             fetch ANS-compressed bytes
+  fetch compressed JSON bytes      fetch ANS-compressed bytes
        │                                  │
        ▼                                  ▼
   return as-is                   ANS decode → token IDs → decode
@@ -371,22 +373,29 @@ There is one real cost: the vocabulary and frequency table become part of the on
 
 There's also a bigger-picture reason to like token-native storage as [search and generation converge](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation): keeping UTF-8 blobs in the index while the model reasons in tokens means maintaining two representations of the same text.
 
-The same trick applies to **agent trace storage**. Tool calls, reasoning steps, and retrieved context pile up as unstructured text, and the logs are typically compressed with the same generic byte codecs. Token-native encoding gives you the same ~3× win there — and the stored token IDs are what the agent would produce anyway when replaying or analyzing a run.
+The same trick applies to **agent trace storage**. Tool calls, reasoning steps, and retrieved context pile up as unstructured text, and the logs are typically compressed with the same generic byte codecs. Token-native encoding gives you the same ~3× win there, and the stored token IDs are what the agent would produce anyway when replaying or analyzing a run.
 
-I'd also expect more overlap in LLM tokenizers over time — cl100k is already a de facto baseline across several model families — and common standards should emerge. That makes token-native storage more natural: you're not locking into one vendor's vocabulary so much as aligning with where the ecosystem is heading.
+Push this further and the interesting question isn't just how to store tokens, it's whether text needs to come back at all. If the consumer reading a stored document is an LLM, not a human, decoding ANS-compressed bytes back to token IDs is already the end of the job: the next step is feeding those IDs into a model, which tokenizes internally anyway. The UTF-8 round trip only exists to serve human eyes. In a pipeline you fully control, retrieval through generation on a model you host yourself, token IDs never have to become text at all except for logs or a UI. That only works end to end if you own the inference stack, since hosted LLM APIs take text prompts, not raw token arrays, for safety and injection-guarding reasons, and it means standardizing on one tokenizer's ID space rather than juggling several. But it's the logical endpoint of treating tokens as the native format instead of a compression trick bolted onto text.
+
+I'd also expect more overlap in LLM tokenizers over time (cl100k is already a de facto baseline across several model families) and common standards should emerge. That makes token-native storage more natural: you're not locking into one vendor's vocabulary so much as aligning with where the ecosystem is heading.
 
 ## A Note to Tokenizer Vendors
 
 Every tokenizer vendor already computes a token frequency table as a byproduct of training BPE merges on their corpus. Publishing it, versioned alongside each tokenizer release (`r50k.freq`, `cl100k.freq`, `o200k.freq`), costs them nothing: no new training, no risk of leaking raw documents, just aggregate counts they already have sitting in a file.
 
-The downstream effect is bigger than it looks:
+Token pricing and inference latency stay untouched, since billing and speed depend on inference-time token count, not how those IDs get stored downstream. Context window is also unaffected, since that's a function of vocabulary design, not frequency-table publishing. What it actually removes is the bootstrapping tax every downstream team pays today: this post had to approximate GPT's real distribution using WikiText, an English-only proxy, when a real corpus-derived table would need no approximation at all.
 
-- **Token pricing**: unaffected. Billing is per-token at inference time, unrelated to how those token IDs get entropy-coded at rest downstream.
-- **Latency**: unaffected at inference. What it removes is the bootstrapping tax every downstream team pays today: this post had to approximate GPT's real distribution using WikiText, an English-only proxy. A real corpus-derived table needs no approximation.
-- **Context window**: unaffected. That's a function of vocabulary design (size and merge coverage), a separate lever from frequency-table publishing.
-- **Multilingual and code coverage**: this is where a real table wins clearly. GPT's actual training mix already includes code and dozens of languages, so a vendor-published table would generalize where a WikiText proxy can't. Our JSON benchmark showed exactly this failure mode: a text-trained table gave 1.10× on JSON, a JSON-trained table gave 2.24×. A vendor's real table, trained on a mix that already includes structured and multilingual text, would likely land close to the JSON-trained number out of the box, for every content type at once.
+The one place a real table wins clearly is multilingual and code coverage. GPT's actual training mix already includes code and dozens of languages, so a vendor-published table would generalize where a WikiText proxy can't. Our JSON benchmark showed exactly this failure mode: a text-trained table gave 1.10× on JSON, a JSON-trained table gave 2.24×. A vendor's real table, trained on a mix that already includes structured and multilingual text, would likely land close to that JSON-trained number out of the box, for every content type at once.
 
 It's the same category of thing as a font shipping kerning tables or JPEG shipping default quantization tables: cheap metadata release, no product cost, and it unlocks compression work the vendor has no reason to do themselves.
+
+## Limitations
+
+- **Decode is slower than LZ4, the codec this post is actually trying to replace.** zstd isn't deployed in Qdrant or Elasticsearch; LZ4 is, chosen precisely because it's fast, not because it compresses well. Against LZ4, ANS decode is 18µs versus LZ4's 1µs, an 18x gap, and encode is 54µs versus 15µs. Both are still tiny next to typical network or disk I/O, so it's a non-issue in absolute terms, but relatively speaking LZ4 wins on speed by a wide margin, which is exactly the tradeoff it was built for. Even the fairest byte-codec competitor, zstd with a trained dictionary, decodes faster than ANS (2µs vs 18µs); it just loses on ratio and encode speed.
+- **The frequency table is only as good as the corpus it's trained on.** This post approximates GPT's real token distribution using WikiText-103, an English-only proxy. Domain mismatch is expensive: a WikiText-trained table gets 1.10x on JSON, a JSON-trained table gets 2.24x. Anyone deploying this needs a table trained on their actual data, not a borrowed one.
+- **Sharing only works at the corpus level, not per block.** LZ4 gets a real, free win from sharing a compression window across a block of documents. The same trick backfires for ANS: a table trained fresh on each 16KB block costs 900 to 4,000 bytes of overhead just to ship the table, which loses to the static corpus-wide table even at 1MB blocks.
+- **cl100k's larger vocabulary doesn't always mean fewer tokens.** On long digit strings and emoji-heavy text it can produce more tokens than r50k, since its extra vocabulary budget went toward code and non-English scripts, not those cases.
+- **The vocabulary and frequency table become part of the on-disk format forever.** Change either and every previously encoded document needs re-encoding or a versioned codec path.
 
 ## Key Takeaways
 
