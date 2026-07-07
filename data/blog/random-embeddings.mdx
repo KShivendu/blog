@@ -15,18 +15,18 @@ I've always noticed that random vectors degrade vector search, but almost nobody
 
 The closest of all 10,000 sits at cosine **0.12**. A random pair sits at **0.00**. So the "nearest neighbor" is basically the least-far of 10,000 roughly-equidistant points — there's nothing special about it.
 
-Now the same test with real jina embeddings over 10,000 sentences, same count, same 1024 dims — the nearest neighbor sits at **0.55**, the median pair at just **0.10**. Look at that for a second — a real embedding's _nearest_ neighbor (0.55) towers over both its own typical pair (0.10) and random's best-of-10,000 (0.12). The whole distribution has a tail random barely has. That 0.12-vs-0.55 gap is what this whole post is about — why random vectors don't have it, what "structure" is as the cure, and what that structure actually buys you (mostly compute, it turns out, not recall).
+Now the same test with real jina embeddings over 10,000 sentences, same count, same 1024 dims: the nearest neighbor sits at **0.55**, the median pair at just **0.10**. Look at that for a second. A real embedding's _nearest_ neighbor (0.55) towers over both its own typical pair (0.10) and random's best-of-10,000 (0.12). The whole distribution has a tail random barely has. That 0.12-vs-0.55 gap is what this whole post is about: why random vectors don't have it, what "structure" is as the cure, and what that structure actually buys you (mostly compute, it turns out, not recall).
 
 ### What is an embedding and cosine similarity anyways?
 
-Any set of extracted features can act like embedding dimensions — `(height, weight, age)` is a 3-dim embedding. Some features carry their own information; others are partly redundant, predictable from the rest (`weight ≈ f(height)`); some are basically independent. A good learned embedding leans hard on the redundant kind — it packs a lot of _correlated_ structure into its numbers.
+Any set of extracted features can act like embedding dimensions: `(height, weight, age)` is a 3-dim embedding. Some features carry their own information; others are partly redundant, predictable from the rest (`weight ≈ f(height)`); some are basically independent. A good learned embedding leans hard on the redundant kind — it packs a lot of _correlated_ structure into its numbers.
 
 Now watch what **cosine similarity** does to this. To compare two embeddings you divide each by its length, pinning every vector onto the unit sphere `x² + y² + z² + … = 1`. That quietly does two things:
 
 1. **It throws away magnitude** — only direction survives.
-2. **It gives every axis equal weight**, treating them as independent, orthogonal directions — even the ones that were redundant. So two correlated coordinates (`y ≈ f(x)`) get _double-counted_: their shared signal sits in both, and the dot product adds it twice. Packing the real information into as _few_ independent directions as possible — so that double-counting can't happen — turns out to be exactly what "structure" means later.
+2. **It gives every axis equal weight**, treating them as independent, orthogonal directions — even the ones that were redundant. So two correlated coordinates (`y ≈ f(x)`) get _double-counted_: their shared signal sits in both, and the dot product adds it twice. Packing the real information into as _few_ independent directions as possible (so that double-counting can't happen) turns out to be exactly what "structure" means later.
 
-And the sphere is a constraint, not a free space: `x² + y² + z² = 1` is a **fixed budget** — push one coordinate up and the rest must shrink; the axes can't all grow at once. Across a dataset it's exact — the total variance over all coordinates is pinned to 1.
+And the sphere is a constraint, not a free space: `x² + y² + z² = 1` is a **fixed budget** — push one coordinate up and the rest must shrink; the axes can't all grow at once. Across a dataset it's exact: the total variance over all coordinates is pinned to 1.
 
 The punchline: **once you center each vector, cosine similarity is just the Pearson correlation between the two coordinate lists.** "Are these embeddings similar?" is literally "are their coordinate patterns correlated?" — so the rest of this post is really a story about correlation: when it vanishes (random), when it survives (real neighbours), and what it costs to search for.
 
@@ -53,7 +53,7 @@ Why is a random vector's nearest neighbour so far away? Think of every other vec
 
 As `d` climbs, the yellow (random) cloud collapses onto the vertical **90° line** — every other vector's vote gets **neutralized**. That's the cancellation counted up: a unit vector spreads its length across `d` axes at about `1/√d` each, so the cosine of two of them sums `d` coin-flip votes that mostly cancel, landing near 0 with spread `1/√d`. More dimensions, tighter to zero — the share of random pairs within ±0.1 of neutral climbs from **6.5%** in 2D to **99.9%** by 1024-d.
 
-You can read that vote exactly: the share of coordinates voting **with** you is `½ + arcsin(cos)/π` — **100% at 0° (fully with you), a 50/50 coin toss at neutral (90°), 0% at 180° (fully against)**. So "neutralized" is literal — at 90° a vector's coordinates split evenly for and against, and cancel to nothing. (That net vote — with minus against — is exactly **Kendall's τ = (2/π)·arcsin(cos)**: the _rank_-correlation twin of the Pearson correlation from the intro. Cosine and the vote are two faces of the same correlation.)
+You can read that vote exactly: the share of coordinates voting **with** you is `½ + arcsin(cos)/π` — **100% at 0° (fully with you), a 50/50 coin toss at neutral (90°), 0% at 180° (fully against)**. So "neutralized" is literal — at 90° a vector's coordinates split evenly for and against, and cancel to nothing. (That net vote, with minus against, is exactly **Kendall's τ = (2/π)·arcsin(cos)**: the _rank_-correlation twin of the Pearson correlation from the intro. Cosine and the vote are two faces of the same correlation.)
 
 <details>
 <summary>Does this hold for real embeddings? (yes — with one wrinkle)</summary>
@@ -71,7 +71,7 @@ So searchability can't come from raw distance — in high dimensions there's bar
 
 ## 🌐 Haze vs continents, on a globe
 
-So far this has been pairs of vectors and cosines. Here's the same conclusion as a picture you can spin. I run the _exact same pipeline_ on both random and real vectors — cluster them into 14 groups with k-means, project to a 3D globe with UMAP (the same tool people use to map real embeddings), colour by cluster — so any difference is the data, not the method:
+So far this has been pairs of vectors and cosines. Here's the same conclusion as a picture you can spin. I run the _exact same pipeline_ on both random and real vectors, so any difference is the data, not the method: cluster them into 14 groups with k-means, project to a 3D globe with UMAP (the same tool people use to map real embeddings), and colour by cluster.
 
 <NSphereGlobe />
 
@@ -141,7 +141,7 @@ The clusters differ in one more way: their **sizes**. Sort the 64 clusters bigge
 
 Random's line is almost flat — every cluster holds ~110–150 points, because k-means slices a uniform cloud into near-equal cells (Gini 0.04). Real **sentence** embeddings fall off a cliff: 296 down to 40, a ~7× spread (Gini 0.23) — some topics are dense, others sparse. And real **input tokens** are lumpier still — 383 down to 35, an ~11× spread (Gini 0.29): the vocabulary's frequency structure, a few big groups and a long tail of small ones. Real embeddings, tokens or sentences, carve the sphere unevenly; random can't (Gini 0.04) because there's no skew to carry. (This is where the token vs sentence contrast lives now — on the pairwise-cosine histogram above, jina's tokens and sentences both sit near +0.11 and overlap, so I left tokens off that chart.)
 
-That structure — real neighbourhoods versus structureless confetti — is the whole thing search runs on, and it's the geometry the rest of the post is about.
+That structure (real neighbourhoods versus structureless confetti) is the whole thing search runs on, and it's the geometry the rest of the post is about.
 
 ## 🧮 Anatomy of a cosine: clusters, centering, and hubs
 
@@ -155,9 +155,9 @@ Three things to see, all measured:
 
 **A cluster is a set of sentences whose products keep pointing up.** That's what training does, mechanically: it adjusts same-topic sentences to be large on the **same components with the same signs**, so their pairwise products come out positive and stack instead of cancelling. Nothing more is meant by "cluster" — and the clusters this recipe builds are the topics themselves: k-means on these vectors recovers the 14 DBpedia categories almost exactly (agreement 0.87). The ladder in the chart _is_ cluster structure: the more components a pair shares with matching signs, the higher its walk climbs.
 
-**Part of every real walk is the same escalator.** Click **center vectors**. All three real traces sag together — the different-topic pair collapses from +0.10 to ~+0.04 — while random doesn't move. What got removed is the **shared component**: every real vector contains a copy of the corpus-average vector μ, and that copy adds ‖μ‖² ≈ +0.11 to _every_ pair's sum, whatever the topics (that's the E[cos] = ‖μ‖² identity from the intro). A term that appears in every cosine distinguishes nothing — so deleting it (**centering** = subtracting the average vector, nothing more) barely changes search results (precision@10: 0.878 → 0.880). The component-level receipt: real pairs' products are 53.8% positive before centering and exactly 50.0% after. The +0.11 background _was_ the shared component; the climb above it is the clusters.
+**Part of every real walk is the same escalator.** Click **center vectors**. All three real traces sag together (the different-topic pair collapses from +0.10 to ~+0.04) while random doesn't move. What got removed is the **shared component**: every real vector contains a copy of the corpus-average vector μ, and that copy adds ‖μ‖² ≈ +0.11 to _every_ pair's sum, whatever the topics (that's the E[cos] = ‖μ‖² identity from the intro). A term that appears in every cosine distinguishes nothing — so deleting it (**centering** = subtracting the average vector, nothing more) barely changes search results (precision@10: 0.878 → 0.880). The component-level receipt: real pairs' products are 53.8% positive before centering and exactly 50.0% after. The +0.11 background _was_ the shared component; the climb above it is the clusters.
 
-**The dashed verticals are jina's Matryoshka cut-points.** A bonus of reading the cosine as a running sum: the walk's height at component _k_ is exactly the (un-normalised) similarity of the two _k_-dim MRL slices. The first 32 components — 3% of the vector — already hold **14–31%** of a real pair's final cosine, and the first half holds **~70–80%**: MRL training front-loads the similarity, which is why the truncated slices you saw on the globe still work. And since a real k-dim slice gets **re-normalised** at k dims, flip **renormalize each slice** to see the true slice-level cosine a k-dim index would compute: the nearest-neighbour trace sits near its final value from dim 32 onward, while a random pair swings inside a ±2/√k funnel that only narrows to ~0 at full width.
+**The dashed verticals are jina's Matryoshka cut-points.** A bonus of reading the cosine as a running sum: the walk's height at component _k_ is exactly the (un-normalised) similarity of the two _k_-dim MRL slices. The first 32 components (3% of the vector) already hold **14–31%** of a real pair's final cosine, and the first half holds **~70–80%**: MRL training front-loads the similarity, which is why the truncated slices you saw on the globe still work. And since a real k-dim slice gets **re-normalised** at k dims, flip **renormalize each slice** to see the true slice-level cosine a k-dim index would compute: the nearest-neighbour trace sits near its final value from dim 32 onward, while a random pair swings inside a ±2/√k funnel that only narrows to ~0 at full width.
 
 One paragraph of jargon-decoding, because every embedding paper will throw this word at you: **anisotropy** ("not the same in all directions") gets used for two _different_ measurements of what you just watched. Sometimes it means the _average pairwise cosine_ — which, as the centering click showed, measures only the shared component (≈ 0.11 here) and vanishes with it. Sometimes it means _variance concentrated into few directions_ — which is the cluster structure itself (real vectors effectively use ~25 of their 1024 dimensions, random ~230), survives centering, and is what search runs on. Same word, two referents: one a removable constant, the other the signal. When a paper says "embeddings are anisotropic and that's bad," check which one it measured.
 
@@ -267,7 +267,7 @@ I built HNSW indexes (M=16, efConstruction=200) over both datasets and swept the
   }}
 />
 
-Real embeddings hit **0.90 recall by efSearch=32** — about **670 distance comparisons** per query — and stay pinned there. Random never gets there: even at efSearch=256 (8× the effort, **~5,500 comparisons**, 2× real's work) it tops out at **0.867**. Note that this is the same index, same 1024 dims, same 10,000 vectors. The only thing that changed is whether the vectors have structure, and you can't `efSearch` your way out of geometry.
+Real embeddings hit **0.90 recall by efSearch=32** (about **670 distance comparisons** per query) and stay pinned there. Random never gets there: even at efSearch=256 (8× the effort, **~5,500 comparisons**, 2× real's work) it tops out at **0.867**. Note that this is the same index, same 1024 dims, same 10,000 vectors. The only thing that changed is whether the vectors have structure, and you can't `efSearch` your way out of geometry.
 
 ## 🧱 So what is structure, then?
 
@@ -388,7 +388,7 @@ There's a second, quieter result hiding in this sweep. **Structure mostly buys c
 
 ### For search, isotropy is the enemy
 
-Here's the part that cuts against standard advice. Random vectors are the _most_ isotropic data you can have — they fill every dimension equally — and they're the _worst_ to search. Every structured dataset above is _less_ isotropic than random. So the usual NLP framing of "isotropy good, anisotropy bad" is about a different problem ([cosine saturation in similarity scores](/blog/embedding-anisotropy)); for nearest-neighbor _search_ you actually want anisotropy, because variance piled into fewer directions is what gives the greedy walk a gradient to follow. (Which single number best measures "structure" — and why the average-cosine anisotropy the field leaned on for years barely detects it — is a rabbit hole I save for the [follow-up post](/blog/faking-embeddings).)
+Here's the part that cuts against standard advice. Random vectors are the _most_ isotropic data you can have (they fill every dimension equally) and they're the _worst_ to search. Every structured dataset above is _less_ isotropic than random. So the usual NLP framing of "isotropy good, anisotropy bad" is about a different problem ([cosine saturation in similarity scores](/blog/embedding-anisotropy)); for nearest-neighbor _search_ you actually want anisotropy, because variance piled into fewer directions is what gives the greedy walk a gradient to follow. (Which single number best measures "structure," and why the average-cosine anisotropy the field leaned on for years barely detects it, is a rabbit hole I save for the [follow-up post](/blog/faking-embeddings).)
 
 ## 🚫 You can't bolt structure on at index time
 
@@ -419,11 +419,11 @@ If structure is what makes search cheap, can you just bolt it on _after_ the emb
 
 </div>
 
-At a practical `efSearch`, the cost is dominated by the **base-layer beam** — the work of examining the ~`efSearch` candidates around the query to polish the answer — not by _getting_ to the right neighborhood. A better starting point only saves the cheap descent. (This flips at very large N, where the descent grows ~log N and routing starts to matter — worth revisiting at 100M+ scale, but at 10k it's noise.)
+At a practical `efSearch`, the cost is dominated by the **base-layer beam** (the work of examining the ~`efSearch` candidates around the query to polish the answer), not by _getting_ to the right neighborhood. A better starting point only saves the cheap descent. (This flips at very large N, where the descent grows ~log N and routing starts to matter — worth revisiting at 100M+ scale, but at 10k it's noise.)
 
 The third lever, `M` and `efConstruction`, _does_ move the numbers — but only by trading compute for recall along the usual curve, not by manufacturing a free speedup.
 
-The throughline: none of the index-side tricks make search cheaper for free. The ~3× spread we keep seeing — random at ~1,880 distance comps vs real at ~1,080 vs tight clusters at ~570 — comes from the data's own geometry, which is baked in when the embeddings are produced. An index can trade compute for recall; it can't put structure into vectors that don't have it.
+The throughline: none of the index-side tricks make search cheaper for free. The ~3× spread we keep seeing (random at ~1,880 distance comps vs real at ~1,080 vs tight clusters at ~570) comes from the data's own geometry, which is baked in when the embeddings are produced. An index can trade compute for recall; it can't put structure into vectors that don't have it.
 
 <details>
 <summary>**Aside: HNSW indexes are nondeterministic** — and it doesn't matter</summary>
@@ -442,6 +442,7 @@ The reassuring part: across all those different graphs, recall and latency are s
 - **"Structure" is two separate things.** Low effective dimensionality (restores distance contrast; the gain tracks intrinsic dim) and clustering (separable basins; 4–5× cheaper search, independent of dimensionality). Real embeddings have both: intrinsic dim ~25 plus clusters.
 - **Structure mostly buys compute, not recall.** Past the random→structured jump, recall pins at the HNSW ceiling; the big wins are all in latency.
 - **For search, isotropy is the enemy.** Random is the most isotropic data and the worst to search. You want variance piled into fewer directions, not spread evenly.
+- **You can't add structure in the index.** Insertion order and smart entry points give nothing at this scale (the base-layer beam dominates, not the descent); `M`/`efConstruction` only trade compute for recall. The geometry is set when the embeddings are made; the index can't fake it.
 
 ## 🔭 Closing thoughts
 
@@ -450,5 +451,3 @@ The thing I keep coming back to: structure isn't something the index provides, i
 Which raises the obvious next question: if structure is just cached compute, can we _manufacture_ it directly, without training a model? Can you write down a generator that produces vectors as searchable as real ones? I tried, and the short version is: you can match every aggregate statistic of real embeddings and _still_ fail a shape test, until you copy the geometry locally. That's the [follow-up post](/blog/faking-embeddings) — plus a look at what a model's own 24 layers are each doing to the geometry, from the raw word-embedding table to the final sentence vector.
 
 Thanks for reading! Feel free to DM me on [X](http://kshivendu.dev/x) or [LinkedIn](http://kshivendu.dev/linkedin) if you spot a mistake or want to nerd out about this.
-
-- **You can't add structure in the index.** Insertion order and smart entry points give nothing at this scale (the base-layer beam dominates, not the descent); `M`/`efConstruction` only trade compute for recall. The geometry is set when the embeddings are made — the index can't fake it.

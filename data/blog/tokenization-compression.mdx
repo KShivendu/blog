@@ -17,13 +17,15 @@ Every vector search engine (aka vector DB) stores two things for each point: the
 
 This post makes one claim: **tokenize that text before compressing it, and you roughly double what generic byte codecs achieve**. I'll show the benchmark, the latency cost (small), and what it would take to add this to a real database.
 
+There's another reason to care than the compression ratio: agents, not humans, are increasingly the ones reading unstructured data, and agents think in tokens. A **token-native storage format** for text speaks their language directly and gets the compression win for free.
+
 ## The Forgotten Layer
 
 When you insert a document into Qdrant, or Elasticsearch, you typically store something like:
 
 ```json
 {
-  "id": "doc_123",
+  "id": 123,
   "vector": [0.12, -0.34, ...],
   "payload": {
     "text": "Retrieval-Augmented Generation is a technique..."
@@ -31,7 +33,7 @@ When you insert a document into Qdrant, or Elasticsearch, you typically store so
 }
 ```
 
-Qdrant stores on-disk payloads in [Gridstore](https://qdrant.tech/articles/gridstore-key-value-storage/) (its custom KV engine, replacing RocksDB since v1.13) with LZ4 compression on by default. Elasticsearch packs stored fields into 16 KB blocks and compresses each block with LZ4, so a handful of documents share a compression window. Either way, the codec sees at most a few documents at a time and has no learned model of the language, just whatever byte patterns happen to repeat within the block. That gets you roughly 1.15–2x on text.
+Qdrant stores on-disk payloads in [Gridstore](https://qdrant.tech/articles/gridstore-key-value-storage/) and compresses each payload value independently with LZ4, so a point read never has to decompress a neighboring document, keeping random lookups cheap. Elasticsearch instead packs stored fields into 16 KB blocks and compresses each block together, letting LZ4 back-reference across documents at the cost of decompressing the whole block to read one field. Either way, the codec has no learned model of the language, just whatever byte patterns happen to repeat within its window. That gets you roughly 1.15x per-document (Qdrant) to 1.85x block-level (Elasticsearch-style) on text.
 
 But there is a component that knows a lot about the structure of natural language, and it's already part of every embedding and language model: **the tokenizer**.
 
@@ -41,17 +43,17 @@ But there is a component that knows a lot about the structure of natural languag
 
 The top path is what databases do today: store UTF-8 bytes, compress with a generic codec. The bottom path is my proposal: tokenize first, then entropy-code the token IDs.
 
-**Step 1: BPE tokenization.** BPE (Byte Pair Encoding) starts with raw bytes and repeatedly merges the most frequent adjacent pair into a new token, building up a vocabulary of common subwords. OpenAI ships two BPE tokenizers: **r50k** (used by GPT-2/GPT-3, 50,257 tokens) and **cl100k** (used by GPT-3.5/GPT-4, 100,277 tokens). cl100k has a larger vocabulary so it learns longer merges — it produces fewer tokens per document but each token ID needs 4 bytes (uint32) since the vocab exceeds the uint16 limit of 65,535. r50k fits in 2 bytes (uint16).
+**Step 1: BPE tokenization.** BPE (Byte Pair Encoding) starts with raw bytes and repeatedly merges the most frequent adjacent pair into a new token, building up a vocabulary of common subwords. OpenAI ships two BPE tokenizers: **r50k** (used by GPT-2/GPT-3, 50,257 tokens) and **cl100k** (used by GPT-3.5/GPT-4, 100,277 tokens). cl100k has a larger vocabulary so it learns longer merges, which usually (but not always) means fewer tokens per document, especially for code and non-English text. Either way, each token ID needs 4 bytes (uint32) since the vocab exceeds the uint16 limit of 65,535. r50k fits in 2 bytes (uint16).
 
 BPE merges frequent byte sequences into single tokens. `"language"` is one token. `"Retrieval"` is three (`Ret + ri + eval`). On average one BPE token covers [3/4 of a word](https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them). An average English word is ~5 characters plus a space, so:
 
 ```
 6 bytes/word × 3/4 words/token = 4.5 bytes/token (raw text)
-2 bytes/token (uint16 IDs)
+2 bytes/token (r50k uint16 token IDs)
 ratio: ~2.25x
 ```
 
-Just packing token IDs into uint16 already compresses, before any actual compression algorithm runs.
+With this napkin math, we see that just packing token IDs into uint16 already compresses, before any actual compression algorithm runs.
 
 **Step 2: ANS entropy coding.** gzip and LZ4 see opaque bytes and can't know that `[0x01, 0x7F]` is token 383. An entropy coder working directly on token IDs can give frequent tokens short codes: `"the"` is 40x more common than `"embeddings"`, so it gets a much shorter code. I used ANS (Asymmetric Numeral Systems, the entropy coder inside zstd) via the [constriction](https://github.com/bamler-lab/constriction) library.
 
@@ -95,7 +97,8 @@ Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/
 
 | Method                      |       min |    median |       max |
 | --------------------------- | --------: | --------: | --------: |
-| LZ4 (default in Qdrant/ES)  |     0.88x |     1.15x |     1.78x |
+| LZ4, per-document (Qdrant)  |     0.88x |     1.15x |     1.78x |
+| LZ4, 16KB blocks (ES-style) |     1.35x |     1.85x |     2.33x |
 | gzip -9                     |     0.99x |     1.66x |     2.34x |
 | zstd -22                    |     1.11x |     1.68x |     2.39x |
 | brotli q=11                 |     1.22x |     2.26x |     3.13x |
@@ -106,6 +109,8 @@ Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/
 | **cl100k BPE + static ANS** | **1.68x** | **3.30x** | **4.14x** |
 
 All methods above are lossless (0% character error rate on full round trip).
+
+The single-document LZ4 row is what a naive per-document codec gets. The 16KB-block row is the fairer real-world number: Elasticsearch packs ~20 documents per block and compresses them together, so LZ4 gets to back-reference across documents, not just within one.
 
 <CompressionWidget />
 
@@ -132,12 +137,13 @@ The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`)
     {
       type: 'bar',
       orientation: 'h',
-      x: [1.0, 1.15, 1.66, 1.68, 2.26, 2.33, 2.61, 3.37],
+      x: [1.0, 1.15, 1.66, 1.68, 1.85, 2.26, 2.33, 2.61, 3.37],
       y: [
         'Raw UTF-8',
-        'LZ4 (Qdrant/ES default)',
+        'LZ4, per-document (Qdrant)',
         'gzip -9',
         'zstd -22',
+        'LZ4, 16KB blocks (ES-style)',
         'brotli q=11',
         'r50k uint16 raw',
         'zstd dict 112KB',
@@ -149,13 +155,14 @@ The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`)
           '#ef4444',
           '#94a3b8',
           '#94a3b8',
+          '#ef4444',
           '#f59e0b',
           '#60a5fa',
           '#f59e0b',
           '#10b981',
         ],
       },
-      text: ['1.0×', '1.15×', '1.66×', '1.68×', '2.26×', '2.33×', '2.61×', '3.37×'],
+      text: ['1.0×', '1.15×', '1.66×', '1.68×', '1.85×', '2.26×', '2.33×', '2.61×', '3.37×'],
       textposition: 'outside',
     },
   ]}
@@ -363,6 +370,23 @@ READ                             READ
 There is one real cost: the vocabulary and frequency table become part of the on-disk format forever, so encodings have to be versioned per collection.
 
 There's also a bigger-picture reason to like token-native storage as [search and generation converge](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation): keeping UTF-8 blobs in the index while the model reasons in tokens means maintaining two representations of the same text.
+
+The same trick applies to **agent trace storage**. Tool calls, reasoning steps, and retrieved context pile up as unstructured text, and the logs are typically compressed with the same generic byte codecs. Token-native encoding gives you the same ~3× win there — and the stored token IDs are what the agent would produce anyway when replaying or analyzing a run.
+
+I'd also expect more overlap in LLM tokenizers over time — cl100k is already a de facto baseline across several model families — and common standards should emerge. That makes token-native storage more natural: you're not locking into one vendor's vocabulary so much as aligning with where the ecosystem is heading.
+
+## A Note to Tokenizer Vendors
+
+Every tokenizer vendor already computes a token frequency table as a byproduct of training BPE merges on their corpus. Publishing it, versioned alongside each tokenizer release (`r50k.freq`, `cl100k.freq`, `o200k.freq`), costs them nothing: no new training, no risk of leaking raw documents, just aggregate counts they already have sitting in a file.
+
+The downstream effect is bigger than it looks:
+
+- **Token pricing**: unaffected. Billing is per-token at inference time, unrelated to how those token IDs get entropy-coded at rest downstream.
+- **Latency**: unaffected at inference. What it removes is the bootstrapping tax every downstream team pays today: this post had to approximate GPT's real distribution using WikiText, an English-only proxy. A real corpus-derived table needs no approximation.
+- **Context window**: unaffected. That's a function of vocabulary design (size and merge coverage), a separate lever from frequency-table publishing.
+- **Multilingual and code coverage**: this is where a real table wins clearly. GPT's actual training mix already includes code and dozens of languages, so a vendor-published table would generalize where a WikiText proxy can't. Our JSON benchmark showed exactly this failure mode: a text-trained table gave 1.10× on JSON, a JSON-trained table gave 2.24×. A vendor's real table, trained on a mix that already includes structured and multilingual text, would likely land close to the JSON-trained number out of the box, for every content type at once.
+
+It's the same category of thing as a font shipping kerning tables or JPEG shipping default quantization tables: cheap metadata release, no product cost, and it unlocks compression work the vendor has no reason to do themselves.
 
 ## Key Takeaways
 

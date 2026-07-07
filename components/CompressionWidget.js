@@ -116,7 +116,9 @@ function Bar({ pct, winner }) {
 
 export default function CompressionWidget() {
   const { resolvedTheme } = useTheme()
-  const dark = resolvedTheme === 'dark'
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  const dark = mounted && resolvedTheme === 'dark'
 
   const [open, setOpen] = useState(false)
   const [activeExample, setActiveExample] = useState(0)
