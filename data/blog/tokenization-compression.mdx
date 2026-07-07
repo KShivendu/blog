@@ -379,16 +379,6 @@ Push this further and the interesting question isn't just how to store tokens, i
 
 I'd also expect more overlap in LLM tokenizers over time (cl100k is already a de facto baseline across several model families) and common standards should emerge. That makes token-native storage more natural: you're not locking into one vendor's vocabulary so much as aligning with where the ecosystem is heading.
 
-## A Note to Tokenizer Vendors
-
-Every tokenizer vendor already computes a token frequency table as a byproduct of training BPE merges on their corpus. Publishing it, versioned alongside each tokenizer release (`r50k.freq`, `cl100k.freq`, `o200k.freq`), costs them nothing: no new training, no risk of leaking raw documents, just aggregate counts they already have sitting in a file.
-
-Token pricing and inference latency stay untouched, since billing and speed depend on inference-time token count, not how those IDs get stored downstream. Context window is also unaffected, since that's a function of vocabulary design, not frequency-table publishing. What it actually removes is the bootstrapping tax every downstream team pays today: this post had to approximate GPT's real distribution using WikiText, an English-only proxy, when a real corpus-derived table would need no approximation at all.
-
-The one place a real table wins clearly is multilingual and code coverage. GPT's actual training mix already includes code and dozens of languages, so a vendor-published table would generalize where a WikiText proxy can't. Our JSON benchmark showed exactly this failure mode: a text-trained table gave 1.10× on JSON, a JSON-trained table gave 2.24×. A vendor's real table, trained on a mix that already includes structured and multilingual text, would likely land close to that JSON-trained number out of the box, for every content type at once.
-
-It's the same category of thing as a font shipping kerning tables or JPEG shipping default quantization tables: cheap metadata release, no product cost, and it unlocks compression work the vendor has no reason to do themselves.
-
 ## Limitations
 
 - **Decode is slower than LZ4, the codec this post is actually trying to replace.** zstd isn't deployed in Qdrant or Elasticsearch; LZ4 is, chosen precisely because it's fast, not because it compresses well. Against LZ4, ANS decode is 18µs versus LZ4's 1µs, an 18x gap, and encode is 54µs versus 15µs. Both are still tiny next to typical network or disk I/O, so it's a non-issue in absolute terms, but relatively speaking LZ4 wins on speed by a wide margin, which is exactly the tradeoff it was built for. Even the fairest byte-codec competitor, zstd with a trained dictionary, decodes faster than ANS (2µs vs 18µs); it just loses on ratio and encode speed.
