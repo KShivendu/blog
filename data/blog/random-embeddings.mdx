@@ -83,7 +83,7 @@ The clusters differ in one more way: their **sizes**. Sort the 64 clusters bigge
 
 <PlotlyChart src="/static/interactives/data/re_cluster_sizes.json" />
 
-Random's line is almost flat — every cluster holds ~110–150 points, because k-means slices a uniform cloud into near-equal cells (Gini 0.04). Real **sentence** embeddings fall off a cliff: 296 down to 40, a ~7× spread (Gini 0.23) — some topics are dense, others sparse. And real **input tokens** are lumpier still — 383 down to 35, an ~11× spread (Gini 0.29): the vocabulary's frequency structure, a few big groups and a long tail of small ones. Real embeddings, tokens or sentences, carve the sphere unevenly; random can't (Gini 0.04) because there's no skew to carry. (This is where the token vs sentence contrast lives now — on the pairwise-cosine histogram above, jina's tokens and sentences both sit near +0.11 and overlap, so I left tokens off that chart.)
+Random's line is almost flat: every cluster holds ~110–150 points, because k-means slices a uniform cloud into near-equal cells (Gini 0.04). Real **sentence** embeddings fall off a cliff: 296 down to 40, a ~7× spread (Gini 0.23), with some topics dense and others sparse. And real **input tokens** are lumpier still, 383 down to 35, an ~11× spread (Gini 0.29): the vocabulary's frequency structure, a few big groups and a long tail of small ones. Real embeddings, tokens or sentences, carve the sphere unevenly; random can't (Gini 0.04) because there's no skew to carry. (This is where the token vs sentence contrast lives now: on the pairwise-cosine histogram above, jina's tokens and sentences both sit near +0.11 and overlap, so I left tokens off that chart.)
 
 That structure (real neighbourhoods versus structureless confetti) is the whole thing search runs on, and it's the geometry the rest of the post is about.
 
@@ -120,7 +120,7 @@ Random is a tight bump that stops dead by ~26; real has a **spike at 0** (the or
 - A point aligned with the **shared component** collects that +0.11 escalator with everyone on top (rank correlation 0.33).
 - A fringe point whose components match nobody's strongly becomes an **orphan** — it never surfaces in anyone's results.
 
-Centering removes the second cause but not the first: the worst hub drops **11× → 6×** (orphans 1.2% → 0.9%), and the remaining 6× still towers over random's 2.6× — the clusters themselves, not the shared component, do most of the hub-making. That residue can't be removed, and you wouldn't want to: it _is_ the structure.
+Centering removes the second cause but not the first: the worst hub drops **11× → 6×** (orphans 1.2% → 0.9%), and the remaining 6× still dwarfs random's 2.6× — the clusters themselves, not the shared component, do most of the hub-making. That residue can't be removed, and you wouldn't want to: it _is_ the structure.
 
 The through-line: with no structure the products cancel and nothing is anyone's neighbour; with structure they stack — and a few well-placed points collect more than their share. What both facts cost a search index is next.
 
@@ -142,7 +142,7 @@ Real embeddings hit **0.90 recall by efSearch=32** (about **670 distance compari
 2. **Spectral decay** — keep all 1024 dimensions but scale them by a decaying spectrum (`i^(-α/2)`), so a few directions dominate. Sweep `α`. This is the [anisotropy](/blog/embedding-anisotropy) real embeddings are famous for.
 3. **Clusters** — draw the vectors from a mixture of 64 centers and sweep how tight the clusters are.
 
-To put all three knobs on a common axis I use **intrinsic dimension** — roughly, how many numbers you'd actually need to pin down a point, regardless of how many it's stored with. A sheet of paper crumpled inside a 3D room is still intrinsically 2D; random vectors are the opposite, using up nearly every dimension they're given. I estimate it with [TwoNN](https://www.nature.com/articles/s41598-017-11873-y), a standard intrinsic-dimension estimator — and the contrast is the key number here: **random comes out ~230, real jina ~25**. Plotting query latency against intrinsic dimension (each point is one knob setting; hover to see which; lower-left is cheaper) separates two distinct mechanisms:
+To put all three knobs on a common axis I use **intrinsic dimension**: roughly, how many numbers you'd actually need to pin down a point, regardless of how many it's stored with. A sheet of paper crumpled inside a 3D room is still intrinsically 2D; random vectors are the opposite, using up nearly every dimension they're given. I estimate it with [TwoNN](https://www.nature.com/articles/s41598-017-11873-y), a standard intrinsic-dimension estimator, and the contrast is the key number here: **random comes out ~230, real jina ~25**. Plotting query latency against intrinsic dimension (each point is one knob setting; hover to see which; lower-left is cheaper) separates two distinct mechanisms:
 
 <PlotlyChart src="/static/interactives/data/re_structure_sweep.json" />
 
