@@ -15,9 +15,7 @@ authors: ['default']
 
 Every vector search engine (aka vector DB) stores two things for each point: the vector and the payload. Vectors get all the attention: quantization, compression, careful index design. The text in the payload gets LZ4 at best.
 
-This post makes one claim: **tokenize that text before compressing it, and you roughly double what generic byte codecs achieve**. I'll show the benchmark, the latency cost (small), and what it would take to add this to a real database.
-
-There's another reason to care than the compression ratio: agents, not humans, are increasingly the ones reading unstructured data, and agents read and write in tokens. A **token-native storage format** for text speaks their language directly and gets the compression win for free.
+This post makes one claim: **tokenize that text before compressing it, and you roughly double what generic byte codecs achieve**. I'll show the benchmark, the latency cost (small), and what it would take to add this to a real database. There's another reason to care beyond the ratio, too: agents, not humans, are increasingly the ones reading this data, and agents read and write in tokens. A **token-native storage format** speaks their language directly and gets the compression win for free.
 
 ## The Forgotten Layer
 
@@ -124,7 +122,6 @@ The single-document LZ4 row is what a naive per-document codec gets. The 16KB-bl
 - **r50k BPE uint16 (raw)**: r50k has 50,257 tokens, which fits in uint16 (max 65,535), so 2 bytes per token ID.
 - **cl100k BPE uint32 (raw)**: cl100k has 100,277 tokens, which exceeds uint16 and requires uint32 (4 bytes per token). It produces fewer tokens per document than r50k (larger vocab = longer merges), but 4 bytes × fewer tokens still comes out worse than 2 bytes × more tokens. Hence 1.13x vs 2.33x.
 - **zstd trained dict 112KB**: zstd with a 112KB dictionary trained on WikiText-103 (`zstd --train`), a global dictionary shared across all documents, same design as the static ANS table. The fairest byte-codec comparison since it also learns from the corpus.
-- **r50k / cl100k BPE + static ANS**: ANS allocates bits based on token frequency, not a fixed byte width. A common token gets ~1 bit and a rare one gets ~16 bits, regardless of vocab size. So the uint32 penalty that crushes cl100k raw disappears entirely, and both tokenizers land near 3.3x.
 
 </details>
 
@@ -176,83 +173,6 @@ The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`)
   }}
 />
 
-<PlotlyChart
-  data={[
-    {
-      name: 'gzip -9',
-      type: 'bar',
-      x: [
-        0.95, 1.05, 1.15, 1.25, 1.35, 1.45, 1.55, 1.65, 1.75, 1.85, 1.95, 2.05, 2.15, 2.25, 2.35,
-        2.45, 2.55, 2.65, 2.75, 2.85, 2.95, 3.05, 3.15, 3.25, 3.35, 3.45, 3.55, 3.65, 3.75, 3.85,
-        3.95, 4.05, 4.15, 4.25, 4.35, 4.45,
-      ],
-      y: [
-        1, 3, 29, 64, 109, 171, 277, 345, 322, 262, 130, 45, 11, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      ],
-      marker: { color: '#94a3b8' },
-      opacity: 0.75,
-    },
-    {
-      name: 'zstd trained dict 112KB',
-      type: 'bar',
-      x: [
-        0.95, 1.05, 1.15, 1.25, 1.35, 1.45, 1.55, 1.65, 1.75, 1.85, 1.95, 2.05, 2.15, 2.25, 2.35,
-        2.45, 2.55, 2.65, 2.75, 2.85, 2.95, 3.05, 3.15, 3.25, 3.35, 3.45, 3.55, 3.65, 3.75, 3.85,
-        3.95, 4.05, 4.15, 4.25, 4.35, 4.45,
-      ],
-      y: [
-        0, 0, 0, 0, 0, 0, 2, 3, 7, 19, 32, 43, 60, 109, 147, 210, 238, 282, 240, 182, 93, 63, 26,
-        10, 5, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
-      ],
-      marker: { color: '#f59e0b' },
-      opacity: 0.75,
-    },
-    {
-      name: 'r50k uint16 raw',
-      type: 'bar',
-      x: [
-        0.95, 1.05, 1.15, 1.25, 1.35, 1.45, 1.55, 1.65, 1.75, 1.85, 1.95, 2.05, 2.15, 2.25, 2.35,
-        2.45, 2.55, 2.65, 2.75, 2.85, 2.95, 3.05, 3.15, 3.25, 3.35, 3.45, 3.55, 3.65, 3.75, 3.85,
-        3.95, 4.05, 4.15, 4.25, 4.35, 4.45,
-      ],
-      y: [
-        0, 1, 1, 0, 0, 3, 3, 11, 12, 27, 78, 113, 211, 305, 370, 291, 172, 96, 52, 18, 6, 1, 1, 0,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      ],
-      marker: { color: '#60a5fa' },
-      opacity: 0.75,
-    },
-    {
-      name: 'r50k + static ANS',
-      type: 'bar',
-      x: [
-        0.95, 1.05, 1.15, 1.25, 1.35, 1.45, 1.55, 1.65, 1.75, 1.85, 1.95, 2.05, 2.15, 2.25, 2.35,
-        2.45, 2.55, 2.65, 2.75, 2.85, 2.95, 3.05, 3.15, 3.25, 3.35, 3.45, 3.55, 3.65, 3.75, 3.85,
-        3.95, 4.05, 4.15, 4.25, 4.35, 4.45,
-      ],
-      y: [
-        0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 2, 0, 3, 6, 7, 9, 20, 38, 41, 95, 124, 174, 219, 220, 233,
-        215, 165, 85, 59, 35, 11, 8, 2, 0, 0,
-      ],
-      marker: { color: '#10b981' },
-      opacity: 0.75,
-    },
-  ]}
-  layout={{
-    title: {
-      text: 'Distribution of compression ratio, 1,773 WikiText-103 articles',
-      font: { size: 14 },
-    },
-    barmode: 'overlay',
-    xaxis: { title: 'compression ratio', range: [0.8, 4.6], dtick: 0.5 },
-    yaxis: { title: 'articles' },
-    height: 340,
-    margin: { t: 48, r: 24, b: 48, l: 56 },
-    legend: { x: 0.02, y: 0.98, bgcolor: 'rgba(0,0,0,0)' },
-  }}
-/>
-
 ### What does it cost in latency?
 
 Measured across 200 WikiText-103 articles (50–500 words), static corpus ANS model:
@@ -288,15 +208,7 @@ Raw uint16 packing is basically a wash between the two (2.35x vs 2.33x): mxbai's
 
 ## What It Saves at Scale
 
-English Wikipedia is ~7M articles averaging 708 words. Applying the corpus-average ratios:
-
-| Method                |         Per doc |    7M docs |    vs raw |
-| --------------------- | --------------: | ---------: | --------: |
-| Raw UTF-8             |     4,497 bytes |    31.5 GB |        1x |
-| zstd -22              |     2,382 bytes |    16.7 GB |      1.9x |
-| **r50k + static ANS** | **1,342 bytes** | **9.4 GB** | **3.35x** |
-
-At a billion documents that's 1.3 TB instead of 4.5 TB. At \$0.08/GB for SSD and \$0.02/GB for S3-class object storage:
+English Wikipedia is ~7M articles averaging 708 words. At the 3.35x median ratio, that's 31.5 GB of raw UTF-8 down to 9.4 GB, and at a billion documents, 4.5 TB down to 1.3 TB. At \$0.08/GB for SSD and \$0.02/GB for S3-class object storage:
 
 | Storage tier   | Raw UTF-8 | r50k + ANS |   Saved |
 | -------------- | --------: | ---------: | ------: |
@@ -375,13 +287,13 @@ There's also a bigger-picture reason to like token-native storage as [search and
 
 The same trick applies to **agent trace storage**. Tool calls, reasoning steps, and retrieved context pile up as unstructured text, and the logs are typically compressed with the same generic byte codecs. Token-native encoding gives you the same ~3× win there, and the stored token IDs are what the agent would produce anyway when replaying or analyzing a run.
 
-Push this further and the interesting question isn't just how to store tokens, it's whether text needs to come back at all. If the consumer reading a stored document is an LLM, not a human, decoding ANS-compressed bytes back to token IDs is already the end of the job: the next step is feeding those IDs into a model, which tokenizes internally anyway. The UTF-8 round trip only exists to serve human eyes. In a pipeline you fully control, retrieval through generation on a model you host yourself, token IDs never have to become text at all except for logs or a UI. That only works end to end if you own the inference stack, since hosted LLM APIs take text prompts, not raw token arrays, for safety and injection-guarding reasons, and it means standardizing on one tokenizer's ID space rather than juggling several. But it's the logical endpoint of treating tokens as the native format instead of a compression trick bolted onto text.
+Push this further and text may not need to come back at all. If the consumer is an LLM, not a human, the UTF-8 round trip only exists to serve human eyes, and a pipeline you fully control could skip it entirely. That only works if you own the inference stack, since hosted LLM APIs take text prompts, not raw token arrays.
 
-I'd also expect more overlap in LLM tokenizers over time (cl100k is already a de facto baseline across several model families) and common standards should emerge. That makes token-native storage more natural: you're not locking into one vendor's vocabulary so much as aligning with where the ecosystem is heading.
+I'd also expect more overlap in LLM tokenizers over time (cl100k is already a de facto baseline across several model families) and common standards should emerge. That makes token-native storage more natural: you're picking a vocabulary several vendors already share, not locking into one.
 
 ## Limitations
 
-- **Decode is slower than LZ4, the codec this post is actually trying to replace.** zstd isn't deployed in Qdrant or Elasticsearch; LZ4 is, chosen precisely because it's fast, not because it compresses well. Against LZ4, ANS decode is 18µs versus LZ4's 1µs, an 18x gap, and encode is 54µs versus 15µs. Both are still tiny next to typical network or disk I/O, so it's a non-issue in absolute terms, but relatively speaking LZ4 wins on speed by a wide margin, which is exactly the tradeoff it was built for. Even the fairest byte-codec competitor, zstd with a trained dictionary, decodes faster than ANS (2µs vs 18µs); it just loses on ratio and encode speed.
+- **Decode is slower than LZ4**, the codec this post is actually trying to replace (see [latency](#what-does-it-cost-in-latency)), chosen precisely because it's fast, not because it compresses well. Both are still tiny next to typical network or disk I/O, so it's a non-issue in absolute terms, but LZ4 wins on raw speed by a wide margin, exactly the tradeoff it was built for.
 - **The frequency table is only as good as the corpus it's trained on.** This post approximates GPT's real token distribution using WikiText-103, an English-only proxy. Domain mismatch is expensive: a WikiText-trained table gets 1.10x on JSON, a JSON-trained table gets 2.24x. Anyone deploying this needs a table trained on their actual data, not a borrowed one.
 - **Sharing only works at the corpus level, not per block.** LZ4 gets a real, free win from sharing a compression window across a block of documents. The same trick backfires for ANS: a table trained fresh on each 16KB block costs 900 to 4,000 bytes of overhead just to ship the table, which loses to the static corpus-wide table even at 1MB blocks.
 - **cl100k's larger vocabulary doesn't always mean fewer tokens.** On long digit strings and emoji-heavy text it can produce more tokens than r50k, since its extra vocabulary budget went toward code and non-English scripts, not those cases.
