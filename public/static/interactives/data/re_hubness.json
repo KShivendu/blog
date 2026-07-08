@@ -1,0 +1,38 @@
+{
+  "data": [
+    {
+      "name": "random",
+      "x": [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40],
+      "y": [
+        0.08, 0.93, 5.31, 14.82, 24.69, 24.31, 16.62, 8.75, 3.1, 1.05, 0.28, 0.03, 0.02, 0.01, 0, 0,
+        0, 0, 0, 0, 0
+      ],
+      "type": "bar",
+      "marker": { "color": "#f59e0b" },
+      "opacity": 0.6
+    },
+    {
+      "name": "real jina",
+      "x": [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40],
+      "y": [
+        4.28, 10.24, 14.1, 14.78, 12.41, 10.29, 8.96, 6.88, 5.27, 3.6, 2.57, 1.82, 1.44, 1.11, 0.63,
+        0.51, 0.29, 0.29, 0.15, 0.15, 0.06
+      ],
+      "type": "bar",
+      "marker": { "color": "#10b981" },
+      "opacity": 0.6
+    }
+  ],
+  "layout": {
+    "title": {
+      "text": "How often is each point picked as a top-10 neighbour? (fair share = 10)",
+      "font": { "size": 14 }
+    },
+    "barmode": "overlay",
+    "xaxis": { "title": "times named someone’s neighbour" },
+    "yaxis": { "title": "% of points (log)", "type": "log" },
+    "height": 320,
+    "margin": { "t": 44, "r": 24, "b": 46, "l": 56 },
+    "legend": { "orientation": "h", "y": -0.24 }
+  }
+}

@@ -1,11 +1,29 @@
 import dynamic from 'next/dynamic'
 import { useTheme } from 'next-themes'
+import { useEffect, useState } from 'react'
 
 const Plot = dynamic(() => import('react-plotly.js'), { ssr: false })
 
-export default function PlotlyChart({ data, layout, config, style, frames }) {
+export default function PlotlyChart({ data, layout, config, style, frames, src }) {
   const { theme, resolvedTheme } = useTheme()
   const isDark = (resolvedTheme || theme) === 'dark'
+
+  // Optional: load {data, layout} from an external JSON instead of inline props.
+  const [fetched, setFetched] = useState(null)
+  useEffect(() => {
+    if (!src) return
+    let live = true
+    fetch(src)
+      .then((r) => r.json())
+      .then((j) => live && setFetched(j))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [src])
+  if (src && !fetched) return <div style={{ minHeight: 320, margin: '1.5rem 0' }} />
+  const chartData = src ? fetched.data : data
+  const chartLayout = src ? fetched.layout : layout
 
   const fontColor = isDark ? '#e2e8f0' : '#1e293b'
   const gridColor = isDark ? '#334155' : '#e2e8f0'
@@ -18,18 +36,18 @@ export default function PlotlyChart({ data, layout, config, style, frames }) {
     margin: { t: 48, r: 24, b: 64, l: 64 },
     legend: { font: { color: fontColor } },
     dragmode: false,
-    ...layout,
+    ...chartLayout,
     xaxis: {
       gridcolor: gridColor,
       linecolor: gridColor,
       zerolinecolor: gridColor,
-      ...(layout?.xaxis || {}),
+      ...(chartLayout?.xaxis || {}),
     },
     yaxis: {
       gridcolor: gridColor,
       linecolor: gridColor,
       zerolinecolor: gridColor,
-      ...(layout?.yaxis || {}),
+      ...(chartLayout?.yaxis || {}),
     },
   }
 
@@ -43,7 +61,7 @@ export default function PlotlyChart({ data, layout, config, style, frames }) {
   return (
     <div style={{ borderRadius: '0.5rem', overflow: 'hidden', margin: '1.5rem 0' }}>
       <Plot
-        data={data}
+        data={chartData}
         layout={defaultLayout}
         config={defaultConfig}
         frames={frames}

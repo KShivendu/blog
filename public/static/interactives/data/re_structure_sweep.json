@@ -1,0 +1,77 @@
+{
+  "data": [
+    {
+      "name": "low intrinsic dim",
+      "x": [0.3, 6.4, 25.1, 64.2, 118.2, 158.5],
+      "y": [0.0055, 0.0242, 0.0487, 0.0537, 0.0554, 0.0556],
+      "mode": "markers+lines",
+      "type": "scatter",
+      "marker": { "size": 9, "color": "#6366f1" },
+      "text": ["subspace r=2", "r=8", "r=32", "r=128", "r=512", "r=1024"],
+      "hovertemplate": "%{text}<br>intrinsic dim %{x}<br>%{y} ms<extra></extra>"
+    },
+    {
+      "name": "spectral decay",
+      "x": [12.2, 20.4, 33.1, 65.5, 163.7, 217.5],
+      "y": [0.0172, 0.0218, 0.0275, 0.0341, 0.0546, 0.0615],
+      "mode": "markers+lines",
+      "type": "scatter",
+      "marker": { "size": 9, "color": "#8b5cf6" },
+      "text": ["α=3.0", "α=2.0", "α=1.5", "α=1.0", "α=0.5", "α=0.25"],
+      "hovertemplate": "spectral %{text}<br>intrinsic dim %{x}<br>%{y} ms<extra></extra>"
+    },
+    {
+      "name": "clusters (tightening)",
+      "x": [226.6, 154.6, 145.3, 156, 141.1, 145.9],
+      "y": [0.0561, 0.0339, 0.0296, 0.022, 0.0153, 0.0128],
+      "mode": "markers+lines",
+      "type": "scatter",
+      "marker": { "size": 9, "color": "#10b981" },
+      "text": ["loose c=0.25", "c=0.5", "c=1", "c=2", "c=4", "tight c=8"],
+      "hovertemplate": "clusters %{text}<br>intrinsic dim %{x}<br>%{y} ms<extra></extra>"
+    },
+    {
+      "name": "random (anchor)",
+      "x": [229.9],
+      "y": [0.0578],
+      "mode": "markers",
+      "type": "scatter",
+      "marker": {
+        "size": 15,
+        "color": "#f59e0b",
+        "symbol": "star",
+        "line": { "width": 1, "color": "white" }
+      }
+    },
+    {
+      "name": "real jina (anchor)",
+      "x": [25.1],
+      "y": [0.0372],
+      "mode": "markers",
+      "type": "scatter",
+      "marker": {
+        "size": 15,
+        "color": "#ef4444",
+        "symbol": "star",
+        "line": { "width": 1, "color": "white" }
+      }
+    }
+  ],
+  "layout": {
+    "title": {
+      "text": "What structure buys: query latency vs intrinsic dimension",
+      "font": { "size": 15 }
+    },
+    "xaxis": {
+      "title": { "text": "intrinsic dimension (TwoNN) →", "standoff": 12 },
+      "type": "log",
+      "tickmode": "array",
+      "tickvals": [1, 3, 10, 30, 100, 230],
+      "ticktext": ["1", "3", "10", "30", "100", "230"]
+    },
+    "yaxis": { "title": "median query latency (ms) ↓", "range": [0, 0.066] },
+    "height": 440,
+    "margin": { "t": 48, "r": 32, "b": 64, "l": 64 },
+    "legend": { "orientation": "h", "y": -0.2 }
+  }
+}
