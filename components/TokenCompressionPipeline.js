@@ -2,19 +2,19 @@ import { useTheme } from 'next-themes'
 import { useEffect, useState } from 'react'
 
 // First 20 chars of the reference doc + ellipsis marker
-const CHARS = 'Retrieval-Augmented '.split('').concat(['…'])
+const CHARS = 'Token-native storage'.split('').concat(['…'])
 
-// Actual r50k tokenization of "Retrieval-Augmented Generation is …"
+// Actual r50k tokenization of "Token-native storage persists documents as token IDs…"
 // (verified with tiktoken.get_encoding('r50k_base'))
 const TOKENS = [
-  { t: 'Ret' },
-  { t: 'ri' },
-  { t: 'eval' },
+  { t: 'Token' },
   { t: '-' },
-  { t: 'Aug' },
-  { t: 'mented' },
-  { t: ' Generation' },
-  { t: ' is' },
+  { t: 'native' },
+  { t: ' storage' },
+  { t: ' persists' },
+  { t: ' documents' },
+  { t: ' as' },
+  { t: ' token' },
   { t: ' …' },
 ]
 
@@ -91,7 +91,7 @@ export default function TokenCompressionPipeline() {
         viewBox={`0 0 ${W} ${H}`}
         style={{
           width: '100%',
-          maxWidth: `${W}px`,
+          maxWidth: `${W * 1.3}px`,
           display: 'block',
           margin: '0 auto',
           fontFamily: 'Inter, ui-sans-serif, sans-serif',
@@ -174,7 +174,7 @@ export default function TokenCompressionPipeline() {
           fontSize="9"
           fill={textMuted}
         >
-          1,853 chars = 1,853 bytes (UTF-8)
+          1,600 chars = 1,600 bytes (UTF-8)
         </text>
 
         <line
@@ -218,7 +218,7 @@ export default function TokenCompressionPipeline() {
         />
 
         <text x={RES_X} y={R1_CY - 5} fontSize="11" fontWeight="600" fill={textMuted}>
-          1,468 bytes
+          1,233 bytes
         </text>
         <text x={RES_X} y={R1_CY + 11} fontSize="16" fontWeight="700" fill={textMuted}>
           1.3×
@@ -294,7 +294,7 @@ export default function TokenCompressionPipeline() {
           fontSize="9"
           fill={textMuted}
         >
-          392 tokens × 2 bytes = 784 bytes (uint16 r50k)
+          328 tokens × 2 bytes = 656 bytes (uint16 r50k)
         </text>
 
         <line
@@ -330,7 +330,7 @@ export default function TokenCompressionPipeline() {
         />
 
         <text x={RES_X} y={R2_CY - 5} fontSize="11" fontWeight="600" fill="#10b981">
-          648 bytes
+          552 bytes
         </text>
         <text x={RES_X} y={R2_CY + 11} fontSize="16" fontWeight="700" fill="#10b981">
           2.9×
@@ -338,7 +338,7 @@ export default function TokenCompressionPipeline() {
 
         {/* Footnote */}
         <text x="8" y="278" fontSize="9" fill={textMuted}>
-          first 20 chars shown; r50k tokenizer (GPT-2 BPE, 50,257-token vocab); same 1,853-byte
+          first 20 chars shown; r50k tokenizer (GPT-2 BPE, 50,257-token vocab); same 1,600-byte
           reference doc; static ANS table trained on WikiText-103
         </text>
       </svg>

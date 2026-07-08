@@ -4,8 +4,8 @@ import { useTheme } from 'next-themes'
 
 const EXAMPLES = [
   {
-    label: 'RAG doc',
-    text: `Retrieval-Augmented Generation (RAG) is a technique that combines large language models with external knowledge retrieval. Instead of relying solely on parametric memory encoded in model weights, RAG systems retrieve relevant documents from a knowledge base at inference time and condition the model's response on that retrieved context.
+    label: 'Token-native storage',
+    text: `Token-native storage persists documents as token IDs instead of UTF-8 bytes. Rather than treating text as opaque bytes for a generic codec, token-native systems store what the tokenizer already produces during encoding.
 
 Vector databases like Qdrant store dense embeddings of documents alongside the raw text payload, enabling fast approximate nearest-neighbor search over billions of vectors. The raw text is stored verbatim so it can be returned to the model as context after retrieval.`,
   },
