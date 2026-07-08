@@ -121,7 +121,7 @@ The single-document LZ4 row is what a naive per-document codec gets. The 16KB-bl
 - **brotli q=11**: Google's codec at max quality. Best ratio of the byte codecs, but slow.
 - **r50k BPE uint16 (raw)**: r50k has 50,257 tokens, which fits in uint16 (max 65,535), so 2 bytes per token ID.
 - **cl100k BPE uint32 (raw)**: cl100k has 100,277 tokens, which exceeds uint16 and requires uint32 (4 bytes per token). It produces fewer tokens per document than r50k (larger vocab = longer merges), but 4 bytes × fewer tokens still comes out worse than 2 bytes × more tokens. Hence 1.13x vs 2.33x.
-- **zstd trained dict 112KB**: zstd with a 112KB dictionary trained on WikiText-103 (`zstd --train`), a global dictionary shared across all documents, same design as the static ANS table. The fairest byte-codec comparison since it also learns from the corpus.
+- **zstd trained dict 112KB**: zstd with a 112KB dictionary trained on WikiText-103 (`zstd --train`), a global dictionary shared across all documents, same design as the static ANS table.
 
 </details>
 
@@ -258,30 +258,6 @@ Nothing exotic. Any store that compresses text payloads on write and decompresse
 3. Decompress transparently on read
 
 The index, vectors, and query pipeline don't change at all, since this only touches how the payload bytes are stored and retrieved.
-
-```
-Current                          Proposed
-───────────────────────────────────────────────────────
-INSERT                           INSERT
-  payload: {"text": "..."}         payload: {"text": "..."}
-       │                                  │
-       ▼                                  ▼
-  JSON → generic codec (LZ4)     tokenize → uint16 IDs → ANS
-                                        │
-                                        ▼
-                                  store (ANS)
-
-READ                             READ
-  fetch compressed JSON bytes      fetch ANS-compressed bytes
-       │                                  │
-       ▼                                  ▼
-  return as-is                   ANS decode → token IDs → decode
-                                        │
-                                        ▼
-                                  return original text
-```
-
-There is one real cost: the vocabulary and frequency table become part of the on-disk format forever, so encodings have to be versioned per collection.
 
 There's also a bigger-picture reason to like token-native storage as [search and generation converge](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation): keeping UTF-8 blobs in the index while the model reasons in tokens means maintaining two representations of the same text.
 
