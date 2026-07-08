@@ -1,0 +1,222 @@
+---
+title: 'Sparse latent terms beat dense for same-modality multimodal search'
+date: '2026-06-29'
+lastmod: '2026-06-29'
+tags: ['search', 'sparse-retrieval', 'multimodal', 'interpretability', 'embeddings']
+draft: true
+summary: "Train a small sparse autoencoder on a frozen CLIP/SigLIP and every item gets a sparse code next to its dense vector. For same-modality search the sparse index wins — image→image +18%, text→text +6–14% mAP — while running ~8× faster and ~12× smaller at 1M docs, and it supports a concept-negation knob dense can't. Cross-modal search still belongs to dense, so keep both and route by direction."
+authors: ['default']
+---
+
+> Looking for TL;DR? Skip to [key takeaways](#key-takeaways).
+>
+> **Status: draft / research notes.** Two datasets (CIFAR-100, Flickr30k), three backbones across two generations (SigLIP, SigLIP 2, CLIP ViT-B/32), two seeds. All runs on a single Modal T4; total compute a few dollars.
+
+In a [previous post](/blog/cross-modal-latent-terms) I trained a Sparse Autoencoder (SAE) on a frozen SigLIP and found that image and text keep mostly separate sparse vocabularies: only ~8% of latent-term features are shared across modalities, though the shared ones really are cross-modal (a "wolf" feature fires for both the photo and the word). That was interesting, but it left the obvious question open — is any of this useful for search?
+
+It is, for one direction. The [Latent Terms paper](https://arxiv.org/abs/2605.29384) showed these sparse features beat dense single-vector scoring for text. That win extends to **same-modality** retrieval on both sides: image→image and text→text both beat dense, and the sparse index is faster, smaller, and controllable in a way dense embeddings aren't. Cross-modal (image↔text) is the exception — dense still wins there. So the design isn't "replace dense," it's "keep both and route by direction."
+
+## One frozen model, two indexes
+
+The recipe is cheap and adds nothing to inference:
+
+1. Freeze a multimodal model (SigLIP-base or CLIP ViT-B/32).
+2. Embed every item once. You already have a **dense vector**.
+3. Train one TopK SAE (4,096 features, k=32) on the union of image+text embeddings. Now every item also has a **sparse latent-term code** with 32 non-zeros.
+4. Score sparse with **IDF-weighted dot product** — the paper's BM25-style trick: down-weight features that fire everywhere, up-weight the rare ones.
+
+That IDF step is what makes sparse competitive at all. A handful of features fire on almost everything — the visual equivalent of "the." With a plain dot-product they dominate every score, so everything looks similar to everything and sparse loses to dense across the board. IDF pushes them to near-zero, so the score is carried by the rare, discriminative features. That's exactly what tells two images apart.
+
+Each item now carries a dense vector and a sparse code, and you pick the scorer per query direction.
+
+## Same-modality: sparse beats dense
+
+For image→image and text→text there's no [modality gap](https://arxiv.org/abs/2203.02053) to fight, and IDF-weighted latent terms win. It replicates across datasets, backbones, and seeds.
+
+CIFAR-100 (same-class ground truth, mAP, mean of 2 seeds):
+
+<div style={{overflowX: 'auto'}}>
+
+| direction               | dense | sparse_idf | Δ          |
+| ----------------------- | ----- | ---------- | ---------- |
+| i2i (image→image)       | 0.359 | 0.424      | **+18%**   |
+| t2t (text→text)         | 0.663 | 0.757      | **+14%**   |
+| i2t / t2i (cross-modal) | 0.64  | 0.30       | dense wins |
+
+</div>
+
+Flickr30k (real captions, paraphrase ground truth for t2t, mAP):
+
+<div style={{overflowX: 'auto'}}>
+
+| direction | backbone      | dense | sparse_idf | hybrid    |
+| --------- | ------------- | ----- | ---------- | --------- |
+| t2t       | SigLIP-base   | 0.500 | 0.538      | **0.545** |
+| t2t       | CLIP ViT-B/32 | 0.459 | 0.489      | **0.500** |
+| i2t / t2i | both          | best  | ≪          | < dense   |
+
+</div>
+
+The text-side win reproduces the paper's result on a real captioned dataset and a second backbone. The image→image win of **+18%** is new: the effect carries over to vision. Note that the margins are bigger on CIFAR (coarse class retrieval, where concept-level features shine) than on Flickr paraphrase t2t (+6–8%, finer-grained), but the direction is consistent every time.
+
+## Cross-modal still belongs to dense
+
+For image→text and text→image, sparse loses badly (Flickr i2t mAP 0.21 vs dense 0.79), and folding sparse into a hybrid drags dense down. This is the modality gap made concrete: image codes and text codes fire largely disjoint features (~8% shared), so there's little to match across modalities. Route those queries to the dense vector you already stored.
+
+## Why so little is shared, and how centering fixes it
+
+The reason image and text share only ~6–8% of features is the modality gap. Contrastive loss only cares about the ranking: a matched image and caption should score higher than mismatched pairs. It never requires the two to sit in the same place. So each modality is free to drift into its own region of the space, and the two regions end up separated by a roughly constant offset vector. The SAE carves up space by location, so it mirrors that split faithfully: separate regions, separate features. It can't share what the model kept apart.
+
+That points straight at a fix. Subtract each modality's mean — the image-mean from the images, the text-mean from the texts — before training the SAE, and the two regions overlap. A wolf photo and the word "wolf" now land near each other, so the SAE hands them the same features.
+
+<div style={{overflowX: 'auto'}}>
+
+|               | shared features | modality gap | sparse t2i mAP | dense t2i mAP |
+| ------------- | --------------- | ------------ | -------------- | ------------- |
+| raw           | 6.2%            | 1.19         | 0.27           | 0.61          |
+| mean-centered | **61.8%**       | 0.04         | 0.45           | 0.63          |
+
+</div>
+
+Shared features go from 6% to **62%**, and sparse cross-modal retrieval jumps with them (t2i 0.27 → 0.45) while dense is unchanged (a touch better, actually — centering also kills anisotropy). No retraining: the gap is essentially one offset, and removing it is free. You don't converge on 100% shared — the "Mind the Gap" caveat holds, since some content (texture vs grammar) is genuinely modality-specific — but you land on shared concepts plus modality-specific detail.
+
+This isn't specific to SigLIP-1. It replicates on SigLIP 2 (the 2025 model): the same ~1.2 gap, the same 5% → 60% jump under centering, sparse t2i 0.35 → 0.49. The modality gap is intrinsic to contrastive training, not something newer models grew out of, and centering is the same fix across generations.
+
+It also generalizes out of sample. Compute the two mean vectors on a train split, then apply them to a disjoint held-out split: shared features still go 2% → 44% and sparse cross-modal still jumps (t2i 0.21 → 0.58), dense unchanged. The gap is a stable, transferable offset — which is how you'd actually deploy it: store two vectors once, subtract them from every new query, no per-query statistics.
+
+One bound worth stating plainly: centering narrows the cross-modal sparse gap but doesn't close it. At full evaluation dense still wins i2t/t2i (sparse ~0.48–0.58 vs dense ~0.65), and centering lifts dense too, which erodes the pure-sparse same-modality edge (hybrid recovers it). So the routing verdict doesn't change. What centering buys you is the shared vocabulary and interpretability, plus a much more viable sparse cross-modal fallback.
+
+## Are the latent terms Zipfian? (yes, on the image side too)
+
+The paper's headline property is that latent terms follow a Zipfian frequency distribution, which is what lets them behave like natural-language terms and drop into BM25. It holds on the image side too:
+
+<div style={{overflowX: 'auto'}}>
+
+| corpus               | raw α (R²)  | centered α (R²) | raw head doc-freq |
+| -------------------- | ----------- | --------------- | ----------------- |
+| image side (i2i/t2i) | 1.10 (0.79) | 0.78 (0.75)     | 1.00              |
+| text side (t2t/i2t)  | 1.29 (0.89) | 0.86 (0.81)     | 1.00              |
+
+</div>
+
+The raw image latent terms fit a power law at **α ≈ 1.10** — near-ideal Zipf, essentially matching the paper's text result (α ≈ 1.02). The text side is steeper (α ≈ 1.29), probably because our text is templated class descriptions rather than natural prose.
+
+There's a catch that ties back to centering. In the raw distribution the single most-common feature fires in 100% of items. That saturated head is largely the modality-gap constant — one feature encoding the offset that's present in everything — and it's part of what makes the curve steeply Zipfian. Centering removes that hub (head doc-frequency drops 1.0 → 0.07, and nearly twice as many features light up), which flattens the distribution to α ≈ 0.7. So the two nice properties pull against each other: raw gives you clean Zipf that drops into BM25, centering gives you the shared cross-modal vocabulary. You optimize for one or the other.
+
+## The sparse index is ~8× faster and ~12× smaller
+
+Exact retrieval on CPU (no ANN), synthetic codes matching the real setup (D=768, V=4,096, k=32):
+
+<PlotlyChart
+  data={[
+    {
+      name: 'dense brute-force',
+      x: ['10K', '100K', '1M'],
+      y: [0.257, 6.835, 63.659],
+      type: 'bar',
+      marker: { color: '#6366f1' },
+      text: ['0.26ms', '6.8ms', '63.7ms'],
+      textposition: 'outside',
+    },
+    {
+      name: 'sparse inverted index',
+      x: ['10K', '100K', '1M'],
+      y: [0.142, 0.84, 8.138],
+      type: 'bar',
+      marker: { color: '#10b981' },
+      text: ['0.14ms', '0.84ms', '8.1ms'],
+      textposition: 'outside',
+    },
+  ]}
+  layout={{
+    title: { text: 'Exact query latency vs corpus size (CPU)', font: { size: 15 } },
+    barmode: 'group',
+    yaxis: {
+      title: 'median ms/query',
+      type: 'log',
+      tickvals: [0.1, 1, 10, 100],
+      ticktext: ['0.1', '1', '10', '100'],
+    },
+    xaxis: { title: 'corpus size' },
+    height: 380,
+    legend: { orientation: 'h', y: -0.2 },
+    margin: { t: 56, r: 24, b: 64, l: 56 },
+  }}
+/>
+
+<div style={{overflowX: 'auto'}}>
+
+| corpus | dense   | sparse  | speedup  | memory                         |
+| ------ | ------- | ------- | -------- | ------------------------------ |
+| 10K    | 0.26 ms | 0.14 ms | 1.8×     | 12× smaller                    |
+| 100K   | 6.84 ms | 0.84 ms | **8.1×** | 12× smaller                    |
+| 1M     | 63.7 ms | 8.1 ms  | **7.8×** | 12× smaller (259 MB vs 3.1 GB) |
+
+</div>
+
+The speedup is structural, not a benchmark quirk. A query only touches the postings lists of its ~32 active features. Each list holds on average `k·N/V` docs (all the nonzeros spread over V features), and you do k lookups, so the work is `k²·N/V` — independent of the 768-dim dot products dense has to run against every doc.
+
+TopK also makes the index unusually predictable. It keeps the k largest activations and zeros the rest _by construction_, so every doc has exactly k=32 terms — min = p50 = p99 = max = 32, no tail. SPLADE learns its sparsity, so its doc lengths vary and you have to size the index for the worst case; here the size and per-query cost are fixed. This is exact-vs-exact, so it isn't "sparse beats HNSW" — dense ANN is sub-linear too. The point is the sparse index is exact, small, and the same index that gives the next two properties.
+
+## Concept negation: a knob dense doesn't have
+
+Because latent terms are named and additive, you can subtract a concept: `score = s_P − λ·s_N`. On CelebA ("find faces that are P but NOT N"), sweeping λ gives a tunable suppression knob, and at λ≈2 it beats dense on all three axes (two seeds):
+
+<div style={{overflowX: 'auto'}}>
+
+| method                     | AP(P&¬N) ↑ | N-rate@k ↓ | P-rate@k ↑ |
+| -------------------------- | ---------- | ---------- | ---------- |
+| dense (positive only)      | 0.412      | 0.222      | 0.721      |
+| dense "P but not N" prompt | 0.308      | 0.455      | 0.627      |
+| sparse `s_P − 2·s_N`       | **0.460**  | **0.163**  | **0.798**  |
+
+</div>
+
+Dense handles language negation badly. Ask CLIP for "a person smiling but not wearing glasses" and the glasses rate _doubles_, 0.22 → 0.46 — the well-known CLIP-can't-do-"not" failure. Subtracting the latent-term signature instead drives it down to 0.16 and beats dense on all three axes at once (AP, N-rate, P-rate). That's a real capability for filtered search, moderation, and debiasing, not just a quality tweak.
+
+## Every feature is a nameable concept
+
+A sparse index is only useful if you can read it, and these features read cleanly. For each one I pulled the images that activate it most, probed its direction against the model's own word vocabulary, and auto-captioned its top images with a small VLM (BLIP). Those three independent signals agree per-feature, and the top images are almost always a single concept (activation purity ~0.9–1.0). The features are monosemantic: one feature, one concept.
+
+![Feature cards — each row is one SAE feature: its word label, cross-modal agreement, purity, and BLIP caption, alongside the six images that most activate it.](/static/images/blogs/latent-terms-feature-cards.png)
+
+Two kinds fall out:
+
+- **Cross-modal features** (the ~8% shared with text): a concept shared by images and words — lion, bee, house, tank, shark, bridge — where the word label, top-image class, and caption all converge.
+- **Image-only features**: a strong visual concept (mountain, bottle, plate) with no firing text twin, the modality gap again. Word-probing fails here, but the caption still nails it ("a field with a mountain in the background").
+
+For search, this means every match can carry a human-readable reason ("matched on: tiger, stripes"), and the negation knob above operates on exactly these named features. Features often encode a bit more than the bare class — the tiger feature prefers striped, orange tigers — though picking exactly which features to surface as the reason is its own problem.
+
+## What didn't work
+
+My first bet was multi-attribute conjunctive search ("find images that are A AND B AND C"), the case where dense single-vectors are supposed to collapse. It looked great at small scale, and I killed it at full scale. SigLIP's natural-language conjunction prompt turns out to be a strong baseline, and sparse only won with a single attribute (M=1). The reason: with one attribute, IDF just picks out that concept's feature, which is easy. ANDing several needs the right features to co-fire on the same items, and a SAE trained on the pooled embeddings doesn't guarantee that — the attributes it isolates aren't the ones you're querying together. The cheapest-config-first-then-scale discipline is what separated this mirage from the same-modality win above.
+
+## Limitations
+
+- **Margins scale with granularity.** Coarse class retrieval (CIFAR) gives +14–18%; fine paraphrase retrieval (Flickr t2t) gives +6–8%.
+- **The SAE adds an index-time training step** (cheap — minutes on a T4) and a sparsity/quality knob (k, n_features) to tune.
+- **Latency here is exact-vs-exact.** A production comparison should pit the sparse inverted index against dense HNSW.
+
+## Key Takeaways
+
+- **Same-modality: sparse latent terms beat dense**, replicated across 2 datasets × 2 backbones × 2 seeds — image→image +18%, text→text +6–14% mAP. IDF weighting is what makes it work.
+- **Cross-modal belongs to dense.** The modality gap means image and text codes barely overlap, so route i2t/t2i to the dense vector you already have.
+- **The sparse index is ~8× faster and ~12× smaller** at 1M docs, because a query only touches its ~32 features' postings, and TopK fixes doc length at exactly 32.
+- **It's controllable and interpretable.** Concept negation by signature subtraction beats dense (which backfires on language negation), and every feature is a monosemantic, nameable concept, so matches come with reasons.
+- **The small shared vocabulary is the modality gap, not a limit.** Mean-centering each modality removes a constant offset, takes shared features 6% → 62%, and makes sparse cross-modal viable — at no cost to dense, no retraining. The catch is it flattens the clean Zipf that makes raw terms BM25-ready.
+
+## Citation
+
+This builds on Mixedbread's Latent Terms. If referencing the underlying method, cite the original:
+
+```bibtex
+@misc{latentterms,
+  title={Latent Terms: Dense Retrievers Contain Trivially Extractable BM25-ready Zipfian Vocabularies},
+  author={Benjamin Clavié and Sean Lee and Aamir Shakir and Makoto P. Kato},
+  year={2026},
+  eprint={2605.29384},
+  archivePrefix={arXiv},
+  primaryClass={cs.IR},
+  url={https://arxiv.org/abs/2605.29384},
+}
+```
