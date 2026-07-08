@@ -57,7 +57,7 @@ I started on [BEIR scifact](https://github.com/beir-cellar/beir) (5,183 docs, 30
 
 Two things jump out. First, **the retrieval-tuned static model is far better than the general one**: `potion-retrieval-32M` (0.6345) beats its own base `potion-base-32M` (0.5618) by **13%**, just from fine-tuning the same table on retrieval data. Always use the retrieval variant.
 
-Second, the headline tradeoff. `potion-retrieval-32M` reaches **97.9% of all-MiniLM's NDCG@10** (0.6345 vs 0.6484), and actually **beats it on Recall@10** (0.7948 vs 0.7883), while embedding queries **~90× faster** (0.13ms vs 12.1ms) and indexing **~80× faster** (1,562 vs 19 docs/sec). It lands within 4.5% of BM25, at a query cost you can't tell apart from BM25's.
+Second, the headline tradeoff. `potion-retrieval-32M` reaches **97.9% of all-MiniLM's NDCG@10** (0.6345 vs 0.6484), and actually **beats it on Recall@10** (0.7948 vs 0.7883), while encoding queries **~90× faster** (0.13ms vs 12.1ms) and indexing **~80× faster** (1,562 vs 19 docs/sec) on the same CPU. It lands within 4.5% of BM25's NDCG, and the query encoding is effectively free at 0.13ms. (These CPU latencies are from a shared box, so read them as order-of-magnitude; the ratio is the point.)
 
 <PlotlyChart
   data={[
