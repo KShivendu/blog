@@ -1,0 +1,43 @@
+{
+  "data": [
+    {
+      "name": "real (jina)",
+      "x": [422, 674, 1089, 1736, 2730],
+      "y": [0.897, 0.9, 0.9, 0.9, 0.9],
+      "mode": "markers+lines+text",
+      "type": "scatter",
+      "text": ["ef16", "ef32", "ef64", "ef128", "ef256"],
+      "textposition": "bottom center",
+      "marker": { "size": 10, "color": "#10b981" },
+      "textfont": { "size": 10 }
+    },
+    {
+      "name": "random",
+      "x": [671, 1116, 1931, 3370, 5527],
+      "y": [0.797, 0.808, 0.818, 0.839, 0.867],
+      "mode": "markers+lines+text",
+      "type": "scatter",
+      "text": ["ef16", "ef32", "ef64", "ef128", "ef256"],
+      "textposition": "top center",
+      "marker": { "size": 10, "color": "#f59e0b" },
+      "textfont": { "size": 10 }
+    }
+  ],
+  "layout": {
+    "title": {
+      "text": "Recall vs work, real vs random (HNSW, efSearch sweep)",
+      "font": { "size": 15 }
+    },
+    "xaxis": {
+      "title": { "text": "distance comparisons per query, lower is better →", "standoff": 12 },
+      "type": "log",
+      "tickmode": "array",
+      "tickvals": [500, 1000, 2000, 5000],
+      "ticktext": ["500", "1k", "2k", "5k"]
+    },
+    "yaxis": { "title": "recall@10 ↑", "range": [0.78, 0.92] },
+    "height": 420,
+    "margin": { "t": 48, "r": 32, "b": 64, "l": 64 },
+    "legend": { "orientation": "h", "y": -0.2 }
+  }
+}
