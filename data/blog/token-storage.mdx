@@ -333,7 +333,27 @@ English Wikipedia is ~7M articles averaging 708 words. At the 3.35x median ratio
 | SSD ($0.08/GB) |   $360/mo |    $107/mo | $253/mo |
 | S3 ($0.02/GB)  |    $90/mo |     $27/mo |  $63/mo |
 
-One scoping note so the claim doesn't overreach: in collections with large embeddings, the vectors dominate total bytes (a 1536-dim float32 vector is ~6 KB, often bigger than the text next to it). Payload compression matters most when payloads are large, vectors are quantized, or text is the point of the collection.
+One scoping note so the claim doesn't overreach: how this shakes out depends heavily on chunk size and vector compression.
+
+<details>
+<summary>How big is the text next to the vector, really?</summary>
+
+Take a chunk sized to mxbai-embed-large-v1's own [recommended sequence length](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1) of 512 tokens: at this post's ~4.5 bytes/token, that's 512 × 4.5 ≈ 2,304 bytes of raw UTF-8. mxbai-embed-large-v1 outputs 1024-dim vectors, so float32 (4 bytes per dimension) puts the embedding at 1024 × 4 = 4,096 bytes:
+
+| Stage                                |    Size |
+| ------------------------------------ | ------: |
+| Text chunk, raw UTF-8                | 2,304 B |
+| Text chunk, r50k uint16 (raw)        |   989 B |
+| Text chunk, r50k + ANS               |   688 B |
+| Embedding, 1024-dim float32          | 4,096 B |
+| Embedding, 512-dim (MRL) float32     | 2,048 B |
+| Embedding, 256-dim (MRL) float32     | 1,024 B |
+| Embedding, 1024-dim int8 quantized   | 1,024 B |
+| Embedding, 1024-dim binary quantized |   128 B |
+
+Unquantized, the embedding (4,096 B) dominates either form of the text, the common case for collections with large, uncompressed embeddings. MRL alone is a modest lever: truncating to 512 or 256 dims still keeps quality closer to the full vector, and lands at 2,048 B or 1,024 B, in the same ballpark as the text rather than dwarfing it. int8 scalar quantization lands in the same place, 1,024 B, a safer quality tradeoff than binary. Binary quantization is the outlier: even without touching MRL, it drops the 1024-dim vector to 128 B, ~5.4x smaller than the compressed text chunk (688 B), though it's also the most aggressive quality tradeoff of the group and worth validating against your own recall numbers before leaning on it. Payload compression matters most exactly in that regime: large payloads, quantized vectors, or collections where text is the point.
+
+</details>
 
 Compression doesn't just shrink primary storage. Every copy of your data, from snapshots and backups to write-ahead logs, replication, shard rebalancing, cache density, and egress, benefits from the same 3.35× reduction. That means less data shipped across the network, more payloads fitting in RAM, and faster reads and indexing, all multiplying the operational impact well beyond the headline storage savings. This effect is especially valuable in storage-constrained contexts like edge devices or on-device RAG, where shrinking the payload pays off far more than marginal savings on a central server.
 
@@ -438,6 +458,7 @@ The same write path applies when the writer is a model instead of a client. An L
 ## Limitations
 
 - **No shared vocabulary across models yet.** Embedding models use WordPiece or SentencePiece, LLMs use BPE variants (r50k, cl100k, o200k), and different LLM families don't share one either. A token-native payload only pays off end-to-end for a consumer using the same tokenizer it was stored with. That's exactly the case for a common token vocabulary standard, the way ASCII and UTF-8 standardized bytes, rather than treating token-native storage as a single-vendor optimization.
+- **Hosted LLM APIs don't accept or return token IDs today.** Even when your storage tokenizer matches the model's exactly, the read path only closes the loop end to end if you own the inference stack: hosted chat APIs take text prompts and return text, not raw token arrays, so a detokenize/retokenize step still happens somewhere. See [this follow-up proposing a token-ID-native LLM API](/blog/token-llm-interface) for what closing that gap would actually take.
 - **Raw packing efficiency depends on the tokenizer and the script.** cl100k's larger vocabulary doesn't always mean fewer tokens: on long digit strings and emoji-heavy text it can produce more tokens than r50k, since its extra vocabulary budget went toward code and non-English scripts. And for scripts a tokenizer has no merges for, uint16 packing can lose outright: the Thai word `การ` is 9 raw UTF-8 bytes but 6 single-byte tokens, 12 bytes as uint16, 33% worse than doing nothing.
 - **ANS is one entropy coder, not the point of this post.** It's what got the benchmark from 2.33x (raw packing alone) to 3.35x, but it comes with real costs of its own: decode is slower than LZ4 (see [latency](#what-does-it-cost-in-latency)), the frequency table is only as good as the corpus it's trained on (a WikiText-trained table gets 1.10x on JSON, a JSON-trained table gets 2.24x), and it only shares well at the corpus level, not per block (a table trained fresh on each 16KB block costs 900-4,000 bytes of overhead, losing to a static table even at 1MB blocks). A different entropy coder could trade some of this differently, and a tokenizer that assigned token IDs by frequency rank in the first place could shrink or remove the need for a separate entropy-coding step altogether. The core argument, store tokens instead of bytes, holds regardless of which coder, if any, you layer on top.
 
