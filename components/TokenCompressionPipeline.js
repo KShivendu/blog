@@ -174,7 +174,7 @@ export default function TokenCompressionPipeline() {
           fontSize="9"
           fill={textMuted}
         >
-          1,600 chars = 1,600 bytes (UTF-8)
+          1,600 chars × 1 byte/char = 1,600 bytes (ASCII text, UTF-8)
         </text>
 
         <line
@@ -222,6 +222,9 @@ export default function TokenCompressionPipeline() {
         </text>
         <text x={RES_X} y={R1_CY + 11} fontSize="16" fontWeight="700" fill={textMuted}>
           1.3×
+        </text>
+        <text x={RES_X} y={R1_CY + 23} fontSize="8" fill={textMuted}>
+          compression ratio
         </text>
 
         {/* ═══ ROW 2: TOKENS ═══ */}
@@ -296,6 +299,16 @@ export default function TokenCompressionPipeline() {
         >
           328 tokens × 2 bytes = 656 bytes (uint16 r50k)
         </text>
+        <text
+          x={(REP_X + tokEndX) / 2}
+          y={R2_TOP + TOK_H + 38}
+          textAnchor="middle"
+          fontSize="13"
+          fontWeight="700"
+          fill={tokStroke}
+        >
+          2.4× compression, before ANS even runs
+        </text>
 
         <line
           x1={tokEndX + 4}
@@ -334,6 +347,9 @@ export default function TokenCompressionPipeline() {
         </text>
         <text x={RES_X} y={R2_CY + 11} fontSize="16" fontWeight="700" fill="#10b981">
           2.9×
+        </text>
+        <text x={RES_X} y={R2_CY + 23} fontSize="8" fill="#10b981">
+          compression ratio
         </text>
 
         {/* Footnote */}
