@@ -49,21 +49,23 @@ PUT /collections/my_collection/index
 }
 ```
 
+The insert call barely changes. `description` still takes the same value as before, plain text, and the database tokenizes it on write. A client that already has token IDs on hand can send those instead, as a plain array, no wrapper object needed:
+
 ```js
-// Insert records/points with tokens
+// Insert with token IDs directly instead of text
 PUT /collections/my_collection/points
 {
   "points": [
     {
       "id": 123,
       "vector": [0.12, -0.34, ...],
-      "payload": { "description": { "tokens": [1858, 6427, 20272, 318, 257, 6997, ...] } }
+      "payload": { "description": [1858, 6427, 20272, 318, 257, 6997, ...] }
     }
   ]
 }
 ```
 
-The tokenizer is a collection-level choice, not a per-document one: mixing tokenizers in the same collection would mean mixing vocabularies, and the static ANS table only makes sense for one vocabulary at a time. The client passes plain token IDs, the same array the tokenizer already produces, or plain text if it doesn't tokenize on its own and lets the database do it on insert. ANS compression is an internal storage detail either way: the database runs it on write and reverses it on read, so the interface never exposes compressed bytes.
+A string or an array is easy to tell apart, so the database picks the right path: tokenize-then-compress for text, compress directly for token IDs. Either way, ANS compression happens inside the database, on write, and gets reversed on read, so the interface never exposes compressed bytes. The tokenizer itself is a collection-level choice, not a per-document one: mixing tokenizers in the same collection would mean mixing vocabularies, and the static ANS table only makes sense for one vocabulary at a time.
 
 ## Models Read and Write in Tokens
 
