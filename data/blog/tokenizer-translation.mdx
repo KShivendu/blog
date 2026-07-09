@@ -1,0 +1,93 @@
+---
+title: 'Translating Between Tokenizers: The Naive Way Is Already Fine'
+date: '2026-07-14'
+tags: ['vector-databases', 'compression', 'internals', 'nlp']
+draft: false
+summary: 'Cross-tokenizer translation only comes up on a rare path (fallback provider, degraded model, version migration), and decode-then-re-encode already handles it: 100% lossless at 121.6µs median round trip, negligible next to network or inference latency. I also tried to make it faster with a static lookup table and a splice-based translator. It failed on both correctness (16.2% exact match) and speed (0.97x). The naive path remains the right answer, and the deeper case for a shared vocabulary standard is about not having to maintain a tokenizer-coupled storage layer at all.'
+authors: ['default']
+---
+
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
+
+The [previous post](/blog/token-storage) argued for storing text as token IDs instead of UTF-8, and flagged an obvious hole in that argument: there is no shared vocabulary across models. r50k and cl100k are both OpenAI tokenizers, but a token-native payload stored in one only pays off for a consumer that reads the same one. That sounds like a real problem until you notice how rarely it actually comes up, and how cheap the fix is when it does.
+
+## The Common Case Doesn't Need Translation
+
+A deployed system almost always uses one tokenizer end to end. The embedding model and the LLM you've shipped don't swap token IDs mid-request, the storage tokenizer is a fixed collection-level choice, and it stays fixed for the lifetime of that collection. Cross-tokenizer translation is only needed on the rare path: a fallback provider kicks in, a degraded route sends traffic to a different model family, or you're mid-migration between model versions and some payloads are still in the old tokenizer.
+
+For that rare case, the trivial approach already works. Both r50k and cl100k build their vocabularies from raw bytes with a complete byte-fallback, so `decode(encode(text))` reproduces `text` exactly for either one, which makes decode-then-re-encode translation always lossless: decode the stored r50k token IDs back to UTF-8 text, then re-encode that text with cl100k. I measured the real cost of that path, granular by step, same harness as the original post's latency table (`perf_counter`, 200 WikiText-103 articles, 50-500 words, 10 runs per article, median and p99 via sorted array):
+
+| Step                            |  median |     p99 |
+| ------------------------------- | ------: | ------: |
+| decode (r50k IDs -> text)       |   5.0µs |  20.1µs |
+| re-encode (text -> cl100k IDs)  |  66.4µs | 191.5µs |
+| round trip (decode + re-encode) | 121.6µs | 334.5µs |
+
+121.6µs at the median, 334.5µs at p99, and it is exactly correct every time, not approximately. The original post's finding about ANS and LZ4 latencies being tiny next to network or disk I/O applies here with even more force: this cost only shows up on a fallback or migration path in the first place, and a third of a millisecond at the tail is nothing against the round trip to a different model provider that triggered the fallback to begin with.
+
+## Trying to Do Better Anyway
+
+A rare-but-nonzero operation is still worth optimizing if the optimization is cheap, so I tried to beat the 121.6µs naive path with something closer to a lookup than a full re-tokenization.
+
+Both r50k and cl100k are byte-level BPE, so every token decodes to a concrete byte string. Build a `r50k_id -> cl100k_id` map once: for each of r50k's 50,256 tokens (excluding the special `<|endoftext|>` token), decode it to bytes, then check whether that exact byte string is also a single token in cl100k's vocabulary. Where it is, the ID lookup is O(1). Where it is not, the token has to expand into some other cl100k sequence, and figuring out which one requires knowing the surrounding bytes, since BPE merging is context-dependent.
+
+## The Splice Algorithm
+
+For a document tokenized with r50k, walk the token IDs and mark each one resolved (its byte string is a single cl100k token) or unresolved. Group consecutive tokens into runs. A resolved run gets its cl100k IDs straight from the table, no tokenizer call at all. An unresolved run gets its raw byte span decoded back to text and re-encoded with cl100k, but only over that local span rather than the whole document. Concatenate the pieces and compare against `cl100k.encode(text)` run on the full document.
+
+This is the same idea the earlier post described for entropy coding: swap the expensive step for a table lookup wherever the data allows it, and only pay full cost where it does not.
+
+## Results
+
+Measured on 500 WikiText-103 test articles (≥30 words, same filter as the original post's benchmarks).
+
+| Metric                                                         |                          Value |
+| -------------------------------------------------------------- | -----------------------------: |
+| Static vocab overlap (r50k byte-string also a cl100k token)    |        85.7% (43,066 / 50,256) |
+| Occurrence-level lookup hit rate on real text                  | 95.1% (72,165 / 75,890 tokens) |
+| Hybrid output exactly matches full re-encode                   |      16.2% (81 / 500 articles) |
+| Average matching-prefix length before first divergence         |          38.4% of the document |
+| Token-level similarity (SequenceMatcher ratio, hybrid vs real) |                          96.6% |
+
+Latency, 200 articles (50-500 words) x 10 runs, `perf_counter` median and p99:
+
+| Method                                |  median |     p99 |
+| ------------------------------------- | ------: | ------: |
+| naive decode + re-encode (round trip) | 121.6µs | 334.5µs |
+| hybrid lookup + splice                | 125.3µs | 541.5µs |
+
+Speedup: 0.97x at the median, 0.62x at p99. The hybrid path is not faster, it is slightly slower, and considerably worse at the tail.
+
+The vocab overlap number looks generous on its own: 85.7% of r50k's tokens have a byte-identical twin in cl100k, and in real text 95.1% of token instances hit that table. If BPE merges were context-free, that would translate almost directly into a 95%-lossless, mostly-O(1) translator. They are not context-free. A resolved token's byte span being a valid cl100k token in isolation says nothing about whether cl100k would still choose that exact boundary once it sees the bytes on either side. Two adjacent resolved tokens can merge into a longer token that neither one's table entry predicts, and once one boundary is wrong, every following token in that run of the document shifts. That is why the average matching prefix cuts out at 38% of the document, and why full-document exact match sits at 16.2% despite the individual pieces being high-similarity per the SequenceMatcher score.
+
+The timing tells the same story from a different angle. Grouping resolved and unresolved runs, decoding byte spans, and calling `cl100k.encode` per unresolved run (rather than once for the whole document) adds Python-level overhead that eats the entire savings from skipping the resolved spans. The unresolved runs are also exactly the places where cl100k's tokenizer has to do the most context-sensitive work, so they are not cheap to re-encode even in isolation. The optimization was worth trying since it was cheap to test, but it loses on both axes that mattered, correctness and speed, so the naive round trip from the section above remains the right answer.
+
+## Limitations
+
+- **Only tested for r50k → cl100k.** Both are OpenAI's own byte-level BPE tokenizers with a shared design lineage, likely the best-case scenario for vocab overlap. Cross-vendor pairs (Llama's BPE, Gemini's SentencePiece) would need the same experiment run again, and there is no reason to expect the hybrid translator to do better there. The naive decode-then-re-encode path also would not apply as-is to a pair that includes a WordPiece or SentencePiece tokenizer, see below.
+- **The splice algorithm is one specific design, not an exhaustive search.** A smarter boundary-safety check (verifying resolved runs against a local re-encode before trusting them) would fix correctness but reintroduces exactly the re-encoding cost the table was meant to avoid, so it does not change the conclusion.
+- **This does not touch WordPiece or SentencePiece at all.** The decode → re-encode trick already breaks at the first step there, since those tokenizers normalize text (lowercasing, accent-stripping) on the way in, so `decode(encode(text)) != text` to begin with. Neither the naive path nor the lookup-table idea survives that.
+- **500 articles is a large enough exhaustive check to trust the shape of the result, not a proof.** The mismatch rate could differ on code, non-English text, or very short documents where a single unresolved run dominates.
+- **The 121.6µs naive round trip is per document, on a WikiText-sized article.** A workload doing this translation on a hot path at high volume, rather than an occasional fallback or migration, would need to budget for it accordingly, though at that volume the tokenizer mismatch is itself a sign something upstream should be fixed rather than translated around.
+
+## Key Takeaways
+
+- **In practice, cross-tokenizer translation is rare.** A deployed system uses one tokenizer end to end, and translation only comes up on a fallback provider, a degraded route to a different model, or a version migration.
+- **For that rare case, decode-then-re-encode already works.** It is 100% lossless and costs 121.6µs at the median, 334.5µs at p99, negligible next to the network or inference latency of whatever triggered the fallback in the first place.
+- **The optimization attempt failed on both axes.** Static vocab overlap between r50k and cl100k is 85.7%, and occurrence-level lookup hits are 95.1% on real text, both genuinely high, but the splice-based hybrid translator only reproduces full re-encoding exactly 16.2% of the time and is not even faster (0.97x median, 0.62x p99).
+- **BPE merge boundaries are context-dependent**, so a token's byte string matching a single token in another vocabulary in isolation says nothing about whether that boundary survives once surrounding bytes are considered. One wrong boundary invalidates everything after it in that run.
+- **This does not reopen the shared-vocabulary-standard argument from the original post, it narrows it.** Translation between existing vocabularies is not impossible, the naive path handles the occasional need fine. The real cost of no shared standard is having to run and maintain a token-native storage layer coupled to one specific tokenizer at all: versioning the on-disk format, re-encoding every stored document when a tokenizer changes, and keeping a fallback path around for the rare cross-tokenizer case. A shared vocabulary standard removes that maintenance burden, it was never about translation being unsolvable.
+
+## Citation
+
+If you find this useful, please cite:
+
+```bibtex
+@misc{kumar2026tokenizertranslation,
+  author       = {Kumar Shivendu},
+  title        = {Translating Between Tokenizers: The Naive Way Is Already Fine},
+  year         = {2026},
+  url          = {https://www.kshivendu.dev/blog/tokenizer-translation},
+  note         = {Blog post}
+}
+```
