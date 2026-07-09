@@ -10,7 +10,7 @@ authors: ['default']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-The [previous post](/blog/tokenization-compression) covered storage: BPE tokenization + static entropy coding gives ~3× lossless compression on text payloads. After publishing, the obvious follow-up question surfaced: once you've stored documents efficiently, what happens at _inference_ time?
+The [previous post](/blog/token-storage) covered token-native storage: persist text as BPE token IDs with a static entropy coder for ~3× lossless compression, free OOD detection, and a representation aligned with how LLMs consume retrieved context. After publishing, the obvious follow-up question surfaced: once you've stored documents efficiently, what happens at _inference_ time?
 
 RAG has two compute costs that rarely get discussed together:
 

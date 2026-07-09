@@ -1,5 +1,5 @@
 ---
-title: 'Token-Native Storage: Store Text the Way Models Read It'
+title: 'Token-Native Storage: Read and Write in the Language Models Already Speak'
 date: '2026-05-12'
 lastmod: '2026-07-08'
 tags: ['vector-databases', 'compression', 'internals', 'rag', 'nlp']
@@ -13,52 +13,53 @@ authors: ['default']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Every vector search engine stores two things for each point: the vector and the payload. Vectors get amazing compression with quantization and MRL. The text in the payload gets raw UTF-8 bytes, or LZ4 compression at best, a generic codec with no idea the systems that actually consume it (embedders, rerankers, LLMs/agents) all operate on **tokens**. This problem can be found anywhere models/agents read and write: agent traces, LLM chat history, not just vector search.
+Every vector search engine stores two things for each point: the vector and the payload. Vectors get real compression effort with quantization and MRL. The text payload gets raw UTF-8, or LZ4 at best, even though the **systems that actually consume it, embedders, rerankers, LLMs, all operate on tokens, not bytes**.
 
-This post argues for **token-native storage**: persist text as BPE token IDs, not as UTF-8. Token IDs alone, with no compression algorithm running at all, already pack ~2.33× smaller than raw UTF-8 text. Combine that with a static entropy coder and it reaches ~3.35× (2.9× what LZ4 manages). The same bytes shrink everywhere they get copied — snapshots, replication, etc and LLM output can be persisted without detokenizing first. If agents are going to be the biggest users of text based systems like web, search, and chat interfaces; the storage should be designed to speak their language i.e. tokens
+**Token IDs alone, with no compression algorithm running at all, already pack ~2.33× smaller than raw UTF-8 bytes**. A static entropy encoding on top reaches ~3.35×.
 
-This post also argues for a need for new common standard for tokens like ASCII/UTF-8 to amplify the impact of such design across embeddings, rerankers, and LLMs/agents.
+This post argues for **token-native storage**: persist text as BPE token IDs, not UTF-8 bytes. This mismatch of language isn't unique to vector search engines, it shows up **anywhere models read and write: agent traces, chat history, generated output**.
 
-## Rethinking the Payload
+## The Text Field Still Speaks Bytes
 
-When you insert a document into Qdrant, or Elasticsearch, you typically store something like:
+When you insert a document into Qdrant, you typically send something like:
 
-```json
+```js
+// Current approach for inserting data:
+PUT /collections/my_collection/points
 {
-  "id": 123,
-  "vector": [0.12, -0.34, ...],
-  "payload": {
-    "description": "Token-native storage persists text as token IDs, not UTF-8 bytes..."
-  }
+  "points": [
+      {
+        "id": 123,
+        "vector": [0.12, -0.34, ...],
+        "payload": { "description": "Token-native storage persists text as token IDs, not UTF-8 bytes..." }
+      },
+  ]
 }
 ```
 
-Qdrant stores on-disk payloads in [Gridstore](https://qdrant.tech/articles/gridstore-key-value-storage/) and compresses each payload value independently with LZ4, so a point read never has to decompress a neighboring document, keeping random lookups cheap. Elasticsearch instead packs stored fields into 16 KB blocks and compresses each block together, letting LZ4 back-reference across documents at the cost of decompressing the whole block to read one field. Either way, the codec has no learned model of the language, just whatever byte patterns happen to repeat within its window. That gets you roughly 1.15x per-document (Qdrant) to 1.85x block-level (Elasticsearch-style) on text.
+Qdrant compresses each payload value independently with LZ4. Elasticsearch instead shares an LZ4 window across a block of documents, trading that independence for a better ratio. Either way, the codec has no learned model of the language, just whatever byte patterns happen to repeat within its window.
 
-But there is a component that already knows a lot about the structure of natural language, and it's part of every embedding and language model stack: **the tokenizer**. Token-native storage means making token IDs the on-disk representation instead of treating tokenization as a transient inference step:
+But there is a component that already knows a lot about the structure of natural language, and it's part of every embedding and language model stack: **the tokenizer**. Token-native storage makes token IDs the on-disk representation instead of throwing them away right after tokenizing:
 
-```json
-// Collection schema, set once: every document in this collection shares
-// one tokenizer and one static ANS table, so they stay decodable together.
+```js
+// One time: Set tokenizer on collection level for the 'description' field
+PUT /collections/my_collection/index
 {
-  "payload_schema": {
-    "description": { "type": "token", "tokenizer": "r50k" }
-  }
+  "schema": { "description": { "type": "token", "tokenizer": "r50k" } }
 }
 ```
 
-```json
-// Per-document insert: no tokenizer field, it's inherited from the schema.
+```js
+// Insert records/points with tokens
+PUT /collections/my_collection/points
 {
-  "id": 123,
-  "vector": [0.12, -0.34, ...],
-  "payload": {
-    "description": {
-      "tokens": [1858, 6427, 20272, 318, 257, 6997, ...]
-      // or "text": "Token-native storage persists text as token IDs, not UTF-8 bytes...",
-      // letting the database tokenize on insert for clients that don't tokenize themselves
+  "points": [
+    {
+      "id": 123,
+      "vector": [0.12, -0.34, ...],
+      "payload": { "description": { "tokens": [1858, 6427, 20272, 318, 257, 6997, ...] } }
     }
-  }
+  ]
 }
 ```
 
@@ -69,6 +70,12 @@ The tokenizer is a collection-level choice, not a per-document one: mixing token
 Tokenization isn't just an input-side detail. Every model in the stack, embedders, rerankers, LLMs, tokenizes text going in, and generative models emit token IDs going out. The storage pipeline only ever touches the UTF-8 detour in between. Model output is born as token IDs, the sampler emits them before anything detokenizes to text. Today the standard path is: model emits tokens → detokenize to text → store → compress with a byte codec. Storing generated text (chat logs, summaries, agent traces) token-natively has **zero encode cost**: you persist what the model already produced instead of detokenizing and re-compressing it.
 
 With agent traces becoming a major storage category, this is the cleanest version of the argument that storage and inference should share a representation. The caveat is coordination: it only works when the storage tokenizer matches the model's, and model tokenizers churn across versions — so treat it as an optimization for systems that control both ends, not a portable guarantee.
+
+The read side benefits the same way. Decompression is transparent by default, the database reverses ANS and hands back UTF-8 text, but if the consumer is an LLM, that last conversion step can be skipped entirely: storing token IDs in LLM format (r50k/cl100k) avoids re-tokenizing retrieved documents at inference time, since the token IDs are already there. There's a bigger-picture reason to like this as [search and generation converge](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation): keeping UTF-8 blobs in the index while the model reasons in tokens means maintaining two representations of the same text.
+
+Push this further and text may not need to come back at all. If the consumer is an LLM, not a human, the UTF-8 round trip only exists to serve human eyes, and a pipeline you fully control could skip it entirely. That only works if you own the inference stack, since hosted LLM APIs take text prompts, not raw token arrays.
+
+I'd also expect more overlap in LLM tokenizers over time (cl100k is already a de facto baseline across several model families) and common standards should emerge. That makes token-native storage more natural: you're picking a vocabulary several vendors already share, not locking into one.
 
 ## How Token-Native Storage Works
 
@@ -288,22 +295,6 @@ Past that is LM territory. Chinchilla 70B achieves 0.664 bits/byte on Wikipedia 
 
 And because the stored format is just token IDs, swapping the unigram table for a bigram table later is a codec upgrade, not a data migration.
 
-## What Would a Database Need to Do?
-
-Nothing exotic. Token-native storage can be a payload encoding extension:
-
-1. Accept a token-native encoding (e.g. `tokenizer: "r50k"`) as a collection-level schema option
-2. Tokenize on insert, pack IDs as uint16, run ANS with the shared static table
-3. Decompress transparently on read (or skip converting to UTF-8 if the consumer is an LLM)
-
-There's a bigger-picture reason to like this as [search and generation converge](https://www.kshivendu.dev/blog/why-search#the-duality-of-search:~:text=Unified%20search%20and%20generation): keeping UTF-8 blobs in the index while the model reasons in tokens means maintaining two representations of the same text. Storing token IDs in LLM format (r50k/cl100k) also avoids re-tokenizing retrieved documents at inference time when feeding them to the LLM — the token IDs are already there.
-
-The inference-side wins go further: skipping re-tokenization at serving time, and KV-cache reuse for hot documents. That thread has its own experiments and its own surprises (the hot-doc opportunity turns out to hinge entirely on how concentrated your query traffic is): [The Hot Doc Problem: KV Cache Tiering for RAG](/blog/rag-kv-cache-tiering).
-
-Push this further and text may not need to come back at all. If the consumer is an LLM, not a human, the UTF-8 round trip only exists to serve human eyes, and a pipeline you fully control could skip it entirely. That only works if you own the inference stack, since hosted LLM APIs take text prompts, not raw token arrays.
-
-I'd also expect more overlap in LLM tokenizers over time (cl100k is already a de facto baseline across several model families) and common standards should emerge. That makes token-native storage more natural: you're picking a vocabulary several vendors already share, not locking into one.
-
 ## Limitations
 
 - **Decode is slower than LZ4** (see [latency](#what-does-it-cost-in-latency)). LZ4 was chosen for speed, not ratio, and it wins on raw decompression by a wide margin. Both are still tiny next to typical network or disk I/O, so it's a non-issue in absolute terms — but the tradeoff is real if you're optimizing for microsecond-level payload reads.
@@ -336,9 +327,9 @@ If you find this useful, please cite:
 ```bibtex
 @misc{kumar2026tokennative,
   author       = {Kumar Shivendu},
-  title        = {Token-Native Storage: Store Text the Way Models Read It},
+  title        = {Token-Native Storage: Read and Write in the Language Models Already Speak},
   year         = {2026},
-  url          = {https://www.kshivendu.dev/blog/tokenization-compression},
+  url          = {https://www.kshivendu.dev/blog/token-storage},
   note         = {Blog post}
 }
 ```
