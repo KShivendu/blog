@@ -262,14 +262,13 @@ export default function PerpendicularCircle() {
             const p = place(realCos[hover.i], hover.i)
             return <circle cx={p.x} cy={p.y} r={5} fill="none" stroke="#10b981" strokeWidth="2" />
           })()}
-        {/* locked dot: tracked across dims — radial guide + ring + cos/angle label */}
+        {/* locked dot: tracked across dims — radial guide + ring + cosine label */}
         {sel &&
           (() => {
             const cur = sel.type === 'a' ? randCos[sel.i] : realCos ? realCos[sel.i] : null
             if (cur == null) return null
             const p = place(cur, sel.i)
             const col = sel.type === 'a' ? '#f59e0b' : '#10b981'
-            const deg = Math.round((Math.acos(Math.max(-1, Math.min(1, cur))) * 180) / Math.PI)
             return (
               <g>
                 <line
@@ -290,7 +289,7 @@ export default function PerpendicularCircle() {
                   strokeWidth="1.5"
                 />
                 <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="10" fill="currentColor">
-                  {(cur >= 0 ? '+' : '') + cur.toFixed(2)} · {deg}°
+                  cos {(cur >= 0 ? '+' : '') + cur.toFixed(2)}
                 </text>
               </g>
             )
