@@ -18,7 +18,7 @@ function randn(rng) {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
 }
 
-const DIMS = [2, 8, 32, 64, 128, 256, 512, 1024]
+const DIMS = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
 const REAL_DIMS = [32, 64, 128, 256, 512, 1024]
 const M = 250 // random vectors sampled
 const DATA_URL = '/static/interactives/data/perp_circle.json'
@@ -335,10 +335,19 @@ export default function PerpendicularCircle() {
       </div>
 
       {/* sentences: the anchor, plus the hovered/locked point */}
-      {anchorText && (
+      {realCos ? (
         <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
-          <b style={{ color: 'currentColor' }}>★ your point</b>{' '}
+          <b style={{ color: 'currentColor' }}>★ your point (real)</b>{' '}
           <span className="italic">“{anchorText}”</span>
+          <span className="text-gray-400">
+            {' '}
+            · the yellow cloud is measured against its own random point (no sentence)
+          </span>
+        </div>
+      ) : (
+        <div className="mt-2 text-xs text-gray-400">
+          Your point here is a <b>random</b> vector (no sentence) — the yellow cloud is
+          random-vs-random at this d. Pick a green ● dimension to anchor on a real sentence.
         </div>
       )}
       <div className="mt-1 min-h-[1.4em] text-xs text-gray-600 dark:text-gray-300">
