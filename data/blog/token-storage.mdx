@@ -435,10 +435,7 @@ PUT /collections/my_collection/points
 
 A string or an array is easy to tell apart, so the database picks the right path: tokenize-then-compress for text, compress directly for token IDs. Either way, ANS compression happens inside the database, on write, and gets reversed on read, so the interface never exposes compressed bytes. The tokenizer itself is a collection-level choice, not a per-document one: mixing tokenizers in the same collection would mean mixing vocabularies, and the static ANS table only makes sense for one vocabulary at a time.
 
-<details>
-<summary>What would reading it back look like?</summary>
-
-The read side needs the same symmetry: a way to ask for text or for raw token IDs, per field. Qdrant's `with_payload` already controls which fields come back, so extending its value from a boolean to also accept a format string per field keeps the same idiom:
+**What would reading it back look like?** The read side needs the same symmetry: a way to ask for text or for raw token IDs, per field. Qdrant's `with_payload` already controls which fields come back, so extending its value from a boolean to also accept a format string per field keeps the same idiom:
 
 ```js
 POST /collections/my_collection/points/search
@@ -450,8 +447,6 @@ POST /collections/my_collection/points/search
 ```
 
 Omit the field, or use the plain boolean form, and it defaults to `"text"`, so existing clients see no change. An LLM-facing pipeline asks for `"tokens"` and skips detokenization entirely; anything rendering to a human asks for `"text"` or just leaves the default. This only works end to end if you own the inference stack, since hosted LLM APIs take text prompts, not raw token arrays ([yet](/blog/token-llm-interface)).
-
-</details>
 
 The same write path applies when the writer is a model instead of a client. An LLM's sampler produces token IDs before anything detokenizes them to text, so storing generated output (chat logs, summaries, agent traces) as tokens has zero encode cost: persist what the model already produced instead of detokenizing and re-compressing it.
 
