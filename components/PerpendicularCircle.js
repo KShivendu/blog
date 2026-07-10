@@ -138,11 +138,12 @@ export default function PerpendicularCircle() {
       key={key}
       cx={p.x}
       cy={p.y}
-      r={near ? 3.4 : 2.6}
+      r={near ? 3 : 2.6}
       fill={fill}
       opacity={op}
-      stroke={near ? 'currentColor' : undefined}
+      stroke={near ? '#059669' : undefined}
       strokeWidth={near ? 1 : undefined}
+      strokeOpacity={near ? 0.6 : undefined}
       style={{ cursor: 'pointer' }}
       onClick={() => setSel((s) => (s && s.type === type && s.i === idx ? null : { type, i: idx }))}
       onMouseEnter={hoverable ? () => setHover({ type, i: idx }) : undefined}
@@ -250,16 +251,7 @@ export default function PerpendicularCircle() {
         {realCos &&
           realCos.map((c, i) => {
             const near = i < nnear
-            return dot(
-              place(c, i),
-              'r' + i,
-              near ? '#34d399' : '#10b981',
-              near ? 1 : 0.5,
-              'r',
-              i,
-              true,
-              near
-            )
+            return dot(place(c, i), 'r' + i, '#10b981', near ? 0.9 : 0.5, 'r', i, true, near)
           })}
         {randCos.map((c, i) => dot(place(c, i), 'a' + i, '#f59e0b', 0.75, 'a', i, false))}
         {/* hovered green dot: ring */}
@@ -334,8 +326,8 @@ export default function PerpendicularCircle() {
         {realCos && (
           <span>
             <span
-              style={{ background: '#34d399' }}
-              className="mr-1 inline-block h-2.5 w-2.5 rounded-full align-middle ring-1 ring-current"
+              style={{ background: '#10b981', boxShadow: '0 0 0 1.5px #05966999' }}
+              className="mr-1 inline-block h-2.5 w-2.5 rounded-full align-middle"
             />
             true nearest (top {nnear} at full d)
           </span>
