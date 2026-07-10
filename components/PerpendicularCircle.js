@@ -83,6 +83,8 @@ export default function PerpendicularCircle() {
   const [seed, setSeed] = useState(1)
   const [anchor, setAnchor] = useState(0)
   const [real, setReal] = useState(null)
+  const [sel, setSel] = useState(null) // {type:'a'|'r', i} — a locked dot, tracked across dims
+  const [hover, setHover] = useState(null) // {type:'r', i} — green dot under the cursor
 
   useEffect(() => {
     let live = true
@@ -96,16 +98,53 @@ export default function PerpendicularCircle() {
   }, [])
 
   const randCos = useMemo(() => randomCosines(d, seed), [d, seed])
-  const realCos =
-    real && REAL_DIMS.includes(d) ? real.anchors[anchor % real.anchors.length][d] : null
+  const anchorRec = real ? real.anchors[anchor % real.anchors.length] : null
+  const realCos = anchorRec && REAL_DIMS.includes(d) ? anchorRec[d] : null
+  const realTexts = anchorRec && REAL_DIMS.includes(d) ? anchorRec.texts : null
+  const anchorText = anchorRec ? anchorRec.anchor_text : null
   const nnear = real ? real.nnear : 0
+
+  // sentence to show below the disc: hovered green dot wins, else the locked dot
+  let activeText = null,
+    activeLabel = null,
+    activeColor = null,
+    activeQuote = false
+  if (hover && hover.type === 'r' && realTexts) {
+    activeText = realTexts[hover.i]
+    activeLabel = 'hovering'
+    activeColor = '#10b981'
+    activeQuote = true
+  } else if (sel) {
+    activeLabel = 'locked'
+    if (sel.type === 'r') {
+      activeColor = '#10b981'
+      if (realTexts) {
+        activeText = realTexts[sel.i]
+        activeQuote = true
+      } else activeText = '(pick a green ● dimension to read this point)'
+    } else {
+      activeColor = '#f59e0b'
+      activeText = 'random vector — no sentence'
+    }
+  }
 
   const near = (arr) => (100 * arr.filter((c) => Math.abs(c) < 0.1).length) / arr.length
   const randPerp = near(randCos).toFixed(0)
   const realPerp = realCos ? near(realCos).toFixed(0) : null
 
-  const dot = (p, i, fill, op) => (
-    <circle key={i} cx={p.x} cy={p.y} r={2.6} fill={fill} opacity={op} />
+  const dot = (p, key, fill, op, type, idx, hoverable) => (
+    <circle
+      key={key}
+      cx={p.x}
+      cy={p.y}
+      r={2.6}
+      fill={fill}
+      opacity={op}
+      style={{ cursor: 'pointer' }}
+      onClick={() => setSel((s) => (s && s.type === type && s.i === idx ? null : { type, i: idx }))}
+      onMouseEnter={hoverable ? () => setHover({ type, i: idx }) : undefined}
+      onMouseLeave={hoverable ? () => setHover(null) : undefined}
+    />
   )
   const topY = cy - R
 
@@ -139,6 +178,8 @@ export default function PerpendicularCircle() {
           onClick={() => {
             setSeed((s) => s + 1)
             setAnchor((a) => a + 1)
+            setSel(null)
+            setHover(null)
           }}
           className="ml-auto rounded border border-gray-300 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
         >
@@ -204,8 +245,51 @@ export default function PerpendicularCircle() {
         </text>
         {/* points: real (green) behind, random (yellow) in front */}
         {realCos &&
-          realCos.map((c, i) => dot(place(c, i), 'r' + i, '#10b981', i < nnear ? 0.95 : 0.6))}
-        {randCos.map((c, i) => dot(place(c, i), 'a' + i, '#f59e0b', 0.75))}
+          realCos.map((c, i) =>
+            dot(place(c, i), 'r' + i, '#10b981', i < nnear ? 0.95 : 0.6, 'r', i, true)
+          )}
+        {randCos.map((c, i) => dot(place(c, i), 'a' + i, '#f59e0b', 0.75, 'a', i, false))}
+        {/* hovered green dot: ring */}
+        {hover &&
+          hover.type === 'r' &&
+          realCos &&
+          (() => {
+            const p = place(realCos[hover.i], hover.i)
+            return <circle cx={p.x} cy={p.y} r={5} fill="none" stroke="#10b981" strokeWidth="2" />
+          })()}
+        {/* locked dot: tracked across dims — radial guide + ring + cos/angle label */}
+        {sel &&
+          (() => {
+            const cur = sel.type === 'a' ? randCos[sel.i] : realCos ? realCos[sel.i] : null
+            if (cur == null) return null
+            const p = place(cur, sel.i)
+            const col = sel.type === 'a' ? '#f59e0b' : '#10b981'
+            const deg = Math.round((Math.acos(Math.max(-1, Math.min(1, cur))) * 180) / Math.PI)
+            return (
+              <g>
+                <line
+                  x1={cx}
+                  y1={cy}
+                  x2={p.x}
+                  y2={p.y}
+                  stroke={col}
+                  strokeOpacity="0.55"
+                  strokeDasharray="3 3"
+                />
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r={6}
+                  fill={col}
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+                <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="10" fill="currentColor">
+                  {(cur >= 0 ? '+' : '') + cur.toFixed(2)} · {deg}°
+                </text>
+              </g>
+            )
+          })()}
         {/* anchor = your point at 0° */}
         <circle cx={cx + R} cy={cy} r={6} fill="currentColor" />
         <text x={cx + R} y={cy + 18} textAnchor="end" fontSize="11" fill="currentColor">
@@ -235,6 +319,39 @@ export default function PerpendicularCircle() {
           </span>
         )}
         <span className="ml-auto italic">radius = jitter (spacing only), not data</span>
+      </div>
+
+      {/* sentences: the anchor, plus the hovered/locked point */}
+      {anchorText && (
+        <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+          <b style={{ color: 'currentColor' }}>★ your point</b>{' '}
+          <span className="italic">“{anchorText}”</span>
+        </div>
+      )}
+      <div className="mt-1 min-h-[1.4em] text-xs text-gray-600 dark:text-gray-300">
+        {activeText ? (
+          <>
+            <span style={{ color: activeColor }}>●</span> <b>{activeLabel}:</b>{' '}
+            {activeQuote ? (
+              <span className="italic">“{activeText}”</span>
+            ) : (
+              <span>{activeText}</span>
+            )}
+            {sel && (
+              <button
+                onClick={() => setSel(null)}
+                className="ml-2 text-gray-400 underline hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                unlock
+              </button>
+            )}
+          </>
+        ) : (
+          <span className="text-gray-400">
+            Click any dot to lock it and watch its vote as you change d; hover a green dot for its
+            sentence.
+          </span>
+        )}
       </div>
 
       <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">
