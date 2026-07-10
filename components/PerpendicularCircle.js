@@ -111,7 +111,7 @@ export default function PerpendicularCircle() {
     activeQuote = false
   if (hover && hover.type === 'r' && realTexts) {
     activeText = realTexts[hover.i]
-    activeLabel = 'hovering'
+    activeLabel = hover.i < nnear ? 'hovering · true nearest ★' : 'hovering'
     activeColor = '#10b981'
     activeQuote = true
   } else if (sel) {
@@ -121,6 +121,7 @@ export default function PerpendicularCircle() {
       if (realTexts) {
         activeText = realTexts[sel.i]
         activeQuote = true
+        if (sel.i < nnear) activeLabel = 'locked · true nearest ★'
       } else activeText = '(pick a green ● dimension to read this point)'
     } else {
       activeColor = '#f59e0b'
@@ -132,14 +133,16 @@ export default function PerpendicularCircle() {
   const randPerp = near(randCos).toFixed(0)
   const realPerp = realCos ? near(realCos).toFixed(0) : null
 
-  const dot = (p, key, fill, op, type, idx, hoverable) => (
+  const dot = (p, key, fill, op, type, idx, hoverable, near) => (
     <circle
       key={key}
       cx={p.x}
       cy={p.y}
-      r={2.6}
+      r={near ? 3.4 : 2.6}
       fill={fill}
       opacity={op}
+      stroke={near ? 'currentColor' : undefined}
+      strokeWidth={near ? 1 : undefined}
       style={{ cursor: 'pointer' }}
       onClick={() => setSel((s) => (s && s.type === type && s.i === idx ? null : { type, i: idx }))}
       onMouseEnter={hoverable ? () => setHover({ type, i: idx }) : undefined}
@@ -245,9 +248,19 @@ export default function PerpendicularCircle() {
         </text>
         {/* points: real (green) behind, random (yellow) in front */}
         {realCos &&
-          realCos.map((c, i) =>
-            dot(place(c, i), 'r' + i, '#10b981', i < nnear ? 0.95 : 0.6, 'r', i, true)
-          )}
+          realCos.map((c, i) => {
+            const near = i < nnear
+            return dot(
+              place(c, i),
+              'r' + i,
+              near ? '#34d399' : '#10b981',
+              near ? 1 : 0.5,
+              'r',
+              i,
+              true,
+              near
+            )
+          })}
         {randCos.map((c, i) => dot(place(c, i), 'a' + i, '#f59e0b', 0.75, 'a', i, false))}
         {/* hovered green dot: ring */}
         {hover &&
@@ -316,6 +329,15 @@ export default function PerpendicularCircle() {
               className="mr-1 inline-block h-2.5 w-2.5 rounded-sm align-middle"
             />
             real jina sentences (d = {d})
+          </span>
+        )}
+        {realCos && (
+          <span>
+            <span
+              style={{ background: '#34d399' }}
+              className="mr-1 inline-block h-2.5 w-2.5 rounded-full align-middle ring-1 ring-current"
+            />
+            true nearest (top {nnear} at full d)
           </span>
         )}
         <span className="ml-auto italic">radius = jitter (spacing only), not data</span>
