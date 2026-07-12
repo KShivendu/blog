@@ -13,11 +13,13 @@ authors: ['default']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Every vector search engine stores two things for each point: the vector and the payload. The community has gone out to compress the vectors with quantization and MRL. However, the text payload gets raw UTF-8, or LZ4 at best, even though the **systems that actually consume it, embedders, rerankers, LLMs, all operate on tokens, not bytes**.
+Every vector search engine stores two things for each point: the vector and the payload. The AI community has gone out to compress the vectors with [quantization](https://qdrant.tech/articles/what-is-vector-quantization/) and [MRL](https://huggingface.co/blog/matryoshka). However, the text payload gets raw UTF-8, or LZ4 at best, even though the **systems that actually consume it (embedders, rerankers, LLMs) operate on tokens, not bytes**.
 
-I found that **Token IDs alone, with no compression algorithm running at all, already achieves 2.33× compression over raw UTF-8 bytes**. A static entropy based compression on top reaches 3.35×.
+I realised that **using Token IDs over raw text already achieves 2.33× compression over raw UTF-8 bytes** and is better than all byte level compression algorithms (yes, **tokenization is free compression!**). Optionally, applying a static entropy coder compression on top reaches 3.35×
 
-This post argues for **token-native storage**: persist text as BPE token IDs, not UTF-8 bytes. This mismatch of the interface isn't unique to vector search engines, it shows up **anywhere models read and write: web, search, LLM agent traces (or chat history)**.
+This post argues that we should have **token-native storage** (read/write text as BPE token IDs, not UTF-8 bytes) **anywhere models are the primary readers and writers: search engines, local files, LLM agent traces (or chat history), or text heavy APIs**
+
+My whole bet is that **if agents are going to be the biggest users of your system, then your system should speak their language: tokens**. I'll show my point with experiments, talk about limitations, and how the community can help get rid of them.
 
 ## How Token-Native Storage Works
 
@@ -32,19 +34,17 @@ BPE (Byte Pair Encoding) starts with raw bytes and repeatedly merges the most fr
 1. **r50k**: used by GPT-2/GPT-3, 50,257 tokens (fits in uin16 = ~65k)
 2. **cl100k**: used by GPT-3.5/GPT-4, 100,277 tokens (needs int32 = ~4B)
 
-cl100k has a larger vocabulary so it learns longer merges, which usually (but not always) means fewer tokens per document, especially for code and non-English text. Either way, r50k fits in 2 bytes (uint16) while c100k needs 4 bytes (uint32) since the vocab exceeds the uint16 limit of ~65k (=2^16).
-
 BPE merges frequent byte sequences into single tokens. `"storage"` is one token. `"Token-native"` is three (`Token + - + native`). On average one BPE token covers [3/4 of a word](https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them). An average English word is ~5 characters plus a space, so:
 
 ```
-6 bytes/word (1 char = 1 byte) × 3/4 words/token = 4.5 bytes/token (raw text)
-2 bytes/token (r50k uint16 token IDs)
+Using UTF-8 text: 6 bytes/word (1 char = 1 byte) × 3/4 word/token = 4.5 bytes/token (raw text)
+Using Tokens: 2 bytes/token (r50k uint16 token IDs)
 ratio: ~2.25x
 ```
 
-This napkin math is what gave me the motivation to run the experiment: just packing token IDs into uint16 already gives compression, even before any true compression algorithm starts. **~2.25× from token IDs alone**, before an entropy coder even runs, is confirmed by the benchmark below.
+**This napkin math is what gave me the motivation to run the experiment: just by using token IDs instead of utf-8 already gives 2.25x compression** and my experiments below will prove it in practice.
 
-Here's another way to look at this: every token costs a flat 2 bytes (uint16). A word almost always comes with a leading space in a real sentence, and BPE merges that space straight into the next word for free, no extra token spent on it. So packing wins as soon as a word is longer than 1 character. `" cat"` is 4 raw bytes (space + 3 letters) but just 1 token, 2 bytes, a clean win.
+Another fun fact is that a every word in a sentence comes with a `" "`, so using uint16 token performs better for any word longer than 1 character. Example: `" cat"` is 4 raw bytes (space + 3 letters) but just 1 token, 2 bytes (uint16), an easy win :D
 
 ### Step 2 (Optional): ANS Entropy Coding
 
@@ -84,9 +84,9 @@ def decompress(data):
 
 </details>
 
-## What Compression Buys You
+## Benchmarks
 
-### The Benchmark
+### Storage efficiency
 
 Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/wikitext) test articles (≥30 words). The ANS frequency table was trained on the WikiText-103 train split, a shared static model with no per-document overhead. All methods below are lossless (0% character error rate on full round trip).
 
@@ -156,42 +156,14 @@ Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/
   }}
 />
 
-Two things stand out. **r50k raw uint16 (no compression algorithm at all) already beats every byte codec except brotli**. And r50k + static ANS beats everything by a wide margin. cl100k raw uint32 sits near 1.13x, worse than even gzip, yet cl100k + ANS recovers to 3.30x: the fixed-width storage penalty vanishes once ANS allocates bits by frequency instead of by vocab size.
+Observations:
 
-The fairest competitor is zstd with a corpus-trained dictionary (`zstd --train`), since it also learns from the corpus. It reaches 2.61x median, still 30% behind. The difference is that the token model operates on units of language: `"embeddings"` is one symbol with a known global frequency, where a byte-level model has to rediscover that pattern from scratch.
+1. **r50k raw uint16 already beats every byte codec compression algorithm!**
+2. r50k + static ANS **beats everything by a wide margin.**
+3. cl100k raw uint32 sits near 1.13x, worse than even gzip, yet **cl100k + ANS recovers to 3.30x**: the fixed-width storage penalty vanishes once ANS allocates bits by frequency instead of by vocab size.
+4. The fairest competitor to r50k+ANS is `zstd --train`, since it also learns a vocab from the corpus. It reaches 2.61x, still 30% behind! (and its vocab isn't standardized like the tokenizers)
 
-<details>
-<summary>Full results table: min / median / max per method</summary>
-
-| Method                             |       min |    median |       max |
-| ---------------------------------- | --------: | --------: | --------: |
-| LZ4, per-document (Qdrant)         |     0.88x |     1.15x |     1.78x |
-| LZ4, 16KB blocks (ES-style)        |     1.35x |     1.85x |     2.33x |
-| gzip -9                            |     0.99x |     1.66x |     2.34x |
-| zstd -22                           |     1.11x |     1.68x |     2.39x |
-| brotli q=11                        |     1.22x |     2.26x |     3.13x |
-| r50k BPE uint16 (raw)              |     1.04x |     2.33x |     3.34x |
-| cl100k BPE uint32 (raw)            |     0.45x |     1.13x |     1.62x |
-| zstd trained dict 112KB (WikiText) |     1.51x |     2.61x |     3.63x |
-| **r50k BPE + static ANS**          | **1.68x** | **3.37x** | **4.30x** |
-| **cl100k BPE + static ANS**        | **1.68x** | **3.30x** | **4.14x** |
-
-</details>
-
-<details>
-<summary>Method glossary: what the names mean</summary>
-
-- **LZ4**: default codec in Qdrant and Elasticsearch. Optimized for speed, not ratio.
-- **gzip -9**: max compression level, classic deflate. The `-9` is the level (1–9).
-- **zstd -22**: [Zstandard](https://github.com/facebook/zstd) at level 22 ("ultra" mode). Much slower to compress than default, same decompression speed.
-- **brotli q=11**: Google's codec at max quality. Best ratio of the byte codecs, but slow.
-- **r50k BPE uint16 (raw)**: r50k has 50,257 tokens, which fits in uint16 (max 65,535), so 2 bytes per token ID.
-- **cl100k BPE uint32 (raw)**: cl100k has 100,277 tokens, which exceeds uint16 and requires uint32 (4 bytes per token). It produces fewer tokens per document than r50k (larger vocab = longer merges), but 4 bytes × fewer tokens still comes out worse than 2 bytes × more tokens. Hence 1.13x vs 2.33x.
-- **zstd trained dict 112KB**: zstd with a 112KB dictionary trained on WikiText-103 (`zstd --train`), a global dictionary shared across all documents, same design as the static ANS table.
-
-</details>
-
-### What does it cost in latency?
+### Latency
 
 Measured across 200 WikiText-103 articles (50–500 words), static corpus ANS model:
 
@@ -285,7 +257,7 @@ Measured across 200 WikiText-103 articles (50–500 words), static corpus ANS mo
       text: 'Encode/decode latency, median, 200 WikiText-103 articles<br><sup>faded = byte codecs, full color = token-native approach (tokenizer, with or without ANS)</sup>',
       font: { size: 14 },
     },
-    yaxis: { title: 'microseconds (log scale)', type: 'log' },
+    yaxis: { title: 'microseconds' },
     barmode: 'stack',
     height: 420,
     margin: { t: 64, r: 24, b: 48, l: 60 },
@@ -293,10 +265,45 @@ Measured across 200 WikiText-103 articles (50–500 words), static corpus ANS mo
   }}
 />
 
-LZ4 decompresses in 1µs, designed entirely for speed. zstd dict's encoder is slowest at 128µs (best of three dictionary sizes tested: 32KB, 64KB, 112KB), though it decompresses in 2µs. The tokenizer-only bars isolate what `enc.encode`/`enc.decode` alone cost, and the "+ ANS" segment stacked on top shows what entropy coding adds. The split flips between encode and decode. **Encode is tokenizer-dominated**: BPE's merge search costs 43-54µs, ANS only adds 9-10µs on top. **Decode is ANS-dominated**: detokenizing is a 4µs table lookup, but ANS decoding costs 15-17µs, most of the 19-21µs total. Either way the tokenizer you'd run regardless (to get token IDs to embed or feed to an LLM) already accounts for most of the encode cost.
+Observations:
+
+0. LZ4 compresses in 15µs and decompresses in 1µs (it's designed entirely for speed)
+
+1. **Tokenization is expensive but it's anyways a mandatory to pass text to the model** so it's free lunch and more importantly, re-usable. Detokenization is fast so it's easy to also show text back to humans.
+
+2. Our ANS encoding and decoding steps are slow because of python. It can be much faster if written in Rust/C++.
+
+3. zstd dict's encoder is surprisingly slow at 128µs (best of three dictionary sizes tested: 32KB, 64KB, 112KB), though it decompresses in 2µs.
 
 <details>
-<summary>Full latency table: median and p99</summary>
+<summary>Full results and latency tables, method glossary</summary>
+
+**Storage efficiency, min / median / max per method:**
+
+| Method                             |       min |    median |       max |
+| ---------------------------------- | --------: | --------: | --------: |
+| LZ4, per-document (Qdrant)         |     0.88x |     1.15x |     1.78x |
+| LZ4, 16KB blocks (ES-style)        |     1.35x |     1.85x |     2.33x |
+| gzip -9                            |     0.99x |     1.66x |     2.34x |
+| zstd -22                           |     1.11x |     1.68x |     2.39x |
+| brotli q=11                        |     1.22x |     2.26x |     3.13x |
+| r50k BPE uint16 (raw)              |     1.04x |     2.33x |     3.34x |
+| cl100k BPE uint32 (raw)            |     0.45x |     1.13x |     1.62x |
+| zstd trained dict 112KB (WikiText) |     1.51x |     2.61x |     3.63x |
+| **r50k BPE + static ANS**          | **1.68x** | **3.37x** | **4.30x** |
+| **cl100k BPE + static ANS**        | **1.68x** | **3.30x** | **4.14x** |
+
+**What the names mean:**
+
+- **LZ4**: default codec in Qdrant and Elasticsearch. Optimized for speed, not ratio.
+- **gzip -9**: max compression level, classic deflate. The `-9` is the level (1–9).
+- **zstd -22**: [Zstandard](https://github.com/facebook/zstd) at level 22 ("ultra" mode). Much slower to compress than default, same decompression speed.
+- **brotli q=11**: Google's codec at max quality. Best ratio of the byte codecs, but slow.
+- **r50k BPE uint16 (raw)**: r50k has 50,257 tokens, which fits in uint16 (max 65,535), so 2 bytes per token ID.
+- **cl100k BPE uint32 (raw)**: cl100k has 100,277 tokens, which exceeds uint16 and requires uint32 (4 bytes per token). It produces fewer tokens per document than r50k (larger vocab = longer merges), but 4 bytes × fewer tokens still comes out worse than 2 bytes × more tokens. Hence 1.13x vs 2.33x.
+- **zstd trained dict 112KB**: zstd with a 112KB dictionary trained on WikiText-103 (`zstd --train`), a global dictionary shared across all documents, same design as the static ANS table.
+
+**Latency, median and p99:**
 
 | Method                | enc median | enc p99 | dec median | dec p99 |
 | --------------------- | ---------: | ------: | ---------: | ------: |
@@ -311,7 +318,7 @@ LZ4 decompresses in 1µs, designed entirely for speed. zstd dict's encoder is sl
 
 </details>
 
-Note that today's embedding models use different tokenizers (WordPiece, SentencePiece) than LLM BPE tokenizers, so you can't skip the tokenization step by reusing embedding tokenization. The real benefit runs the other way: if you store token IDs in LLM format (r50k/cl100k), you avoid re-tokenizing retrieved documents at inference time when feeding them to the LLM, since the token IDs are already there.
+Note that for RAG and agentic search, many of today's embedding models use different tokenizers (WordPiece, SentencePiece) than LLM BPE tokenizers, so you can't skip the tokenization step for most embedding/re-ranking models. However, it's not a fundamental problem and many modern embedding models, it's all because of BERT family legacy and we should get rid of it. Note that even with the legacy tokenizers, if you store token IDs in the token native format (r50k/cl100k), you avoid re-tokenizing retrieved documents at inference time when feeding them to the LLM. It's still a win :)
 
 <details>
 <summary>Side quest: mxbai's WordPiece tokenizer compresses slightly better but lowercases your text. Expand if curious.</summary>
@@ -329,7 +336,7 @@ Raw uint16 packing is basically a wash between the two (2.35x vs 2.33x): mxbai's
 
 </details>
 
-### What It Saves at Scale
+### Savings at Scale
 
 English Wikipedia is ~7M articles averaging 708 words. At the 3.35x median ratio, that's 31.5 GB of raw UTF-8 down to 9.4 GB, and at a billion documents, 4.5 TB down to 1.3 TB. At \$0.08/GB for SSD and \$0.02/GB for S3-class object storage:
 
@@ -338,10 +345,8 @@ English Wikipedia is ~7M articles averaging 708 words. At the 3.35x median ratio
 | SSD ($0.08/GB) |   $360/mo |    $107/mo | $253/mo |
 | S3 ($0.02/GB)  |    $90/mo |     $27/mo |  $63/mo |
 
-One scoping note so the claim doesn't overreach: how this shakes out depends heavily on chunk size and vector compression.
-
 <details>
-<summary>How big is the text next to the vector, really?</summary>
+<summary>Side quest: How big is the text next to the vector, really?</summary>
 
 Take a chunk sized to mxbai-embed-large-v1's own [recommended sequence length](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1) of 512 tokens: at this post's ~4.5 bytes/token, that's 512 × 4.5 ≈ 2,304 bytes of raw UTF-8. mxbai-embed-large-v1 outputs 1024-dim vectors, so float32 (4 bytes per dimension) puts the embedding at 1024 × 4 = 4,096 bytes:
 
@@ -360,7 +365,7 @@ Unquantized, the embedding (4,096 B) dominates either form of the text, the comm
 
 </details>
 
-Compression doesn't just shrink primary storage. Every copy of your data, from snapshots and backups to write-ahead logs, replication, shard rebalancing, cache density, and egress, benefits from the same 3.35× reduction. That means less data shipped across the network, more payloads fitting in RAM, and faster reads and indexing, all multiplying the operational impact well beyond the headline storage savings. This effect is especially valuable in storage-constrained contexts like edge devices or on-device RAG, where shrinking the payload pays off far more than marginal savings on a central server.
+Note that every copy of your data: snapshots, backups, write-ahead logs, replication, and egress enjoy the same 3.35× reduction, multiplying benefits beyond storage: less data moves over the network, more fits in RAM, and reads and indexing get faster.
 
 ## How Far Can Token Compression Go?
 
@@ -410,7 +415,7 @@ PUT /collections/my_collection/points
 }
 ```
 
-That LZ4 codec (see [the benchmark](#the-benchmark) above) has no learned model of the language, just whatever byte patterns happen to repeat within its window. Token-native storage swaps it for the tokenizer's own output as the on-disk representation, instead of throwing token IDs away right after tokenizing:
+That LZ4 codec (see [the benchmark](#benchmarks) above) has no learned model of the language, just whatever byte patterns happen to repeat within its window. Token-native storage swaps it for the tokenizer's own output as the on-disk representation, instead of throwing token IDs away right after tokenizing:
 
 ```js
 // One time: Set tokenizer on collection level for the 'text' field
@@ -431,6 +436,8 @@ PUT /collections/my_collection/points
       "id": 123,
       "vector": [0.12, -0.34, ...],
       "payload": { "text": [1858, 6427, 20272, 318, 257, 6997, ...] }
+      // You can still pass raw text for the engine to tokenize
+      // "payload": { "text": "Token-native storage persists text as token IDs, not UTF-8 bytes..." }
     }
   ]
 }
