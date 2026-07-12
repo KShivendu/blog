@@ -97,16 +97,16 @@ Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/
     {
       type: 'bar',
       orientation: 'h',
-      x: [1.0, 1.15, 1.66, 1.68, 1.85, 2.26, 2.33, 1.13, 2.61, 3.37, 3.3],
+      x: [1.0, 1.15, 1.66, 1.68, 2.26, 2.33, 1.13, 1.49, 2.61, 3.37, 3.3],
       y: [
         'Raw UTF-8',
         'LZ4, per-document (Qdrant)',
         'gzip -9',
         'zstd -22',
-        'LZ4, 16KB blocks (ES-style)',
         'brotli q=11',
         'r50k uint16 raw',
         'cl100k uint32 raw',
+        'cl100k 3-byte raw',
         'zstd trained dict 112KB',
         'r50k + static ANS',
         'cl100k + static ANS',
@@ -117,25 +117,25 @@ Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/
           '#ef4444',
           '#94a3b8',
           '#94a3b8',
-          '#ef4444',
           '#94a3b8',
           '#60a5fa',
+          '#93c5fd',
           '#93c5fd',
           '#f59e0b',
           '#10b981',
           '#34d399',
         ],
-        opacity: [0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 1, 1, 0.75, 1, 1],
+        opacity: [0.75, 0.75, 0.75, 0.75, 0.75, 1, 1, 1, 0.75, 1, 1],
       },
       text: [
         '1.0×',
         '1.15×',
         '1.66×',
         '1.68×',
-        '1.85×',
         '2.26×',
         '2.33×',
         '1.13×',
+        '1.49×',
         '2.61×',
         '3.37×',
         '3.30×',
@@ -160,8 +160,17 @@ Observations:
 
 1. **r50k raw uint16 already beats every byte codec compression algorithm!**
 2. r50k + static ANS **beats everything by a wide margin.**
-3. cl100k raw uint32 sits near 1.13x, worse than even gzip, yet **cl100k + ANS recovers to 3.30x**: the fixed-width storage penalty vanishes once ANS allocates bits by frequency instead of by vocab size.
+3. cl100k raw uint32 sits near 1.13x, worse than even gzip, but most of that is the container, not the tokenizer: just switching to a 3-byte packing (cl100k's 100,277 tokens still fit in 24 bits) already recovers 1.49x, no entropy coder involved. **cl100k + ANS recovers further to 3.30x**: the fixed-width storage penalty vanishes once ANS allocates bits by frequency instead of by vocab size.
 4. The fairest competitor to r50k+ANS is `zstd --train`, since it also learns a vocab from the corpus. It reaches 2.61x, still 30% behind! (and its vocab isn't standardized like the tokenizers)
+
+<details>
+<summary>Side note: how much of this is the entropy coder, and how much is tokenization?</summary>
+
+Run the exact same ANS coder on raw UTF-8 bytes instead of tokens, an order-0 model over the 256 possible byte values, no tokenizer involved at all, and it gets **1.73x**. Barely ahead of gzip (1.66x) and zstd (1.68x), and it loses outright to brotli (2.26x), even though ANS is the theoretically tighter entropy coder. That's because gzip/zstd/brotli aren't just entropy coders, they also do LZ77-style repeated-substring matching, which a plain order-0 byte model has none of.
+
+The gap between that 1.73x and the 3.3x+ this post gets from token-level ANS is the tokenizer's contribution, not the entropy coder's. Feeding ANS better symbols (subwords instead of single bytes) is doing most of the real work here. As a further check, running full zstd (its own LZ77 + entropy stage, not isolated) directly on packed token ID bytes instead of raw ANS gets 2.49x for r50k and ~2.0x for cl100k, still well behind rANS's 3.3x+, since zstd's substring matching has little left to find once BPE has already folded repeated words into single tokens, and its LZ77 stage is hunting through a byte-packed representation that doesn't align with token boundaries.
+
+</details>
 
 ### Latency
 
@@ -283,24 +292,25 @@ Observations:
 | Method                             |       min |    median |       max |
 | ---------------------------------- | --------: | --------: | --------: |
 | LZ4, per-document (Qdrant)         |     0.88x |     1.15x |     1.78x |
-| LZ4, 16KB blocks (ES-style)        |     1.35x |     1.85x |     2.33x |
 | gzip -9                            |     0.99x |     1.66x |     2.34x |
 | zstd -22                           |     1.11x |     1.68x |     2.39x |
 | brotli q=11                        |     1.22x |     2.26x |     3.13x |
 | r50k BPE uint16 (raw)              |     1.04x |     2.33x |     3.34x |
 | cl100k BPE uint32 (raw)            |     0.45x |     1.13x |     1.62x |
+| cl100k BPE 3-byte (raw)            |     0.60x |     1.51x |     2.16x |
 | zstd trained dict 112KB (WikiText) |     1.51x |     2.61x |     3.63x |
 | **r50k BPE + static ANS**          | **1.68x** | **3.37x** | **4.30x** |
 | **cl100k BPE + static ANS**        | **1.68x** | **3.30x** | **4.14x** |
 
 **What the names mean:**
 
-- **LZ4**: default codec in Qdrant and Elasticsearch. Optimized for speed, not ratio.
+- **LZ4**: Qdrant's default codec. Optimized for speed, not ratio.
 - **gzip -9**: max compression level, classic deflate. The `-9` is the level (1–9).
 - **zstd -22**: [Zstandard](https://github.com/facebook/zstd) at level 22 ("ultra" mode). Much slower to compress than default, same decompression speed.
 - **brotli q=11**: Google's codec at max quality. Best ratio of the byte codecs, but slow.
 - **r50k BPE uint16 (raw)**: r50k has 50,257 tokens, which fits in uint16 (max 65,535), so 2 bytes per token ID.
 - **cl100k BPE uint32 (raw)**: cl100k has 100,277 tokens, which exceeds uint16 and requires uint32 (4 bytes per token). It produces fewer tokens per document than r50k (larger vocab = longer merges), but 4 bytes × fewer tokens still comes out worse than 2 bytes × more tokens. Hence 1.13x vs 2.33x.
+- **cl100k BPE 3-byte (raw)**: 100,277 tokens actually fits in 24 bits (max 16,777,215), so packing to 3 bytes instead of 4 recovers most of the gap, 1.13x to 1.49x, with no entropy coder at all. Not byte-aligned to a native integer type, so it costs a small unpack step, but it's a much cheaper fix than it looks. (I also tried the exact minimum, 17 bits: better ratio, 2.05x, but a much costlier decode, and padding to 18 or 20 bits for alignment didn't recover any of that speed back, so 3-byte stays the practical choice.)
 - **zstd trained dict 112KB**: zstd with a 112KB dictionary trained on WikiText-103 (`zstd --train`), a global dictionary shared across all documents, same design as the static ANS table.
 
 **Latency, median and p99:**
@@ -318,7 +328,7 @@ Observations:
 
 </details>
 
-Note that for RAG and agentic search, many of today's embedding models use different tokenizers (WordPiece, SentencePiece) than LLM BPE tokenizers, so you can't skip the tokenization step for most embedding/re-ranking models. However, it's not a fundamental problem and many modern embedding models, it's all because of BERT family legacy and we should get rid of it. Note that even with the legacy tokenizers, if you store token IDs in the token native format (r50k/cl100k), you avoid re-tokenizing retrieved documents at inference time when feeding them to the LLM. It's still a win :)
+Note that for RAG and agentic search, many of today's embedding models still use WordPiece or SentencePiece instead of LLM BPE tokenizers, so you can't skip tokenization for most embedding/re-ranking models. That's BERT-family legacy, not a fundamental limit. OpenAI's [text-embedding-3](https://platform.openai.com/docs/guides/embeddings) family already uses cl100k directly. [Jina's embeddings-v4](https://huggingface.co/jinaai/jina-embeddings-v4) moved to a real BPE tokenizer too, inherited from its Qwen2.5-VL backbone. Either way, storing token IDs in LLM format (r50k/cl100k) still avoids re-tokenizing retrieved documents at inference time. It's still a win :)
 
 <details>
 <summary>Side quest: mxbai's WordPiece tokenizer compresses slightly better but lowercases your text. Expand if curious.</summary>
@@ -396,6 +406,34 @@ Past that is LM territory. Chinchilla 70B achieves 0.664 bits/byte on Wikipedia 
 | Chinchilla 70B                      | ~12×      | No                    |
 
 And because the stored format is just token IDs, swapping the unigram table for a bigram table later is a codec upgrade, not a data migration.
+
+## A Cheaper Fix: Frequency-Sorted Token IDs
+
+ANS gets close to the entropy bound, but it isn't the only lever, and it isn't the cheapest one. **BPE assigns token IDs in merge-discovery order during training, not by how often a token actually appears in real text.** I checked this directly: the Spearman correlation between a token's default ID and its real-world frequency rank is only 0.50. Of the 1,000 most frequent tokens, only 33% land in the first 1,000 IDs.
+
+That gap is wasted, because fixed-width packing (uint16, uint32) can't use it at all. Every token costs the same number of bytes regardless of its ID, 2 bytes is 2 bytes whether the ID is 5 or 50,000. Turning "small ID" into "fewer bytes" needs a variable-length integer code on top, but tried alone on BPE's default ID order, that doesn't help either: plain varint on the default order actually came out worse than uint16 packing (2.23x vs 2.29x for r50k), since the IDs aren't sorted enough for "smaller number, fewer bytes" to pay off.
+
+**Combine both and it works.** Reassign token IDs by frequency rank, then use a variable-length integer code:
+
+| Tokenizer | uint16/32 (current) | Freq-remap + varint | ANS (existing benchmark) |
+| --------- | ------------------: | ------------------: | -----------------------: |
+| r50k      |               2.29x |               2.93x |                    3.37x |
+| cl100k    |               1.09x |               2.85x |                    3.30x |
+
+cl100k is the real story. Its raw packing is currently worse than gzip purely because 100,277 tokens don't fit in uint16, forcing 4 bytes per token. A frequency-sorted vocabulary plus a variable-length code fixes that outright, 1.09x to 2.85x, with no entropy coder, no probability model, and no per-corpus training beyond the one-time frequency count you'd want anyway.
+
+The variable-length step doesn't have to be slow, either. Swapping the naive per-integer varint for `streamvbyte` or `varintgb` (real, SIMD-vectorized libraries from the FastPFOR family, used in production search engines) gets:
+
+| Tokenizer | Freq-remap + streamvbyte | Decode latency |
+| --------- | -----------------------: | -------------: |
+| r50k      |                    2.62x |           ~1µs |
+| cl100k    |                    2.53x |           ~1µs |
+
+That's roughly 15-17x faster to decode than ANS (15-17µs), for about 78% of ANS's compression ratio. A real, honest tradeoff, not a free lunch, but a genuinely deployable one.
+
+**This is the actual ask of this post.** If a tokenizer vendor assigned token IDs by frequency rank at training time instead of merge-discovery order, this fix would cost nothing extra: it's just a choice of which integer to assign to which token, made once, at vocabulary-construction time. It changes neither the tokenizer's behavior nor the model, only which number represents each token. For a model already shipped, the same fix is still cheap: permute the embedding table rows to match the new ID order, a one-time mechanical operation, not a retrain, and every downstream system that stores token IDs benefits immediately.
+
+You don't have to wait for that. The remap is just a lookup table built from a frequency count, the same one this post already needs for ANS, so you can apply it entirely inside your own storage layer today: translate between the model's ID and a frequency-sorted storage ID at the tokenize/detokenize boundary, no changes to the tokenizer or the model required.
 
 ## What This Looks Like in Practice
 
