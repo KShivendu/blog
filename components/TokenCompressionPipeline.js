@@ -8,13 +8,15 @@ const PRESETS = [
   {
     key: 'english',
     label: 'English prose',
-    raw: 799,
-    tokens: 163,
-    uint16: 326,
-    lz4: 708,
-    ans: 270,
-    bytePreview: 'Token-native storage '.split(''),
-    tokenPreview: ['Token', '-', 'native', ' storage', ' persists', ' documents', ' as', ' token'],
+    // A short passage about the post's own subject, real tiktoken/lz4/ANS numbers
+    // (ANS estimated against the same WikiText-103-trained table used in the benchmark).
+    raw: 571,
+    tokens: 107,
+    uint16: 214,
+    lz4: 497,
+    ans: 175,
+    bytePreview: 'Token-native compres'.split(''),
+    tokenPreview: ['Token', '-', 'native', ' compression', ' stores', ' the', ' token', ' IDs'],
   },
   {
     key: 'code',

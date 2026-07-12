@@ -13,11 +13,11 @@ authors: ['default']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Every vector search engine stores two things for each point: the vector and the payload. Vectors get real compression effort with quantization and MRL. The text payload gets raw UTF-8, or LZ4 at best, even though the **systems that actually consume it, embedders, rerankers, LLMs, all operate on tokens, not bytes**.
+Every vector search engine stores two things for each point: the vector and the payload. The community has gone out to compress the vectors with quantization and MRL. However, the text payload gets raw UTF-8, or LZ4 at best, even though the **systems that actually consume it, embedders, rerankers, LLMs, all operate on tokens, not bytes**.
 
-**Token IDs alone, with no compression algorithm running at all, already achieves 2.33× compression over raw UTF-8 bytes**. A static entropy based compression on top reaches 3.35×.
+I found that **Token IDs alone, with no compression algorithm running at all, already achieves 2.33× compression over raw UTF-8 bytes**. A static entropy based compression on top reaches 3.35×.
 
-This post argues for **token-native storage**: persist text as BPE token IDs, not UTF-8 bytes. This mismatch of language isn't unique to vector search engines, it shows up **anywhere models read and write: web, search, LLM chat history, or agent traces from RL rollouts**.
+This post argues for **token-native storage**: persist text as BPE token IDs, not UTF-8 bytes. This mismatch of the interface isn't unique to vector search engines, it shows up **anywhere models read and write: web, search, LLM agent traces (or chat history)**.
 
 ## How Token-Native Storage Works
 
@@ -27,12 +27,17 @@ The top path is what databases do today: store UTF-8 bytes, compress with a gene
 
 ### Step 1: BPE Tokenization
 
-BPE (Byte Pair Encoding) starts with raw bytes and repeatedly merges the most frequent adjacent pair into a new token, building up a vocabulary of common subwords. OpenAI ships two BPE tokenizers: **r50k** (used by GPT-2/GPT-3, 50,257 tokens) and **cl100k** (used by GPT-3.5/GPT-4, 100,277 tokens). cl100k has a larger vocabulary so it learns longer merges, which usually (but not always) means fewer tokens per document, especially for code and non-English text. Either way, each token ID needs 4 bytes (uint32) since the vocab exceeds the uint16 limit of 65,535. r50k fits in 2 bytes (uint16).
+BPE (Byte Pair Encoding) starts with raw bytes and repeatedly merges the most frequent adjacent pair into a new token, building up a vocabulary of common subwords. OpenAI ships two BPE tokenizers:
+
+1. **r50k**: used by GPT-2/GPT-3, 50,257 tokens (fits in uin16 = ~65k)
+2. **cl100k**: used by GPT-3.5/GPT-4, 100,277 tokens (needs int32 = ~4B)
+
+cl100k has a larger vocabulary so it learns longer merges, which usually (but not always) means fewer tokens per document, especially for code and non-English text. Either way, r50k fits in 2 bytes (uint16) while c100k needs 4 bytes (uint32) since the vocab exceeds the uint16 limit of ~65k (=2^16).
 
 BPE merges frequent byte sequences into single tokens. `"storage"` is one token. `"Token-native"` is three (`Token + - + native`). On average one BPE token covers [3/4 of a word](https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them). An average English word is ~5 characters plus a space, so:
 
 ```
-6 bytes/word × 3/4 words/token = 4.5 bytes/token (raw text)
+6 bytes/word (1 char = 1 byte) × 3/4 words/token = 4.5 bytes/token (raw text)
 2 bytes/token (r50k uint16 token IDs)
 ratio: ~2.25x
 ```
@@ -389,7 +394,7 @@ And because the stored format is just token IDs, swapping the unigram table for 
 
 ## What This Looks Like in Practice
 
-When you insert a document into Qdrant, you typically send something like:
+Here's what all of this looks like as an actual API, not just benchmark numbers. When you insert a document into Qdrant today, you typically send something like:
 
 ```js
 // Current approach for inserting data:
@@ -405,9 +410,7 @@ PUT /collections/my_collection/points
 }
 ```
 
-Qdrant compresses each payload value independently with LZ4. Elasticsearch instead shares an LZ4 window across a block of documents, trading that independence for a better ratio. Either way, the codec has no learned model of the language, just whatever byte patterns happen to repeat within its window.
-
-But there is a component that already knows a lot about the structure of natural language, and it's part of every embedding and language model stack: **the tokenizer**. Token-native storage makes token IDs the on-disk representation instead of throwing them away right after tokenizing:
+That LZ4 codec (see [the benchmark](#the-benchmark) above) has no learned model of the language, just whatever byte patterns happen to repeat within its window. Token-native storage swaps it for the tokenizer's own output as the on-disk representation, instead of throwing token IDs away right after tokenizing:
 
 ```js
 // One time: Set tokenizer on collection level for the 'text' field
