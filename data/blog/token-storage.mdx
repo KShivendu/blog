@@ -564,9 +564,9 @@ ANS gets close to the entropy limit, but it's just one option, and it turned out
 
 ## What AI Labs Should Fix
 
-This is the actual ask of this post, aimed at whoever trains the next tokenizer: OpenAI, Anthropic, Alibaba (Qwen), DeepSeek, Google (Gemma), and everyone else shipping a BPE vocabulary. If tokenizer vendors assigned IDs by frequency rank from training corpus, it would cost nothing more and it could deliver extra compression for end users by default.
+This is the actual ask of this post. **If you're training the next tokenizer, OpenAI, Anthropic, Alibaba, DeepSeek, Google, whoever, just assign token IDs by frequency rank instead of merge-discovery order.** It costs nothing extra, it's the same vocabulary either way, just a different choice of which integer means which token, and it hands every downstream user free compression by default.
 
-Note that, as an end user (or DB engine), you don't have to wait for that. You can already start by storing token IDs instead of raw bytes. Even the frequency sorting is just a lookup table, you can apply it in your own storage layer today and achieve more compression than what a vendor's frequency-sorted token IDs would provide (because it's especially assigned for your own corpus)
+You don't have to wait around for that, though. **The remap is just a lookup table you can build yourself.** Apply it in your own storage layer today, no changes to the tokenizer or the model required, and honestly you'll do better than a vendor's version anyway: yours is fit to your corpus, not some generic training mix.
 
 ## What This Looks Like in Practice
 
