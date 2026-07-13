@@ -2,7 +2,7 @@
 title: 'Translating Between Tokenizers: The Naive Way Is Already Fine'
 date: '2026-07-14'
 tags: ['vector-databases', 'compression', 'internals', 'nlp']
-draft: false
+draft: true
 summary: 'Cross-tokenizer translation only comes up on a rare path (fallback provider, degraded model, version migration), and decode-then-re-encode already handles it: 100% lossless at 121.6µs median round trip, negligible next to network or inference latency. I also tried to make it faster with a static lookup table and a splice-based translator. It failed on both correctness (16.2% exact match) and speed (0.97x). The naive path remains the right answer, and the deeper case for a shared vocabulary standard is about not having to maintain a tokenizer-coupled storage layer at all.'
 authors: ['default']
 ---
