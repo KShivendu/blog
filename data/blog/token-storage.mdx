@@ -749,12 +749,9 @@ The same write path applies when the writer is a model instead of a client. An L
 
 ## Key Takeaways
 
-- **The actual argument: store text as tokens, not UTF-8 bytes.** Raw r50k uint16 token IDs alone already reach 2.33×, beating every byte codec, with zero entropy coding at all. Any coder layered on top (ANS, frequency-remap) is a bonus, not the point.
-- **Token-native means reading and writing in whatever representation the model already speaks.** LLM output (chat logs, agent traces) is born as token IDs, so storing it that way has zero encode cost, no detokenize-then-recompress round trip.
-- Optional entropy coding pushes the ratio further, at a real latency cost: a shared static ANS table reaches 3.37× lossless (encode ~50-65µs, decode ~19-21µs), or frequency-sorted IDs + streamvbyte gets ~78-87% of that ratio at ~1/15th the decode latency, a change any tokenizer vendor could ship for free.
-- The compression multiplier, whichever coder you pick, applies to **every copy of the bytes** — snapshots, WAL, replication, shard rebalancing, page-cache density, egress — not just primary storage.
-- **Not an OpenAI-only story**: cl100k, o200k, Qwen2.5, DeepSeek-V2, and Gemma-2 all show the same packing pattern on their own real tokenizers.
-- Real limitations to respect: no shared vocabulary across models yet, hosted LLM APIs don't accept token IDs today, and the vocabulary becomes part of your on-disk format forever, so version your encodings.
+- Just switching from UTF-8 bytes to token IDs gets you free compression, no entropy coder needed. r50k alone hits 2.33x, already beating every byte codec. ANS on top gets you to 3.37x, but that's a bonus, the tokens are the real win.
+- This isn't an OpenAI trick. cl100k, o200k, Qwen2.5, DeepSeek-V2, Gemma-2, all of them show the same pattern on their own real tokenizers.
+- The hard part isn't the math, it's the ecosystem: models don't share a vocabulary yet, and hosted LLM APIs still only take text in and text out.
 
 ## Acknowledgements
 
