@@ -739,6 +739,8 @@ Omit the field, or use the plain boolean form, and it defaults to `"text"`, so e
 
 The same write path applies when the writer is a model instead of a client. An LLM's sampler produces token IDs before anything detokenizes them to text, so storing generated output (chat logs, summaries, agent traces) as tokens has zero encode cost: persist what the model already produced instead of detokenizing and re-compressing it.
 
+This splits cleanly by workload. Writing-heavy, where LLMs generate most of what gets stored (agent traces, synthetic data, summaries), you get token IDs for free, there's no encode step to pay for. Reading-heavy, where LLMs are the ones pulling documents back out (RAG, agent memory), every future read skips detokenize-then-retokenize entirely, so the cost that matters most just disappears. Human reads stay cheap regardless: detokenizing is the fast half of the round trip, ~4µs in this post's numbers, so a page rendering to a person barely notices the extra step.
+
 ## Limitations
 
 - **No shared vocabulary across models yet.** Embedding models use WordPiece or SentencePiece, LLMs use BPE variants (r50k, cl100k, o200k), and different LLM families don't share one either. A token-native payload only pays off end-to-end for a consumer using the same tokenizer it was stored with. That's exactly the case for a common token vocabulary standard, the way ASCII and UTF-8 standardized bytes, rather than treating token-native storage as a single-vendor optimization.
@@ -749,9 +751,9 @@ The same write path applies when the writer is a model instead of a client. An L
 
 ## Key Takeaways
 
-- Just switching from UTF-8 bytes to token IDs gets you free compression, no entropy coder needed. r50k alone hits 2.33x, already beating every byte codec. ANS on top gets you to 3.37x, but that's a bonus, the tokens are the real win.
-- This isn't an OpenAI trick. cl100k, o200k, Qwen2.5, DeepSeek-V2, Gemma-2, all of them show the same pattern on their own real tokenizers.
-- The hard part isn't the math, it's the ecosystem: models don't share a vocabulary yet, and hosted LLM APIs still only take text in and text out.
+- Switching from UTF-8 bytes to token IDs brings you free compression. OpenAI `r50k` tokenizer hits 2.33x, already beating every byte codec. ANS entropy coding on top gets you to 3.37x.
+- The compression gains are generalizable and across all tokenizers from all vendors. But another massive bonus is never having to tokenize again as models use your data thousands or millions of times in future.
+- Although token native storage is already usable, the ecosystem needs to evolve to make it even better: models don't share a vocabulary yet, and hosted LLM APIs still only take text in and text out.
 
 ## Acknowledgements
 
