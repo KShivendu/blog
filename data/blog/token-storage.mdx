@@ -564,7 +564,7 @@ ANS gets close to the entropy limit, but it's just one option, and it turned out
 
 **No fixed width fixes this, wider just wastes more** (see the glossary above for why cl100k/o200k need 3 bytes at all). Reassigning IDs by frequency rank and packing with [`streamvbyte`](https://github.com/lemire/streamvbyte) (a real SIMD-vectorized library from the FastPFOR family) gets most of the way to ANS's ratio with no entropy coder at all, at a ~15-20x faster decode, a genuine, deployable middle ground.
 
-## What AI Labs Should Fix
+## What AI Labs Could Fix for Free
 
 **To OpenAI, Anthropic, Alibaba, DeepSeek, Google, and anyone else training the next BPE vocabulary: assign token IDs by frequency rank instead of merge-discovery order.** It costs nothing extra, it's the same vocabulary either way, just a different choice of which integer means which token, and it hands every downstream user some extra token compression by default.
 
