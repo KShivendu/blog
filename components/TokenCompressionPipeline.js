@@ -1,18 +1,26 @@
 import { useTheme } from 'next-themes'
 import { useEffect, useState } from 'react'
 
-// All figures verified with tiktoken.get_encoding('r50k_base') + real lz4.frame.compress
-// + an entropy estimate against the same static WikiText-103-trained r50k frequency
-// table used elsewhere in this post (public/static/r50k_probs.bin).
+// All figures verified with tiktoken (r50k_base or cl100k_base, per preset) + real
+// lz4.frame.compress + an entropy estimate against the same static WikiText-103-trained
+// frequency table used elsewhere in this post (public/static/r50k_probs.bin, or the
+// equivalent cl100k table for the Python preset).
+const TOKENIZER_INFO = {
+  r50k: { vocab: '50,257', family: 'GPT-2 BPE', packLabel: 'uint16 r50k', bytesPerToken: 2 },
+  cl100k: { vocab: '100,277', family: 'GPT-4 BPE', packLabel: '3-byte cl100k', bytesPerToken: 3 },
+  o200k: { vocab: '200,019', family: 'GPT-4o BPE', packLabel: '3-byte o200k', bytesPerToken: 3 },
+}
+
 const PRESETS = [
   {
     key: 'english',
     label: 'English prose',
+    tokenizer: 'r50k',
     // A short passage about the post's own subject, real tiktoken/lz4/ANS numbers
     // (ANS estimated against the same WikiText-103-trained table used in the benchmark).
     raw: 571,
     tokens: 107,
-    uint16: 214,
+    packed: 214,
     lz4: 497,
     ans: 175,
     bytePreview: 'Token-native compres'.split(''),
@@ -21,26 +29,35 @@ const PRESETS = [
   {
     key: 'code',
     label: 'Python code',
-    raw: 751,
-    tokens: 328,
-    uint16: 656,
-    lz4: 533,
-    ans: 640,
-    bytePreview: 'def compress(text): '.split(''),
-    tokenPreview: ['def', ' compress', '(', 'text', ')', ':', '↵', ' '],
+    tokenizer: 'cl100k',
+    // A real Django app config file (django_semantic_search/apps.py), tokenized with
+    // cl100k. Picked over the earlier compress/decompress snippet because that one
+    // happened to have unusually little repeated structure for its length, so LZ4
+    // edged out raw token packing; this file is a more typical case where repeated
+    // identifiers (django_semantic_search, settings, setting) let BPE + ANS win clearly.
+    raw: 499,
+    tokens: 93,
+    packed: 279,
+    lz4: 330,
+    ans: 232,
+    bytePreview: 'from django.apps im'.split(''),
+    tokenPreview: ['from', ' django', '.apps', ' import', ' AppConfig', '↵', 'from', ' django'],
   },
   {
-    key: 'thai',
-    label: 'Thai script',
-    raw: 1818,
-    tokens: 1212,
-    uint16: 2424,
-    lz4: 886,
-    ans: 2655,
-    // r50k has no real merges for Thai, so both raw bytes and most tokens are
-    // shown as hex, single UTF-8 continuation bytes don't decode to valid text alone.
-    bytePreview: ['E0', 'B8', 'AB', 'E0', 'B8', 'AD', 'E0', 'B9', '84', 'E0', 'B8', 'AD'],
-    tokenPreview: ['E0B8', 'AB', 'E0B8', 'AD', 'E0B9', '84', 'E0B8', 'AD'],
+    key: 'hindi',
+    label: 'Hindi script',
+    tokenizer: 'o200k',
+    // The opening line of Hindi Wikipedia's Mahatma Gandhi article, tokenized with
+    // o200k. o200k's merges cover Devanagari far better than r50k/cl100k do (GPT-4o's
+    // tokenizer was built with much more multilingual coverage), so tokens decode
+    // to legible subwords instead of falling back to single raw bytes.
+    raw: 695,
+    tokens: 85,
+    packed: 255,
+    lz4: 476,
+    ans: 232,
+    bytePreview: 'मोहनदास करमचन्द '.split(''),
+    tokenPreview: ['मो', 'हन', 'द', 'ास', ' कर', 'म', 'च', 'न्द'],
   },
 ]
 
@@ -114,10 +131,11 @@ export default function TokenCompressionPipeline() {
   })
   const tokEndX = tx - TOK_GROUP_GAP
 
+  const tokInfo = TOKENIZER_INFO[preset.tokenizer]
   const lz4Ratio = preset.raw / preset.lz4
-  const packRatio = preset.raw / preset.uint16
+  const packRatio = preset.raw / preset.packed
   const ansRatio = preset.raw / preset.ans
-  const tokResultBytes = ansOn ? preset.ans : preset.uint16
+  const tokResultBytes = ansOn ? preset.ans : preset.packed
   const tokResultRatio = ansOn ? ansRatio : packRatio
   const lossColor = '#ef4444'
   const resultColor = tokResultRatio < 1 ? lossColor : ansOn ? tokStroke : packColor
@@ -207,7 +225,7 @@ export default function TokenCompressionPipeline() {
           BYTE CODEC PATH
         </text>
         <text x="8" y="178" fontSize="10" fontWeight="700" fill={textMuted} letterSpacing="0.06em">
-          TOKEN PATH (r50k)
+          TOKEN PATH ({preset.tokenizer})
         </text>
 
         {/* ═══ ROW 1: BYTES ═══ */}
@@ -407,8 +425,8 @@ export default function TokenCompressionPipeline() {
           fontSize="9"
           fill={textMuted}
         >
-          {preset.tokens.toLocaleString()} tokens × 2 bytes = {preset.uint16.toLocaleString()} bytes
-          (uint16 r50k)
+          {preset.tokens.toLocaleString()} tokens × {tokInfo.bytesPerToken} bytes ={' '}
+          {preset.packed.toLocaleString()} bytes ({tokInfo.packLabel})
         </text>
         <text
           x={(REP_X + tokEndX) / 2}
@@ -522,9 +540,9 @@ export default function TokenCompressionPipeline() {
 
         {/* Footnote */}
         <text x="8" y={H - 10} fontSize="9" fill={textMuted}>
-          preview truncated; r50k tokenizer (GPT-2 BPE, 50,257-token vocab); LZ4 and ANS sizes are
-          real, measured per sample (ANS via the static WikiText-103-trained table used elsewhere in
-          this post)
+          preview truncated; {preset.tokenizer} tokenizer ({tokInfo.family}, {tokInfo.vocab}-token
+          vocab); LZ4 and ANS sizes are real, measured per sample (ANS via the static
+          WikiText-103-trained table used elsewhere in this post)
         </text>
       </svg>
     </div>
