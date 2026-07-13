@@ -39,9 +39,7 @@ Using Tokens: 2 bytes/token (r50k uint16 token IDs)
 ratio: ~2.25x
 ```
 
-**This napkin math is what gave me the motivation to run the experiment: just by using token IDs instead of utf-8 already gives 2.25x compression** and my experiments below will prove it in practice.
-
-Another fun fact is that a every word in a sentence comes with a `" "`, so using uint16 token performs better for any word longer than 1 character. Example: `" cat"` is 4 raw bytes (space + 3 letters) but just 1 token, 2 bytes (uint16), an easy win :D
+**This napkin math is what gave me the motivation to run the experiment**, and my experiments below prove it in practice.
 
 ### Step 2 (Optional): ANS Entropy Coding
 
@@ -89,57 +87,70 @@ Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/
 
 {/* <CompressionWidget /> */}
 
+export const storageData = {
+  x: [1.0, 1.15, 1.66, 1.68, 2.26, 2.33, 1.49, 1.52, 2.61, 3.37, 3.3, 3.32],
+  y: [
+    'Raw UTF-8',
+    'LZ4 (used in Qdrant/Elastic)',
+    'gzip -9',
+    'zstd -22',
+    'brotli q=11',
+    'r50k uint16 raw',
+    'cl100k 3-byte raw',
+    'o200k 3-byte raw',
+    'zstd corpus trained dict',
+    'r50k + static ANS',
+    'cl100k + static ANS',
+    'o200k + static ANS',
+  ],
+  color: [
+    '#94a3b8',
+    '#94a3b8',
+    '#94a3b8',
+    '#94a3b8',
+    '#94a3b8',
+    '#60a5fa',
+    '#93c5fd',
+    '#93c5fd',
+    '#f59e0b',
+    '#10b981',
+    '#34d399',
+    '#6ee7b7',
+  ],
+  opacity: [0.75, 0.75, 0.75, 0.75, 0.75, 1, 1, 1, 0.75, 1, 1, 1],
+  text: [
+    '1.0×',
+    '1.15×',
+    '1.66×',
+    '1.68×',
+    '2.26×',
+    '2.33×',
+    '1.49×',
+    '1.52×',
+    '2.61×',
+    '3.37×',
+    '3.30×',
+    '3.32×',
+  ],
+}
+
+export const focusButtonStyle = {
+  bgcolor: '#cbd5e1',
+  bordercolor: '#64748b',
+  font: { color: '#1e293b', size: 10 },
+  activecolor: '#94a3b8',
+  pad: { t: 2, b: 2, l: 4, r: 4 },
+}
+
 <PlotlyChart
   data={[
     {
       type: 'bar',
       orientation: 'h',
-      x: [1.0, 1.15, 1.66, 1.68, 2.26, 2.33, 1.49, 1.52, 2.61, 3.37, 3.3, 3.32],
-      y: [
-        'Raw UTF-8',
-        'LZ4 (used in Qdrant/Elastic)',
-        'gzip -9',
-        'zstd -22',
-        'brotli q=11',
-        'r50k uint16 raw',
-        'cl100k 3-byte raw',
-        'o200k 3-byte raw',
-        'zstd corpus trained dict',
-        'r50k + static ANS',
-        'cl100k + static ANS',
-        'o200k + static ANS',
-      ],
-      marker: {
-        color: [
-          '#94a3b8',
-          '#94a3b8',
-          '#94a3b8',
-          '#94a3b8',
-          '#94a3b8',
-          '#60a5fa',
-          '#93c5fd',
-          '#93c5fd',
-          '#f59e0b',
-          '#10b981',
-          '#34d399',
-          '#6ee7b7',
-        ],
-        opacity: [0.75, 0.75, 0.75, 0.75, 0.75, 1, 1, 1, 0.75, 1, 1, 1],
-      },
-      text: [
-        '1.0×',
-        '1.15×',
-        '1.66×',
-        '1.68×',
-        '2.26×',
-        '2.33×',
-        '1.49×',
-        '1.52×',
-        '2.61×',
-        '3.37×',
-        '3.30×',
-        '3.32×',
-      ],
+      x: storageData.x,
+      y: storageData.y,
+      marker: { color: storageData.color, opacity: storageData.opacity },
+      text: storageData.text,
       textposition: 'outside',
     },
   ]}
@@ -162,67 +173,18 @@ Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/
         y: 1.18,
         yanchor: 'top',
         showactive: true,
-        bgcolor: '#cbd5e1',
-        bordercolor: '#64748b',
-        font: { color: '#1e293b', size: 10 },
-        activecolor: '#94a3b8',
-        pad: { t: 2, b: 2, l: 4, r: 4 },
+        ...focusButtonStyle,
         buttons: [
           {
             label: 'All',
             method: 'restyle',
             args: [
               {
-                x: [[1.0, 1.15, 1.66, 1.68, 2.26, 2.33, 1.49, 1.52, 2.61, 3.37, 3.3, 3.32]],
-                y: [
-                  [
-                    'Raw UTF-8',
-                    'LZ4 (used in Qdrant/Elastic)',
-                    'gzip -9',
-                    'zstd -22',
-                    'brotli q=11',
-                    'r50k uint16 raw',
-                    'cl100k 3-byte raw',
-                    'o200k 3-byte raw',
-                    'zstd corpus trained dict',
-                    'r50k + static ANS',
-                    'cl100k + static ANS',
-                    'o200k + static ANS',
-                  ],
-                ],
-                'marker.color': [
-                  [
-                    '#94a3b8',
-                    '#94a3b8',
-                    '#94a3b8',
-                    '#94a3b8',
-                    '#94a3b8',
-                    '#60a5fa',
-                    '#93c5fd',
-                    '#93c5fd',
-                    '#f59e0b',
-                    '#10b981',
-                    '#34d399',
-                    '#6ee7b7',
-                  ],
-                ],
-                'marker.opacity': [[0.75, 0.75, 0.75, 0.75, 0.75, 1, 1, 1, 0.75, 1, 1, 1]],
-                text: [
-                  [
-                    '1.0×',
-                    '1.15×',
-                    '1.66×',
-                    '1.68×',
-                    '2.26×',
-                    '2.33×',
-                    '1.49×',
-                    '1.52×',
-                    '2.61×',
-                    '3.37×',
-                    '3.30×',
-                    '3.32×',
-                  ],
-                ],
+                x: [storageData.x],
+                y: [storageData.y],
+                'marker.color': [storageData.color],
+                'marker.opacity': [storageData.opacity],
+                text: [storageData.text],
               },
               [0],
             ],
@@ -289,117 +251,99 @@ Gemma has the biggest vocabulary of the six and still comes out with the best co
 
 Measured across 200 WikiText-103 articles (50–500 words), static corpus ANS model:
 
+export const latencyData = {
+  categories: [
+    'LZ4',
+    'gzip -9',
+    'zstd -22',
+    'zstd dict',
+    'r50k tokenizer',
+    'cl100k tokenizer',
+    'o200k tokenizer',
+    'cl100k + 3-byte',
+    'o200k + 3-byte',
+    'r50k + ANS',
+    'cl100k + ANS',
+    'o200k + ANS',
+  ],
+  encRaw: [15, 27, 72, 128, 43, 54, 104, 68, 116, 43, 54, 104],
+  encRawText: [
+    '15µs',
+    '27µs',
+    '72µs',
+    '128µs',
+    '43µs',
+    '54µs',
+    '104µs',
+    '68µs',
+    '116µs',
+    '43µs',
+    '54µs',
+    '104µs',
+  ],
+  decRaw: [1, 21, 3, 2, 4, 4, 4, 12, 13, 4, 4, 4],
+  decRawText: [
+    '1µs',
+    '21µs',
+    '3µs',
+    '2µs',
+    '4µs',
+    '4µs',
+    '4µs',
+    '12µs',
+    '13µs',
+    '4µs',
+    '4µs',
+    '4µs',
+  ],
+  rawOpacity: [0.6, 0.6, 0.6, 0.6, 1, 1, 1, 1, 1, 1, 1, 1],
+  encAns: [0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 10, 9],
+  encAnsText: ['', '', '', '', '', '', '', '', '', '9µs', '10µs', '9µs'],
+  decAns: [0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 17, 20],
+  decAnsText: ['', '', '', '', '', '', '', '', '', '15µs', '17µs', '20µs'],
+  fullOpacity: Array(12).fill(1),
+}
+
 <PlotlyChart
   data={[
     {
       type: 'bar',
       name: 'encode (raw)',
       offsetgroup: 'encode',
-      x: [
-        'LZ4',
-        'gzip -9',
-        'zstd -22',
-        'zstd dict',
-        'r50k tokenizer',
-        'cl100k tokenizer',
-        'o200k tokenizer',
-        'cl100k + 3-byte',
-        'o200k + 3-byte',
-        'r50k + ANS',
-        'cl100k + ANS',
-        'o200k + ANS',
-      ],
-      y: [15, 27, 72, 128, 43, 54, 104, 68, 116, 43, 54, 104],
-      marker: {
-        color: '#60a5fa',
-        opacity: [0.6, 0.6, 0.6, 0.6, 1, 1, 1, 1, 1, 1, 1, 1],
-      },
-      text: [
-        '15µs',
-        '27µs',
-        '72µs',
-        '128µs',
-        '43µs',
-        '54µs',
-        '104µs',
-        '68µs',
-        '116µs',
-        '43µs',
-        '54µs',
-        '104µs',
-      ],
+      x: latencyData.categories,
+      y: latencyData.encRaw,
+      marker: { color: '#60a5fa', opacity: latencyData.rawOpacity },
+      text: latencyData.encRawText,
       textposition: 'inside',
     },
     {
       type: 'bar',
       name: 'decode (raw)',
       offsetgroup: 'decode',
-      x: [
-        'LZ4',
-        'gzip -9',
-        'zstd -22',
-        'zstd dict',
-        'r50k tokenizer',
-        'cl100k tokenizer',
-        'o200k tokenizer',
-        'cl100k + 3-byte',
-        'o200k + 3-byte',
-        'r50k + ANS',
-        'cl100k + ANS',
-        'o200k + ANS',
-      ],
-      y: [1, 21, 3, 2, 4, 4, 4, 12, 13, 4, 4, 4],
-      marker: {
-        color: '#10b981',
-        opacity: [0.6, 0.6, 0.6, 0.6, 1, 1, 1, 1, 1, 1, 1, 1],
-      },
-      text: ['1µs', '21µs', '3µs', '2µs', '4µs', '4µs', '4µs', '12µs', '13µs', '4µs', '4µs', '4µs'],
+      x: latencyData.categories,
+      y: latencyData.decRaw,
+      marker: { color: '#10b981', opacity: latencyData.rawOpacity },
+      text: latencyData.decRawText,
       textposition: 'inside',
     },
     {
       type: 'bar',
       name: 'encode (+ ANS)',
       offsetgroup: 'encode',
-      x: [
-        'LZ4',
-        'gzip -9',
-        'zstd -22',
-        'zstd dict',
-        'r50k tokenizer',
-        'cl100k tokenizer',
-        'o200k tokenizer',
-        'cl100k + 3-byte',
-        'o200k + 3-byte',
-        'r50k + ANS',
-        'cl100k + ANS',
-        'o200k + ANS',
-      ],
-      y: [0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 10, 9],
+      x: latencyData.categories,
+      y: latencyData.encAns,
       marker: { color: '#1d4ed8' },
-      text: ['', '', '', '', '', '', '', '', '', '9µs', '10µs', '9µs'],
+      text: latencyData.encAnsText,
       textposition: 'inside',
     },
     {
       type: 'bar',
       name: 'decode (+ ANS)',
       offsetgroup: 'decode',
-      x: [
-        'LZ4',
-        'gzip -9',
-        'zstd -22',
-        'zstd dict',
-        'r50k tokenizer',
-        'cl100k tokenizer',
-        'o200k tokenizer',
-        'cl100k + 3-byte',
-        'o200k + 3-byte',
-        'r50k + ANS',
-        'cl100k + ANS',
-        'o200k + ANS',
-      ],
-      y: [0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 17, 20],
+      x: latencyData.categories,
+      y: latencyData.decAns,
       marker: { color: '#065f46' },
-      text: ['', '', '', '', '', '', '', '', '', '15µs', '17µs', '20µs'],
+      text: latencyData.decAnsText,
       textposition: 'inside',
     },
   ]}
@@ -422,79 +366,33 @@ Measured across 200 WikiText-103 articles (50–500 words), static corpus ANS mo
         y: 1.2,
         yanchor: 'top',
         showactive: true,
-        bgcolor: '#cbd5e1',
-        bordercolor: '#64748b',
-        font: { color: '#1e293b', size: 10 },
-        activecolor: '#94a3b8',
-        pad: { t: 2, b: 2, l: 4, r: 4 },
+        ...focusButtonStyle,
         buttons: [
           {
             label: 'All',
             method: 'restyle',
             args: [
-              (() => {
-                const cats = [
-                  'LZ4',
-                  'gzip -9',
-                  'zstd -22',
-                  'zstd dict',
-                  'r50k tokenizer',
-                  'cl100k tokenizer',
-                  'o200k tokenizer',
-                  'cl100k + 3-byte',
-                  'o200k + 3-byte',
-                  'r50k + ANS',
-                  'cl100k + ANS',
-                  'o200k + ANS',
-                ]
-                return {
-                  x: [cats, cats, cats, cats],
-                  y: [
-                    [15, 27, 72, 128, 43, 54, 104, 68, 116, 43, 54, 104],
-                    [1, 21, 3, 2, 4, 4, 4, 12, 13, 4, 4, 4],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 10, 9],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 17, 20],
-                  ],
-                  'marker.opacity': [
-                    [0.6, 0.6, 0.6, 0.6, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0.6, 0.6, 0.6, 0.6, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                  ],
-                  text: [
-                    [
-                      '15µs',
-                      '27µs',
-                      '72µs',
-                      '128µs',
-                      '43µs',
-                      '54µs',
-                      '104µs',
-                      '68µs',
-                      '116µs',
-                      '43µs',
-                      '54µs',
-                      '104µs',
-                    ],
-                    [
-                      '1µs',
-                      '21µs',
-                      '3µs',
-                      '2µs',
-                      '4µs',
-                      '4µs',
-                      '4µs',
-                      '12µs',
-                      '13µs',
-                      '4µs',
-                      '4µs',
-                      '4µs',
-                    ],
-                    ['', '', '', '', '', '', '', '', '', '9µs', '10µs', '9µs'],
-                    ['', '', '', '', '', '', '', '', '', '15µs', '17µs', '20µs'],
-                  ],
-                }
-              })(),
+              {
+                x: [
+                  latencyData.categories,
+                  latencyData.categories,
+                  latencyData.categories,
+                  latencyData.categories,
+                ],
+                y: [latencyData.encRaw, latencyData.decRaw, latencyData.encAns, latencyData.decAns],
+                'marker.opacity': [
+                  latencyData.rawOpacity,
+                  latencyData.rawOpacity,
+                  latencyData.fullOpacity,
+                  latencyData.fullOpacity,
+                ],
+                text: [
+                  latencyData.encRawText,
+                  latencyData.decRawText,
+                  latencyData.encAnsText,
+                  latencyData.decAnsText,
+                ],
+              },
               [0, 1, 2, 3],
             ],
           },
@@ -654,13 +552,13 @@ Unquantized, the embedding (4,096 B) dominates either form of the text, the comm
 
 ANS gets close to the entropy limit, but it's just one option, and it turned out to be [slow to decode](#latency). But then I realised that **BPE assigns token IDs in merge-discovery order, not by real-world frequency**, so fixed-width packing wastes that gap, 2 bytes is 2 bytes whether the ID is 5 or 50,000. The fix is simple: reassign IDs by frequency rank, then use a variable-length integer code.
 
-| Tokenizer | uint32 | uint64 | uint16/3-byte (practical) | + freq-remap, varint | + freq-remap, streamvbyte |                  ANS |
-| --------- | -----: | -----: | ------------------------: | -------------------: | ------------------------: | -------------------: |
-| r50k      |  1.16x |  0.58x |            2.31x (uint16) |                2.95x |          2.64x (~1µs dec) | 3.37x (~15-17µs dec) |
-| cl100k    |  1.12x |  0.56x |            1.49x (3-byte) |                2.89x |          2.58x (~1µs dec) | 3.30x (~15-17µs dec) |
-| o200k     |  1.13x |  0.56x |            1.50x (3-byte) |                2.90x |          2.60x (~1µs dec) | 3.32x (~15-17µs dec) |
+| Tokenizer | uint32 | uint16/3-byte (practical) | + freq-remap, varint | + freq-remap, streamvbyte |                  ANS |
+| --------- | -----: | ------------------------: | -------------------: | ------------------------: | -------------------: |
+| r50k      |  1.16x |            2.31x (uint16) |                2.95x |          2.64x (~1µs dec) | 3.37x (~15-17µs dec) |
+| cl100k    |  1.12x |            1.49x (3-byte) |                2.89x |          2.58x (~1µs dec) | 3.30x (~15-17µs dec) |
+| o200k     |  1.13x |            1.50x (3-byte) |                2.90x |          2.60x (~1µs dec) | 3.32x (~15-17µs dec) |
 
-The `uint32`/`uint64` columns make the point directly: **no fixed width fixes this, wider just wastes more.** cl100k and o200k are the real story: their practical packing is only 1.49-1.50x because 100,277+ tokens need 3 bytes, and a frequency-sorted vocabulary fixes that outright, no entropy coder needed, reaching 2.89-2.90x. Swapping naive varint for `streamvbyte`/`varintgb` (real SIMD-vectorized libraries from the FastPFOR family) trades a bit of ratio for a ~15-17x faster decode than ANS, a genuine, deployable middle ground.
+**No fixed width fixes this, wider just wastes more** (see the glossary above for why cl100k/o200k need 3 bytes at all). A frequency-sorted vocabulary gets there without any entropy coder, reaching 2.89-2.90x. Swapping naive varint for `streamvbyte`/`varintgb` (real SIMD-vectorized libraries from the FastPFOR family) trades a bit of ratio for a ~15-17x faster decode than ANS, a genuine, deployable middle ground.
 
 ## What AI Labs Should Fix
 
