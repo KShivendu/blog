@@ -749,15 +749,12 @@ The same write path applies when the writer is a model instead of a client. An L
 
 ## Key Takeaways
 
-- **Store text as tokens, not UTF-8 bytes.** Vector databases compress payloads with LZ4 (~1.15× per document). Raw r50k uint16 token IDs alone already reach 2.33×, beating every byte codec including brotli, with no compression algorithm running at all. Token-native storage — BPE token IDs + static ANS — pushes that to 3.37× lossless and aligns the on-disk format with how embedders, rerankers, and LLMs actually consume text.
+- **Store text as tokens, not UTF-8 bytes.** Raw r50k uint16 token IDs alone reach 2.33×, beating every byte codec including brotli; a shared static ANS table (per-document tables cost ~900 bytes each and erase the gain) pushes that to 3.37× lossless.
 - The compression multiplier applies to **every copy of the bytes** — snapshots, WAL, replication, shard rebalancing, page-cache density, egress — not just primary storage.
 - **LLM output is born as token IDs** — storing chat logs and agent traces token-natively has zero encode cost, if you control both the storage codec and the model tokenizer.
-- The frequency table must be static and shared. Per-document tables cost ~900 bytes each and erase the gain.
-- Latency is a non-issue: encode costs ~50-65µs (mostly the tokenizer, ANS adds only ~9-10µs), decode costs ~19-21µs (mostly ANS, the tokenizer's share is just ~4µs).
-- The trade-off to respect: the vocabulary becomes part of your on-disk format forever, so version your encodings.
-- **cl100k's raw uint32 packing (1.13x, worse than gzip) is a container artifact, not a tokenizer flaw.** 3-byte packing alone recovers 1.49x, no entropy coder needed, cl100k's 100,277 tokens fit comfortably in 24 bits.
-- **Frequency-sorted token IDs + a cheap variable-length code (streamvbyte) recovers ~78-87% of ANS's ratio at roughly 1/15th the decode latency.** A real, shippable alternative when repeated decode cost matters more than squeezing out the last bit of ratio, and it's a change any tokenizer vendor could make for free in a new vocabulary.
-- **This isn't an OpenAI-only story.** Qwen2.5, DeepSeek-V2, and Gemma-2 all show the same packing/ANS pattern on their own real tokenizers; Gemma's 256,000-token vocabulary, the largest tested, gets the best compression of the six.
+- Latency is a non-issue: encode costs ~50-65µs (mostly the tokenizer), decode costs ~19-21µs (mostly ANS).
+- **Frequency-sorted token IDs + streamvbyte recovers ~78-87% of ANS's ratio at ~1/15th the decode latency**, a change any tokenizer vendor could make for free in a new vocabulary.
+- **Not an OpenAI-only story**: Qwen2.5, DeepSeek-V2, and Gemma-2 show the same pattern on their own tokenizers. But the vocabulary becomes part of your on-disk format forever, so version your encodings.
 
 ## Acknowledgements
 
