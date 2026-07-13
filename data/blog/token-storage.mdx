@@ -226,7 +226,7 @@ Observations:
 
 1. **r50k raw uint16 already beats every byte codec compression algorithm!**
 2. r50k + static ANS **beats everything by a wide margin.**
-3. cl100k and o200k just need the right container: switching from naive 4-byte packing (so bad it's not even worth a bar on the chart above, see the [glossary](#glossary) for why) to 3-byte packing, with no entropy coder at all, already gets them to 1.49x and 1.50x. **ANS recovers further still, to 3.30x (cl100k) and 3.32x (o200k)**.
+3. cl100k and o200k just need the right container: switching from naive uint32 (4-byte) packing (left off the chart above, see the [glossary](#glossary) for why) to 3-byte packing, with no entropy coder at all, already gets them to 1.49x and 1.50x. **ANS recovers further still, to 3.30x (cl100k) and 3.32x (o200k)**.
 4. The fairest competitor to r50k+ANS is [`zstd --train`](https://github.com/facebook/zstd/wiki/Zstandard-Dictionary-Compression-format), since it also learns a vocab from the corpus. It reaches 2.61x, still 30% behind! (and its vocab isn't standardized like the tokenizers)
 
 <details>
@@ -556,11 +556,11 @@ Unquantized, the embedding (4,096 B) dominates either form of the text, the comm
 
 ANS gets close to the entropy limit, but it's just one option, and it turned out to be [slow to decode](#latency). But then I realised that **BPE assigns token IDs in merge-discovery order, not by real-world frequency**, so fixed-width packing wastes that gap, 2 bytes is 2 bytes whether the ID is 5 or 50,000. The fix is simple: reassign IDs by frequency rank, then use a variable-length integer code.
 
-| Tokenizer | naive 4-byte | uint16/3-byte (practical) | + freq-remap, streamvbyte |                  ANS |
-| --------- | -----------: | ------------------------: | ------------------------: | -------------------: |
-| r50k      |        1.16x |            2.31x (uint16) |          2.64x (~1µs dec) | 3.37x (~15-17µs dec) |
-| cl100k    |        1.12x |            1.49x (3-byte) |          2.58x (~1µs dec) | 3.30x (~15-17µs dec) |
-| o200k     |        1.13x |            1.50x (3-byte) |          2.60x (~1µs dec) | 3.32x (~15-17µs dec) |
+| Tokenizer | uint32 (4-byte) | uint16/3-byte (practical) | + freq-remap, streamvbyte |                  ANS |
+| --------- | --------------: | ------------------------: | ------------------------: | -------------------: |
+| r50k      |           1.16x |            2.31x (uint16) |          2.64x (~1µs dec) | 3.37x (~15-17µs dec) |
+| cl100k    |           1.12x |            1.49x (3-byte) |          2.58x (~1µs dec) | 3.30x (~15-17µs dec) |
+| o200k     |           1.13x |            1.50x (3-byte) |          2.60x (~1µs dec) | 3.32x (~15-17µs dec) |
 
 **No fixed width fixes this, wider just wastes more** (see the glossary above for why cl100k/o200k need 3 bytes at all). Reassigning IDs by frequency rank and packing with [`streamvbyte`](https://github.com/lemire/streamvbyte) (a real SIMD-vectorized library from the FastPFOR family) gets most of the way to ANS's ratio with no entropy coder at all, at a ~15-17x faster decode, a genuine, deployable middle ground.
 
