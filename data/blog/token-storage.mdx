@@ -13,13 +13,9 @@ authors: ['default']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Every vector search engine stores two things for each point: the vector and the payload. The AI community has gone out to compress the vectors with [quantization](https://qdrant.tech/articles/what-is-vector-quantization/) and [MRL](https://huggingface.co/blog/matryoshka). However, the text payload gets raw UTF-8, or LZ4 at best, even though the **systems that actually consume it (embedders, rerankers, LLMs) operate on tokens, not bytes**.
+Every vector search engine stores two things for each point: the vector and the payload. The AI community has gone out to compress the vectors with [quantization](https://qdrant.tech/articles/what-is-vector-quantization/) and [MRL](https://huggingface.co/blog/matryoshka). However, the text payload gets raw UTF-8, or LZ4 at best, even though the **systems that actually consume it (embedders, rerankers, LLMs) operate on tokens, not bytes**. I realised that **using OpenAI r50k token IDs over raw text already achieves 2.33× compression**, beating every byte-level codec, and a static entropy coder on top reaches 3.37× (beating even a corpus-trained zstd), yes, **tokenization gives you free compression!**
 
-I realised that **using OpenAI r50k Token IDs over raw text already achieves 2.33× compression over raw UTF-8 bytes** and is better than all byte level compression algorithms (yes, **tokenization gives you free compression!**). Optionally, applying a static entropy coder compression on top reaches 3.35x! (which beats even the corpus trained zstd algorithm)
-
-This post argues that we should have **token-native storage** (read/write text as BPE token IDs, not UTF-8 bytes) **anywhere models are the primary readers and writers: search engines, local files, LLM agent traces (or chat history), or text heavy APIs**
-
-My whole point is that **if agents are going to be the biggest users of your system, then your system should speak their language: tokens**. I'll show my point with experiments, talk about limitations, and how the community can help get rid of them.
+**My whole point is that if agents are going to be the biggest users of your system, then your system should speak their language: tokens.** This post argues for **token-native storage** (read/write text as BPE token IDs, not UTF-8 bytes) anywhere models are the primary readers and writers: search engines, local files, LLM agent traces, or text-heavy APIs. I'll show my point with experiments, talk about limitations, and how the community can help get rid of them.
 
 ## How Token-Native Storage Works
 
@@ -266,13 +262,13 @@ Observations:
 
 1. **r50k raw uint16 already beats every byte codec compression algorithm!**
 2. r50k + static ANS **beats everything by a wide margin.**
-3. Naive uint32 packing is the worst option for any vocab bigger than uint16 (cl100k: 1.13x, o200k: 1.14x, both dropped from the chart above since they're not a real recommendation, just a warning), but most of that is the container, not the tokenizer: 100,277 (cl100k) and 200,019 (o200k) tokens both still fit in 24 bits, so just switching to a 3-byte packing already recovers 1.49x (cl100k) and 1.52x (o200k), no entropy coder involved at all. **ANS recovers further still, to 3.30x (cl100k) and 3.32x (o200k)**: the fixed-width storage penalty vanishes once bits are allocated by frequency instead of by vocab size.
+3. Naive uint32 packing is the worst option for any vocab bigger than uint16 (cl100k/o200k dropped from the chart above, not a real recommendation), but 3-byte packing fixes most of it with no entropy coder at all (details in the glossary below). **ANS recovers further still, to 3.30x (cl100k) and 3.32x (o200k)**.
 4. The fairest competitor to r50k+ANS is `zstd --train`, since it also learns a vocab from the corpus. It reaches 2.61x, still 30% behind! (and its vocab isn't standardized like the tokenizers)
 
 <details>
-<summary>This isn't an OpenAI-specific trick: the same pattern holds for every modern LLM tokenizer</summary>
+<summary>Digging deeper: does this hold for every tokenizer, and how much is the entropy coder vs. the tokenizer?</summary>
 
-Checked directly against their real static frequency tables:
+**This isn't an OpenAI-specific trick.** Checked directly against real static frequency tables for every modern LLM tokenizer:
 
 | Tokenizer   |       Vocab |  uint32/16 raw | 3-byte raw | + static ANS |
 | ----------- | ----------: | -------------: | ---------: | -----------: |
@@ -283,16 +279,9 @@ Checked directly against their real static frequency tables:
 | DeepSeek-V2 |     100,002 |          1.08x |      1.43x |        3.21x |
 | **Gemma-2** | **256,000** |      **1.13x** |  **1.51x** |    **3.36x** |
 
-Gemma has the biggest vocabulary of the six and still comes out with the best compression, better than cl100k, o200k, and every other non-r50k tokenizer tested. Bigger vocab isn't a liability for token-native storage once the packing width is fixed. 3-byte packing covers up to 16M+ token IDs, so even Gemma's 256,000-token vocabulary, the largest here, only uses 18 of the 24 available bits. You can practically never exhaust it.
+Gemma has the biggest vocabulary of the six and still comes out with the best compression. Bigger vocab isn't a liability once the packing width is fixed: 3-byte packing covers up to 16M+ token IDs, so even Gemma's 256,000-token vocabulary only uses 18 of the 24 available bits. You can practically never exhaust it.
 
-</details>
-
-<details>
-<summary>Side note: how much of this is the entropy coder, and how much is tokenization?</summary>
-
-Run the exact same ANS coder on raw UTF-8 bytes instead of tokens, an order-0 model over the 256 possible byte values, no tokenizer involved at all, and it gets **1.73x**. Barely ahead of gzip (1.66x) and zstd (1.68x), and it loses outright to brotli (2.26x), even though ANS is the theoretically tighter entropy coder. That's because gzip/zstd/brotli aren't just entropy coders, they also do LZ77-style repeated-substring matching, which a plain order-0 byte model has none of.
-
-The gap between that 1.73x and the 3.3x+ this post gets from token-level ANS is the tokenizer's contribution, not the entropy coder's. Feeding ANS better symbols (subwords instead of single bytes) is doing most of the real work here. As a further check, running full zstd (its own LZ77 + entropy stage, not isolated) directly on packed token ID bytes instead of raw ANS gets 2.49x for r50k and ~2.0x for cl100k, still well behind rANS's 3.3x+, since zstd's substring matching has little left to find once BPE has already folded repeated words into single tokens, and its LZ77 stage is hunting through a byte-packed representation that doesn't align with token boundaries.
+**How much of the ratio is the entropy coder vs. the tokenizer?** Running the exact same ANS coder on raw UTF-8 bytes (an order-0 model over 256 possible byte values, no tokenizer at all) gets **1.73x**, barely ahead of gzip/zstd and behind brotli, even though ANS is the theoretically tighter coder, because gzip/zstd/brotli also do LZ77-style substring matching that a plain byte model lacks. The gap between that 1.73x and the 3.3x+ this post gets from token-level ANS is the tokenizer's contribution, not the coder's: feeding ANS better symbols (subwords instead of bytes) does most of the real work. Confirming from the other direction, running full zstd (its own LZ77 + entropy stage) directly on packed token ID bytes instead of raw ANS gets only 2.49x for r50k, since zstd's substring matching has little left to find once BPE has already folded repeated words into single tokens.
 
 </details>
 
@@ -755,18 +744,16 @@ The same write path applies when the writer is a model instead of a client. An L
 - **No shared vocabulary across models yet.** Embedding models use WordPiece or SentencePiece, LLMs use BPE variants (r50k, cl100k, o200k), and different LLM families don't share one either. A token-native payload only pays off end-to-end for a consumer using the same tokenizer it was stored with. That's exactly the case for a common token vocabulary standard, the way ASCII and UTF-8 standardized bytes, rather than treating token-native storage as a single-vendor optimization.
 - **Hosted LLM APIs don't accept or return token IDs today.** Even when your storage tokenizer matches the model's exactly, the read path only closes the loop end to end if you own the inference stack: hosted chat APIs take text prompts and return text, not raw token arrays, so a detokenize/retokenize step still happens somewhere. See [this follow-up proposing a token-ID-native LLM API](/blog/token-llm-interface) for what closing that gap would actually take.
 - **Raw packing efficiency depends on the tokenizer and the script.** cl100k's larger vocabulary doesn't always mean fewer tokens: on long digit strings and emoji-heavy text it can produce more tokens than r50k, since its extra vocabulary budget went toward code and non-English scripts. And for scripts a tokenizer has no merges for, uint16 packing can lose outright: with r50k, the Hindi word `भारत` is 12 raw UTF-8 bytes but 7 single-byte tokens, 14 bytes as uint16, worse than doing nothing.
-- **ANS is one entropy coder, not the point of this post.** It's what got the benchmark from 2.33x (raw packing alone) to 3.35x, but it comes with real costs of its own: decode is slower than LZ4 (see [latency](#what-does-it-cost-in-latency)), and it only shares well at the corpus level, not per block (a table trained fresh on each 16KB block costs 900-4,000 bytes of overhead, losing to a static table even at 1MB blocks). The core argument, store tokens instead of bytes, holds regardless of which coder, if any, you layer on top.
-- **ANS's cost is asymmetric: cheap to encode once, but decode recurs on every read.** A document is written once, but if it gets retrieved across many LLM calls over its lifetime, its ~15-21µs decode cost is paid every single time, unlike the one-time encode. Faster ANS variants exist in principle (zstd's own entropy stage uses a table-based variant that trades arithmetic for lookups) but aren't available as a standalone library to verify here. The frequency-sorted-ID approach above sidesteps the asymmetry, ~1µs decode instead of ~15-17µs, at the cost of some ratio, but it inherits the same domain-mismatch risk, tested directly: a WikiText-trained ranking applied to JSON gets 1.08x, worse than no remap at all (1.31x), while a JSON-trained ranking gets 1.99x. The frequency data has to match your actual corpus either way, whichever coder you're feeding it to.
+- **ANS is one entropy coder, not the point of this post.** It's what got the benchmark from 2.33x (raw packing alone) to 3.37x, but it comes with real costs of its own: decode is slower than LZ4 (see [latency](#latency)), and it only shares well at the corpus level, not per block (a table trained fresh on each 16KB block costs 900-4,000 bytes of overhead, losing to a static table even at 1MB blocks). The core argument, store tokens instead of bytes, holds regardless of which coder, if any, you layer on top.
+- **ANS's cost is asymmetric: cheap to encode once, but decode recurs on every read.** A document is written once, but if it gets retrieved across many LLM calls over its lifetime, its decode cost is paid every single time, unlike the one-time encode, which is exactly what motivates the [frequency-sorted-ID alternative](#a-faster-alternative-to-ans-frequency-sorted-token-ids) above. Whichever coder or remap you use, the frequency data has to match your actual corpus: a WikiText-trained ranking applied to JSON gets 1.08x, worse than no remap at all (1.31x), while a JSON-trained ranking gets 1.99x.
 
 ## Key Takeaways
 
-- **Store text as tokens, not UTF-8 bytes.** Vector databases compress payloads with LZ4 (~1.15× per document). Token-native storage — BPE token IDs + static ANS — gives 3.35× lossless compression and aligns the on-disk format with how embedders, rerankers, and LLMs actually consume text.
+- **Store text as tokens, not UTF-8 bytes.** Vector databases compress payloads with LZ4 (~1.15× per document). Raw r50k uint16 token IDs alone already reach 2.33×, beating every byte codec including brotli, with no compression algorithm running at all. Token-native storage — BPE token IDs + static ANS — pushes that to 3.37× lossless and aligns the on-disk format with how embedders, rerankers, and LLMs actually consume text.
 - The compression multiplier applies to **every copy of the bytes** — snapshots, WAL, replication, shard rebalancing, page-cache density, egress — not just primary storage.
-- **Raw uint16 token IDs alone reach 2.4×**, beating every byte codec except brotli, with no compression algorithm at all.
 - **LLM output is born as token IDs** — storing chat logs and agent traces token-natively has zero encode cost, if you control both the storage codec and the model tokenizer.
 - The frequency table must be static and shared. Per-document tables cost ~900 bytes each and erase the gain.
 - Latency is a non-issue: encode costs ~50-65µs (mostly the tokenizer, ANS adds only ~9-10µs), decode costs ~19-21µs (mostly ANS, the tokenizer's share is just ~4µs).
-- The same idea stretches to ~4.7× with a bigram table (1.4 MB of table already gets 4.35×). Past ~5× you need an actual language model.
 - The trade-off to respect: the vocabulary becomes part of your on-disk format forever, so version your encodings.
 - **cl100k's raw uint32 packing (1.13x, worse than gzip) is a container artifact, not a tokenizer flaw.** 3-byte packing alone recovers 1.49x, no entropy coder needed, cl100k's 100,277 tokens fit comfortably in 24 bits.
 - **Frequency-sorted token IDs + a cheap variable-length code (streamvbyte) recovers ~78-87% of ANS's ratio at roughly 1/15th the decode latency.** A real, shippable alternative when repeated decode cost matters more than squeezing out the last bit of ratio, and it's a change any tokenizer vendor could make for free in a new vocabulary.
