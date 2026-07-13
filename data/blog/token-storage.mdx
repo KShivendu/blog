@@ -558,11 +558,11 @@ ANS gets close to the entropy limit, but it's just one option, and it turned out
 
 | Tokenizer | uint32 (4-byte) | uint16/3-byte (practical) | + freq-remap, streamvbyte |                  ANS |
 | --------- | --------------: | ------------------------: | ------------------------: | -------------------: |
-| r50k      |           1.16x |            2.31x (uint16) |          2.64x (~1µs dec) | 3.37x (~15-17µs dec) |
-| cl100k    |           1.12x |            1.49x (3-byte) |          2.58x (~1µs dec) | 3.30x (~15-17µs dec) |
-| o200k     |           1.13x |            1.50x (3-byte) |          2.60x (~1µs dec) | 3.32x (~15-17µs dec) |
+| r50k      |           1.16x |            2.31x (uint16) |       2.64x (~1µs decode) | 3.37x (~15µs decode) |
+| cl100k    |           1.12x |            1.49x (3-byte) |       2.58x (~1µs decode) | 3.30x (~17µs decode) |
+| o200k     |           1.13x |            1.50x (3-byte) |       2.60x (~1µs decode) | 3.32x (~20µs decode) |
 
-**No fixed width fixes this, wider just wastes more** (see the glossary above for why cl100k/o200k need 3 bytes at all). Reassigning IDs by frequency rank and packing with [`streamvbyte`](https://github.com/lemire/streamvbyte) (a real SIMD-vectorized library from the FastPFOR family) gets most of the way to ANS's ratio with no entropy coder at all, at a ~15-17x faster decode, a genuine, deployable middle ground.
+**No fixed width fixes this, wider just wastes more** (see the glossary above for why cl100k/o200k need 3 bytes at all). Reassigning IDs by frequency rank and packing with [`streamvbyte`](https://github.com/lemire/streamvbyte) (a real SIMD-vectorized library from the FastPFOR family) gets most of the way to ANS's ratio with no entropy coder at all, at a ~15-20x faster decode, a genuine, deployable middle ground.
 
 ## What AI Labs Should Fix
 
