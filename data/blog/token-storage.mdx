@@ -670,76 +670,39 @@ Note that, as an end user (or DB engine), you don't have to wait for that. You c
 
 ## What This Looks Like in Practice
 
-Here's what all of this looks like as an actual API, not just benchmark numbers. When you insert a document into Qdrant today, you typically send something like:
+Here's the actual API, not just benchmark numbers. One-time setup: register a tokenizer on the field, at the collection level.
 
 ```js
-// Current approach for inserting data:
-PUT /collections/my_collection/points
-{
-  "points": [
-      {
-        "id": 123,
-        "vector": [0.12, -0.34, ...],
-        "payload": { "text": "Token-native storage persists text as token IDs, not UTF-8 bytes..." }
-      },
-  ]
-}
-```
-
-That LZ4 codec (see [the benchmark](#benchmarks) above) has no learned model of the language, just whatever byte patterns happen to repeat within its window. Token-native storage swaps it for the tokenizer's own output as the on-disk representation, instead of throwing token IDs away right after tokenizing:
-
-```js
-// One time: Set tokenizer on collection level for the 'text' field
 PUT /collections/my_collection/index
-{
-  "schema": { "text": { "type": "token", "tokenizer": "r50k" } }
-}
+{ "schema": { "text": { "type": "token", "tokenizer": "r50k" } } }
 ```
 
-The insert call barely changes: `text` still takes plain text, or a client with token IDs on hand can send those instead, as a plain array:
+After that, insert barely changes: `text` still takes a plain string and the engine tokenizes it, or you hand it token IDs directly as an array and skip tokenization entirely.
 
 ```js
-// Insert with token IDs directly instead of text
 PUT /collections/my_collection/points
 {
-  "points": [
-    {
-      "id": 123,
-      "vector": [0.12, -0.34, ...],
-      "payload": { "text": [1858, 6427, 20272, 318, 257, 6997, ...] }
-      // You can still pass raw text for the engine to tokenize
-      // "payload": { "text": "Token-native storage persists text as token IDs, not UTF-8 bytes..." }
-    }
-  ]
+  "points": [{
+    "id": 123,
+    "vector": [0.12, -0.34, ...],
+    "payload": { "text": [1858, 6427, 20272, 318, 257, 6997, ...] } // or a plain string
+  }]
 }
 ```
 
-A string or an array is easy to tell apart, so the database picks the right path: tokenize-then-compress for text, compress directly for token IDs. Either way, ANS compression happens inside the database, on write, and gets reversed on read, so the interface never exposes compressed bytes. The tokenizer itself is a collection-level choice, not a per-document one: mixing tokenizers in the same collection would mean mixing vocabularies, and the static ANS table only makes sense for one vocabulary at a time.
+A string or an array is easy to tell apart, so the database picks the right path, tokenize-then-compress or compress directly. ANS happens on write and reverses on read, invisibly. The tokenizer is a collection-level choice, not per-document: mixing tokenizers means mixing vocabularies, and the static table only makes sense for one.
 
-**What would reading it back look like?** The read side needs the same symmetry: a way to ask for text or for raw token IDs, per field. Qdrant's `with_payload` already controls which fields come back, so extending its value from a boolean to also accept a format string per field keeps the same idiom:
+Reading needs the same symmetry, so `with_payload` takes a format per field instead of just a boolean:
 
 ```js
 POST /collections/my_collection/points/search
-{
-  "vector": [...],
-  "limit": 10,
-  "with_payload": { "text": "tokens" }
-}
-
-//Response:
-{
-  "points": [
-    { "id": 1, "vector": [0.12, -0.34, ...], "payload": {"text": [1858, 6427, 20272, 318, 257, 6997, ...]} },
-    ...
-  ]
-}
+{ "vector": [...], "limit": 10, "with_payload": { "text": "tokens" } }
+// payload comes back as {"text": [1858, 6427, 20272, 318, 257, 6997, ...]}
 ```
 
-Omit the field, or use the plain boolean form, and it defaults to `"text"`, so existing clients see no change. An LLM-facing pipeline asks for `"tokens"` and skips detokenization entirely; anything rendering to a human asks for `"text"` or just leaves the default. This only works end to end if you own the inference stack, since hosted LLM APIs take text prompts, not raw token arrays ([yet](/blog/token-llm-interface)).
+Default stays `"text"`, so existing clients see no change. An LLM-facing pipeline asks for `"tokens"` and skips detokenization; anything human-facing asks for `"text"`. This only closes the loop end to end if you own the inference stack, since hosted LLM APIs take text prompts, not token arrays ([yet](/blog/token-llm-interface)).
 
-The same write path applies when the writer is a model instead of a client. An LLM's sampler produces token IDs before anything detokenizes them to text, so storing generated output (chat logs, summaries, agent traces) as tokens has zero encode cost: persist what the model already produced instead of detokenizing and re-compressing it.
-
-This splits cleanly by workload. Writing-heavy, where LLMs generate most of what gets stored (agent traces, synthetic data, summaries), you get token IDs for free, there's no encode step to pay for. Reading-heavy, where LLMs are the ones pulling documents back out (RAG, agent memory), every future read skips detokenize-then-retokenize entirely, so the cost that matters most just disappears. Human reads stay cheap regardless: detokenizing is the fast half of the round trip, ~4µs in this post's numbers, so a page rendering to a person barely notices the extra step.
+The same symmetry applies when the writer is a model: a sampler produces token IDs before anything detokenizes them, so storing generated output (chat logs, agent traces) this way has zero encode cost. It splits cleanly by workload: writing-heavy (agent traces, synthetic data) gets free token IDs, reading-heavy (RAG, agent memory) skips detokenize-then-retokenize on every future read. Human reads stay cheap either way, detokenizing alone is ~4µs.
 
 ## Limitations
 
@@ -753,7 +716,7 @@ This splits cleanly by workload. Writing-heavy, where LLMs generate most of what
 
 - Switching from UTF-8 bytes to token IDs brings you free compression. OpenAI `r50k` tokenizer hits 2.33x, already beating every byte codec. ANS entropy coding on top gets you to 3.37x.
 - The compression gains are generalizable and across all tokenizers from all vendors. But another massive bonus is never having to tokenize again as models use your data thousands or millions of times in future.
-- Although token native storage is already usable, the ecosystem needs to evolve to make it even better: models don't share a vocabulary yet, and hosted LLM APIs still only take text in and text out.
+- Although token native storage is already usable and benificial, the ecosystem needs to evolve to make it even better: models don't share a vocabulary yet, and hosted LLM APIs still only take text in and text out.
 
 ## Acknowledgements
 
