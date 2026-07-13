@@ -226,7 +226,7 @@ Observations:
 
 1. **r50k raw uint16 already beats every byte codec compression algorithm!**
 2. r50k + static ANS **beats everything by a wide margin.**
-3. Naive 4-byte packing is the worst option for any vocab bigger than uint16 (cl100k/o200k dropped from the chart above, not a real recommendation, see the glossary below for why), but 3-byte packing fixes most of it with no entropy coder at all. **ANS recovers further still, to 3.30x (cl100k) and 3.32x (o200k)**.
+3. 3-byte packing alone (no entropy coder) already recovers most of the gap for cl100k/o200k, both of which lose badly under naive 4-byte packing, dropped from the chart above since it's not a real recommendation (see the [glossary](#glossary) for why). **ANS recovers further still, to 3.30x (cl100k) and 3.32x (o200k)**.
 4. The fairest competitor to r50k+ANS is [`zstd --train`](https://github.com/facebook/zstd/wiki/Zstandard-Dictionary-Compression-format), since it also learns a vocab from the corpus. It reaches 2.61x, still 30% behind! (and its vocab isn't standardized like the tokenizers)
 
 <details>
@@ -450,6 +450,8 @@ Observations:
 3. ANS encoding and decoding steps turned out to be slow. I've propose a cheaper and intermediate path [here](#a-faster-alternative-to-ans-frequency-sorted-token-ids)
 
 4. zstd dict's encoder is surprisingly slow at 128µs, though it decompresses in 2µs.
+
+<a id="glossary"></a>
 
 <details>
 <summary>Full results and latency tables, method glossary</summary>
