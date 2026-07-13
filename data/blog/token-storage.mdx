@@ -566,7 +566,7 @@ ANS gets close to the entropy limit, but it's just one option, and it turned out
 
 ## What AI Labs Should Fix
 
-This is the actual ask of this post. **If you're training the next tokenizer, OpenAI, Anthropic, Alibaba, DeepSeek, Google, whoever, just assign token IDs by frequency rank instead of merge-discovery order.** It costs nothing extra, it's the same vocabulary either way, just a different choice of which integer means which token, and it hands every downstream user some extra token compression by default.
+**To OpenAI, Anthropic, Alibaba, DeepSeek, Google, and anyone else training the next BPE vocabulary: assign token IDs by frequency rank instead of merge-discovery order.** It costs nothing extra, it's the same vocabulary either way, just a different choice of which integer means which token, and it hands every downstream user some extra token compression by default.
 
 You don't have to wait around for that, though. **The remap is just a lookup table you can build yourself.** Apply it in your own storage layer today, no changes to the tokenizer or the model required, and honestly you'll do better than a vendor's version anyway: yours is fit to your corpus, not some generic training mix.
 
