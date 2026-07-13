@@ -25,7 +25,7 @@ The top path is what databases do today: store UTF-8 bytes, compress with a gene
 
 ### Step 1: BPE Tokenization
 
-BPE (Byte Pair Encoding) starts with raw bytes and repeatedly merges the most frequent adjacent pair into a new token, building up a vocabulary of common subwords. OpenAI ships three BPE tokenizers:
+BPE (Byte Pair Encoding) starts with raw bytes and repeatedly merges the most frequent adjacent pair into a new token, building up a vocabulary of common subwords. OpenAI ships [three BPE tokenizers](https://github.com/openai/tiktoken/blob/main/tiktoken_ext/openai_public.py):
 
 1. **r50k**: used by GPT-2/GPT-3, 50,257 tokens and fits in uint16 (= ~65k)
 2. **cl100k**: used by GPT-3.5/GPT-4, 100,277 tokens and fits in 17 bits (131k) but only 24 bits (3 bytes) is practical due to overhead
@@ -45,7 +45,7 @@ Another fun fact is that a every word in a sentence comes with a `" "`, so using
 
 ### Step 2 (Optional): ANS Entropy Coding
 
-Step 1 alone already gets you the ~2.25× above, raw uint16 packing with no compression algorithm running at all. This step is for squeezing further: gzip and LZ4 see opaque bytes and can't know that `[0x01, 0x7F]` is token 383. An entropy coder working directly on token IDs can give frequent tokens short codes: `"the"` is 40x more common than `"embeddings"`, so it gets a much shorter code. I used ANS (Asymmetric Numeral Systems, the entropy coder inside zstd) via the [constriction](https://github.com/bamler-lab/constriction) library.
+Step 1 alone already gets you the ~2.25× above, raw uint16 packing with no compression algorithm running at all. This step is for squeezing further: gzip and LZ4 see opaque bytes and can't know that `[0x01, 0x7F]` is token 383. An entropy coder working directly on token IDs can give frequent tokens short codes: `"the"` is 40x more common than `"embeddings"`, so it gets a much shorter code. I used [ANS](https://en.wikipedia.org/wiki/Asymmetric_numeral_systems) (Asymmetric Numeral Systems, the entropy coder inside zstd) via the [constriction](https://github.com/bamler-lab/constriction) library.
 
 There's one important thing to understand here: the frequency table is **trained once on a large corpus and shared**, not built per document. A per-document table compresses better on paper (it achieved 5x compression), but the decoder needs the table to reconstruct the document, so you'd have to store it alongside each payload. That's ~900 bytes for a typical 512-token chunk, which defeats the purpose.
 
@@ -227,21 +227,21 @@ Observations:
 1. **r50k raw uint16 already beats every byte codec compression algorithm!**
 2. r50k + static ANS **beats everything by a wide margin.**
 3. Naive uint32 packing is the worst option for any vocab bigger than uint16 (cl100k/o200k dropped from the chart above, not a real recommendation), but 3-byte packing fixes most of it with no entropy coder at all (details in the glossary below). **ANS recovers further still, to 3.30x (cl100k) and 3.32x (o200k)**.
-4. The fairest competitor to r50k+ANS is `zstd --train`, since it also learns a vocab from the corpus. It reaches 2.61x, still 30% behind! (and its vocab isn't standardized like the tokenizers)
+4. The fairest competitor to r50k+ANS is [`zstd --train`](https://github.com/facebook/zstd/wiki/Zstandard-Dictionary-Compression-format), since it also learns a vocab from the corpus. It reaches 2.61x, still 30% behind! (and its vocab isn't standardized like the tokenizers)
 
 <details>
 <summary>Digging deeper: does this hold for every tokenizer, and how much is the entropy coder vs. the tokenizer?</summary>
 
 **This isn't an OpenAI-specific trick.** Checked directly against real static frequency tables for every modern LLM tokenizer:
 
-| Tokenizer   |       Vocab |  uint32/16 raw | 3-byte raw | + static ANS |
-| ----------- | ----------: | -------------: | ---------: | -----------: |
-| r50k        |      50,257 | 2.33x (uint16) |          — |        3.37x |
-| cl100k      |     100,277 |          1.13x |      1.49x |        3.30x |
-| o200k       |     200,019 |          1.13x |      1.50x |        3.31x |
-| Qwen2.5     |     151,665 |          1.08x |      1.45x |        3.25x |
-| DeepSeek-V2 |     100,002 |          1.08x |      1.43x |        3.21x |
-| **Gemma-2** | **256,000** |      **1.13x** |  **1.51x** |    **3.36x** |
+| Tokenizer                                                          |       Vocab |  uint32/16 raw | 3-byte raw | + static ANS |
+| ------------------------------------------------------------------ | ----------: | -------------: | ---------: | -----------: |
+| r50k                                                               |      50,257 | 2.33x (uint16) |          — |        3.37x |
+| cl100k                                                             |     100,277 |          1.13x |      1.49x |        3.30x |
+| o200k                                                              |     200,019 |          1.13x |      1.50x |        3.31x |
+| [Qwen2.5](https://huggingface.co/Qwen/Qwen2.5-7B)                  |     151,665 |          1.08x |      1.45x |        3.25x |
+| [DeepSeek-V2](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite) |     100,002 |          1.08x |      1.43x |        3.21x |
+| **[Gemma-2](https://huggingface.co/google/gemma-2-9b)**            | **256,000** |      **1.13x** |  **1.51x** |    **3.36x** |
 
 Gemma has the biggest vocabulary of the six and still comes out with the best compression. Bigger vocab isn't a liability once the packing width is fixed: 3-byte packing covers up to 16M+ token IDs, so even Gemma's 256,000-token vocabulary only uses 18 of the 24 available bits. You can practically never exhaust it.
 
@@ -447,7 +447,7 @@ Observations:
 
 2. **Tokenization is expensive but it's anyways a mandatory step to pass text to the model** so it's free lunch and more importantly, re-usable. Detokenization is fast so it's easy to also show text back to humans.
 
-3. ANS encoding and decoding steps turned out to be slow. I've propose a cheaper and intermediate path [here](/#A-Cheaper-Fix:-Frequency-Sorted-Token-IDs)
+3. ANS encoding and decoding steps turned out to be slow. I've propose a cheaper and intermediate path [here](#a-faster-alternative-to-ans-frequency-sorted-token-ids)
 
 4. zstd dict's encoder is surprisingly slow at 128µs, though it decompresses in 2µs.
 
@@ -510,7 +510,7 @@ Note that every copy of your data: snapshots, backups, write-ahead logs, replica
 <details>
 <summary>Side quest: WordPiece tokenizer used by embedding models like mxbai also compresses well but there's a tiny problem. Expand if curious.</summary>
 
-The mixedbread embedding model (`mxbai-embed-large-v1`) uses BERT's WordPiece tokenizer with a 30,522-token vocabulary. Smaller vocabulary means more common tokens, lower entropy, slightly better compression. Across 1,773 WikiText-103 test articles:
+The mixedbread embedding model ([`mxbai-embed-large-v1`](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1)) uses BERT's WordPiece tokenizer with a 30,522-token vocabulary. Smaller vocabulary means more common tokens, lower entropy, slightly better compression. Across 1,773 WikiText-103 test articles:
 
 | Method                       |   min | median |   max |
 | ---------------------------- | ----: | -----: | ----: |
