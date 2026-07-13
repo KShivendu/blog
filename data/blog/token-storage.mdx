@@ -560,7 +560,7 @@ ANS gets close to the entropy limit, but it's just one option, and it turned out
 | cl100k    |  1.12x |            1.49x (3-byte) |                2.89x |          2.58x (~1µs dec) | 3.30x (~15-17µs dec) |
 | o200k     |  1.13x |            1.50x (3-byte) |                2.90x |          2.60x (~1µs dec) | 3.32x (~15-17µs dec) |
 
-**No fixed width fixes this, wider just wastes more** (see the glossary above for why cl100k/o200k need 3 bytes at all). A frequency-sorted vocabulary gets there without any entropy coder, reaching 2.89-2.90x. Swapping naive varint for `streamvbyte`/`varintgb` (real SIMD-vectorized libraries from the FastPFOR family) trades a bit of ratio for a ~15-17x faster decode than ANS, a genuine, deployable middle ground.
+**No fixed width fixes this, wider just wastes more** (see the glossary above for why cl100k/o200k need 3 bytes at all). A frequency-sorted vocabulary gets there without any entropy coder, reaching 2.89-2.90x. Swapping naive varint for [`streamvbyte`](https://github.com/lemire/streamvbyte) (a real SIMD-vectorized library from the FastPFOR family) trades a bit of ratio for a ~15-17x faster decode than ANS, a genuine, deployable middle ground.
 
 ## What AI Labs Should Fix
 
