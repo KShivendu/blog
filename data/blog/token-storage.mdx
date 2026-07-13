@@ -41,6 +41,8 @@ ratio: ~2.25x
 
 **This napkin math is what gave me the motivation to run the experiment**, and my experiments below prove it in practice.
 
+Another fun fact is that a every word in a sentence comes with a `" "`, so using uint16 token performs better for any word longer than 1 character. Example: `" cat"` is 4 raw bytes (space + 3 letters) but just 1 token, 2 bytes (uint16), an easy win :D
+
 ### Step 2 (Optional): ANS Entropy Coding
 
 Step 1 alone already gets you the ~2.25× above, raw uint16 packing with no compression algorithm running at all. This step is for squeezing further: gzip and LZ4 see opaque bytes and can't know that `[0x01, 0x7F]` is token 383. An entropy coder working directly on token IDs can give frequent tokens short codes: `"the"` is 40x more common than `"embeddings"`, so it gets a much shorter code. I used ANS (Asymmetric Numeral Systems, the entropy coder inside zstd) via the [constriction](https://github.com/bamler-lab/constriction) library.
