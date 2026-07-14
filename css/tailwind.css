@@ -605,6 +605,91 @@ body {
   border-bottom-color: var(--tty-accent);
 }
 
+/* ── Talks index ────────────────────────────────────────────────────────────
+   Same contained buffer + hairline rows as the blog index, but each row carries
+   a muted event/venue subtitle under the title and small labeled external links
+   (video / slides). Titles link out to the external slide deck. Reuses the same
+   accent, muted, hairline and row-hover tokens as .tty-index-row. */
+.tty-talk-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 1.15rem;
+  border-top: 1px solid var(--tty-hair);
+  transition: background-color 0.12s ease;
+}
+.tty-index-list > li:first-child .tty-talk-row {
+  border-top: 0;
+}
+.tty-talk-row:hover {
+  background-color: var(--tty-row-hover);
+}
+.tty-talk-main {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.tty-talk-title {
+  color: #14161a;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  transition: color 0.12s ease;
+}
+.dark .tty-talk-title {
+  color: #dde6e0;
+}
+.tty-talk-title:hover {
+  color: var(--tty-accent);
+}
+.tty-talk-event {
+  color: var(--tty-muted);
+  font-size: 0.8125rem;
+}
+.tty-talk-links {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.9rem;
+  align-items: baseline;
+  padding-top: 0.15rem;
+}
+.tty-talk-link {
+  color: var(--tty-muted);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.2rem;
+  transition: color 0.12s ease;
+}
+.tty-talk-link:hover {
+  color: var(--tty-accent);
+}
+.tty-talk-ext {
+  font-size: 0.7em;
+  color: var(--tty-muted);
+  flex-shrink: 0;
+}
+.tty-talk-title:hover .tty-talk-ext,
+.tty-talk-link:hover .tty-talk-ext {
+  color: var(--tty-accent);
+}
+/* Narrow screens: links drop under the title/event, row stays tidy. */
+@media (max-width: 520px) {
+  .tty-talk-row {
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.75rem 0.9rem;
+  }
+  .tty-talk-links {
+    padding-top: 0;
+  }
+}
+
 /* https://stackoverflow.com/questions/61083813/how-to-avoid-internal-autofill-selected-style-to-be-applied */
 input:-webkit-autofill,
 input:-webkit-autofill:focus {

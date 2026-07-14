@@ -20,9 +20,6 @@ export async function middleware(req, ev) {
   if (pathname == '/linkedin') {
     return NextResponse.redirect('https://www.linkedin.com/in/kshivendu')
   }
-  if (pathname == '/talks') {
-    return NextResponse.redirect('https://kshivendu.github.io/talks')
-  }
   if (pathname == '/iitbh-sheet') {
     return NextResponse.redirect('https://cutt.ly/Xwiam6Vz')
   }
