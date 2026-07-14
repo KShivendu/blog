@@ -417,6 +417,68 @@ body {
   margin: 0;
   border-radius: 0;
 }
+/* Copy button: sits in the title-bar top-right, aligned with the language
+   label. The code surface (gray.800 #1e2822) is dark in BOTH site themes, so
+   the button is tuned for that dark surface rather than the site theme — a
+   muted icon (dark-muted token value) that goes terminal-green on hover, and
+   the terminal-green accent for the copied state. Padding matches .tty-codebar
+   (0.8rem inline) so it lines up with the label's right edge. */
+.tty-codeblock .tty-copy {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.6rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.55rem;
+  width: 1.55rem;
+  padding: 0.28rem;
+  border-radius: 4px;
+  color: #8a968e; /* --tty-muted (dark) — legible on the dark code surface */
+  background: rgba(10, 15, 13, 0.55); /* faint scrim over Night Owl code */
+  border: 1px solid rgba(138, 150, 142, 0.35);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.tty-codeblock .tty-copy:hover {
+  color: #34d399; /* --tty-accent (dark) — terminal green on the dark surface */
+  border-color: rgba(52, 211, 153, 0.6);
+}
+.tty-codeblock .tty-copy:focus-visible {
+  outline: 2px solid #34d399;
+  outline-offset: 1px;
+}
+.tty-codeblock .tty-copy.is-copied {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.7);
+}
+.tty-codeblock .tty-copy svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Inline code that is ALSO a link (a > code, e.g. `naver/splade-v3-doc`).
+   By default it inherits the link's bright accent green (#34d399) plus inline
+   code's bold 600 weight, which reads as loud neon on the dark inline-code
+   surface. Make it read as CODE first — normal inline-code text color, normal
+   weight — with a subtle underline as the only link affordance; shift to the
+   terminal-green accent only on hover. The .dark rule matches the invert
+   theme's specificity so it wins there too. Non-linked inline code and code
+   BLOCKS are untouched. */
+.prose-tty a code {
+  color: #111815; /* gray.900 — normal light inline-code text */
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.dark .prose-tty a code {
+  color: #f0f2f0; /* gray.100 — normal dark inline-code text */
+}
+.prose-tty a:hover code,
+.dark .prose-tty a:hover code {
+  color: var(--tty-accent);
+}
 
 /* ── Tables: bordered, uppercase muted header, tabular figures ───────────── */
 .prose-tty table {
