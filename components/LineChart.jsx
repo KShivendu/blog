@@ -56,14 +56,14 @@ import { useTheme } from 'next-themes'
  *   />
  */
 
-// Graticule categorical palette, led by the azure accent. First entry is
-// swapped to the lighter dark-accent (#47b4f0) in dark mode (see colorsFor).
-const DEFAULT_COLORS = ['#0b72c4', '#0891b2', '#7048e8', '#0d9488', '#64748b', '#16a34a']
+// Categorical palette, led by the Teletype-v2 terminal-green accent. First entry
+// is swapped to the lighter dark-accent (#34d399) in dark mode (see colorsFor).
+const DEFAULT_COLORS = ['#047857', '#0891b2', '#7048e8', '#0d9488', '#64748b', '#2563eb']
 const VIEW_W = 760
 
-// Theme-aware categorical: use the lighter azure as the lead colour in dark.
+// Theme-aware categorical: use the lighter green as the lead colour in dark.
 function colorsFor(isDark) {
-  return isDark ? ['#47b4f0', ...DEFAULT_COLORS.slice(1)] : DEFAULT_COLORS
+  return isDark ? ['#34d399', ...DEFAULT_COLORS.slice(1)] : DEFAULT_COLORS
 }
 
 function palette(isDark) {

@@ -64,22 +64,22 @@ body {
 
 /* ── Teletype terminal chrome ──────────────────────────────────────────── */
 :root {
-  --tty-accent: #0b72c4;
+  --tty-accent: #047857;
   --tty-border: #c8cfc9;
   --tty-bg: #fbfcfb;
   --tty-muted: #5f6570;
   /* faint hairline inside the framed listing + subtle row hover wash */
   --tty-hair: #e3e7e3;
-  --tty-row-hover: rgba(11, 114, 196, 0.055);
+  --tty-row-hover: rgba(4, 120, 87, 0.06);
   --tty-scroll-thumb: #cdd4ce;
 }
 .dark {
-  --tty-accent: #47b4f0;
+  --tty-accent: #34d399;
   --tty-border: #2a322c;
   --tty-bg: #0a0f0d;
   --tty-muted: #8a968e;
   --tty-hair: #1a221c;
-  --tty-row-hover: rgba(71, 180, 240, 0.08);
+  --tty-row-hover: rgba(52, 211, 153, 0.08);
   --tty-scroll-thumb: #313a33;
 }
 
