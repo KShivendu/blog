@@ -46,9 +46,8 @@ const MobileNav = () => {
         {/* Top bar: path label + theme toggle + close, mirrors the site header. */}
         <div
           style={{ borderBottom: '1px solid var(--tty-border)' }}
-          className="flex items-center justify-between px-4 py-4"
+          className="flex items-center justify-end px-4 py-4"
         >
-          <span className="tty-path text-sm">~/menu</span>
           <div className="flex items-center gap-1">
             <ThemeSwitch />
             <button
