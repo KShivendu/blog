@@ -31,11 +31,11 @@
 /* ── Graticule × Teletype-v2 theme tokens ──────────────────────────────── */
 :root {
   /* Graticule's calm faint graph-paper gridline (light) */
-  --grat-gridline: #eef1f6;
+  --grat-gridline: #f4f6f9;
   --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .dark {
-  --grat-gridline: #141922;
+  --grat-gridline: #0f141a;
 }
 
 /* Whole page rests on Graticule's faint 48px graph-paper grid.
