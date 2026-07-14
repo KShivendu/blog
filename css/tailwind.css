@@ -68,12 +68,19 @@ body {
   --tty-border: #c8cfc9;
   --tty-bg: #fbfcfb;
   --tty-muted: #5f6570;
+  /* faint hairline inside the framed listing + subtle row hover wash */
+  --tty-hair: #e3e7e3;
+  --tty-row-hover: rgba(11, 114, 196, 0.055);
+  --tty-scroll-thumb: #cdd4ce;
 }
 .dark {
   --tty-accent: #47b4f0;
   --tty-border: #2a322c;
   --tty-bg: #0a0f0d;
   --tty-muted: #8a968e;
+  --tty-hair: #1a221c;
+  --tty-row-hover: rgba(71, 180, 240, 0.08);
+  --tty-scroll-thumb: #313a33;
 }
 
 /* Shared buffer/path label — the `~/…` prompt used across pages. */
@@ -161,6 +168,119 @@ body {
   font-family: var(--font-mono);
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* ── Contained index listing (blog / home / tags) ──────────────────────────
+   turbopuffer-grade containment expressed in Teletype-v2's terminal idiom:
+   one opaque bordered "buffer" window with a `~/…` path notch, dense aligned
+   rows, right-aligned tabular dates. The page grid shows only OUTSIDE it. */
+.tty-list-frame {
+  position: relative;
+  border: 1px solid var(--tty-border);
+  background: var(--tty-bg);
+  margin-top: 1.35rem;
+}
+
+/* Scrollable row viewport — keeps ~11 posts in view, rest scroll inside the
+   frame behind a subtle, theme-aware scrollbar. */
+.tty-index-scroll {
+  max-height: min(66vh, 640px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tty-scroll-thumb) transparent;
+}
+.tty-index-scroll::-webkit-scrollbar {
+  width: 11px;
+}
+.tty-index-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  border-left: 1px solid var(--tty-border);
+}
+.tty-index-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--tty-scroll-thumb);
+  border: 3px solid var(--tty-bg);
+  border-radius: 0;
+}
+.tty-index-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--tty-muted);
+}
+
+/* One post = one tight, aligned row: title left, date right (tabular). */
+.tty-index-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.72rem 1.15rem;
+  border-top: 1px solid var(--tty-hair);
+  transition: background-color 0.12s ease;
+}
+.tty-index-list > li:first-child .tty-index-row {
+  border-top: 0;
+}
+.tty-index-row:hover {
+  background-color: var(--tty-row-hover);
+}
+.tty-index-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1 1 auto;
+  color: #14161a;
+  font-weight: 500;
+}
+.dark .tty-index-title {
+  color: #dde6e0;
+}
+.tty-index-marker {
+  color: var(--tty-muted);
+  flex-shrink: 0;
+  transition: color 0.12s ease;
+}
+.tty-index-row:hover .tty-index-marker,
+.tty-index-row:hover .tty-index-title {
+  color: var(--tty-accent);
+}
+.tty-index-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tty-index-date {
+  flex-shrink: 0;
+  color: var(--tty-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Small tag pill (e.g. a `guest` marker) beside a title. */
+.tty-pill {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 0.2em 0.45em;
+  color: var(--tty-accent);
+  border: 1px solid var(--tty-border);
+  background: color-mix(in srgb, var(--tty-accent) 8%, transparent);
+  letter-spacing: 0.02em;
+}
+
+/* On narrow screens the date drops under the title, rows stay tidy. */
+@media (max-width: 520px) {
+  .tty-index-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.2rem;
+    padding: 0.7rem 0.9rem;
+  }
+  .tty-index-title {
+    width: 100%;
+  }
+  .tty-index-date {
+    padding-left: 1.25rem;
+  }
 }
 
 .task-list-item::before {

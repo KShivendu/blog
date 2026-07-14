@@ -30,9 +30,6 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
       <article>
         <div className="pt-6">
           <div className="tty-frame mx-auto max-w-none">
-            <span className="tty-frame-path" aria-hidden="true">
-              {`~/blog/${slug}.md`}
-            </span>
             <header>
               <div className="space-y-2">
                 <dl>
