@@ -1,5 +1,5 @@
 import Link from '@/components/Link'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import siteMetadata from '@/data/siteMetadata'
 
 // Compact, tabular date for the aligned index column: "Jan 15, 2026".
@@ -10,12 +10,84 @@ const formatIndexDate = (date) =>
     day: '2-digit',
   })
 
+// ── Fuzzy / typo-tolerant search ────────────────────────────────────────────
+// No dependency: substring → Levenshtein-within-budget → prefix-typo, per term.
+// Damerau (optimal string alignment) distance — adjacent transpositions cost 1,
+// so common typos like "vetcor"→"vector" / "saerch"→"search" are 1 edit.
+function levenshtein(a, b) {
+  const m = a.length
+  const n = b.length
+  if (!m) return n
+  if (!n) return m
+  let prev2 = null
+  let prev = Array.from({ length: n + 1 }, (_, i) => i)
+  for (let i = 1; i <= m; i++) {
+    const cur = new Array(n + 1)
+    cur[0] = i
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      let v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost)
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        v = Math.min(v, prev2[j - 2] + 1)
+      }
+      cur[j] = v
+    }
+    prev2 = prev
+    prev = cur
+  }
+  return prev[n]
+}
+
+// Typo budget scales with term length (short terms must be near-exact).
+const typoBudget = (len) => (len < 4 ? 0 : len < 8 ? 1 : 2)
+
+// Best score for one query term against a field's words + full string.
+function termScore(term, words, fieldStr) {
+  if (fieldStr.includes(term)) return 3 // exact substring — strongest
+  const budget = typoBudget(term.length)
+  if (!budget) return 0
+  let best = 0
+  for (const w of words) {
+    if (Math.abs(w.length - term.length) <= budget) {
+      const d = levenshtein(term, w)
+      if (d <= budget) best = Math.max(best, 2 - d * 0.3) // whole-word typo
+    }
+    if (w.length > term.length) {
+      const dp = levenshtein(term, w.slice(0, term.length))
+      if (dp <= budget) best = Math.max(best, 1.5 - dp * 0.3) // prefix typo (still typing)
+    }
+  }
+  return best
+}
+
+const wordsOf = (s) => s.split(/[^a-z0-9]+/i).filter(Boolean)
+
+function scorePost(terms, fm) {
+  const title = (fm.title || '').toLowerCase()
+  const rest = ((fm.summary || '') + ' ' + (fm.tags || []).join(' ')).toLowerCase()
+  const titleWords = wordsOf(title)
+  const restWords = wordsOf(rest)
+  let total = 0
+  for (const term of terms) {
+    // Title matches count more than summary/tags.
+    const s = Math.max(termScore(term, titleWords, title) * 1.6, termScore(term, restWords, rest))
+    if (s <= 0) return 0 // every term must match somewhere (AND)
+    total += s
+  }
+  return total
+}
+
 export default function ListLayout({ posts, label = 'Blog', meta }) {
   const [searchValue, setSearchValue] = useState('')
-  const filteredBlogPosts = posts.filter((frontMatter) => {
-    const searchContent = frontMatter.title + frontMatter.summary + frontMatter.tags.join(' ')
-    return searchContent.toLowerCase().includes(searchValue.toLowerCase())
-  })
+  const filteredBlogPosts = useMemo(() => {
+    const terms = searchValue.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    if (!terms.length) return posts
+    return posts
+      .map((fm) => ({ fm, score: scorePost(terms, fm) }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((x) => x.fm)
+  }, [posts, searchValue])
 
   return (
     <div className="mx-auto max-w-[960px] pt-6 pb-10">
