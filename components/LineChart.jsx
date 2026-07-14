@@ -56,13 +56,37 @@ import { useTheme } from 'next-themes'
  *   />
  */
 
-const DEFAULT_COLORS = ['#d6336c', '#1c7ed6', '#0e8a6e', '#f08c00', '#7048e8', '#0ca678']
+// Graticule categorical palette, led by the azure accent. First entry is
+// swapped to the lighter dark-accent (#47b4f0) in dark mode (see colorsFor).
+const DEFAULT_COLORS = ['#0b72c4', '#0891b2', '#7048e8', '#0d9488', '#64748b', '#16a34a']
 const VIEW_W = 760
 
+// Theme-aware categorical: use the lighter azure as the lead colour in dark.
+function colorsFor(isDark) {
+  return isDark ? ['#47b4f0', ...DEFAULT_COLORS.slice(1)] : DEFAULT_COLORS
+}
+
 function palette(isDark) {
+  // Teletype-v2 neutrals + Graticule's faint plot gridline (matches page grid).
   return isDark
-    ? { ink: '#e2e8f0', muted: '#94a3b8', grid: '#2b3a4f', axis: '#475569', tip: '#0b1220' }
-    : { ink: '#1e293b', muted: '#64748b', grid: '#eef2f7', axis: '#cbd5e1', tip: '#1e293b' }
+    ? {
+        ink: '#dde6e0',
+        muted: '#8a968e',
+        grid: '#141922',
+        axis: '#38473e',
+        tip: '#0a0f0d',
+        border: '#1e2822',
+        card: '#0d1310',
+      }
+    : {
+        ink: '#14161a',
+        muted: '#5f6570',
+        grid: '#eef1f6',
+        axis: '#c8cfc9',
+        tip: '#14161a',
+        border: '#e0e4e1',
+        card: '#ffffff',
+      }
 }
 
 // 1-2-5 decade ticks within [lo, hi] — the helper used by both reference reports.
@@ -261,7 +285,8 @@ function ChartImpl({
   const fmtTipY = (v) => trim(v) + yUnit
   const esc = (str) => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;')
 
-  const colorOf = (s, i) => s.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length]
+  const CATS = colorsFor(isDark)
+  const colorOf = (s, i) => s.color || CATS[i % CATS.length]
 
   // ── Build SVG layers ─────────────────────────────────────────────────────
   const gridLayer = []
@@ -374,10 +399,10 @@ function ChartImpl({
     <div style={{ margin: '1.5rem 0' }}>
       <div
         style={{
-          border: `1px solid ${C.grid}`,
-          borderRadius: '0.6rem',
+          border: `1px solid ${C.border}`,
+          borderRadius: 0,
           padding: '10px 10px 4px',
-          background: isDark ? '#131c2b' : '#ffffff',
+          background: C.card,
         }}
       >
         <svg
@@ -394,7 +419,7 @@ function ChartImpl({
               fontSize="15"
               fontWeight="600"
               fill={C.ink}
-              fontFamily="Inter, system-ui, sans-serif"
+              fontFamily="var(--font-mono, ui-monospace, monospace)"
             >
               {title}
             </text>
@@ -412,7 +437,7 @@ function ChartImpl({
               textAnchor="middle"
               fontSize="12"
               fill={C.ink}
-              fontFamily="Inter, system-ui, sans-serif"
+              fontFamily="var(--font-mono, ui-monospace, monospace)"
             >
               {xLabel}
             </text>
@@ -423,7 +448,7 @@ function ChartImpl({
               textAnchor="middle"
               fontSize="12"
               fill={C.ink}
-              fontFamily="Inter, system-ui, sans-serif"
+              fontFamily="var(--font-mono, ui-monospace, monospace)"
             >
               {yLabel}
             </text>
