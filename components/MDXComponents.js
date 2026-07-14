@@ -7,6 +7,7 @@ import TOCInline from './TOCInline'
 import Pre from './Pre'
 import { BlogNewsletterForm } from './NewsletterForm'
 import PlotlyChart from './PlotlyChart'
+import LineChart from './LineChart'
 import SpladeVsIF from './SpladeVsIF'
 import TokenCompressionPipeline from './TokenCompressionPipeline'
 import CompressionWidget from './CompressionWidget'
@@ -24,6 +25,7 @@ export const MDXComponents = {
   pre: Pre,
   BlogNewsletterForm: BlogNewsletterForm,
   PlotlyChart,
+  LineChart,
   SpladeVsIF,
   TokenCompressionPipeline,
   CompressionWidget,
