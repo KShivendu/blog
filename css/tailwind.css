@@ -509,6 +509,13 @@ body {
   margin: 0;
   border-radius: 0;
 }
+/* Tighter, code-appropriate line spacing — the prose default (1.71) reads too
+   airy for Fira Code's tall x-height. */
+.tty-codeblock pre,
+.tty-codeblock pre code,
+.tty-codeblock .code-line {
+  line-height: 1.5;
+}
 /* Copy button: sits in the title-bar top-right, aligned with the language
    label. The code surface (gray.800 #1e2822) is dark in BOTH site themes, so
    the button is tuned for that dark surface rather than the site theme — a
