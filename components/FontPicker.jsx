@@ -19,7 +19,6 @@ const MONO = [
   { name: 'Geist Mono', google: 'Geist+Mono:wght@400;500;600' },
   { name: 'JetBrains Mono', google: 'JetBrains+Mono:wght@400;500;600' },
   { name: 'IBM Plex Mono', google: 'IBM+Plex+Mono:wght@400;500;600' },
-  { name: 'Fira Code', google: 'Fira+Code:wght@400;500;600' },
   { name: 'Source Code Pro', google: 'Source+Code+Pro:wght@400;500;600' },
   { name: 'Roboto Mono', google: 'Roboto+Mono:wght@400;500;600' },
   { name: 'Space Mono', google: 'Space+Mono:wght@400;700' },
