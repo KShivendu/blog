@@ -8,6 +8,7 @@ import formatDate from '@/lib/utils/formatDate'
 export default function ListLayout({
   posts,
   title,
+  path = '~/blog',
   initialDisplayPosts = [],
   pagination,
   description,
@@ -24,14 +25,17 @@ export default function ListLayout({
 
   return (
     <>
-      <div className="divide-y">
-        <div className="space-y-2 pt-6 pb-8 md:space-y-5">
-          <h1 className="text-3xl font-extrabold leading-9 tracking-tight text-gray-900 dark:text-gray-100 sm:text-4xl sm:leading-10 md:text-6xl md:leading-14">
+      <div>
+        <div className="space-y-4 pt-6 pb-8">
+          <div className="tty-buffer">
+            <h1 className="tty-path text-2xl font-semibold tracking-tight sm:text-3xl">{path}</h1>
+            <span className="tty-cursor" aria-hidden="true" />
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            <span className="text-gray-400 dark:text-gray-500">{'// '}</span>
             {title}
-          </h1>
-          {description && (
-            <p className="text-lg leading-7 text-gray-500 dark:text-gray-400">{description}</p>
-          )}
+            {description ? ` — ${description}` : ` — ${posts.length} entries`}
+          </p>
           <div className="relative max-w-lg">
             <input
               aria-label="Search articles"
@@ -56,29 +60,34 @@ export default function ListLayout({
             </svg>
           </div>
         </div>
-        <ul>
-          {!filteredBlogPosts.length && 'No posts found.'}
+        <ul className="mt-6">
+          {!filteredBlogPosts.length && (
+            <li className="py-4 text-sm text-gray-500 dark:text-gray-400">
+              <span className="tty-marker">{'~ '}</span>No posts found.
+            </li>
+          )}
           {displayPosts.map((frontMatter) => {
-            const { slug, date, title, summary, tags } = frontMatter
+            const { slug, date, title, summary } = frontMatter
             return (
-              <li key={slug} className="py-2">
-                <article className="space-y-1">
-                  <div>
-                    <h3 className="text-2xl font-bold leading-8 tracking-tight">
+              <li key={slug} className="tty-row py-4">
+                <article className="space-y-1.5">
+                  <div className="flex items-baseline gap-2">
+                    <span className="tty-marker shrink-0" aria-hidden="true">
+                      {'~/'}
+                    </span>
+                    <h3 className="text-lg font-semibold leading-7 tracking-tight sm:text-xl">
                       <Link href={`/blog/${slug}`} className="text-gray-900 dark:text-gray-100">
                         {title}
                       </Link>
                     </h3>
-                    {/* <div className="flex flex-wrap">
-                      {tags.map((tag) => (
-                        <Tag key={tag} text={tag} />
-                      ))}
-                    </div> */}
                   </div>
-                  <div className="prose max-w-none text-gray-500 dark:text-gray-400">{summary}</div>
-                  <dl>
+                  <div className="prose max-w-none pl-6 text-sm text-gray-500 dark:text-gray-400">
+                    {summary}
+                  </div>
+                  <dl className="pl-6">
                     <dt className="sr-only">Published on</dt>
-                    <dd className="text-base font-medium leading-6 text-gray-500 dark:text-gray-400">
+                    <dd className="text-xs font-medium leading-6 text-gray-500 dark:text-gray-400">
+                      <span className="text-gray-400 dark:text-gray-500">{'$ date '}</span>
                       <time dateTime={date}>{formatDate(date)}</time>
                     </dd>
                   </dl>

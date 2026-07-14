@@ -8,36 +8,38 @@ import Comments from '@/components/comments'
 import ScrollTopAndComment from '@/components/ScrollTopAndComment'
 
 export default function PostLayout({ frontMatter, authorDetails, next, prev, children }) {
-  const { date, title } = frontMatter
+  const { slug, date, title } = frontMatter
 
   return (
     <SectionContainer>
       <BlogSEO url={`${siteMetadata.siteUrl}/blog/${frontMatter.slug}`} {...frontMatter} />
       <ScrollTopAndComment />
       <article>
-        <div>
-          <header>
-            <div className="space-y-1 border-b border-gray-200 pb-10 text-center dark:border-gray-700">
-              <dl>
-                <div>
+        <div className="pt-6">
+          <div className="tty-frame mx-auto max-w-[76ch]">
+            <span className="tty-frame-path" aria-hidden="true">
+              {`~/blog/${slug}.md`}
+            </span>
+            <header>
+              <div className="space-y-2">
+                <dl>
                   <dt className="sr-only">Published on</dt>
-                  <dd className="text-base font-medium leading-6 text-gray-500 dark:text-gray-400">
+                  <dd className="text-xs font-medium leading-6 text-gray-500 dark:text-gray-400">
+                    <span className="text-gray-400 dark:text-gray-500">{'$ date · '}</span>
                     <time dateTime={date}>{formatDate(date)}</time>
                   </dd>
+                </dl>
+                <div>
+                  <PageTitle>{title}</PageTitle>
                 </div>
-              </dl>
-              <div>
-                <PageTitle>{title}</PageTitle>
               </div>
-            </div>
-          </header>
+            </header>
+            <div className="prose max-w-none pt-8 pb-2 dark:prose-dark">{children}</div>
+          </div>
           <div
             className="divide-y divide-gray-200 pb-8 dark:divide-gray-700 xl:divide-y-0 "
             style={{ gridTemplateRows: 'auto 1fr' }}
           >
-            <div className="divide-y divide-gray-200 dark:divide-gray-700 xl:col-span-3 xl:row-span-2 xl:pb-0">
-              <div className="prose max-w-none pt-10 pb-8 dark:prose-dark">{children}</div>
-            </div>
             <Comments frontMatter={frontMatter} />
             <footer>
               <div className="flex flex-col text-sm font-medium sm:flex-row sm:justify-between sm:text-base">

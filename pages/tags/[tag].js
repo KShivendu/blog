@@ -49,7 +49,7 @@ export default function Tag({ posts, tag }) {
         title={`${tag} - ${siteMetadata.author}`}
         description={`${tag} tags - ${siteMetadata.author}`}
       />
-      <ListLayout posts={posts} title={title} />
+      <ListLayout posts={posts} path={`~/tags/${kebabCase(tag)}`} title={`Tagged “${tag}”`} />
     </>
   )
 }
