@@ -31,11 +31,11 @@
 /* ── Graticule × Teletype-v2 theme tokens ──────────────────────────────── */
 :root {
   /* Graticule's calm faint graph-paper gridline (light) */
-  --grat-gridline: #f7f9fb;
+  --grat-gridline: #f2f5f8;
   --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .dark {
-  --grat-gridline: #0d1216;
+  --grat-gridline: #12171f;
 }
 
 /* Whole page rests on Graticule's faint 48px graph-paper grid.
@@ -466,6 +466,87 @@ body {
     max-width: 100%;
     overflow-x: auto;
   }
+}
+
+/* ── About / author profile card ──────────────────────────────────────────
+   Sits inside the same framed buffer as a post. Avatar + identity on the left,
+   an aligned key-value contact block underneath — no `~`/`$` prompts, just
+   quiet muted keys with green-on-hover links. Prose bio follows in .prose-tty. */
+.tty-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+  align-items: flex-start;
+}
+@media (min-width: 640px) {
+  .tty-profile {
+    flex-direction: row;
+    gap: 1.9rem;
+  }
+}
+.tty-avatar {
+  flex-shrink: 0;
+  border: 1px solid var(--tty-border);
+  padding: 4px;
+  background: var(--tty-bg);
+  line-height: 0;
+}
+.tty-avatar img {
+  display: block;
+}
+.tty-profile-body {
+  min-width: 0;
+}
+.tty-profile-name {
+  font-size: 1.5rem;
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.tty-profile-role {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--tty-muted);
+  line-height: 1.5;
+}
+.tty-profile-role .at {
+  color: var(--tty-accent);
+  padding: 0 0.4em;
+}
+
+/* Aligned key → value contact block (github / twitter / email / resume). */
+.tty-kv {
+  margin: 1.15rem 0 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.35rem 1.1rem;
+  font-size: 0.8125rem;
+}
+.tty-kv dt {
+  color: var(--tty-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tty-kv dd {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tty-kv a {
+  color: #14161a;
+  text-decoration: none;
+  border-bottom: 1px solid var(--tty-border);
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.dark .tty-kv a {
+  color: #dde6e0;
+}
+.tty-kv a:hover {
+  color: var(--tty-accent);
+  border-bottom-color: var(--tty-accent);
 }
 
 /* https://stackoverflow.com/questions/61083813/how-to-avoid-internal-autofill-selected-style-to-be-applied */

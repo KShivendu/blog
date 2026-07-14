@@ -1,43 +1,59 @@
-import SocialIcon from '@/components/social-icons'
 import Image from '@/components/Image'
+import Link from '@/components/Link'
 import { PageSEO } from '@/components/SEO'
+
+// Strip protocol / trailing slash so a link reads as a terminal-style handle.
+const handle = (url) => (url ? url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '') : '')
 
 export default function AuthorLayout({ children, frontMatter }) {
   const { name, avatar, occupation, company, email, twitter, linkedin, github } = frontMatter
 
+  const contact = [
+    github && { key: 'github', href: github, label: handle(github) },
+    twitter && { key: 'twitter', href: twitter, label: `@${handle(twitter).split('/').pop()}` },
+    linkedin && { key: 'linkedin', href: linkedin, label: handle(linkedin) },
+    email && { key: 'email', href: `mailto:${email}`, label: email },
+    { key: 'resume', href: '/resume-pdf', label: 'resume-pdf' },
+  ].filter(Boolean)
+
   return (
     <>
       <PageSEO title={`About - ${name}`} description={`About me - ${name}`} />
-      <div className="divide-y">
-        <div className="space-y-3 pt-6 pb-8">
-          <div className="tty-buffer">
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">About</h1>
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            <span className="text-gray-400 dark:text-gray-500">{'// '}</span>
-            {name}
-          </p>
-        </div>
-        <div className="items-start space-y-2 xl:grid xl:grid-cols-3 xl:gap-x-8 xl:space-y-0">
-          <div className="flex flex-col items-center space-x-2 pt-8">
-            <Image
-              src={avatar}
-              alt="avatar"
-              width="192px"
-              height="192px"
-              className="h-48 w-48 rounded-full"
-            />
-            <h3 className="pt-4 pb-2 text-2xl font-bold leading-8 tracking-tight">{name}</h3>
-            <div className="text-gray-500 dark:text-gray-400">{occupation}</div>
-            <div className="text-gray-500 dark:text-gray-400">{company}</div>
-            <div className="flex space-x-3 pt-6">
-              <SocialIcon kind="mail" href={`mailto:${email}`} />
-              <SocialIcon kind="github" href={github} />
-              <SocialIcon kind="linkedin" href={linkedin} />
-              <SocialIcon kind="twitter" href={twitter} />
+      <div className="pt-6 pb-10">
+        <div className="tty-frame tty-article">
+          <span className="tty-frame-path" aria-hidden="true">
+            about.md
+          </span>
+
+          <header className="tty-article-head">
+            <div className="tty-profile">
+              <div className="tty-avatar">
+                <Image src={avatar} alt={name} width={132} height={132} className="h-28 w-28" />
+              </div>
+              <div className="tty-profile-body">
+                <h1 className="tty-profile-name">{name}</h1>
+                <p className="tty-profile-role">
+                  {occupation}
+                  <span className="at" aria-hidden="true">
+                    @
+                  </span>
+                  {company}
+                </p>
+                <dl className="tty-kv">
+                  {contact.map(({ key, href, label }) => (
+                    <div key={key} className="contents">
+                      <dt>{key}</dt>
+                      <dd>
+                        <Link href={href}>{label}</Link>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
             </div>
-          </div>
-          <div className="prose max-w-none pt-8 pb-8 dark:prose-dark xl:col-span-2">{children}</div>
+          </header>
+
+          <div className="prose-tty prose max-w-none pt-10 pb-2 dark:prose-dark">{children}</div>
         </div>
       </div>
     </>
