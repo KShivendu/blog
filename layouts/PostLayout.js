@@ -29,7 +29,7 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
       <ScrollTopAndComment />
       <article>
         <div className="pt-6">
-          <div className="tty-frame mx-auto max-w-[92ch]">
+          <div className="tty-frame mx-auto max-w-none">
             <span className="tty-frame-path" aria-hidden="true">
               {`~/blog/${slug}.md`}
             </span>
