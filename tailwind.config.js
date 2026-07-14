@@ -25,9 +25,16 @@ module.exports = {
         14: '3.5rem',
       },
       fontFamily: {
-        // Teletype-v2 is mono-forward: Geist Mono everywhere.
-        sans: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
-        mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+        // Reading text = Inter; code + terminal chrome = Fira Code.
+        sans: [
+          'Inter',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"Segoe UI"',
+          'Roboto',
+          'sans-serif',
+        ],
+        mono: ['"Fira Code"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       colors: {
         // Accent: Teletype-v2 terminal green.

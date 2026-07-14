@@ -28,11 +28,75 @@
     url('/static/fonts/geist-mono-latin-600-normal.woff') format('woff');
 }
 
+/* Reading typeface: Inter (body + headings) — common, elegant, highly legible.
+   Self-hosted from /public (@fontsource), so it works under the prod CSP. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/inter-latin-400-normal.woff2') format('woff2'),
+    url('/static/fonts/inter-latin-400-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/static/fonts/inter-latin-500-normal.woff2') format('woff2'),
+    url('/static/fonts/inter-latin-500-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/static/fonts/inter-latin-600-normal.woff2') format('woff2'),
+    url('/static/fonts/inter-latin-600-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/static/fonts/inter-latin-700-normal.woff2') format('woff2'),
+    url('/static/fonts/inter-latin-700-normal.woff') format('woff');
+}
+
+/* Code typeface: Fira Code — used for code blocks, inline code, and the
+   terminal chrome (nav, filename notches, listing dates, chart labels). */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/fira-code-latin-400-normal.woff2') format('woff2'),
+    url('/static/fonts/fira-code-latin-400-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/static/fonts/fira-code-latin-500-normal.woff2') format('woff2'),
+    url('/static/fonts/fira-code-latin-500-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/static/fonts/fira-code-latin-600-normal.woff2') format('woff2'),
+    url('/static/fonts/fira-code-latin-600-normal.woff') format('woff');
+}
+
 /* ── Graticule × Teletype-v2 theme tokens ──────────────────────────────── */
 :root {
   /* Graticule's calm faint graph-paper gridline (light) */
   --grat-gridline: #f2f5f8;
-  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Mono = code + terminal chrome; Body = article reading text. */
+  --font-mono: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
 }
 .dark {
   --grat-gridline: #12171f;
@@ -368,6 +432,16 @@ body {
    (figures, tables, code, images, chart/widget wrappers) breaks out wider. */
 .prose-tty {
   max-width: none;
+  /* Article reading text is Inter; code stays mono (rule below). */
+  font-family: var(--font-body);
+}
+/* Code — inline + blocks — keeps the mono (Fira Code) face inside prose. */
+.prose-tty :where(code, pre, kbd, samp) {
+  font-family: var(--font-mono);
+}
+/* The post title reads as content, so it takes the body face too. */
+.tty-article-head h1 {
+  font-family: var(--font-body);
 }
 .prose-tty > p,
 .prose-tty > ul,
