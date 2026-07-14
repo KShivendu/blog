@@ -509,6 +509,16 @@ body {
   margin: 0;
   border-radius: 0;
 }
+/* The <code> inside a <pre> must not carry the inline-code chrome (its own
+   darker background + border + padding) — that renders a nested "box in a box".
+   Reset it so the code sits directly on the <pre> surface. */
+.tty-codeblock pre code,
+.prose-tty pre code {
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
 /* Tighter, code-appropriate line spacing — the prose default (1.71) reads too
    airy for Fira Code's tall x-height. */
 .tty-codeblock pre,
