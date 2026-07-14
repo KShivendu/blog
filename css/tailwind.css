@@ -508,6 +508,10 @@ body {
 .tty-codeblock pre {
   margin: 0;
   border-radius: 0;
+  /* Darker code surface (gray.900) — the shade the old inner box used — now
+     applied to the whole code area. Tighter vertical padding. */
+  background: #111815;
+  padding: 9px 16px;
 }
 /* The <code> inside a <pre> must not carry the inline-code chrome (its own
    darker background + border + padding) — that renders a nested "box in a box".
