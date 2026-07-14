@@ -4,13 +4,22 @@ export default function SpladeVsIF() {
   const { resolvedTheme } = useTheme()
   const dark = resolvedTheme === 'dark'
 
-  const bg = dark ? '#1e293b' : '#f8fafc'
-  const divider = dark ? '#334155' : '#e2e8f0'
-  const pill = dark ? '#0f172a' : '#ffffff'
-  const pillStroke = dark ? '#475569' : '#cbd5e1'
-  const textMain = dark ? '#e2e8f0' : '#1e293b'
-  const textMuted = dark ? '#94a3b8' : '#64748b'
-  const arrow = dark ? '#64748b' : '#94a3b8'
+  // Match the site's native chart palette (see LineChart.jsx / BarChart.jsx).
+  const ink = dark ? '#dde6e0' : '#14161a'
+  const muted = dark ? '#8a968e' : '#5f6570'
+  const border = dark ? '#1e2822' : '#e0e4e1'
+  const card = dark ? '#0d1310' : '#ffffff'
+  const accent = dark ? '#34d399' : '#047857' // site accent (terminal green)
+
+  const mono = 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)'
+
+  const bg = card
+  const divider = border
+  const pill = card
+  const pillStroke = border
+  const textMain = ink
+  const textMuted = muted
+  const arrow = muted
 
   const W = 660
   const H = 268
@@ -43,7 +52,7 @@ export default function SpladeVsIF() {
   const r2ScoreY = r2DotCY - 13 // 182
 
   return (
-    <div style={{ margin: '1.5rem 0' }}>
+    <div style={{ margin: '1.5rem 0', fontFamily: mono }}>
       <svg
         viewBox={`0 0 ${W} ${H}`}
         style={{
@@ -51,8 +60,9 @@ export default function SpladeVsIF() {
           maxWidth: `${W}px`,
           display: 'block',
           margin: '0 auto',
-          fontFamily: 'Inter, sans-serif',
-          borderRadius: '10px',
+          fontFamily: mono,
+          border: `1px solid ${border}`,
+          borderRadius: '2px',
         }}
         aria-label="SPLADE vs SPLADE-IF pipeline comparison"
       >
@@ -65,7 +75,7 @@ export default function SpladeVsIF() {
           </marker>
         </defs>
 
-        <rect width={W} height={H} rx="10" fill={bg} />
+        <rect width={W} height={H} rx="2" fill={bg} />
         <line x1="0" y1="134" x2={W} y2="134" stroke={divider} strokeWidth="1" />
 
         {/* Row labels */}
@@ -84,7 +94,7 @@ export default function SpladeVsIF() {
           y={r1qY}
           width={pillW}
           height="26"
-          rx="6"
+          rx="2"
           fill={pill}
           stroke={pillStroke}
           strokeWidth="1.5"
@@ -99,7 +109,7 @@ export default function SpladeVsIF() {
           y={r1dY}
           width={pillW}
           height="26"
-          rx="6"
+          rx="2"
           fill={pill}
           stroke={pillStroke}
           strokeWidth="1.5"
@@ -116,7 +126,7 @@ export default function SpladeVsIF() {
         </text>
 
         {/* SPLADE encoder box (query side) */}
-        <rect x={boxX} y={r1qY} width={boxW} height="26" rx="6" fill="#6366f1" />
+        <rect x={boxX} y={r1qY} width={boxW} height="26" rx="2" fill="#6366f1" />
         <text
           x={boxX + boxW / 2}
           y={r1qCY + 4}
@@ -134,7 +144,7 @@ export default function SpladeVsIF() {
           y={r1dY}
           width={boxW}
           height="26"
-          rx="6"
+          rx="2"
           fill={divider}
           stroke={pillStroke}
           strokeWidth="1.5"
@@ -218,7 +228,7 @@ export default function SpladeVsIF() {
           y={r1ScoreY}
           width={scoreW}
           height="26"
-          rx="6"
+          rx="2"
           fill={pill}
           stroke={pillStroke}
           strokeWidth="1.5"
@@ -242,7 +252,7 @@ export default function SpladeVsIF() {
           y={r2qY}
           width={pillW}
           height="26"
-          rx="6"
+          rx="2"
           fill={pill}
           stroke={pillStroke}
           strokeWidth="1.5"
@@ -257,7 +267,7 @@ export default function SpladeVsIF() {
           y={r2dY}
           width={pillW}
           height="26"
-          rx="6"
+          rx="2"
           fill={pill}
           stroke={pillStroke}
           strokeWidth="1.5"
@@ -274,7 +284,7 @@ export default function SpladeVsIF() {
         </text>
 
         {/* Tokenizer box */}
-        <rect x={boxX} y={r2qY} width={boxW} height="26" rx="6" fill="#10b981" />
+        <rect x={boxX} y={r2qY} width={boxW} height="26" rx="2" fill={accent} />
         <text
           x={boxX + boxW / 2}
           y={r2qCY + 4}
@@ -292,7 +302,7 @@ export default function SpladeVsIF() {
           y={r2dY}
           width={boxW}
           height="26"
-          rx="6"
+          rx="2"
           fill={divider}
           stroke={pillStroke}
           strokeWidth="1.5"
@@ -347,14 +357,14 @@ export default function SpladeVsIF() {
         />
 
         {/* dot product */}
-        <circle cx={dotCX} cy={r2DotCY} r="18" fill={pill} stroke="#10b981" strokeWidth="2" />
+        <circle cx={dotCX} cy={r2DotCY} r="18" fill={pill} stroke={accent} strokeWidth="2" />
         <text
           x={dotCX}
           y={r2DotCY + 6}
           textAnchor="middle"
           fontSize="18"
           fontWeight="700"
-          fill="#10b981"
+          fill={accent}
         >
           ·
         </text>
@@ -376,7 +386,7 @@ export default function SpladeVsIF() {
           y={r2ScoreY}
           width={scoreW}
           height="26"
-          rx="6"
+          rx="2"
           fill={pill}
           stroke={pillStroke}
           strokeWidth="1.5"

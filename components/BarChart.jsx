@@ -318,7 +318,16 @@ function ChartImpl({
   if (horizontal) {
     const rowH = mobile ? 34 : 30
     H = height || topPad + N * rowH + 44
-    m = mobile ? { t: topPad, r: 48, b: 42, l: 148 } : { t: topPad, r: 74, b: 44, l: 208 }
+    // Size the label gutter to the LONGEST category label (monospace) instead of
+    // a fixed width — short labels ("heart") no longer leave a big empty column.
+    const maxLabelChars = cats.reduce((mx, c) => Math.max(mx, String(c).length), 1)
+    const labelW = maxLabelChars * catLabelFont * 0.62
+    const leftFloor = mobile ? 40 : 56
+    const leftCap = mobile ? 160 : 220
+    // +26 keeps the label→bar gap and leaves `truncate` (m.l-16) enough room to
+    // avoid clipping a full-width label by a rounding pixel.
+    const leftM = Math.min(leftCap, Math.max(leftFloor, Math.round(labelW + 26)))
+    m = mobile ? { t: topPad, r: 48, b: 42, l: leftM } : { t: topPad, r: 74, b: 44, l: leftM }
   } else {
     H = height || (mobile ? 360 : 420)
     // extra bottom room for angled category labels
