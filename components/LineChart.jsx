@@ -204,6 +204,9 @@ function ChartImpl({
   const C = palette(isDark)
 
   const tipRef = useRef(null)
+  const hLineRef = useRef(null)
+  const activeXRef = useRef(null)
+  const [activeX, setActiveX] = useState(null)
   const [hidden, setHidden] = useState(() => new Set())
 
   const toggle = (name) =>
@@ -217,8 +220,8 @@ function ChartImpl({
   const moveTip = (e) => {
     const t = tipRef.current
     if (!t) return
-    t.style.left = Math.min(e.clientX + 14, window.innerWidth - 250) + 'px'
-    t.style.top = e.clientY + 14 + 'px'
+    t.style.left = Math.min(e.clientX + 14, window.innerWidth - 300) + 'px'
+    t.style.top = Math.min(e.clientY + 14, window.innerHeight - 140) + 'px'
   }
   const showTip = (e, html) => {
     const t = tipRef.current
@@ -356,26 +359,98 @@ function ChartImpl({
       pts.forEach(([x, y], pi) => {
         const px = xS(x)
         const py = yS(y)
-        const tip =
-          `<b style="color:#fff">${esc(s.name)}</b>` +
-          `<br>${esc(xLabel || 'x')}: ${esc(xLabelFor(x))}${esc(xUnit)}` +
-          `<br>${esc(yLabel || 'y')}: ${esc(fmtTipY(y))}`
+        // Markers are non-interactive; the crosshair overlay drives all hover.
+        // A hairline card-coloured halo keeps the marker crisp where the line
+        // passes through it (turbopuffer's dots read cleanly the same way).
+        const halo = shape === 'ring' ? {} : { stroke: C.card, strokeWidth: 1 }
         markerLayer.push(
-          <g
-            key={`mk${si}-${pi}`}
-            style={{ cursor: 'pointer' }}
-            onMouseEnter={(e) => showTip(e, tip)}
-            onMouseMove={moveTip}
-            onMouseLeave={hideTip}
-          >
-            {/* enlarged transparent hit target */}
-            <circle cx={px} cy={py} r={10} fill="transparent" />
-            {markerNode(shape, px, py, 4.5, c, `sym${si}-${pi}`)}
+          <g key={`mk${si}-${pi}`} style={{ pointerEvents: 'none' }}>
+            {markerNode(shape, px, py, 4, c, `sym${si}-${pi}`, halo)}
           </g>
         )
       })
     }
   })
+
+  // ── Crosshair ─────────────────────────────────────────────────────────────
+  // Union of every visible series' x-values (sorted), plus each x's pixel pos.
+  // We snap the cursor to the nearest of these, so the readout only re-renders
+  // when the snapped x changes (not per pixel). The horizontal follow-line and
+  // tooltip position are updated imperatively via refs (no re-render).
+  const visSeries = series
+    .map((s, i) => ({ s, i, c: colorOf(s, i) }))
+    .filter(({ s }) => !hidden.has(s.name))
+
+  const xSet = new Set()
+  visSeries.forEach(({ s }) =>
+    (s.points || []).forEach(([x, y]) => {
+      if (x != null && y != null) xSet.add(x)
+    })
+  )
+  const unionXs = [...xSet].sort((a, b) => a - b)
+  const unionPx = unionXs.map((x) => xS(x))
+
+  const buildTipHtml = (ux) => {
+    const rows = visSeries
+      .map(({ s, c }) => {
+        const pt = (s.points || []).find(([x]) => x === ux)
+        if (!pt || pt[1] == null) return ''
+        return (
+          `<div style="display:flex;align-items:center;gap:6px;margin-top:3px">` +
+          `<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${c};flex:none"></span>` +
+          `<span style="flex:1 1 auto">${esc(s.name)}</span>` +
+          `<b style="color:#fff;margin-left:10px">${esc(fmtTipY(pt[1]))}</b></div>`
+        )
+      })
+      .filter(Boolean)
+      .join('')
+    if (!rows) return ''
+    return (
+      `<div style="font-weight:600;color:#fff;padding-bottom:5px;margin-bottom:3px;` +
+      `border-bottom:1px solid rgba(255,255,255,0.14)">` +
+      `${esc(xLabel || 'x')}: ${esc(xLabelFor(ux))}${esc(xUnit)}</div>` +
+      rows
+    )
+  }
+
+  const onCrosshairMove = (e) => {
+    if (!unionXs.length) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    const px = ((e.clientX - rect.left) / rect.width) * W
+    let bi = 0
+    let bd = Infinity
+    for (let i = 0; i < unionPx.length; i++) {
+      const d = Math.abs(unionPx[i] - px)
+      if (d < bd) {
+        bd = d
+        bi = i
+      }
+    }
+    const ux = unionXs[bi]
+    if (ux !== activeXRef.current) {
+      activeXRef.current = ux
+      setActiveX(ux)
+    }
+    // Horizontal follow-line: imperative, clamped to the plot area.
+    const hy = Math.max(m.t, Math.min(m.t + ph, ((e.clientY - rect.top) / rect.height) * H))
+    const hl = hLineRef.current
+    if (hl) {
+      hl.setAttribute('y1', hy)
+      hl.setAttribute('y2', hy)
+      hl.style.opacity = '0.45'
+    }
+    const html = buildTipHtml(ux)
+    if (html) showTip(e, html)
+    else hideTip()
+  }
+
+  const onCrosshairLeave = () => {
+    activeXRef.current = null
+    setActiveX(null)
+    if (hLineRef.current) hLineRef.current.style.opacity = '0'
+    hideTip()
+  }
 
   const legendSwatch = (s, i) => {
     const c = colorOf(s, i)
@@ -425,11 +500,90 @@ function ChartImpl({
             </text>
           )}
           {gridLayer}
-          {/* axis baselines */}
+          {/* faint plot frame (contained, like turbopuffer) + darker L/B axes */}
+          <rect
+            x={m.l}
+            y={m.t}
+            width={pw}
+            height={ph}
+            fill="none"
+            stroke={C.grid}
+            pointerEvents="none"
+          />
           <line x1={m.l} y1={m.t} x2={m.l} y2={m.t + ph} stroke={C.axis} />
           <line x1={m.l} y1={m.t + ph} x2={m.l + pw} y2={m.t + ph} stroke={C.axis} />
           {seriesLayer}
           {markerLayer}
+          {/* Crosshair: vertical snapped line + emphasised points at active x */}
+          {activeX != null &&
+            (() => {
+              const cx = xS(activeX)
+              const nodes = [
+                <line
+                  key="cx-v"
+                  x1={cx}
+                  y1={m.t}
+                  x2={cx}
+                  y2={m.t + ph}
+                  stroke={C.axis}
+                  strokeWidth={1}
+                  strokeOpacity={0.9}
+                  pointerEvents="none"
+                />,
+              ]
+              visSeries.forEach(({ s, i, c }) => {
+                const pt = (s.points || []).find(([x]) => x === activeX)
+                if (!pt || pt[1] == null) return
+                const px = xS(pt[0])
+                const py = yS(pt[1])
+                nodes.push(
+                  <circle
+                    key={`cx-halo-${i}`}
+                    cx={px}
+                    cy={py}
+                    r={7.5}
+                    fill="none"
+                    stroke={c}
+                    strokeWidth={1.5}
+                    strokeOpacity={0.55}
+                    pointerEvents="none"
+                  />
+                )
+                nodes.push(
+                  markerNode(s.marker || 'circle', px, py, 4.5, c, `cx-sym-${i}`, {
+                    pointerEvents: 'none',
+                  })
+                )
+              })
+              return <g>{nodes}</g>
+            })()}
+          {/* Faint horizontal follow-line (imperative y, no re-render) */}
+          <line
+            ref={hLineRef}
+            x1={m.l}
+            x2={m.l + pw}
+            y1={m.t}
+            y2={m.t}
+            stroke={C.axis}
+            strokeWidth={1}
+            strokeDasharray="3 4"
+            style={{ opacity: 0 }}
+            pointerEvents="none"
+          />
+          {/* Transparent overlay: captures all pointer motion for the crosshair */}
+          <rect
+            x={m.l}
+            y={m.t}
+            width={pw}
+            height={ph}
+            fill="transparent"
+            style={{ touchAction: 'none', cursor: 'crosshair' }}
+            onPointerMove={onCrosshairMove}
+            onPointerDown={onCrosshairMove}
+            onPointerLeave={onCrosshairLeave}
+            onPointerUp={onCrosshairLeave}
+            onPointerCancel={onCrosshairLeave}
+          />
           {xLabel && (
             <text
               x={m.l + pw / 2}
@@ -505,11 +659,14 @@ function ChartImpl({
           fontSize: '11.5px',
           lineHeight: 1.5,
           padding: '8px 11px',
-          borderRadius: '8px',
+          borderRadius: '7px',
+          border: '1px solid rgba(255,255,255,0.14)',
+          fontVariantNumeric: 'tabular-nums',
           opacity: 0,
           transition: 'opacity 0.08s',
-          boxShadow: '0 6px 20px rgba(0,0,0,0.22)',
-          maxWidth: '240px',
+          boxShadow: '0 6px 20px rgba(0,0,0,0.28)',
+          minWidth: '150px',
+          maxWidth: '280px',
           left: 0,
           top: 0,
         }}
