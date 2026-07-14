@@ -104,7 +104,7 @@ export default function ListLayout({ posts, label = 'Blog', meta }) {
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
             placeholder="search"
-            className="block w-full border border-gray-300 bg-transparent px-3 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500"
+            className="bg-[var(--tty-bg)] block w-full border border-gray-300 px-3 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:text-gray-100 dark:placeholder:text-gray-500"
           />
           <svg
             className="absolute right-2.5 top-2 h-4 w-4 text-gray-400 dark:text-gray-500"
