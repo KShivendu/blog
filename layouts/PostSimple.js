@@ -22,7 +22,6 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
                 <dl>
                   <dt className="sr-only">Published on</dt>
                   <dd className="text-xs font-medium leading-6 text-gray-500 dark:text-gray-400">
-                    <span className="text-gray-400 dark:text-gray-500">{'$ date · '}</span>
                     <time dateTime={date}>{formatDate(date)}</time>
                   </dd>
                 </dl>
