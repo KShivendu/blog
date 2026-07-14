@@ -129,9 +129,9 @@ export default function SpladeVsIF() {
         <rect x={boxX} y={r1qY} width={boxW} height="26" rx="2" fill="#6366f1" />
         <text
           x={boxX + boxW / 2}
-          y={r1qCY + 4}
+          y={r1qCY + 3.5}
           textAnchor="middle"
-          fontSize="12"
+          fontSize="10.5"
           fontWeight="700"
           fill="white"
         >
@@ -287,9 +287,9 @@ export default function SpladeVsIF() {
         <rect x={boxX} y={r2qY} width={boxW} height="26" rx="2" fill={accent} />
         <text
           x={boxX + boxW / 2}
-          y={r2qCY + 4}
+          y={r2qCY + 3.5}
           textAnchor="middle"
-          fontSize="12"
+          fontSize="10.5"
           fontWeight="700"
           fill="white"
         >
