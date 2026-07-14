@@ -496,12 +496,13 @@ body {
 }
 .tty-codebar {
   font-size: 0.72rem;
-  color: var(--tty-muted);
-  padding: 0.4rem 0.8rem;
-  border-bottom: 1px solid var(--tty-border);
+  /* Same dark surface as the code (#1e2822 in both themes) so there's no
+     different-coloured band above the code — the label just sits on it. */
+  color: #8a968e;
+  padding: 0.35rem 0.8rem 0;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  background: var(--tty-hair);
+  background: #1e2822;
   font-family: var(--font-mono);
 }
 /* The <pre> lives inside the bordered block; drop its rounding/margins. */
