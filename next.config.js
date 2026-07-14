@@ -3,14 +3,20 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 })
 
 // You might need to insert additional domains in script-src if you are using external services
+// In development only, allow Google Fonts so the dev-only <FontPicker> can
+// audition faces live. Production CSP stays locked to 'self'.
+const isDev = process.env.NODE_ENV === 'development'
+const gfStyle = isDev ? ' https://fonts.googleapis.com' : ''
+// gstatic = Google Fonts files; oxide.computer = auditioning their (paid) faces.
+const gfFont = isDev ? ' https://fonts.gstatic.com https://oxide.computer' : ''
 const ContentSecurityPolicy = `
   default-src 'self';
   script-src 'self' 'unsafe-eval' 'unsafe-inline' giscus.app;
-  style-src 'self' 'unsafe-inline';
+  style-src 'self' 'unsafe-inline'${gfStyle};
   img-src * blob: data:;
   media-src 'none';
   connect-src *;
-  font-src 'self';
+  font-src 'self'${gfFont};
   frame-src giscus.app
 `
 

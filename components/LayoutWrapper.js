@@ -6,6 +6,7 @@ import SectionContainer from './SectionContainer'
 import Footer from './Footer'
 import MobileNav from './MobileNav'
 import ThemeSwitch from './ThemeSwitch'
+import FontPicker from './FontPicker'
 
 const LayoutWrapper = ({ children }) => {
   return (
@@ -47,6 +48,7 @@ const LayoutWrapper = ({ children }) => {
         <main className="mb-auto">{children}</main>
         <Footer />
       </div>
+      {process.env.NODE_ENV === 'development' && <FontPicker />}
     </SectionContainer>
   )
 }
