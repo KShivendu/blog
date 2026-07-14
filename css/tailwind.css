@@ -128,6 +128,7 @@ body {
   border: 1px solid var(--tty-border);
   padding: 1.9rem 1.15rem 1.5rem;
   margin-top: 1.35rem;
+  background: var(--tty-bg);
 }
 @media (min-width: 640px) {
   .tty-frame {
