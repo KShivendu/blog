@@ -475,6 +475,55 @@ body {
   }
 }
 
+/* ── Phone: strip the frame chrome, go (near) edge-to-edge ──────────────────
+   On phones the bordered "buffer" frame, its floating filename notch, ~2rem
+   padding and the surrounding graph-paper grid all steal scarce horizontal
+   width and add noise. Drop them so the ~16px SectionContainer gutter is the
+   only inset and the content (text, figures, code, tables) uses the full
+   viewport — matching turbopuffer's borderless mobile reading view. Identity
+   (Geist Mono, green accent, light/dark, no prompts) is untouched. */
+@media (max-width: 640px) {
+  /* Quiet the graph-paper grid — with the frame gone it reads as noise. */
+  body {
+    background-image: none;
+  }
+
+  /* Article "buffer": no border, no notch, no frame padding. */
+  .tty-frame {
+    border: 0;
+    padding: 0;
+    margin-top: 0.5rem;
+    background: transparent;
+  }
+  .tty-frame-path {
+    display: none;
+  }
+
+  /* Listing "buffer": drop the outer border too, keep the rows + hairlines. */
+  .tty-list-frame {
+    border-left: 0;
+    border-right: 0;
+    margin-top: 0.75rem;
+  }
+
+  /* Full-width visual blocks; code/pre scroll inside their own box. */
+  .tty-codeblock {
+    max-width: 100%;
+  }
+  .prose-tty pre {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  /* Long URLs / unbreakable tokens must wrap, never widen the page. */
+  .prose-tty p,
+  .prose-tty li,
+  .prose-tty a,
+  .prose-tty blockquote {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}
+
 /* ── About / author profile card ──────────────────────────────────────────
    Sits inside the same framed buffer as a post. Avatar + identity on the left,
    an aligned key-value contact block underneath — no `~`/`$` prompts, just
