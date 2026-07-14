@@ -2,6 +2,66 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Teletype-v2 typeface: Geist Mono (mono-forward), self-hosted from /public. */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/geist-mono-latin-400-normal.woff2') format('woff2'),
+    url('/static/fonts/geist-mono-latin-400-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/static/fonts/geist-mono-latin-500-normal.woff2') format('woff2'),
+    url('/static/fonts/geist-mono-latin-500-normal.woff') format('woff');
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/static/fonts/geist-mono-latin-600-normal.woff2') format('woff2'),
+    url('/static/fonts/geist-mono-latin-600-normal.woff') format('woff');
+}
+
+/* ── Graticule × Teletype-v2 theme tokens ──────────────────────────────── */
+:root {
+  /* Graticule's calm faint graph-paper gridline (light) */
+  --grat-gridline: #eef1f6;
+  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.dark {
+  --grat-gridline: #141922;
+}
+
+/* Whole page rests on Graticule's faint 48px graph-paper grid.
+   Teletype-v2 neutrals for the paper + ink. */
+html {
+  background-color: #fbfcfb;
+}
+.dark html,
+html.dark {
+  background-color: #0a0f0d;
+}
+body {
+  min-height: 100vh;
+  color: #14161a;
+  font-family: var(--font-mono);
+  font-feature-settings: 'tnum' 1;
+  background-color: #fbfcfb;
+  background-image: linear-gradient(var(--grat-gridline) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grat-gridline) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+.dark body {
+  color: #dde6e0;
+  background-color: #0a0f0d;
+}
+
 .task-list-item::before {
   @apply hidden;
 }
@@ -11,7 +71,7 @@
 }
 
 .footnotes {
-  @apply pt-8 mt-12 border-t border-gray-200 dark:border-gray-700;
+  @apply mt-12 border-t border-gray-200 pt-8 dark:border-gray-700;
 }
 
 .csl-entry {

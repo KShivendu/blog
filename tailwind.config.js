@@ -25,11 +25,40 @@ module.exports = {
         14: '3.5rem',
       },
       fontFamily: {
-        sans: ['InterVariable', ...defaultTheme.fontFamily.sans],
+        // Teletype-v2 is mono-forward: Geist Mono everywhere.
+        sans: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+        mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       colors: {
-        primary: colors.emerald, // I like sky, emerlad, red, stone, lime, amber, cyan
-        gray: colors.neutral,
+        // Accent: Graticule azure/blue (replaces Teletype's terminal green).
+        // 500 = light accent #0B72C4, 400 = dark accent #47B4F0.
+        primary: {
+          50: '#eff8ff',
+          100: '#dbeefe',
+          200: '#bfe1fd',
+          300: '#7cc4f3',
+          400: '#47b4f0',
+          500: '#0b72c4',
+          600: '#0a63aa',
+          700: '#0b5390',
+          800: '#0f4675',
+          900: '#123c62',
+          950: '#0c2740',
+        },
+        // Neutrals: Teletype-v2 cool/green-tinted true-neutral (light + dark).
+        gray: {
+          50: '#FBFCFB', // light bg
+          100: '#F0F2F0', // light surface
+          200: '#E0E4E1', // light border
+          300: '#C8CFC9', // hairline / axis
+          400: '#8A968E', // dark muted
+          500: '#5F6570', // light muted
+          600: '#464C51',
+          700: '#2A322C',
+          800: '#1E2822', // dark border / code bg
+          900: '#111815', // dark surface / near-ink
+          950: '#0A0F0D', // dark bg
+        },
       },
       typography: (theme) => ({
         DEFAULT: {
@@ -48,9 +77,15 @@ module.exports = {
               color: theme('colors.gray.900'),
             },
             h2: {
-              fontWeight: '700',
+              fontWeight: '600',
               letterSpacing: theme('letterSpacing.tight'),
               color: theme('colors.gray.900'),
+              paddingBottom: '0.4rem',
+              borderBottom: `1px dashed ${theme('colors.gray.200')}`,
+            },
+            'h2::before': {
+              content: '"## "',
+              color: theme('colors.primary.500'),
             },
             h3: {
               fontWeight: '600',
@@ -63,8 +98,9 @@ module.exports = {
               backgroundColor: theme('colors.gray.800'),
             },
             code: {
-              color: theme('colors.pink.500'),
+              color: theme('colors.gray.900'),
               backgroundColor: theme('colors.gray.100'),
+              border: `1px solid ${theme('colors.gray.200')}`,
               paddingLeft: '4px',
               paddingRight: '4px',
               paddingTop: '2px',
@@ -105,9 +141,9 @@ module.exports = {
           css: {
             color: theme('colors.gray.300'),
             a: {
-              color: theme('colors.primary.500'),
+              color: theme('colors.primary.400'),
               '&:hover': {
-                color: `${theme('colors.primary.400')} !important`,
+                color: `${theme('colors.primary.300')} !important`,
               },
               code: { color: theme('colors.primary.400') },
             },
@@ -117,9 +153,14 @@ module.exports = {
               color: theme('colors.gray.100'),
             },
             h2: {
-              fontWeight: '700',
+              fontWeight: '600',
               letterSpacing: theme('letterSpacing.tight'),
               color: theme('colors.gray.100'),
+              borderBottom: `1px dashed ${theme('colors.gray.800')}`,
+            },
+            'h2::before': {
+              content: '"## "',
+              color: theme('colors.primary.400'),
             },
             h3: {
               fontWeight: '600',
@@ -132,7 +173,9 @@ module.exports = {
               backgroundColor: theme('colors.gray.800'),
             },
             code: {
-              backgroundColor: theme('colors.gray.800'),
+              color: theme('colors.gray.100'),
+              backgroundColor: theme('colors.gray.900'),
+              border: `1px solid ${theme('colors.gray.800')}`,
             },
             details: {
               backgroundColor: theme('colors.gray.800'),
