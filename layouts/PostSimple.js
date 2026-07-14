@@ -3,12 +3,13 @@ import PageTitle from '@/components/PageTitle'
 import SectionContainer from '@/components/SectionContainer'
 import { BlogSEO } from '@/components/SEO'
 import siteMetadata from '@/data/siteMetadata'
-import formatDate from '@/lib/utils/formatDate'
 import Comments from '@/components/comments'
 import ScrollTopAndComment from '@/components/ScrollTopAndComment'
 
+const isoDate = (date) => new Date(date).toISOString().slice(0, 10)
+
 export default function PostLayout({ frontMatter, authorDetails, next, prev, children }) {
-  const { slug, date, title } = frontMatter
+  const { date, title, readingTime } = frontMatter
 
   return (
     <SectionContainer>
@@ -16,24 +17,33 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
       <ScrollTopAndComment />
       <article>
         <div className="pt-6">
-          <div className="tty-frame mx-auto max-w-none">
-            <header>
-              <div className="space-y-2">
-                <dl>
-                  <dt className="sr-only">Published on</dt>
-                  <dd className="text-xs font-medium leading-6 text-gray-500 dark:text-gray-400">
-                    <time dateTime={date}>{formatDate(date)}</time>
-                  </dd>
-                </dl>
-                <div>
-                  <PageTitle>{title}</PageTitle>
-                </div>
+          <div className="tty-frame tty-article">
+            <span className="tty-frame-path" aria-hidden="true">
+              {frontMatter.slug}.md
+            </span>
+            <header className="tty-article-head">
+              <dl>
+                <dt className="sr-only">Published on</dt>
+                <dd className="tty-meta">
+                  <time dateTime={date}>{isoDate(date)}</time>
+                  {readingTime?.text && (
+                    <>
+                      <span className="sep" aria-hidden="true">
+                        ·
+                      </span>
+                      <span>{readingTime.text}</span>
+                    </>
+                  )}
+                </dd>
+              </dl>
+              <div className="pt-1">
+                <PageTitle>{title}</PageTitle>
               </div>
             </header>
-            <div className="prose max-w-none pt-8 pb-2 dark:prose-dark">{children}</div>
+            <div className="prose-tty prose max-w-none pt-8 pb-2 dark:prose-dark">{children}</div>
           </div>
           <div
-            className="divide-y divide-gray-200 pb-8 dark:divide-gray-700 xl:divide-y-0 "
+            className="tty-article divide-y divide-gray-200 pb-8 dark:divide-gray-700 xl:divide-y-0 "
             style={{ gridTemplateRows: 'auto 1fr' }}
           >
             <Comments frontMatter={frontMatter} />

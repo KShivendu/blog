@@ -396,7 +396,7 @@ function ChartImpl({
   }
 
   return (
-    <div style={{ margin: '1.5rem 0' }}>
+    <div className="line-chart" style={{ margin: '1.5rem 0' }}>
       <div
         style={{
           border: `1px solid ${C.border}`,

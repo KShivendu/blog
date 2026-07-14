@@ -14,10 +14,10 @@ const discussUrl = (slug) =>
     `${siteMetadata.siteUrl}/blog/${slug}`
   )}`
 
-const postDateTemplate = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }
+const isoDate = (date) => new Date(date).toISOString().slice(0, 10)
 
 export default function PostLayout({ frontMatter, authorDetails, next, prev, children }) {
-  const { slug, fileName, date, title, tags } = frontMatter
+  const { slug, fileName, date, title, readingTime } = frontMatter
 
   return (
     <SectionContainer>
@@ -29,25 +29,38 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
       <ScrollTopAndComment />
       <article>
         <div className="pt-6">
-          <div className="tty-frame mx-auto max-w-none">
-            <header>
-              <div className="space-y-2">
-                <dl>
-                  <dt className="sr-only">Published on</dt>
-                  <dd className="text-xs font-medium leading-6 text-gray-500 dark:text-gray-400">
-                    <time dateTime={date}>
-                      {new Date(date).toLocaleDateString(siteMetadata.locale, postDateTemplate)}
-                    </time>
-                  </dd>
-                </dl>
-                <div>
-                  <PageTitle>{title}</PageTitle>
-                </div>
+          <div className="tty-frame tty-article">
+            <span className="tty-frame-path" aria-hidden="true">
+              {slug}.md
+            </span>
+            <header className="tty-article-head">
+              <dl>
+                <dt className="sr-only">Published on</dt>
+                <dd className="tty-meta">
+                  <time dateTime={date}>{isoDate(date)}</time>
+                  {readingTime?.text && (
+                    <>
+                      <span className="sep" aria-hidden="true">
+                        ·
+                      </span>
+                      <span>{readingTime.text}</span>
+                    </>
+                  )}
+                  <span className="sep" aria-hidden="true">
+                    ·
+                  </span>
+                  <Link href={discussUrl(slug)} rel="nofollow">
+                    discuss
+                  </Link>
+                </dd>
+              </dl>
+              <div className="pt-1">
+                <PageTitle>{title}</PageTitle>
               </div>
             </header>
-            <div className="prose max-w-none pt-8 pb-2 dark:prose-dark">{children}</div>
+            <div className="prose-tty prose max-w-none pt-8 pb-2 dark:prose-dark">{children}</div>
           </div>
-          <div className="divide-y divide-gray-200 pb-8 dark:divide-gray-700">
+          <div className="tty-article divide-y divide-gray-200 pb-8 dark:divide-gray-700">
             <div className="pt-6 pb-6 text-sm text-gray-700 dark:text-gray-300">
               <Link href={discussUrl(slug)} rel="nofollow">
                 {'Discuss on Twitter'}
@@ -57,7 +70,7 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
             </div>
             <Comments frontMatter={frontMatter} />
           </div>
-          <div className="pt-4 pb-2">
+          <div className="tty-article pt-4 pb-2">
             <Link
               href="/blog"
               className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
@@ -66,7 +79,7 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
             </Link>
           </div>
           {(next || prev) && (
-            <div className="flex justify-between border-t border-gray-200 py-8 text-sm font-medium dark:border-gray-700">
+            <div className="tty-article flex justify-between border-t border-gray-200 py-8 text-sm font-medium dark:border-gray-700">
               {prev ? (
                 <div>
                   <h2 className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
