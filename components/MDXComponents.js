@@ -8,6 +8,7 @@ import Pre from './Pre'
 import { BlogNewsletterForm } from './NewsletterForm'
 import PlotlyChart from './PlotlyChart'
 import LineChart from './LineChart'
+import BarChart from './BarChart'
 import SpladeVsIF from './SpladeVsIF'
 import TokenCompressionPipeline from './TokenCompressionPipeline'
 import CompressionWidget from './CompressionWidget'
@@ -26,6 +27,7 @@ export const MDXComponents = {
   BlogNewsletterForm: BlogNewsletterForm,
   PlotlyChart,
   LineChart,
+  BarChart,
   SpladeVsIF,
   TokenCompressionPipeline,
   CompressionWidget,

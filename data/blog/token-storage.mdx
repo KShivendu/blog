@@ -15,7 +15,7 @@ authors: ['default']
 
 Every vector search engine stores two things for each point: the vector and the payload. The AI community has gone out to compress the vectors with [quantization](https://qdrant.tech/articles/what-is-vector-quantization/) and [MRL](https://huggingface.co/blog/matryoshka). However, the text payload gets raw UTF-8, or LZ4 at best, even though the **systems that actually consume it (embedders, rerankers, LLMs) operate on tokens, not bytes**. I realised that **using OpenAI r50k token IDs over raw text already achieves 2.33× compression**, beating every byte-level codec, and a static entropy coder on top reaches 3.37× (beating even a corpus-trained zstd), yes, **tokenization gives you free compression!**
 
-**My whole point is that if agents are going to be the biggest users of your system, then your system should speak their language: tokens.** This post argues for **token-native storage** (read/write text as BPE token IDs, not UTF-8 bytes) anywhere models are the primary readers and writers: search engines, local files, LLM agent traces, or text-heavy APIs. I'll show my point with experiments, talk about limitations, and how the community can help get rid of them.
+In other words, **if agents are going to be the [biggest users](https://x.com/eastdakota/status/2062212701414187452) of your system, then your system should speak their language: tokens**. This post argues for **token-native storage** (read/write text as BPE token IDs, not UTF-8 bytes) anywhere models are the primary readers and writers: search engines, local files, LLM agent traces, text-heavy APIs, and eventually the web. I'll show my point with experiments, talk about limitations, and how the community can help get rid of them.
 
 ## How Token-Native Storage Works
 
@@ -136,90 +136,51 @@ export const storageData = {
   ],
 }
 
-export const focusButtonStyle = {
-  bgcolor: '#cbd5e1',
-  bordercolor: '#64748b',
-  font: { color: '#1e293b', size: 10 },
-  activecolor: '#94a3b8',
-  pad: { t: 2, b: 2, l: 4, r: 4 },
-}
-
-<PlotlyChart
-  data={[
+<BarChart
+  orientation="horizontal"
+  title="Median compression ratio, 1,773 WikiText-103 articles"
+  subtitle="faded = byte codecs, full color = token-native approach (raw or + ANS)"
+  valueLabel="compression ratio (higher is better)"
+  valueUnit="×"
+  valueMax={4.2}
+  valueTicks={[0, 1, 2, 3, 4]}
+  views={[
     {
-      type: 'bar',
-      orientation: 'h',
-      x: storageData.x,
-      y: storageData.y,
-      marker: { color: storageData.color, opacity: storageData.opacity },
-      text: storageData.text,
-      textposition: 'outside',
+      label: 'All',
+      categories: storageData.y,
+      series: [
+        {
+          name: 'compression ratio',
+          values: storageData.x,
+          colors: storageData.color,
+          opacities: storageData.opacity,
+          text: storageData.text,
+          textPosition: 'outside',
+        },
+      ],
+    },
+    {
+      label: 'Focus',
+      categories: [
+        'Raw UTF-8',
+        'LZ4 (used in Qdrant/Elastic)',
+        'r50k uint16 raw',
+        'o200k 3-byte raw',
+        'r50k + static ANS',
+        'o200k + static ANS',
+      ],
+      series: [
+        {
+          name: 'compression ratio',
+          values: [1.0, 1.15, 2.33, 1.52, 3.37, 3.32],
+          colors: ['#94a3b8', '#94a3b8', '#60a5fa', '#93c5fd', '#10b981', '#6ee7b7'],
+          opacities: [0.75, 0.75, 1, 1, 1, 1],
+          text: ['1.0×', '1.15×', '2.33×', '1.52×', '3.37×', '3.32×'],
+          textPosition: 'outside',
+        },
+      ],
     },
   ]}
-  layout={{
-    title: {
-      text: 'Median compression ratio, 1,773 WikiText-103 articles<br><sup>faded = byte codecs, full color = token-native approach (raw or + ANS)</sup>',
-      font: { size: 14 },
-    },
-    xaxis: { title: 'compression ratio (higher is better)', range: [0, 4.2] },
-    yaxis: { autorange: 'reversed' },
-    height: 480,
-    margin: { t: 64, r: 80, b: 48, l: 240 },
-    showlegend: false,
-    updatemenus: [
-      {
-        type: 'buttons',
-        direction: 'left',
-        x: 1,
-        xanchor: 'right',
-        y: 1.18,
-        yanchor: 'top',
-        showactive: true,
-        ...focusButtonStyle,
-        buttons: [
-          {
-            label: 'All',
-            method: 'restyle',
-            args: [
-              {
-                x: [storageData.x],
-                y: [storageData.y],
-                'marker.color': [storageData.color],
-                'marker.opacity': [storageData.opacity],
-                text: [storageData.text],
-              },
-              [0],
-            ],
-          },
-          {
-            label: 'Focus',
-            method: 'restyle',
-            args: [
-              {
-                x: [[1.0, 1.15, 2.33, 1.52, 3.37, 3.32]],
-                y: [
-                  [
-                    'Raw UTF-8',
-                    'LZ4 (used in Qdrant/Elastic)',
-                    'r50k uint16 raw',
-                    'o200k 3-byte raw',
-                    'r50k + static ANS',
-                    'o200k + static ANS',
-                  ],
-                ],
-                'marker.color': [
-                  ['#94a3b8', '#94a3b8', '#60a5fa', '#93c5fd', '#10b981', '#6ee7b7'],
-                ],
-                'marker.opacity': [[0.75, 0.75, 1, 1, 1, 1]],
-                text: [['1.0×', '1.15×', '2.33×', '1.52×', '3.37×', '3.32×']],
-              },
-              [0],
-            ],
-          },
-        ],
-      },
-    ],
-  }}
 />
 
 Observations:
@@ -303,142 +264,65 @@ export const latencyData = {
   encAnsText: ['', '', '', '', '', '', '', '', '', '9µs', '10µs', '9µs'],
   decAns: [0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 17, 20],
   decAnsText: ['', '', '', '', '', '', '', '', '', '15µs', '17µs', '20µs'],
-  fullOpacity: Array(12).fill(1),
 }
 
-<PlotlyChart
-  data={[
-    {
-      type: 'bar',
-      name: 'encode (raw)',
-      offsetgroup: 'encode',
-      x: latencyData.categories,
-      y: latencyData.encRaw,
-      marker: { color: '#60a5fa', opacity: latencyData.rawOpacity },
-      text: latencyData.encRawText,
-      textposition: 'inside',
-    },
-    {
-      type: 'bar',
-      name: 'decode (raw)',
-      offsetgroup: 'decode',
-      x: latencyData.categories,
-      y: latencyData.decRaw,
-      marker: { color: '#10b981', opacity: latencyData.rawOpacity },
-      text: latencyData.decRawText,
-      textposition: 'inside',
-    },
-    {
-      type: 'bar',
-      name: 'encode (+ ANS)',
-      offsetgroup: 'encode',
-      x: latencyData.categories,
-      y: latencyData.encAns,
-      marker: { color: '#1d4ed8' },
-      text: latencyData.encAnsText,
-      textposition: 'inside',
-    },
-    {
-      type: 'bar',
-      name: 'decode (+ ANS)',
-      offsetgroup: 'decode',
-      x: latencyData.categories,
-      y: latencyData.decAns,
-      marker: { color: '#065f46' },
-      text: latencyData.decAnsText,
-      textposition: 'inside',
-    },
+export const latencyFocus = {
+  categories: ['LZ4', 'r50k tokenizer', 'o200k tokenizer', 'r50k + ANS', 'o200k + ANS'],
+  encRaw: [15, 43, 104, 43, 104],
+  decRaw: [1, 4, 4, 4, 4],
+  encAns: [0, 0, 0, 9, 9],
+  decAns: [0, 0, 0, 15, 20],
+  rawOpacity: [0.6, 1, 1, 1, 1],
+  encRawText: ['15µs', '43µs', '104µs', '43µs', '104µs'],
+  decRawText: ['1µs', '4µs', '4µs', '4µs', '4µs'],
+  encAnsText: ['', '', '', '9µs', '9µs'],
+  decAnsText: ['', '', '', '15µs', '20µs'],
+}
+
+export const latencySeries = (d) => [
+  {
+    name: 'encode (raw)',
+    group: 'encode',
+    color: '#60a5fa',
+    values: d.encRaw,
+    opacities: d.rawOpacity,
+    text: d.encRawText,
+  },
+  {
+    name: 'decode (raw)',
+    group: 'decode',
+    color: '#10b981',
+    values: d.decRaw,
+    opacities: d.rawOpacity,
+    text: d.decRawText,
+  },
+  {
+    name: 'encode (+ ANS)',
+    group: 'encode',
+    color: '#1d4ed8',
+    values: d.encAns,
+    text: d.encAnsText,
+  },
+  {
+    name: 'decode (+ ANS)',
+    group: 'decode',
+    color: '#065f46',
+    values: d.decAns,
+    text: d.decAnsText,
+  },
+]
+
+<BarChart
+  orientation="vertical"
+  stacked
+  title="Encode/decode latency, median, 200 WikiText-103 articles"
+  subtitle="faded = byte codecs, full color = token-native approach (tokenizer, with or without ANS)"
+  valueLabel="microseconds"
+  valueUnit="µs"
+  views={[
+    { label: 'All', categories: latencyData.categories, series: latencySeries(latencyData) },
+    { label: 'Focus', categories: latencyFocus.categories, series: latencySeries(latencyFocus) },
   ]}
-  layout={{
-    title: {
-      text: 'Encode/decode latency, median, 200 WikiText-103 articles<br><sup>faded = byte codecs, full color = token-native approach (tokenizer, with or without ANS)</sup>',
-      font: { size: 14 },
-    },
-    yaxis: { title: 'microseconds' },
-    barmode: 'stack',
-    height: 420,
-    margin: { t: 64, r: 24, b: 48, l: 60 },
-    legend: { orientation: 'h', y: -0.18, traceorder: 'normal' },
-    updatemenus: [
-      {
-        type: 'buttons',
-        direction: 'left',
-        x: 1,
-        xanchor: 'right',
-        y: 1.2,
-        yanchor: 'top',
-        showactive: true,
-        ...focusButtonStyle,
-        buttons: [
-          {
-            label: 'All',
-            method: 'restyle',
-            args: [
-              {
-                x: [
-                  latencyData.categories,
-                  latencyData.categories,
-                  latencyData.categories,
-                  latencyData.categories,
-                ],
-                y: [latencyData.encRaw, latencyData.decRaw, latencyData.encAns, latencyData.decAns],
-                'marker.opacity': [
-                  latencyData.rawOpacity,
-                  latencyData.rawOpacity,
-                  latencyData.fullOpacity,
-                  latencyData.fullOpacity,
-                ],
-                text: [
-                  latencyData.encRawText,
-                  latencyData.decRawText,
-                  latencyData.encAnsText,
-                  latencyData.decAnsText,
-                ],
-              },
-              [0, 1, 2, 3],
-            ],
-          },
-          {
-            label: 'Focus',
-            method: 'restyle',
-            args: [
-              (() => {
-                const cats = [
-                  'LZ4',
-                  'r50k tokenizer',
-                  'o200k tokenizer',
-                  'r50k + ANS',
-                  'o200k + ANS',
-                ]
-                return {
-                  x: [cats, cats, cats, cats],
-                  y: [
-                    [15, 43, 104, 43, 104],
-                    [1, 4, 4, 4, 4],
-                    [0, 0, 0, 9, 9],
-                    [0, 0, 0, 15, 20],
-                  ],
-                  'marker.opacity': [
-                    [0.6, 1, 1, 1, 1],
-                    [0.6, 1, 1, 1, 1],
-                    [1, 1, 1, 1, 1],
-                    [1, 1, 1, 1, 1],
-                  ],
-                  text: [
-                    ['15µs', '43µs', '104µs', '43µs', '104µs'],
-                    ['1µs', '4µs', '4µs', '4µs', '4µs'],
-                    ['', '', '', '9µs', '9µs'],
-                    ['', '', '', '15µs', '20µs'],
-                  ],
-                }
-              })(),
-              [0, 1, 2, 3],
-            ],
-          },
-        ],
-      },
-    ],
-  }}
 />
 
 Observations:
