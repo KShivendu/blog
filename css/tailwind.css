@@ -390,7 +390,7 @@ body {
 }
 .prose-tty figure,
 .prose-tty p:has(img),
-.prose-tty div:has(> img),
+.prose-tty div:has(img),
 .prose-tty span:has(img) {
   text-align: center;
 }
