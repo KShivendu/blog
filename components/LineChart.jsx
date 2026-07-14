@@ -22,16 +22,26 @@ import { useTheme } from 'next-themes'
  *   yTicks     Array    explicit y ticks (same shape). Omit to auto-generate.
  *   xMin/xMax/yMin/yMax  number   optional domain overrides
  *   xUnit/yUnit  string  suffix appended to tooltip values (e.g. ' ms')
+ *   yTipDecimals number  decimal places for the y value in the tooltip
+ *                        (default 2; raise for fine-grained metrics like NDCG)
  *   height     number   SVG height in px (default 440); width fills container
  *   series     Array of {
  *       name        string
  *       color       string       CSS colour (falls back to a palette)
- *       marker      'circle' | 'square' | 'triangle' | 'diamond' | 'ring'
+ *       marker      'circle' | 'square' | 'triangle' | 'diamond' | 'ring' | 'star'
  *       dashed      boolean       draw the line dashed (fit / reference lines)
- *       showLine    boolean       default true
+ *       showLine    boolean       default true (set false for a scatter/markers-
+ *                                 only series with no connecting line)
  *       showMarkers boolean       default true (set false for smooth fit lines)
  *       width       number        line width (default 2, dashed → 1.5)
  *       points      Array<[x, y]> the data; series may have different lengths
+ *       text        Array<string> optional per-point label drawn next to the
+ *                                 marker ('' or null = no label)
+ *       textPositions Array<string> optional per-point placement, one of
+ *                                 'top left' | 'top right' | 'bottom left' |
+ *                                 'bottom right' | 'top' | 'bottom' | 'left' |
+ *                                 'right' (default 'top right')
+ *       textPosition  string      single fallback placement for all points
  *   }
  *
  * ── Example (brute-force latency vs N, fp32 + bq + O(N) fit) ─────────────────
@@ -163,6 +173,21 @@ function markerNode(shape, x, y, s, color, key, opts = {}) {
           {...common}
         />
       )
+    case 'star': {
+      const spikes = 5
+      const outer = s * 1.55
+      const inner = s * 0.62
+      let d = ''
+      for (let i = 0; i < spikes * 2; i++) {
+        const r = i % 2 === 0 ? outer : inner
+        const ang = (Math.PI / spikes) * i - Math.PI / 2
+        d += `${i === 0 ? 'M' : 'L'}${(x + r * Math.cos(ang)).toFixed(2)} ${(
+          y +
+          r * Math.sin(ang)
+        ).toFixed(2)} `
+      }
+      return <path d={d + 'Z'} {...common} />
+    }
     case 'ring':
       return (
         <circle
@@ -196,6 +221,7 @@ function ChartImpl({
   yMax,
   xUnit = '',
   yUnit = '',
+  yTipDecimals,
   height = 440,
   series = [],
 }) {
@@ -285,7 +311,7 @@ function ChartImpl({
     }
     return fmtNum(v)
   }
-  const fmtTipY = (v) => trim(v) + yUnit
+  const fmtTipY = (v) => (yTipDecimals != null ? v.toFixed(yTipDecimals) : trim(v)) + yUnit
   const esc = (str) => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;')
 
   const CATS = colorsFor(isDark)
@@ -330,6 +356,20 @@ function ChartImpl({
 
   const seriesLayer = []
   const markerLayer = []
+  const labelLayer = []
+  // Per-point label placement → text anchor + pixel offsets from the marker.
+  const placeLabel = (pos) => {
+    const p = String(pos || 'top right')
+    const top = /top/.test(p)
+    const bottom = /bottom/.test(p)
+    const left = /left/.test(p)
+    const right = /right/.test(p)
+    return {
+      anchor: left ? 'end' : right ? 'start' : 'middle',
+      dx: left ? -7 : right ? 7 : 0,
+      dy: top ? -8 : bottom ? 14 : 4,
+    }
+  }
   series.forEach((s, si) => {
     if (hidden.has(s.name)) return
     const c = colorOf(s, si)
@@ -367,6 +407,30 @@ function ChartImpl({
           <g key={`mk${si}-${pi}`} style={{ pointerEvents: 'none' }}>
             {markerNode(shape, px, py, 4, c, `sym${si}-${pi}`, halo)}
           </g>
+        )
+      })
+    }
+
+    // Per-point text labels (drawn regardless of showMarkers).
+    if (s.text) {
+      pts.forEach(([x, y], pi) => {
+        const txt = s.text[pi]
+        if (txt == null || txt === '') return
+        const pos = (s.textPositions && s.textPositions[pi]) || s.textPosition
+        const { anchor, dx, dy } = placeLabel(pos)
+        labelLayer.push(
+          <text
+            key={`lb${si}-${pi}`}
+            x={xS(x) + dx}
+            y={yS(y) + dy}
+            textAnchor={anchor}
+            fontSize="11"
+            fill={C.ink}
+            fontFamily="var(--font-mono, ui-monospace, monospace)"
+            style={{ pointerEvents: 'none' }}
+          >
+            {txt}
+          </text>
         )
       })
     }
@@ -514,6 +578,7 @@ function ChartImpl({
           <line x1={m.l} y1={m.t + ph} x2={m.l + pw} y2={m.t + ph} stroke={C.axis} />
           {seriesLayer}
           {markerLayer}
+          {labelLayer}
           {/* Crosshair: vertical snapped line + emphasised points at active x */}
           {activeX != null &&
             (() => {

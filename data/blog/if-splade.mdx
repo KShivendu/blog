@@ -17,39 +17,36 @@ BM25 is the workhorse of lexical search. It's fast, requires no GPU, and is surp
 
 SPLADE fixes this by using a neural network to expand documents into a richer sparse representation. Here's what [`naver/splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) actually activates for "heart attack":
 
-<PlotlyChart
-  data={[
+<BarChart
+  orientation="horizontal"
+  title='SPLADE token activations for "heart attack"'
+  valueLabel="activation weight"
+  valueMax={2.1}
+  valueTicks={[0, 0.5, 1, 1.5, 2]}
+  showLegend={false}
+  categories={[
+    'heart',
+    'attack',
+    'die',
+    'cardiac',
+    'attacks',
+    'disease',
+    'stroke',
+    'chest',
+    'death',
+    'illness',
+  ]}
+  series={[
     {
-      type: 'bar',
-      orientation: 'h',
-      x: [1.599, 1.133, 0.773, 0.767, 0.764, 0.669, 0.589, 0.498, 0.361, 0.273],
-      y: [
-        'heart',
-        'attack',
-        'die',
-        'cardiac',
-        'attacks',
-        'disease',
-        'stroke',
-        'chest',
-        'death',
-        'illness',
-      ],
-      marker: { color: '#10b981' },
+      name: 'activation weight',
+      values: [1.599, 1.133, 0.773, 0.767, 0.764, 0.669, 0.589, 0.498, 0.361, 0.273],
+      color: '#10b981',
       text: [1.599, 1.133, 0.773, 0.767, 0.764, 0.669, 0.589, 0.498, 0.361, 0.273].map((v) =>
         v.toFixed(2)
       ),
-      textposition: 'outside',
+      textPosition: 'outside',
     },
   ]}
-  layout={{
-    title: { text: 'SPLADE token activations for "heart attack"', font: { size: 14 } },
-    xaxis: { title: 'activation weight', range: [0, 2.1] },
-    yaxis: { autorange: 'reversed' },
-    height: 320,
-    margin: { t: 48, r: 64, b: 48, l: 80 },
-    showlegend: false,
-  }}
 />
 
 The original tokens score highest, but semantically related terms like `cardiac`, `stroke`, `disease`, `chest`, `death` are all activated with meaningful weights. A query for "cardiac arrest" hits `cardiac` (weight 0.77) even though the document only mentions "heart attack." BM25 would miss it entirely.
@@ -94,91 +91,89 @@ I benchmarked a full matrix of configurations on [BEIR scifact](https://github.c
 
 </div>
 
-<PlotlyChart
-  data={[
+<LineChart
+  title="Quality vs Query Latency (BEIR scifact)"
+  xLabel="Median query latency (ms), lower is better →"
+  yLabel="NDCG@10 ↑ higher is better"
+  xScale="log"
+  xTicks={[
+    [2, '2'],
+    [3, '3'],
+    [4, '4'],
+    [5, '5'],
+    [10, '10'],
+    [20, '20'],
+    [60, '60'],
+    [80, '80'],
+  ]}
+  xMin={1.9}
+  xMax={90}
+  yMin={0.62}
+  yMax={0.74}
+  xUnit=" ms"
+  yTipDecimals={4}
+  height={460}
+  series={[
     {
       name: 'SPLADE-Full',
-      x: [57.2, 60.4],
-      y: [0.7161, 0.7093],
-      mode: 'markers+text',
-      type: 'scatter',
+      color: '#6366f1',
+      marker: 'circle',
+      showLine: false,
+      points: [
+        [57.2, 0.7161],
+        [60.4, 0.7093],
+      ],
       text: ['naver', 'PP'],
-      textposition: ['top left', 'bottom left'],
-      marker: { size: 13, color: '#6366f1', line: { width: 2, color: 'white' } },
-      textfont: { size: 11 },
+      textPositions: ['top left', 'bottom left'],
     },
     {
       name: 'SPLADE-IF',
-      x: [4.3, 4.29, 3.9],
-      y: [0.7068, 0.7021, 0.6859],
-      mode: 'markers+text',
-      type: 'scatter',
+      color: '#10b981',
+      marker: 'star',
+      showLine: false,
+      points: [
+        [4.3, 0.7068],
+        [4.29, 0.7021],
+        [3.9, 0.6859],
+      ],
       text: ['naver', 'GTE', 'PP-sym'],
-      textposition: ['top right', 'bottom right', 'top left'],
-      marker: { size: 13, color: '#10b981', symbol: 'star', line: { width: 1, color: 'white' } },
-      textfont: { size: 11 },
+      textPositions: ['top right', 'bottom right', 'top left'],
     },
     {
       name: 'BM25',
-      x: [4.0],
-      y: [0.683],
-      mode: 'markers+text',
-      type: 'scatter',
+      color: '#f59e0b',
+      marker: 'square',
+      showLine: false,
+      points: [[4.0, 0.683]],
       text: ['BM25'],
-      textposition: ['top right'],
-      marker: { size: 11, color: '#f59e0b', symbol: 'square', line: { width: 2, color: 'white' } },
-      textfont: { size: 11 },
+      textPositions: ['top right'],
     },
   ]}
-  layout={{
-    title: { text: 'Quality vs Query Latency (BEIR scifact)', font: { size: 15 } },
-    xaxis: {
-      title: { text: 'Median query latency (ms), lower is better →', standoff: 12 },
-      type: 'log',
-      tickmode: 'array',
-      tickvals: [2, 3, 4, 5, 10, 20, 60, 80],
-      ticktext: ['2', '3', '4', '5', '10', '20', '60', '80'],
-      range: [0.3, 2.0],
-    },
-    yaxis: { title: 'NDCG@10 ↑ higher is better', range: [0.62, 0.74] },
-    height: 460,
-    showlegend: true,
-    legend: { orientation: 'h', y: -0.18 },
-    margin: { t: 56, r: 48, b: 80, l: 64 },
-  }}
 />
 
 The 13× latency gap comes entirely from eliminating the query encoder call. Search time is unchanged.
 
-<PlotlyChart
-  data={[
+<BarChart
+  orientation="vertical"
+  stacked
+  title="Total Query Latency = Embed + Search (median ms)"
+  valueLabel="ms"
+  valueUnit=" ms"
+  categories={['BM25', 'IF (naver)', 'IF (GTE)', 'IF (PP-sym)', 'Full (naver)', 'Full (PP)']}
+  series={[
     {
       name: 'Query embed',
-      x: ['BM25', 'IF (naver)', 'IF (GTE)', 'IF (PP-sym)', 'Full (naver)', 'Full (PP)'],
-      y: [0.1, 0.3, 0.3, 0.3, 50.0, 53.2],
-      type: 'bar',
-      marker: { color: '#6366f1' },
+      group: 'total',
+      color: '#6366f1',
+      values: [0.1, 0.3, 0.3, 0.3, 50.0, 53.2],
     },
     {
       name: 'Search',
-      x: ['BM25', 'IF (naver)', 'IF (GTE)', 'IF (PP-sym)', 'Full (naver)', 'Full (PP)'],
-      y: [3.8, 4.0, 4.0, 3.6, 6.6, 7.1],
-      type: 'bar',
-      marker: { color: '#10b981' },
+      group: 'total',
+      color: '#10b981',
+      values: [3.8, 4.0, 4.0, 3.6, 6.6, 7.1],
     },
   ]}
-  layout={{
-    title: {
-      text: 'Total Query Latency = Embed + Search (median ms)',
-      font: { size: 15 },
-    },
-    barmode: 'stack',
-    xaxis: { title: '' },
-    yaxis: { title: 'ms', tickformat: '.0f' },
-    height: 380,
-    margin: { t: 56, r: 24, b: 64, l: 64 },
-    legend: { orientation: 'h', y: -0.22 },
-  }}
 />
 
 I also ran everything on Lucene/pyserini. Numbers come out 1–2% lower. Lucene stores doc weights as integers, so you lose some float precision. OpenSearch and Elasticsearch have the same constraint. None of them support exact float sparse scoring. The tradeoff is fine: integer arithmetic speeds up search.
@@ -232,33 +227,29 @@ The cost is entirely upfront. SPLADE-IF models encode at 58–83 docs/sec on an 
 
 Once indexed: **encode once, query forever.**
 
-<PlotlyChart
-  data={[
+<BarChart
+  orientation="vertical"
+  title="Doc Encoding Throughput at Index Time"
+  valueLabel="docs / sec"
+  valueUnit=" docs/sec"
+  valueScale="log"
+  valueMin={50}
+  valueMax={5012}
+  valueTicks={[
+    [100, '100'],
+    [1000, '1,000'],
+  ]}
+  showLegend={false}
+  categories={['BM25', 'SPLADE-Full', 'IF-naver', 'IF-GTE']}
+  series={[
     {
       name: 'Doc encoding throughput (docs/sec)',
-      x: ['BM25', 'SPLADE-Full', 'IF-naver', 'IF-GTE'],
-      y: [1439, 98, 83, 58],
-      type: 'bar',
-      marker: { color: ['#f59e0b', '#6366f1', '#10b981', '#34d399'] },
+      values: [1439, 98, 83, 58],
+      colors: ['#f59e0b', '#6366f1', '#10b981', '#34d399'],
       text: ['1,439 (CPU)', '98 (GPU)', '83 (GPU)', '58 (GPU)'],
-      textposition: 'outside',
+      textPosition: 'outside',
     },
   ]}
-  layout={{
-    title: { text: 'Doc Encoding Throughput at Index Time', font: { size: 15 } },
-    xaxis: { title: '' },
-    yaxis: {
-      title: 'docs / sec',
-      type: 'log',
-      range: [1.7, 3.7],
-      tickmode: 'array',
-      tickvals: [100, 1000],
-      ticktext: ['100', '1,000'],
-    },
-    height: 360,
-    margin: { t: 56, r: 24, b: 64, l: 72 },
-    showlegend: false,
-  }}
 />
 
 ## Limitations
