@@ -11,15 +11,16 @@ const LayoutWrapper = ({ children }) => {
   return (
     <SectionContainer>
       <div className="flex h-screen flex-col justify-between">
-        <header className="flex items-center justify-between py-10">
+        <header className="flex items-center justify-between border-b border-gray-200 py-6 dark:border-gray-800">
           <div>
             <Link href="/" aria-label={siteMetadata.headerTitle}>
-              <div className="flex items-center justify-between">
-                <div className="mr-3">
+              <div className="flex items-center">
+                <div className="mr-2">
                   <Logo />
                 </div>
+                <span className="mr-1 font-semibold text-primary-500 dark:text-primary-400">~</span>
                 {typeof siteMetadata.headerTitle === 'string' ? (
-                  <div className="hidden h-6 text-2xl font-semibold sm:block">
+                  <div className="hidden h-6 text-xl font-semibold tracking-tight sm:block">
                     {siteMetadata.headerTitle}
                   </div>
                 ) : (
@@ -28,14 +29,15 @@ const LayoutWrapper = ({ children }) => {
               </div>
             </Link>
           </div>
-          <div className="flex items-center text-base leading-5">
+          <div className="flex items-center text-sm leading-5">
             <div className="hidden sm:block">
               {headerNavLinks.map((link) => (
                 <Link
                   key={link.title}
                   href={link.href}
-                  className="p-1 font-medium text-gray-900 dark:text-gray-100 sm:p-4"
+                  className="p-1 font-medium text-gray-900 hover:text-primary-500 dark:text-gray-100 dark:hover:text-primary-400 sm:p-4"
                 >
+                  <span className="text-gray-400 dark:text-gray-500">/</span>
                   {link.title}
                 </Link>
               ))}

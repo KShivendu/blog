@@ -25,7 +25,8 @@ export default function Home({ posts, initialDisplayPosts, pagination }) {
         posts={posts}
         initialDisplayPosts={initialDisplayPosts}
         pagination={pagination}
-        title="Latest"
+        path="~"
+        title="Latest posts"
         description={siteMetadata.description}
       />
       {siteMetadata.newsletter.provider !== '' && (
