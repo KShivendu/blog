@@ -299,6 +299,175 @@ body {
   @apply my-5;
 }
 
+/* ── Article / post page: contained reading column with wide breakouts ─────
+   The "buffer" frame sits on the page grid a little wider than the text so
+   figures/charts/tables get room, while body text stays at a readable measure
+   (~46rem). Matches design-audit/mockup-teletype-v2.html. */
+:root {
+  /* One shared content measure: text, images, tables and charts all align. */
+  --tty-read: 52rem; /* ~832px */
+  --tty-wide: 52rem; /* same as --tty-read so figures line up with the text */
+}
+
+/* The framed buffer, centred on the grid, opaque so the graph-paper grid only
+   shows OUTSIDE it. Padding (~2rem) sits between the border and the content. */
+.tty-article {
+  max-width: 56rem;
+  margin-inline: auto;
+}
+
+/* Header (meta + title) lives in the reading column. */
+.tty-article-head {
+  max-width: var(--tty-read);
+  margin-inline: auto;
+}
+
+/* Compact terminal meta line: `2025-09-16 · 12 min read · discuss`. */
+.tty-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--tty-muted);
+  font-variant-numeric: tabular-nums;
+}
+.tty-meta .sep {
+  color: var(--tty-border);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.tty-meta a {
+  color: var(--tty-muted);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+.tty-meta a:hover {
+  color: var(--tty-accent);
+}
+
+/* Prose containment: body text at a readable measure, everything visual
+   (figures, tables, code, images, chart/widget wrappers) breaks out wider. */
+.prose-tty {
+  max-width: none;
+}
+.prose-tty > p,
+.prose-tty > ul,
+.prose-tty > ol,
+.prose-tty > dl,
+.prose-tty > h1,
+.prose-tty > h2,
+.prose-tty > h3,
+.prose-tty > h4,
+.prose-tty > h5,
+.prose-tty > h6,
+.prose-tty > blockquote,
+.prose-tty > hr,
+.prose-tty > .footnotes,
+.prose-tty > details {
+  max-width: var(--tty-read);
+  margin-inline: auto;
+}
+/* Wide visual blocks fill the buffer (up to ~960px), centred. */
+.prose-tty > figure,
+.prose-tty > table,
+.prose-tty > pre,
+.prose-tty > .line-chart,
+.prose-tty > div {
+  max-width: var(--tty-wide);
+  margin-inline: auto;
+}
+/* Images (incl. the cover) cap to the breakout width, centred, never overflow. */
+.prose-tty img {
+  max-width: 100%;
+  height: auto;
+  margin-inline: auto;
+}
+.prose-tty > p:has(img),
+.prose-tty > p > img {
+  max-width: var(--tty-wide);
+}
+
+/* ── Code blocks: titled hairline bar above the <pre> (like BENCH.PY) ─────── */
+.tty-codeblock {
+  border: 1px solid var(--tty-border);
+  margin: 1.5rem auto;
+  max-width: var(--tty-wide);
+  overflow: hidden;
+}
+.tty-codebar {
+  font-size: 0.72rem;
+  color: var(--tty-muted);
+  padding: 0.4rem 0.8rem;
+  border-bottom: 1px solid var(--tty-border);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--tty-hair);
+  font-family: var(--font-mono);
+}
+/* The <pre> lives inside the bordered block; drop its rounding/margins. */
+.tty-codeblock pre {
+  margin: 0;
+  border-radius: 0;
+}
+
+/* ── Tables: bordered, uppercase muted header, tabular figures ───────────── */
+.prose-tty table {
+  /* Fill the shared content width; auto layout distributes columns (no gutter). */
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--tty-border);
+  font-variant-numeric: tabular-nums;
+}
+/* Roomy cells so the data can breathe. */
+.prose-tty th,
+.prose-tty td {
+  padding: 0.6rem 1.15rem;
+  vertical-align: baseline;
+}
+.prose-tty thead th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--tty-muted);
+  font-weight: 600;
+  background: var(--tty-hair);
+  border-bottom: 1px solid var(--tty-border);
+  white-space: nowrap;
+}
+.prose-tty tbody tr {
+  border-bottom: 1px solid var(--tty-border);
+}
+.prose-tty tbody tr:last-child {
+  border-bottom: 0;
+}
+
+/* ── Figure captions: `fig.N — caption` terminal style ───────────────────── */
+.prose-tty figure {
+  margin: 1.5rem auto;
+}
+.prose-tty figcaption {
+  font-size: 0.72rem;
+  color: var(--tty-muted);
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
+/* Mobile: collapse the reading column to full width, no horizontal overflow.
+   Tables become scrollable blocks so wide data never pushes the page wider. */
+@media (max-width: 640px) {
+  :root {
+    --tty-read: 100%;
+    --tty-wide: 100%;
+  }
+  .prose-tty table {
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
 /* https://stackoverflow.com/questions/61083813/how-to-avoid-internal-autofill-selected-style-to-be-applied */
 input:-webkit-autofill,
 input:-webkit-autofill:focus {

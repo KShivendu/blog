@@ -20,8 +20,20 @@ const Pre = (props) => {
     }, 2000)
   }
 
+  // Derive the fence language from the inner <code className="language-xxx"> for
+  // the titled hairline bar above the block (Teletype-v2 mockup's `BENCH.PY`).
+  const codeClass = props?.children?.props?.className || ''
+  const langMatch = /language-([\w+-]+)/.exec(codeClass)
+  const language = langMatch && langMatch[1] !== 'text' ? langMatch[1] : ''
+
   return (
-    <div ref={textInput} onMouseEnter={onEnter} onMouseLeave={onExit} className="relative">
+    <div
+      ref={textInput}
+      onMouseEnter={onEnter}
+      onMouseLeave={onExit}
+      className="tty-codeblock relative"
+    >
+      {language && <div className="tty-codebar">{language}</div>}
       {hovered && (
         <button
           aria-label="Copy code"
