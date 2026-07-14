@@ -16,28 +16,31 @@ export default function Tags({ tags }) {
   return (
     <>
       <PageSEO title={`Tags - ${siteMetadata.author}`} description="Things I blog about" />
-      <div className="flex flex-col items-start justify-start divide-y divide-gray-200 dark:divide-gray-700 md:mt-24 md:flex-row md:items-center md:justify-center md:space-x-6 md:divide-y-0">
-        <div className="pt-6 pb-8 md:border-r-2 md:border-gray-200 md:pr-6 md:dark:border-gray-700">
-          <div className="tty-buffer">
-            <h1 className="tty-path text-2xl font-semibold tracking-tight sm:text-3xl">~/tags</h1>
-            <span className="tty-cursor" aria-hidden="true" />
+      <div className="mx-auto max-w-[960px] pt-6 pb-10">
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          <span className="text-gray-400 dark:text-gray-500">{'// '}</span>
+          Things I blog about · {Object.keys(tags).length} tags
+        </p>
+        <div className="tty-list-frame">
+          <span className="tty-frame-path">Tags</span>
+          <div className="flex flex-wrap gap-y-3 p-5 sm:p-6">
+            {Object.keys(tags).length === 0 && (
+              <span className="text-sm text-gray-500 dark:text-gray-400">No tags found.</span>
+            )}
+            {sortedTags.map((t) => {
+              return (
+                <div key={t} className="mr-5 mb-1 flex items-baseline">
+                  <Tag text={t} />
+                  <Link
+                    href={`/tags/${kebabCase(t)}`}
+                    className="-ml-1 text-xs font-medium text-gray-500 dark:text-gray-400"
+                  >
+                    {tags[t]}
+                  </Link>
+                </div>
+              )
+            })}
           </div>
-        </div>
-        <div className="flex max-w-lg flex-wrap">
-          {Object.keys(tags).length === 0 && 'No tags found.'}
-          {sortedTags.map((t) => {
-            return (
-              <div key={t} className="mt-2 mb-2 mr-5">
-                <Tag text={t} />
-                <Link
-                  href={`/tags/${kebabCase(t)}`}
-                  className="-ml-2 text-sm font-semibold uppercase text-gray-600 dark:text-gray-300"
-                >
-                  {` (${tags[t]})`}
-                </Link>
-              </div>
-            )
-          })}
         </div>
       </div>
     </>

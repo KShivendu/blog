@@ -11,12 +11,11 @@ export default function AuthorLayout({ children, frontMatter }) {
       <div className="divide-y">
         <div className="space-y-3 pt-6 pb-8">
           <div className="tty-buffer">
-            <h1 className="tty-path text-2xl font-semibold tracking-tight sm:text-3xl">~/about</h1>
-            <span className="tty-cursor" aria-hidden="true" />
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">About</h1>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             <span className="text-gray-400 dark:text-gray-500">{'// '}</span>
-            {`whoami — ${name}`}
+            {name}
           </p>
         </div>
         <div className="items-start space-y-2 xl:grid xl:grid-cols-3 xl:gap-x-8 xl:space-y-0">

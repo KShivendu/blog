@@ -18,7 +18,6 @@ const LayoutWrapper = ({ children }) => {
                 <div className="mr-2">
                   <Logo />
                 </div>
-                <span className="mr-1 font-semibold text-primary-500 dark:text-primary-400">~</span>
                 {typeof siteMetadata.headerTitle === 'string' ? (
                   <div className="hidden h-6 text-xl font-semibold tracking-tight sm:block">
                     {siteMetadata.headerTitle}
@@ -37,7 +36,6 @@ const LayoutWrapper = ({ children }) => {
                   href={link.href}
                   className="p-1 font-medium text-gray-900 hover:text-primary-500 dark:text-gray-100 dark:hover:text-primary-400 sm:p-4"
                 >
-                  <span className="text-gray-400 dark:text-gray-500">/</span>
                   {link.title}
                 </Link>
               ))}
