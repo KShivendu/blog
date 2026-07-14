@@ -30,20 +30,20 @@ module.exports = {
         mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       colors: {
-        // Accent: Graticule azure/blue (replaces Teletype's terminal green).
-        // 500 = light accent #0B72C4, 400 = dark accent #47B4F0.
+        // Accent: Teletype-v2 terminal green.
+        // 500 = light accent #047857, 400 = dark accent #34D399.
         primary: {
-          50: '#eff8ff',
-          100: '#dbeefe',
-          200: '#bfe1fd',
-          300: '#7cc4f3',
-          400: '#47b4f0',
-          500: '#0b72c4',
-          600: '#0a63aa',
-          700: '#0b5390',
-          800: '#0f4675',
-          900: '#123c62',
-          950: '#0c2740',
+          50: '#ecfdf5',
+          100: '#d1fae5',
+          200: '#a7f3d0',
+          300: '#6ee7b7',
+          400: '#34d399',
+          500: '#047857',
+          600: '#036b4d',
+          700: '#045c43',
+          800: '#064e3b',
+          900: '#053f30',
+          950: '#032b21',
         },
         // Neutrals: Teletype-v2 cool/green-tinted true-neutral (light + dark).
         gray: {
