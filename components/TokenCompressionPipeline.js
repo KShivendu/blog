@@ -71,20 +71,28 @@ export default function TokenCompressionPipeline() {
   const [ansOn, setAnsOn] = useState(true)
   const preset = PRESETS[presetIdx]
 
-  const bg = dark ? '#1e293b' : '#f8fafc'
-  const divider = dark ? '#334155' : '#e2e8f0'
-  const textMain = dark ? '#e2e8f0' : '#1e293b'
-  const textMuted = dark ? '#94a3b8' : '#64748b'
-  const arrowC = dark ? '#64748b' : '#94a3b8'
-  const pillBg = dark ? '#0f172a' : '#ffffff'
-  const pillStroke = dark ? '#475569' : '#cbd5e1'
-  const byteFill = dark ? 'rgba(71,85,105,0.3)' : '#f1f5f9'
-  const byteStroke = dark ? '#475569' : '#cbd5e1'
-  const byteText = dark ? '#94a3b8' : '#64748b'
-  const tokFill = dark ? 'rgba(16,185,129,0.12)' : '#ecfdf5'
-  const tokStroke = dark ? '#10b981' : '#059669'
+  // Palette mirrors BarChart/LineChart's palette(isDark) so this widget reads as
+  // a sibling of the site's native chart components.
+  const MONO = 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)'
+  const accent = dark ? '#34d399' : '#047857'
+  const accentInk = dark ? '#08110c' : '#ffffff'
+
+  const bg = dark ? '#0d1310' : '#ffffff' // card
+  const divider = dark ? '#1e2822' : '#e0e4e1' // border
+  const textMain = dark ? '#dde6e0' : '#14161a' // ink
+  const textMuted = dark ? '#8a968e' : '#5f6570' // muted
+  const arrowC = dark ? '#38473e' : '#c8cfc9' // axis
+  const pillBg = dark ? '#0d1310' : '#ffffff' // card
+  const pillStroke = dark ? '#1e2822' : '#e0e4e1' // border
+  const byteFill = dark ? 'rgba(255,255,255,0.04)' : '#f0f2f0'
+  const byteStroke = dark ? '#38473e' : '#c8cfc9' // axis
+  const byteText = dark ? '#8a968e' : '#5f6570' // muted
+  const tokFill = dark ? 'rgba(52,211,153,0.12)' : 'rgba(4,120,87,0.10)'
+  const tokStroke = accent
   const tokText = dark ? '#6ee7b7' : '#065f46'
-  const packColor = dark ? '#60a5fa' : '#2563eb'
+  // Secondary chart data colour (teal) — keeps the raw-packing / no-ANS result
+  // visually distinct from the accent-green token cells without reintroducing blue.
+  const packColor = dark ? '#22d3ee' : '#0891b2'
 
   const W = 640
   const H = 330
@@ -150,7 +158,15 @@ export default function TokenCompressionPipeline() {
   const tokBarW = clampBar(tokResultBytes)
 
   return (
-    <div style={{ margin: '1.5rem 0' }}>
+    <div
+      style={{
+        margin: '1.5rem 0',
+        border: `1px solid ${divider}`,
+        borderRadius: 2,
+        background: bg,
+        padding: '10px 10px 6px',
+      }}
+    >
       {/* Controls */}
       <div
         style={{
@@ -159,42 +175,78 @@ export default function TokenCompressionPipeline() {
           alignItems: 'center',
           gap: 8,
           marginBottom: 10,
-          fontFamily: 'Inter, ui-sans-serif, sans-serif',
+          fontFamily: MONO,
         }}
       >
-        {PRESETS.map((p, i) => (
-          <button
-            key={p.key}
-            onClick={() => setPresetIdx(i)}
-            style={{
-              padding: '5px 12px',
-              borderRadius: 20,
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: 12,
-              fontWeight: 600,
-              background:
-                presetIdx === i ? (dark ? '#0f172a' : '#1e293b') : dark ? '#334155' : '#e2e8f0',
-              color: presetIdx === i ? '#ffffff' : dark ? '#94a3b8' : '#475569',
-              transition: 'background 0.15s, color 0.15s',
-            }}
-          >
-            {p.label}
-          </button>
-        ))}
+        {/* Segmented preset toggle — matches BarChart's on-theme "views" buttons. */}
+        <div style={{ display: 'flex' }}>
+          {PRESETS.map((p, i) => {
+            const on = presetIdx === i
+            return (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => setPresetIdx(i)}
+                style={{
+                  appearance: 'none',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  lineHeight: 1,
+                  padding: '6px 12px',
+                  border: `1px solid ${on ? accent : divider}`,
+                  marginLeft: i === 0 ? 0 : '-1px',
+                  background: on ? accent : 'transparent',
+                  color: on ? accentInk : textMuted,
+                  fontFamily: 'inherit',
+                  fontWeight: on ? 600 : 400,
+                  zIndex: on ? 1 : 0,
+                  position: 'relative',
+                  transition: 'background 0.15s, color 0.15s',
+                }}
+              >
+                {p.label}
+              </button>
+            )
+          })}
+        </div>
         <label
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 7,
             marginLeft: 'auto',
             fontSize: 12,
             fontWeight: 600,
-            color: dark ? '#94a3b8' : '#475569',
+            color: textMuted,
+            fontFamily: MONO,
             cursor: 'pointer',
+            userSelect: 'none',
           }}
         >
-          <input type="checkbox" checked={ansOn} onChange={(e) => setAnsOn(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={ansOn}
+            onChange={(e) => setAnsOn(e.target.checked)}
+            style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+          />
+          <span
+            aria-hidden="true"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 14,
+              height: 14,
+              border: `1px solid ${ansOn ? accent : byteStroke}`,
+              background: ansOn ? accent : 'transparent',
+              color: accentInk,
+              fontSize: 10,
+              lineHeight: 1,
+              transition: 'background 0.15s, border-color 0.15s',
+            }}
+          >
+            {ansOn ? '✓' : ''}
+          </span>
           Include ANS step
         </label>
       </div>
@@ -206,8 +258,8 @@ export default function TokenCompressionPipeline() {
           maxWidth: `${W * 1.3}px`,
           display: 'block',
           margin: '0 auto',
-          fontFamily: 'Inter, ui-sans-serif, sans-serif',
-          borderRadius: '10px',
+          fontFamily: MONO,
+          borderRadius: '2px',
         }}
         aria-label="Byte codec path vs token path comparison, interactive"
       >
@@ -217,7 +269,7 @@ export default function TokenCompressionPipeline() {
           </marker>
         </defs>
 
-        <rect width={W} height={H} rx="10" fill={bg} />
+        <rect width={W} height={H} rx="2" fill={bg} />
         <line x1="0" y1="160" x2={W} y2="160" stroke={divider} strokeWidth="1" />
 
         {/* Row labels */}
@@ -235,7 +287,7 @@ export default function TokenCompressionPipeline() {
           y={R1_TOP}
           width={INP_W}
           height={INP_H}
-          rx="5"
+          rx="2"
           fill={pillBg}
           stroke={pillStroke}
           strokeWidth="1.5"
@@ -305,7 +357,7 @@ export default function TokenCompressionPipeline() {
           y={R1_TOP}
           width={CODEC_W}
           height={CODEC_H}
-          rx="5"
+          rx="2"
           fill={pillBg}
           stroke={pillStroke}
           strokeWidth="1.5"
@@ -363,7 +415,7 @@ export default function TokenCompressionPipeline() {
           y={R2_TOP}
           width={INP_W}
           height={INP_H}
-          rx="5"
+          rx="2"
           fill={pillBg}
           stroke={pillStroke}
           strokeWidth="1.5"
@@ -468,9 +520,9 @@ export default function TokenCompressionPipeline() {
           y={R2_TOP}
           width={CODEC_W}
           height={CODEC_H}
-          rx="5"
-          fill={ansOn ? '#10b981' : 'none'}
-          stroke={ansOn ? '#10b981' : tokStroke}
+          rx="2"
+          fill={ansOn ? accent : 'none'}
+          stroke={ansOn ? accent : tokStroke}
           strokeDasharray={ansOn ? '0' : '3 3'}
           style={{ transition: 'fill 0.25s ease, opacity 0.25s ease' }}
           opacity={ansOn ? 1 : 0.5}
@@ -481,7 +533,7 @@ export default function TokenCompressionPipeline() {
           textAnchor="middle"
           fontSize="10"
           fontWeight="700"
-          fill={ansOn ? 'white' : textMuted}
+          fill={ansOn ? accentInk : textMuted}
           style={{ transition: 'fill 0.25s ease' }}
         >
           ANS
