@@ -126,6 +126,17 @@ body {
   background-color: #0a0f0d;
 }
 
+/* Text selection — accent-tinted, mirrored per theme (à la oxide.computer):
+   a green-tinted highlight, selected text takes the accent green. */
+::selection {
+  background-color: #a7f3d0; /* emerald-200 */
+  color: #064e3b; /* emerald-800 */
+}
+.dark ::selection {
+  background-color: #0e3327; /* deep emerald */
+  color: #6ee7b7; /* emerald-300 */
+}
+
 /* ── Teletype terminal chrome ──────────────────────────────────────────── */
 :root {
   --tty-accent: #047857;
