@@ -1,5 +1,5 @@
 import dynamic from 'next/dynamic'
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
 
 /*
@@ -181,6 +181,24 @@ function ChartImpl({
   const [activeCat, setActiveCat] = useState(null)
   const [viewIdx, setViewIdx] = useState(0)
 
+  // Mobile: the whole viewBox scales down to phone width, so we shrink the
+  // coordinate space (fonts render near nominal) and default to a "Focus" view
+  // — the dense "All" set is unreadable at this size.
+  const [mobile, setMobile] = useState(false)
+  const userPicked = useRef(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)')
+    const apply = () => setMobile(mq.matches)
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
+  const focusIdx = views ? views.findIndex((v) => /focus/i.test(v.label)) : -1
+  useEffect(() => {
+    if (userPicked.current) return
+    setViewIdx(mobile && focusIdx >= 0 ? focusIdx : 0)
+  }, [mobile, focusIdx])
+
   // Resolve the active dataset (a view, or the flat props as a single view).
   const resolved =
     views && views.length ? views[Math.min(viewIdx, views.length - 1)] : { categories, series }
@@ -242,19 +260,30 @@ function ChartImpl({
   const vt = valueTicks || niceLinearTicks(0, vMax, 5)
 
   // ── Geometry ────────────────────────────────────────────────────────────────
-  const W = VIEW_W
-  const topPad = (title ? 24 : 8) + (subtitle ? 16 : 0) + (views ? 30 : 0)
-  const catLabelFont = 10.5
+  // Shrinking W on mobile brings the scale factor (containerWidth / W) close to
+  // 1, so the fixed-px SVG text renders at a legible size instead of ~half.
+  const W = mobile ? 404 : VIEW_W
+  // On mobile, title/subtitle render as wrapping HTML above the SVG (they can't
+  // wrap inside the fixed viewBox), so don't reserve in-SVG space for them.
+  const topPad = (title && !mobile ? 24 : 8) + (subtitle && !mobile ? 16 : 0) + (views ? 30 : 0)
+  const catLabelFont = mobile ? 12 : 10.5
+  // Font sizes, scaled up a touch on mobile.
+  const fTick = mobile ? 13 : 10
+  const fBarTxt = mobile ? 12 : 10
+  const fBarTxtSm = mobile ? 11.5 : 9.5
+  const fTitle = mobile ? 15 : 14
+  const fSub = mobile ? 11 : 10.5
+  const fAxisTitle = mobile ? 12.5 : 11.5
 
   let m, H
   if (horizontal) {
-    const rowH = 30
+    const rowH = mobile ? 34 : 30
     H = height || topPad + N * rowH + 44
-    m = { t: topPad, r: 74, b: 44, l: 208 }
+    m = mobile ? { t: topPad, r: 48, b: 42, l: 148 } : { t: topPad, r: 74, b: 44, l: 208 }
   } else {
-    H = height || 420
+    H = height || (mobile ? 360 : 420)
     // extra bottom room for angled category labels
-    m = { t: topPad, r: 18, b: 96, l: 58 }
+    m = mobile ? { t: topPad, r: 14, b: 86, l: 42 } : { t: topPad, r: 18, b: 96, l: 58 }
   }
   const pw = W - m.l - m.r
   const ph = H - m.t - m.b
@@ -287,7 +316,7 @@ function ChartImpl({
           x={p}
           y={m.t + ph + 15}
           textAnchor="middle"
-          fontSize="10"
+          fontSize={fTick}
           fill={C.muted}
           fontFamily="var(--font-mono, ui-monospace, monospace)"
         >
@@ -302,7 +331,7 @@ function ChartImpl({
           x={m.l - 7}
           y={p + 3.5}
           textAnchor="end"
-          fontSize="10"
+          fontSize={fTick}
           fill={C.muted}
           fontFamily="var(--font-mono, ui-monospace, monospace)"
         >
@@ -316,36 +345,6 @@ function ChartImpl({
   const catLayer = []
   for (let ci = 0; ci < N; ci++) {
     const cc = catCenter(ci)
-    if (activeCat === ci) {
-      // subtle band highlight behind the active category cluster
-      if (horizontal) {
-        catLayer.push(
-          <rect
-            key={`hb${ci}`}
-            x={m.l}
-            y={cc - band / 2}
-            width={pw}
-            height={band}
-            fill={C.accent}
-            opacity={isDark ? 0.06 : 0.05}
-            pointerEvents="none"
-          />
-        )
-      } else {
-        catLayer.push(
-          <rect
-            key={`hb${ci}`}
-            x={cc - band / 2}
-            y={m.t}
-            width={band}
-            height={ph}
-            fill={C.accent}
-            opacity={isDark ? 0.06 : 0.05}
-            pointerEvents="none"
-          />
-        )
-      }
-    }
     const raw = String(cats[ci])
     if (horizontal) {
       catLayer.push(
@@ -398,7 +397,8 @@ function ChartImpl({
         cum += v
         const c = colorOf(s, ci)
         const op = opacityOf(s, ci)
-        const dim = activeCat != null && activeCat !== ci
+        // Hover shows the tooltip only — bars keep their exact colour/opacity.
+        const dim = false
         let rect
         if (horizontal) {
           rect = {
@@ -421,10 +421,8 @@ function ChartImpl({
             {...rect}
             rx={1.5}
             fill={c}
-            opacity={op * (dim ? 0.4 : 1)}
-            stroke={activeCat === ci ? C.card : 'none'}
-            strokeWidth={activeCat === ci ? 0.75 : 0}
-            style={{ transition: 'opacity 0.12s' }}
+            opacity={op}
+            stroke="none"
             pointerEvents="none"
           />
         )
@@ -440,7 +438,7 @@ function ChartImpl({
                 x={Math.max(p0, p1) + 5}
                 y={barC + 3.4}
                 textAnchor="start"
-                fontSize="10"
+                fontSize={fBarTxt}
                 fill={C.ink}
                 fontFamily="var(--font-mono, ui-monospace, monospace)"
                 pointerEvents="none"
@@ -457,7 +455,7 @@ function ChartImpl({
                   x={barC}
                   y={(p0 + p1) / 2 + 3.2}
                   textAnchor="middle"
-                  fontSize="9.5"
+                  fontSize={fBarTxtSm}
                   fill={readableInk(c)}
                   fontFamily="var(--font-mono, ui-monospace, monospace)"
                   pointerEvents="none"
@@ -474,7 +472,7 @@ function ChartImpl({
                   x={(p0 + p1) / 2}
                   y={barC + 3.4}
                   textAnchor="middle"
-                  fontSize="9.5"
+                  fontSize={fBarTxtSm}
                   fill={readableInk(c)}
                   fontFamily="var(--font-mono, ui-monospace, monospace)"
                   pointerEvents="none"
@@ -490,7 +488,7 @@ function ChartImpl({
                 x={barC}
                 y={Math.min(p0, p1) - 4}
                 textAnchor="middle"
-                fontSize="9.5"
+                fontSize={fBarTxtSm}
                 fill={C.ink}
                 fontFamily="var(--font-mono, ui-monospace, monospace)"
                 pointerEvents="none"
@@ -584,6 +582,27 @@ function ChartImpl({
           background: C.card,
         }}
       >
+        {/* Mobile: wrapping HTML title/subtitle (SVG text can't wrap in-viewBox) */}
+        {mobile && (title || subtitle) && (
+          <div
+            style={{
+              fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+              padding: '2px 2px 4px',
+            }}
+          >
+            {title && (
+              <div style={{ fontSize: '13px', fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>
+                {title}
+              </div>
+            )}
+            {subtitle && (
+              <div style={{ fontSize: '11px', color: C.muted, lineHeight: 1.35, marginTop: '2px' }}>
+                {subtitle}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* On-theme segmented toggle (replaces Plotly updatemenus) */}
         {views && views.length > 1 && (
           <div
@@ -635,12 +654,12 @@ function ChartImpl({
           aria-label={title || 'bar chart'}
           style={{ display: 'block', width: '100%', height: 'auto' }}
         >
-          {title && (
+          {title && !mobile && (
             <text
               x={W / 2}
               y={subtitle ? 15 : 18}
               textAnchor="middle"
-              fontSize="14"
+              fontSize={fTitle}
               fontWeight="600"
               fill={C.ink}
               fontFamily="var(--font-mono, ui-monospace, monospace)"
@@ -648,12 +667,12 @@ function ChartImpl({
               {title}
             </text>
           )}
-          {subtitle && (
+          {subtitle && !mobile && (
             <text
               x={W / 2}
               y={30}
               textAnchor="middle"
-              fontSize="10.5"
+              fontSize={fSub}
               fill={C.muted}
               fontFamily="var(--font-mono, ui-monospace, monospace)"
             >
@@ -674,7 +693,7 @@ function ChartImpl({
               x={m.l + pw / 2}
               y={H - 6}
               textAnchor="middle"
-              fontSize="11.5"
+              fontSize={fAxisTitle}
               fill={C.ink}
               fontFamily="var(--font-mono, ui-monospace, monospace)"
             >
@@ -685,7 +704,7 @@ function ChartImpl({
             <text
               transform={`translate(13 ${m.t + ph / 2}) rotate(-90)`}
               textAnchor="middle"
-              fontSize="11.5"
+              fontSize={fAxisTitle}
               fill={C.ink}
               fontFamily="var(--font-mono, ui-monospace, monospace)"
             >
