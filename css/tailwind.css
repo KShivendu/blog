@@ -489,7 +489,7 @@ body {
 
 /* ── Code blocks: titled hairline bar above the <pre> (like BENCH.PY) ─────── */
 .tty-codeblock {
-  border: 1px solid var(--tty-border);
+  /* No outer border — the dark code surface defines the block on its own. */
   margin: 1.5rem auto;
   max-width: var(--tty-wide);
   overflow: hidden;
