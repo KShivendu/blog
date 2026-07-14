@@ -642,6 +642,12 @@ body {
     --tty-read: 100%;
     --tty-wide: 100%;
   }
+}
+
+/* Wide data must never push the page — tables scroll inside their own box on
+   anything narrower than desktop (covers phones, zoomed-out phones, tablets).
+   Desktop (>1024px) keeps full-width tables. */
+@media (max-width: 1024px) {
   .prose-tty table {
     display: block;
     width: max-content;
