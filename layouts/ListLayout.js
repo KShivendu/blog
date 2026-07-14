@@ -23,7 +23,6 @@ export default function ListLayout({ posts, label = 'Blog', meta }) {
           below carries the section name once, in its notch. */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          <span className="text-gray-400 dark:text-gray-500">{'// '}</span>
           {meta || `${filteredBlogPosts.length} entries`}
         </p>
         <div className="relative w-full sm:w-64">
