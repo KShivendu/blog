@@ -189,8 +189,13 @@ body {
     opacity: 0;
   }
 }
+/* Logo mark: the >_ terminal cursor blinks gently. */
+.logo-cursor {
+  animation: tty-blink 1.15s step-end infinite;
+}
 @media (prefers-reduced-motion: reduce) {
-  .tty-cursor::after {
+  .tty-cursor::after,
+  .logo-cursor {
     animation: none;
   }
 }
