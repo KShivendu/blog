@@ -26,8 +26,15 @@ import { useTheme } from 'next-themes'
  *   valueLabel   string    axis title for the value axis
  *   valueUnit    string    suffix for tooltip values (e.g. 'µs'); ignored for a
  *                          series/point that supplies explicit `text`
+ *   valueScale   'linear' | 'log'   (default 'linear'). On a log value axis bars
+ *                          grow from the axis floor (valueMin) up to their value;
+ *                          intended for single-series charts (stacking a log axis
+ *                          is not meaningful). Linear is unchanged / the default.
+ *   valueMin     number    log only: the value-axis floor (bar base). Defaults to
+ *                          the smallest provided valueTick, else dataMin.
  *   valueMax     number    optional value-axis max (else auto from data + pad)
- *   valueTicks   Array     explicit value-axis ticks (numbers). Else auto.
+ *   valueTicks   Array     explicit value-axis ticks. Each entry is a number
+ *                          (auto-formatted) or a [value, label] pair. Else auto.
  *   height       number    SVG height in px. Horizontal auto-sizes from the
  *                          category count when omitted; vertical defaults 420.
  *   showLegend   boolean   default: true when >1 series, else false
@@ -164,6 +171,8 @@ function ChartImpl({
   subtitle,
   valueLabel,
   valueUnit = '',
+  valueScale = 'linear',
+  valueMin,
   valueMax,
   valueTicks,
   height,
@@ -256,8 +265,38 @@ function ChartImpl({
       if (sum > dataMax) dataMax = sum
     }
   }
-  const vMax = valueMax != null ? valueMax : (dataMax || 1) * 1.12
-  const vt = valueTicks || niceLinearTicks(0, vMax, 5)
+  const isLog = valueScale === 'log'
+  // Smallest positive datum — the log floor falls back to this when unspecified.
+  let dataMin = Infinity
+  for (let ci = 0; ci < N; ci++) {
+    srs.forEach((s) => {
+      const v = s.values?.[ci]
+      if (v != null && v > 0 && v < dataMin) dataMin = v
+    })
+  }
+  if (!isFinite(dataMin)) dataMin = 1
+
+  // Value-axis ticks: numbers or [value, label] pairs → {v, label}.
+  const rawTicks = valueTicks || niceLinearTicks(0, (dataMax || 1) * 1.12, 5)
+  const vt = rawTicks.map((t) =>
+    Array.isArray(t) ? { v: t[0], label: t[1] } : { v: t, label: trim(t) }
+  )
+  const tickVals = vt.map((t) => t.v)
+
+  // Linear keeps its original max (unchanged for existing usages); log spans the
+  // provided floor→ceiling, defaulting from the ticks/data.
+  const vMax = isLog
+    ? valueMax != null
+      ? valueMax
+      : Math.max(dataMax || 1, ...tickVals)
+    : valueMax != null
+    ? valueMax
+    : (dataMax || 1) * 1.12
+  const vMin = isLog
+    ? valueMin != null
+      ? valueMin
+      : Math.min(dataMin, ...tickVals.filter((v) => v > 0))
+    : 0
 
   // ── Geometry ────────────────────────────────────────────────────────────────
   // Shrinking W on mobile brings the scale factor (containerWidth / W) close to
@@ -295,7 +334,17 @@ function ChartImpl({
   const catEnd = horizontal ? m.t + ph : m.l + pw
   const valZero = horizontal ? m.l : m.t + ph
   const valFull = horizontal ? m.l + pw : m.t
-  const valPx = (v) => valZero + (v / vMax) * (valFull - valZero)
+  // Linear: 0 → valZero, vMax → valFull. Log: values ≤ vMin (incl. the bar base
+  // at cum 0) map to valZero; vMax → valFull; intermediate on a log ramp.
+  const logMin = isLog ? Math.log10(vMin) : 0
+  const logMax = isLog ? Math.log10(vMax) : 0
+  const valPx = (v) => {
+    if (isLog) {
+      const lv = v <= vMin ? logMin : Math.log10(v)
+      return valZero + ((lv - logMin) / (logMax - logMin)) * (valFull - valZero)
+    }
+    return valZero + (v / vMax) * (valFull - valZero)
+  }
 
   const band = N ? (catEnd - catStart) / N : 0
   const inner = band * (1 - barGap)
@@ -305,9 +354,9 @@ function ChartImpl({
 
   // ── Build layers ──────────────────────────────────────────────────────────
   const gridLayer = []
-  vt.forEach((v, i) => {
-    if (v > vMax * 1.001) return
-    const p = valPx(v)
+  vt.forEach((t, i) => {
+    if (t.v > vMax * 1.001 || (isLog && t.v < vMin * 0.999)) return
+    const p = valPx(t.v)
     if (horizontal) {
       gridLayer.push(<line key={`vg${i}`} x1={p} y1={m.t} x2={p} y2={m.t + ph} stroke={C.grid} />)
       gridLayer.push(
@@ -320,7 +369,7 @@ function ChartImpl({
           fill={C.muted}
           fontFamily="var(--font-mono, ui-monospace, monospace)"
         >
-          {trim(v)}
+          {t.label}
         </text>
       )
     } else {
@@ -335,7 +384,7 @@ function ChartImpl({
           fill={C.muted}
           fontFamily="var(--font-mono, ui-monospace, monospace)"
         >
-          {trim(v)}
+          {t.label}
         </text>
       )
     }
