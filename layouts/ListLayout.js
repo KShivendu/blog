@@ -80,12 +80,14 @@ function scorePost(terms, fm) {
 export default function ListLayout({ posts, label = 'Blog', meta }) {
   const [searchValue, setSearchValue] = useState('')
   const filteredBlogPosts = useMemo(() => {
+    // Newest first. (Sort here defensively — don't rely on upstream order.)
+    const byDateDesc = (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)
     const terms = searchValue.trim().toLowerCase().split(/\s+/).filter(Boolean)
-    if (!terms.length) return posts
+    if (!terms.length) return [...posts].sort(byDateDesc)
     return posts
       .map((fm) => ({ fm, score: scorePost(terms, fm) }))
       .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => b.score - a.score || byDateDesc(a.fm, b.fm))
       .map((x) => x.fm)
   }, [posts, searchValue])
 
