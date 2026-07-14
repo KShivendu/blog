@@ -67,6 +67,7 @@ body {
   --tty-accent: #047857;
   --tty-border: #c8cfc9;
   --tty-bg: #fbfcfb;
+  --tty-fg: #1a201d;
   --tty-muted: #5f6570;
   /* faint hairline inside the framed listing + subtle row hover wash */
   --tty-hair: #e3e7e3;
@@ -77,6 +78,7 @@ body {
   --tty-accent: #34d399;
   --tty-border: #2a322c;
   --tty-bg: #0a0f0d;
+  --tty-fg: #dde6e0;
   --tty-muted: #8a968e;
   --tty-hair: #1a221c;
   --tty-row-hover: rgba(52, 211, 153, 0.08);
@@ -204,6 +206,22 @@ body {
 }
 .tty-index-scroll::-webkit-scrollbar-thumb:hover {
   background-color: var(--tty-muted);
+}
+
+/* Search input — token-driven so it stays legible in both themes. */
+.tty-search {
+  background: var(--tty-bg);
+  color: var(--tty-fg);
+  border: 1px solid var(--tty-border);
+}
+.tty-search::placeholder {
+  color: var(--tty-muted);
+  opacity: 0.8;
+}
+.tty-search:focus {
+  outline: none;
+  border-color: var(--tty-accent);
+  box-shadow: 0 0 0 1px var(--tty-accent);
 }
 
 /* One post = one tight, aligned row: title left, date right (tabular). */
@@ -566,6 +584,13 @@ body {
     border-left: 0;
     border-right: 0;
     margin-top: 0.75rem;
+  }
+
+  /* On touch, an inner-scroll box would trap the gesture and hide the footer
+     below it. Let the list flow into the page so the whole page scrolls once. */
+  .tty-index-scroll {
+    max-height: none;
+    overflow-y: visible;
   }
 
   /* Full-width visual blocks; code/pre scroll inside their own box. */
