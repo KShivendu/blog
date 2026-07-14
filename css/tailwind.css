@@ -489,19 +489,22 @@ body {
 
 /* ── Code blocks: titled hairline bar above the <pre> (like BENCH.PY) ─────── */
 .tty-codeblock {
-  /* No outer border — the dark code surface defines the block on its own. */
+  /* No outer border — the dark code surface defines the block on its own.
+     gray.800 (#1e2822) is the pre background in both themes, so the whole
+     block (label bar + code) is one continuous dark surface. */
   margin: 1.5rem auto;
   max-width: var(--tty-wide);
   overflow: hidden;
+  background: #1e2822;
 }
 .tty-codebar {
   font-size: 0.72rem;
-  color: var(--tty-muted);
+  /* Muted light label on the dark surface; no divider strip. */
+  color: #8a968e;
   padding: 0.4rem 0.8rem;
-  border-bottom: 1px solid var(--tty-border);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  background: var(--tty-hair);
+  background: transparent;
   font-family: var(--font-mono);
 }
 /* The <pre> lives inside the bordered block; drop its rounding/margins. */
