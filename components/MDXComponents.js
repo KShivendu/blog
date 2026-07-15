@@ -18,6 +18,7 @@ import NSphereGlobe from './NSphereGlobe'
 import ResizingIframe from './ResizingIframe'
 import StaticEmbeddingDemo from './StaticEmbeddingDemo'
 import StaticPipeline from './StaticPipeline'
+import Term from './Term'
 
 export const MDXComponents = {
   Image,
@@ -37,6 +38,7 @@ export const MDXComponents = {
   ResizingIframe,
   StaticEmbeddingDemo,
   StaticPipeline,
+  Term,
   wrapper: ({ components, layout, ...rest }) => {
     const Layout = require(`../layouts/${layout}`).default
     return <Layout {...rest} />
