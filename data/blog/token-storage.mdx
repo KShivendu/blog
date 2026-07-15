@@ -33,7 +33,7 @@ BPE (Byte Pair Encoding) starts with raw bytes and repeatedly merges the most fr
 
 BPE merges frequent byte sequences into single tokens. `"storage"` is one token. `"Token-native"` is three (`Token + - + native`). On average one BPE token covers [3/4 of a word](https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them). An average English word is ~5 characters plus a space, so:
 
-```
+```napkin
 Using UTF-8 text: 6 bytes/word (1 char = 1 byte) × 3/4 word/token = 4.5 bytes/token (raw text)
 Using Tokens: 2 bytes/token (r50k uint16 token IDs)
 ratio: ~2.25x
@@ -279,14 +279,14 @@ export const latencyFocus = {
   decAnsText: ['', '', '', '15µs', '20µs'],
 }
 
-export const latencySeries = (d) => [
+export const latencySeries = (d, showText = true) => [
   {
     name: 'encode (raw)',
     group: 'encode',
     color: '#60a5fa',
     values: d.encRaw,
     opacities: d.rawOpacity,
-    text: d.encRawText,
+    text: showText ? d.encRawText : undefined,
   },
   {
     name: 'decode (raw)',
@@ -294,21 +294,21 @@ export const latencySeries = (d) => [
     color: '#10b981',
     values: d.decRaw,
     opacities: d.rawOpacity,
-    text: d.decRawText,
+    text: showText ? d.decRawText : undefined,
   },
   {
     name: 'encode (+ ANS)',
     group: 'encode',
     color: '#1d4ed8',
     values: d.encAns,
-    text: d.encAnsText,
+    text: showText ? d.encAnsText : undefined,
   },
   {
     name: 'decode (+ ANS)',
     group: 'decode',
     color: '#065f46',
     values: d.decAns,
-    text: d.decAnsText,
+    text: showText ? d.decAnsText : undefined,
   },
 ]
 
@@ -320,8 +320,12 @@ export const latencySeries = (d) => [
   valueLabel="microseconds"
   valueUnit="µs"
   views={[
-    { label: 'All', categories: latencyData.categories, series: latencySeries(latencyData) },
-    { label: 'Focus', categories: latencyFocus.categories, series: latencySeries(latencyFocus) },
+    { label: 'All', categories: latencyData.categories, series: latencySeries(latencyData, false) },
+    {
+      label: 'Focus',
+      categories: latencyFocus.categories,
+      series: latencySeries(latencyFocus, true),
+    },
   ]}
 />
 
