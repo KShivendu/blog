@@ -299,6 +299,11 @@ export default function TokenCompressionAnimated() {
   const stage3T = inPhase(P2, P3)
   const labelOpacity = Math.min(1, progress / 0.03)
 
+  // Sharp char->ID handoff during the encode stage: the char is gone before
+  // the ID arrives (no muddy half-and-half overlap at the midpoint).
+  const dissolveOut = 1 - Math.min(1, stage2T / 0.45)
+  const idIn = Math.max(0, (stage2T - 0.5) / 0.5)
+
   // Per-box "draw-on" progress, cascading left-to-right across stage 1. Each
   // box's outline circles into place over ~0.42 of the stage.
   const byteBoxT = (i) =>
@@ -312,12 +317,12 @@ export default function TokenCompressionAnimated() {
       : progress < P1
       ? 'bytes: box each byte on its own   ·   tokens: merge adjacent bytes (BPE)'
       : progress < P2
-      ? 'wrapping: LZ4 · ANS'
-      : 'compressing to output'
+      ? 'chars dissolve into IDs (byte IDs vs. token IDs)'
+      : 'token IDs shrink to their byte-width; bytes stay 1:1'
 
   // Compact phase name for the timestamp readout (reuses P0..P3 boundaries).
   const phaseName =
-    progress < P0 ? 'copy' : progress < P1 ? 'group' : progress < P2 ? 'wrap' : 'output'
+    progress < P0 ? 'copy' : progress < P1 ? 'group' : progress < P2 ? 'encode' : 'pack'
 
   // Live byte counts shown under each lane in stage 3. Both stay at their
   // pre-shrink size until P2, then shrink toward each codec's output size.
@@ -330,11 +335,19 @@ export default function TokenCompressionAnimated() {
   const tokCurBytes = progress < P2 ? preset.packed : lerp(preset.packed, preset.ans, stage3T)
   const tokCurRatio = preset.raw / tokCurBytes
 
-  // Wrap containers span the shared character row (both lanes, same width).
-  const LZ4_BOX_X = rowStartX - 6
-  const LZ4_BOX_FULL_W = totalRowW + 12
-  const ANS_BOX_X = rowStartX - 6
-  const ANS_BOX_FULL_W = totalRowW + 12
+  // Post-compression, a token is stored as a fixed-width token ID that occupies
+  // `bytesPerToken` bytes — so each token box shrinks from its (many) byte-wide
+  // char span down to exactly that many BYTE-sized cells, then packs together.
+  const tokBytes = tokInfo.bytesPerToken
+  const tokBoxW = tokBytes * CELL_W + (tokBytes - 1) * CELL_G
+  const PACK_GAP = CELL_G * 2
+  const packedTotal = groups.length * tokBoxW + Math.max(0, groups.length - 1) * PACK_GAP
+  const packedStartX = (W - packedTotal) / 2
+  const packedX = (gi) => packedStartX + gi * (tokBoxW + PACK_GAP)
+
+  // "Byte ID" shown once a char dissolves in the byte lane: its byte value as
+  // two hex digits (schematic — low byte for multi-byte glyphs).
+  const byteIdOf = (ch) => (ch.charCodeAt(0) & 0xff).toString(16).toUpperCase().padStart(2, '0')
 
   // A rectangle whose border "draws on" (circling animation) as t goes 0->1;
   // the fill fades in once the outline is mostly complete.
@@ -553,82 +566,47 @@ export default function TokenCompressionAnimated() {
           </>
         )}
 
-        {/* stage 2 (wrap): fade the boxed byte row, grow the LZ4 container. */}
-        {progress >= P1 && progress < P2 && (
-          <>
-            <g opacity={1 - stage2T}>
-              {charRow(TOP_CY, 1)}
-              {charCells.map((ch, i) =>
-                drawRect('yb' + i, {
-                  x: cellX(i) - 2,
-                  y: TOP_CY - CELL_H / 2 - 2,
-                  w: CELL_W + 4,
-                  h: CELL_H + 4,
-                  rx: 3,
-                  stroke: lz4Accent,
-                  strokeWidth: 1.5,
-                  fill: lz4Fill,
-                  t: 1,
-                })
-              )}
+        {/* stage 2 (encode) + stage 3 (pack): each byte keeps its OWN box at
+            the SAME 1-byte width — nothing merges — while the char dissolves
+            and the byte's ID (hex) fades in its place. */}
+        {progress >= P1 &&
+          charCells.map((ch, i) => (
+            <g key={'bb' + i}>
+              <rect
+                x={cellX(i) - 2}
+                y={TOP_CY - CELL_H / 2 - 2}
+                width={CELL_W + 4}
+                height={CELL_H + 4}
+                rx="3"
+                fill={lz4Fill}
+                stroke={lz4Accent}
+                strokeWidth="1.5"
+              />
+              <text
+                x={cellX(i) + CELL_W / 2}
+                y={TOP_CY + 3}
+                textAnchor="middle"
+                fontSize="8.5"
+                fontFamily="monospace"
+                fill={byteText}
+                opacity={dissolveOut}
+              >
+                {ch}
+              </text>
+              <text
+                x={cellX(i) + CELL_W / 2}
+                y={TOP_CY + 3}
+                textAnchor="middle"
+                fontSize="7.5"
+                fontFamily="monospace"
+                fontWeight="600"
+                fill={byteText}
+                opacity={idIn}
+              >
+                {byteIdOf(ch)}
+              </text>
             </g>
-            <rect
-              x={LZ4_BOX_X}
-              y={TOP_CY - CELL_H / 2 - 6}
-              width={LZ4_BOX_FULL_W}
-              height={CELL_H + 12}
-              rx="4"
-              fill={lz4Fill}
-              stroke={lz4Accent}
-              strokeWidth="1.5"
-              opacity={0.4 + 0.6 * stage2T}
-            />
-            <text
-              x={LZ4_BOX_X + LZ4_BOX_FULL_W / 2}
-              y={TOP_CY + 4}
-              textAnchor="middle"
-              fontSize="11"
-              fontWeight="700"
-              fill={lz4Accent}
-              letterSpacing="0.08em"
-              opacity={stage2T}
-            >
-              LZ4
-            </text>
-          </>
-        )}
-
-        {/* stage 3 (shrink): the labeled LZ4 container pulls its right edge in
-            to lz4/raw of its wrapped length. */}
-        {progress >= P2 &&
-          (() => {
-            const w = lerp(LZ4_BOX_FULL_W, LZ4_BOX_FULL_W * (preset.lz4 / preset.raw), stage3T)
-            return (
-              <>
-                <rect
-                  x={LZ4_BOX_X}
-                  y={TOP_CY - CELL_H / 2 - 6}
-                  width={w}
-                  height={CELL_H + 12}
-                  rx="4"
-                  fill={lz4Fill}
-                  stroke={lz4Accent}
-                  strokeWidth="1.5"
-                />
-                <text
-                  x={LZ4_BOX_X + w / 2}
-                  y={TOP_CY + 4}
-                  textAnchor="middle"
-                  fontSize="11"
-                  fontWeight="700"
-                  fill={lz4Accent}
-                  letterSpacing="0.08em"
-                >
-                  LZ4
-                </text>
-              </>
-            )
-          })()}
+          ))}
 
         {/* bytes · ratio from the wrap phase on. Byte lane stays 1.00× until
             LZ4 actually runs in the shrink. */}
@@ -652,7 +630,7 @@ export default function TokenCompressionAnimated() {
               fill={textMuted}
             >
               {progress < P2
-                ? 'raw bytes — LZ4 not run yet'
+                ? 'each byte → its byte ID (still 1:1)'
                 : `LZ4 output (from ${preset.raw.toLocaleString()}B raw)`}
             </text>
           </>
@@ -731,64 +709,11 @@ export default function TokenCompressionAnimated() {
           </>
         )}
 
-        {/* stage 2 (wrap): fade the boxed token row, grow the ANS container. */}
-        {progress >= P1 && progress < P2 && (
-          <>
-            <text
-              x={W / 2}
-              y={BOT_CY - CELL_H / 2 - 14}
-              textAnchor="middle"
-              fontSize="10"
-              fill={textMuted}
-              opacity={1 - stage2T}
-            >
-              {preset.tokens.toLocaleString()} tokens
-            </text>
-            <g opacity={1 - stage2T}>
-              {charRow(BOT_CY, 1)}
-              {groups.map((grp) =>
-                drawRect('gb' + grp.gi, {
-                  x: grp.x,
-                  y: BOT_CY - CELL_H / 2 - 2,
-                  w: grp.w,
-                  h: CELL_H + 4,
-                  rx: 4,
-                  stroke: tokStroke,
-                  strokeWidth: 1.75,
-                  fill: tokFill,
-                  t: 1,
-                })
-              )}
-            </g>
-            <rect
-              x={ANS_BOX_X}
-              y={BOT_CY - CELL_H / 2 - 6}
-              width={ANS_BOX_FULL_W}
-              height={CELL_H + 12}
-              rx="4"
-              fill={tokFill}
-              stroke={tokStroke}
-              strokeWidth="1.5"
-              opacity={0.4 + 0.6 * stage2T}
-            />
-            <text
-              x={ANS_BOX_X + ANS_BOX_FULL_W / 2}
-              y={BOT_CY + 4}
-              textAnchor="middle"
-              fontSize="11"
-              fontWeight="700"
-              fill={tokStroke}
-              letterSpacing="0.08em"
-              opacity={stage2T}
-            >
-              ANS
-            </text>
-          </>
-        )}
-
-        {/* stage 3 (shrink): the labeled ANS container pulls its right edge in
-            to ans/raw — far more than LZ4. */}
-        {progress >= P2 && (
+        {/* stage 2 (encode): the chars inside each green token box dissolve and
+            the token ID fades in. stage 3 (pack): each box then shrinks to its
+            true byte-width (bytesPerToken byte-cells) and packs tight — the
+            whole point: many bytes collapse into one small fixed-width ID. */}
+        {progress >= P1 && (
           <>
             <text
               x={W / 2}
@@ -799,34 +724,39 @@ export default function TokenCompressionAnimated() {
             >
               {preset.tokens.toLocaleString()} tokens
             </text>
-            {(() => {
-              const w = lerp(ANS_BOX_FULL_W, ANS_BOX_FULL_W * (preset.ans / preset.raw), stage3T)
+            {/* chars (in their original per-byte cells) dissolving out */}
+            <g opacity={dissolveOut}>{charRow(BOT_CY, 1)}</g>
+            {groups.map((grp) => {
+              const bx = progress < P2 ? grp.x : lerp(grp.x, packedX(grp.gi), stage3T)
+              const bw = progress < P2 ? grp.w : lerp(grp.w, tokBoxW, stage3T)
+              const cx = bx + bw / 2
               return (
-                <>
+                <g key={'tb' + grp.gi}>
                   <rect
-                    x={ANS_BOX_X}
-                    y={BOT_CY - CELL_H / 2 - 6}
-                    width={w}
-                    height={CELL_H + 12}
+                    x={bx}
+                    y={BOT_CY - CELL_H / 2 - 2}
+                    width={bw}
+                    height={CELL_H + 4}
                     rx="4"
                     fill={tokFill}
                     stroke={tokStroke}
-                    strokeWidth="1.5"
+                    strokeWidth="1.75"
                   />
                   <text
-                    x={ANS_BOX_X + w / 2}
-                    y={BOT_CY + 4}
+                    x={cx}
+                    y={BOT_CY + 3}
                     textAnchor="middle"
-                    fontSize="11"
+                    fontSize="8"
+                    fontFamily="monospace"
                     fontWeight="700"
-                    fill={tokStroke}
-                    letterSpacing="0.08em"
+                    fill={tokText}
+                    opacity={idIn}
                   >
-                    ANS
+                    {grp.id != null ? grp.id : '···'}
                   </text>
-                </>
+                </g>
               )
-            })()}
+            })}
           </>
         )}
 
