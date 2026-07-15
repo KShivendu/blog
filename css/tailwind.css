@@ -635,6 +635,48 @@ body {
   text-decoration-color: var(--tty-accent);
 }
 
+/* <Term def="…"> glossary term: dashed underline + help cursor + hover/tap
+   tooltip. Reveals on hover, and on focus/tap (touch + keyboard) via :focus. */
+.tty-term {
+  position: relative;
+  cursor: help;
+  text-decoration: underline dashed;
+  text-decoration-color: var(--tty-muted);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  outline: none;
+}
+.tty-term-pop {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  transform: translate(0, -4px);
+  z-index: 60;
+  width: max-content;
+  max-width: min(280px, 78vw);
+  padding: 0.5rem 0.7rem;
+  background: var(--tty-bg);
+  color: var(--tty-fg);
+  border: 1px solid var(--tty-accent);
+  border-radius: 2px;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.tty-term:hover .tty-term-pop,
+.tty-term:focus .tty-term-pop,
+.tty-term:focus-within .tty-term-pop {
+  opacity: 1;
+  transform: translate(0, -8px);
+}
+
 /* ── Tables: bordered, uppercase muted header, tabular figures ───────────── */
 .prose-tty table {
   /* Fill the shared content width; auto layout distributes columns (no gutter). */
