@@ -1,5 +1,6 @@
 ---
-title: 'Search Internals: Vector DB architectures'
+title: 'Search Internals'
+subtitle: 'Vector DB architectures'
 date: '2022-03-16'
 lastmod: '2022-03-16'
 tags: ['search', 'internals']
@@ -53,10 +54,13 @@ authors: ['default']
   - Architecture is inspired by Cassandra.
 - They have eventual consistency and don’t allow modifying that for now. However similar to Cassandra (and Qdrant), they can extend existing system to have read/write consistency with request/collection config params.
 - two usecase:
+
   - import in bulk every X days: 1 shard per node at import time, the replicate shards so each node can serve everything -> high throughtput at Query tim
 
     e
+
   - write & read simultaneous: replicate from the start -> highly available at any time.
+
 - They are building dynamic scaling where cluster can be increased or decreased at runtime and Weaviate will handle things like rebalancing, resharding / data transfer with minimal movement, re-indexing, etc.
 - They seems to have an experimental feature to build the HNSW index in a shard manner by multiple nodes having the same replica. That’s very interesting and missing from Qdrant.
 - Imo bad UI and horrible API design. They used to call collections as Classes which was super confusing. They realized it over time and copied SDKs from Qdrant. Collection name must start with a capital letter. Default user can’t even create a collection. What was the point of it. Too much auth and agentic logic baked into DB. Bad versioning with `rc` versions.
@@ -168,10 +172,13 @@ authors: ['default']
   - Architecture is inspired by Cassandra.
 - They have eventual consistency and don't allow modifying that for now. However similar to Cassandra (and Qdrant), they can extend existing system to have read/write consistency with request/collection config params.
 - two usecase:
+
   - import in bulk every X days: 1 shard per node at import time, the replicate shards so each node can serve everything -> high throughtput at Query tim
 
     e
+
   - write & read simultaneous: replicate from the start -> highly available at any time.
+
 - They are building dynamic scaling where cluster can be increased or decreased at runtime and Weaviate will handle things like rebalancing, resharding / data transfer with minimal movement, re-indexing, etc.
 - They seems to have an experimental feature to build the HNSW index in a shard manner by multiple nodes having the same replica. That's very interesting and missing from Qdrant.
 - Imo bad UI and horrible API design. They used to call collections as Classes which was super confusing. They realized it over time and copied SDKs from Qdrant. Collection name must start with a capital letter. Default user can't even create a collection. What was the point of it. Too much auth and agentic logic baked into DB. Bad versioning with `-rc` versions.

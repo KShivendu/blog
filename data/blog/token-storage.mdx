@@ -1,5 +1,6 @@
 ---
-title: 'Token-Native Storage: Read and Write in the Language Models Already Speak'
+title: 'Token-Native Storage'
+subtitle: 'Read and Write in the Language Models Already Speak'
 date: '2026-05-12'
 lastmod: '2026-07-08'
 tags: ['vector-databases', 'compression', 'internals', 'rag', 'nlp']
@@ -25,7 +26,7 @@ The top path is what databases do today: store UTF-8 bytes, compress with a gene
 
 ### Step 1: BPE Tokenization
 
-BPE (Byte Pair Encoding) starts with raw bytes and repeatedly merges the most frequent adjacent pair into a new token, building up a vocabulary of common subwords. OpenAI ships [three BPE tokenizers](https://github.com/openai/tiktoken/blob/main/tiktoken_ext/openai_public.py):
+BPE (Byte Pair Encoding) starts with raw bytes and repeatedly merges the most frequent adjacent pair into a new token, building up a vocabulary of common subwords. OpenAI has [three popular BPE tokenizers](https://github.com/openai/tiktoken/blob/main/tiktoken_ext/openai_public.py):
 
 1. **r50k**: used by GPT-2/GPT-3, 50,257 tokens and fits in uint16 (= ~65k)
 2. **cl100k**: used by GPT-3.5/GPT-4, 100,277 tokens and fits in 17 bits (131k) but only 24 bits (3 bytes) is practical due to overhead
@@ -509,7 +510,7 @@ An LLM produces token IDs before the inference engine detokenizes them, so stori
 
 ## Acknowledgements
 
-The benchmarks use [tiktoken](https://github.com/openai/tiktoken), [zstandard](https://github.com/indygreg/python-zstandard), [lz4](https://github.com/python-lz4/python-lz4), and [constriction](https://github.com/bamler-lab/constriction). The "language modeling is compression" framing comes from [DeepMind's 2023 paper](https://arxiv.org/abs/2309.10668).
+The benchmarks use [tiktoken](https://github.com/openai/tiktoken), [zstandard](https://github.com/indygreg/python-zstandard), [lz4](https://github.com/python-lz4/python-lz4), and [constriction](https://github.com/bamler-lab/constriction). Thanks to the concept of [napkin math](https://github.com/sirupsen/napkin-math) for making me realise this gap. Apparently, the "language modeling is compression" is somewhat explored in [DeepMind's 2023 paper](https://arxiv.org/abs/2309.10668) if you want further read.
 
 ## Citation
 

@@ -3,16 +3,17 @@
 // query params and returns a PNG. Nothing is stored; the CDN caches the result
 // for a year (immutable) since a given URL always yields the same image.
 //
-//   /api/og?title=Some+Post+Title&type=post
+//   /api/og?title=Some+Post+Title&subtitle=optional+deck&type=post
 //   /api/og?type=default
 import { renderOgPng } from '@/lib/og-card'
 
 // eslint-disable-next-line import/no-anonymous-default-export
 export default async function handler(req, res) {
   try {
-    const { title, type } = req.query
+    const { title, subtitle, type } = req.query
     const png = await renderOgPng({
       title: Array.isArray(title) ? title[0] : title,
+      subtitle: Array.isArray(subtitle) ? subtitle[0] : subtitle,
       type: (Array.isArray(type) ? type[0] : type) === 'post' ? 'post' : 'default',
     })
 
