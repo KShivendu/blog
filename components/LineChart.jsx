@@ -315,7 +315,10 @@ function ChartImpl({
   const esc = (str) => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;')
 
   const CATS = colorsFor(isDark)
-  const colorOf = (s, i) => s.color || CATS[i % CATS.length]
+  // `color: 'accent'` opts a series into the theme-aware brand green
+  // (#047857 light / #34d399 dark) — legible in both themes without hardcoding.
+  const colorOf = (s, i) =>
+    s.color === 'accent' ? (isDark ? '#34d399' : '#047857') : s.color || CATS[i % CATS.length]
 
   // ── Build SVG layers ─────────────────────────────────────────────────────
   const gridLayer = []
