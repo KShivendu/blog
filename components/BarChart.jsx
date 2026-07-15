@@ -135,6 +135,24 @@ function trim(v) {
   return +v.toFixed(2) + ''
 }
 
+// Composite a colour drawn at `op` opacity over background `bg` (both #hex).
+function blend(hex, op, bg) {
+  const rd = (h) => {
+    h = h.replace('#', '')
+    if (h.length === 3)
+      h = h
+        .split('')
+        .map((c) => c + c)
+        .join('')
+    return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16))
+  }
+  if (op >= 1) return hex
+  const f = rd(hex)
+  const b = rd(bg)
+  const mix = f.map((c, i) => Math.round(op * c + (1 - op) * b[i]))
+  return '#' + mix.map((c) => c.toString(16).padStart(2, '0')).join('')
+}
+
 // Relative luminance → pick readable label ink on a coloured bar (WCAG-ish).
 function readableInk(hex) {
   const h = hex.replace('#', '')
@@ -514,7 +532,7 @@ function ChartImpl({
                   y={(p0 + p1) / 2 + 3.2}
                   textAnchor="middle"
                   fontSize={fBarTxtSm}
-                  fill={readableInk(c)}
+                  fill={readableInk(blend(c, op, C.card))}
                   fontFamily="var(--font-mono, ui-monospace, monospace)"
                   pointerEvents="none"
                 >
@@ -531,7 +549,7 @@ function ChartImpl({
                   y={barC + 3.4}
                   textAnchor="middle"
                   fontSize={fBarTxtSm}
-                  fill={readableInk(c)}
+                  fill={readableInk(blend(c, op, C.card))}
                   fontFamily="var(--font-mono, ui-monospace, monospace)"
                   pointerEvents="none"
                 >
