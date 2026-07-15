@@ -7,6 +7,7 @@ import Tag from '@/components/Tag'
 import siteMetadata from '@/data/siteMetadata'
 import Comments from '@/components/comments'
 import ScrollTopAndComment from '@/components/ScrollTopAndComment'
+import HeadingLinks from '@/components/HeadingLinks'
 
 const editUrl = (fileName) => `${siteMetadata.siteRepo}/blob/master/data/blog/${fileName}`
 const discussUrl = (slug) =>
@@ -59,6 +60,7 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
               </div>
             </header>
             <div className="prose-tty prose max-w-none pt-8 pb-2 dark:prose-dark">{children}</div>
+            <HeadingLinks />
           </div>
           <div className="tty-article divide-y divide-gray-200 pb-8 dark:divide-gray-700">
             <div className="pt-6 pb-6 text-sm text-gray-700 dark:text-gray-300">

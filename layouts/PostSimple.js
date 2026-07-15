@@ -5,6 +5,7 @@ import { BlogSEO } from '@/components/SEO'
 import siteMetadata from '@/data/siteMetadata'
 import Comments from '@/components/comments'
 import ScrollTopAndComment from '@/components/ScrollTopAndComment'
+import HeadingLinks from '@/components/HeadingLinks'
 
 const isoDate = (date) => new Date(date).toISOString().slice(0, 10)
 
@@ -41,6 +42,7 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
               </div>
             </header>
             <div className="prose-tty prose max-w-none pt-8 pb-2 dark:prose-dark">{children}</div>
+            <HeadingLinks />
           </div>
           <div
             className="tty-article divide-y divide-gray-200 pb-8 dark:divide-gray-700 xl:divide-y-0 "
