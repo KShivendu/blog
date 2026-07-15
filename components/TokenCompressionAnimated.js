@@ -167,8 +167,8 @@ function smoothstep(t) {
 // phase boundary instead of popping.
 const H_PHASE0 = 110 // just the shared byte row
 const H_PHASE1 = 380 // BPE token boxes reach the lowest
-const H_PHASE2 = 340 // LZ4 engine + packing bar
-const H_PHASE3 = 340 // final output bars
+const H_PHASE2 = 340 // wrap: labeled LZ4 / ANS containers
+const H_PHASE3 = 340 // shrink: compressed containers + bytes·ratio
 const H_TRANS = 0.025 // fraction of the cycle spent easing between heights
 
 // Grows/shrinks starting exactly AT each phase boundary (never before it) so
@@ -236,13 +236,11 @@ export default function TokenCompressionAnimated() {
   const tokFill = dark ? 'rgba(52,211,153,0.12)' : 'rgba(4,120,87,0.10)'
   const tokStroke = accent
   const tokText = dark ? '#6ee7b7' : '#065f46'
-  const packColor = dark ? '#22d3ee' : '#0891b2'
   const lz4Accent = dark ? '#f59e0b' : '#b45309'
   const lz4Fill = dark ? 'rgba(245,158,11,0.12)' : 'rgba(180,83,9,0.10)'
 
   const tokInfo = TOKENIZER_INFO[preset.tokenizer]
   const lz4Ratio = preset.raw / preset.lz4
-  const packRatio = preset.raw / preset.packed
   const ansRatio = preset.raw / preset.ans
 
   const W = 640
@@ -324,37 +322,29 @@ export default function TokenCompressionAnimated() {
       : progress < P1
       ? 'LZ4: sliding-window match search   ·   tokens: BPE merges bytes into subwords'
       : progress < P2
-      ? 'LZ4: feeding the match/literal encoder   ·   tokens: packing IDs into fixed-width bytes'
-      : 'LZ4: writing compressed output   ·   tokens: ANS entropy coding'
+      ? 'wrapping: LZ4 · ANS'
+      : 'compressing to output'
 
   // Compact phase name for the timestamp readout (reuses P0..P3 boundaries).
   const phaseName =
-    progress < P0 ? 'bytes' : progress < P1 ? 'match' : progress < P2 ? 'pack' : 'output'
+    progress < P0 ? 'bytes' : progress < P1 ? 'match' : progress < P2 ? 'wrap' : 'output'
 
-  const MAX_RAW = Math.max(...PRESETS.map((p) => p.raw))
-  const BAR_MAX_W = 380
-  const barW = (v) => Math.max(6, (v / MAX_RAW) * BAR_MAX_W)
-
-  // token-path current bytes: raw -> packed (stage2) -> ans (stage3)
-  let curBytes, curLabel, curColor
-  if (progress < P1) {
-    curBytes = preset.raw
-    curLabel = 'raw UTF-8'
-    curColor = textMuted
-  } else if (progress < P2) {
-    curBytes = lerp(preset.raw, preset.packed, stage2T)
-    curLabel = `packing -> ${tokInfo.packLabel}`
-    curColor = packColor
-  } else {
-    curBytes = lerp(preset.packed, preset.ans, stage3T)
-    curLabel = 'ANS entropy coding'
-    curColor = accent
-  }
-  const curRatio = preset.raw / curBytes
-
-  // lz4-lane current bytes: raw the whole time until stage3, then shrinks to lz4
+  // Live byte counts shown under each lane in stage 3. Both stay at raw until
+  // P2, then shrink toward each codec's compressed size as stage3T advances.
   const lz4CurBytes = progress < P2 ? preset.raw : lerp(preset.raw, preset.lz4, stage3T)
   const lz4CurRatio = preset.raw / lz4CurBytes
+  const tokCurBytes = progress < P2 ? preset.raw : lerp(preset.raw, preset.ans, stage3T)
+  const tokCurRatio = preset.raw / tokCurBytes
+
+  // Wrap-container geometry, shared by beat 1 (wrap) and beat 2 (shrink).
+  // LZ4 container hugs the byte-hex row; ANS container hugs the ID chips.
+  const LZ4_BOX_X = hexStartX - 6
+  const LZ4_BOX_FULL_W = totalHexW + 12
+  const lastChip = chipLayout[chipLayout.length - 1]
+  const chipsLeft = chipLayout.length ? chipLayout[0].x : W / 2
+  const chipsRight = lastChip ? lastChip.x + lastChip.w : W / 2
+  const ANS_BOX_X = chipsLeft - 8
+  const ANS_BOX_FULL_W = chipsRight - chipsLeft + 16
 
   return (
     <div
@@ -603,104 +593,94 @@ export default function TokenCompressionAnimated() {
 
           {progress >= P1 && progress < P2 && (
             <>
-              {/* stage 2: feed matches/literals into the LZ4 engine */}
+              {/* beat 1 (wrap + fade): an LZ4 container closes over the byte-hex
+                  cells; the raw byte values fade out and the "LZ4" label fades in
+                  so you're left with a labeled container, not raw bytes. */}
+              {hexDisplay.map((hx, i) => (
+                <g key={i} opacity={1 - stage2T}>
+                  <rect
+                    x={hexStartX + i * HEX_CELL}
+                    y={TOP_CY - BOX_H / 2}
+                    width={HEX_W}
+                    height={BOX_H}
+                    rx="2"
+                    fill={byteFill}
+                    stroke={byteStroke}
+                    strokeWidth="0.75"
+                  />
+                  <text
+                    x={hexStartX + i * HEX_CELL + HEX_W / 2}
+                    y={TOP_CY + 3}
+                    textAnchor="middle"
+                    fontSize="7"
+                    fontFamily="monospace"
+                    fill={byteText}
+                  >
+                    {hx}
+                  </text>
+                </g>
+              ))}
               <rect
-                x={hexStartX}
-                y={TOP_CY - 10}
-                width={totalHexW}
-                height="16"
-                rx="2"
-                fill={byteFill}
-                stroke={byteStroke}
-                strokeWidth="0.75"
-                opacity="0.5"
-              />
-              <text x={hexStartX} y={TOP_CY - 16} fontSize="7" fill={textMuted}>
-                raw bytes
-              </text>
-              <line
-                x1={hexStartX + totalHexW + 6}
-                y1={TOP_CY - 2}
-                x2={W / 2 - 55}
-                y2={TOP_CY - 2}
-                stroke={lz4Accent}
-                strokeWidth="1"
-                markerEnd="url(#arrowLz4)"
-              />
-              <rect
-                x={W / 2 - 50}
-                y={TOP_CY - 24}
-                width="100"
-                height="48"
+                x={LZ4_BOX_X}
+                y={TOP_CY - BOX_H / 2 - 6}
+                width={LZ4_BOX_FULL_W}
+                height={BOX_H + 12}
                 rx="4"
                 fill={lz4Fill}
                 stroke={lz4Accent}
-                strokeWidth="1.25"
+                strokeWidth="1.5"
+                opacity={0.4 + 0.6 * stage2T}
               />
               <text
-                x={W / 2}
-                y={TOP_CY - 8}
+                x={LZ4_BOX_X + LZ4_BOX_FULL_W / 2}
+                y={TOP_CY + 4}
                 textAnchor="middle"
-                fontSize="8"
+                fontSize="11"
                 fontWeight="700"
                 fill={lz4Accent}
+                letterSpacing="0.08em"
+                opacity={stage2T}
               >
-                LZ4 ENGINE
-              </text>
-              <rect
-                x={W / 2 - 40}
-                y={TOP_CY + 2}
-                width="80"
-                height="8"
-                rx="2"
-                fill="none"
-                stroke={lz4Accent}
-                strokeWidth="0.75"
-              />
-              <rect
-                x={W / 2 - 40}
-                y={TOP_CY + 2}
-                width={80 * stage2T}
-                height="8"
-                rx="2"
-                fill={lz4Accent}
-              />
-              <text
-                x={W / 2}
-                y={TOP_CY + BOX_H / 2 + 20}
-                textAnchor="middle"
-                fontSize="8"
-                fill={textMuted}
-              >
-                encoding match offsets/lengths + literal runs
+                LZ4
               </text>
             </>
           )}
 
           {progress >= P2 && (
             <>
-              {/* stage 3: output bytes bar, raw -> lz4 */}
-              <rect
-                x={(W - BAR_MAX_W) / 2}
-                y={TOP_CY - 9}
-                width={BAR_MAX_W}
-                height="18"
-                rx="3"
-                fill="none"
-                stroke={divider}
-                strokeWidth="1"
-              />
-              <rect
-                x={(W - BAR_MAX_W) / 2}
-                y={TOP_CY - 9}
-                width={barW(lz4CurBytes)}
-                height="18"
-                rx="3"
-                fill={lz4Accent}
-              />
+              {/* beat 2 (shrink): the labeled LZ4 container pulls its right edge
+                  in to lz4/raw of its wrapped length. */}
+              {(() => {
+                const w = lerp(LZ4_BOX_FULL_W, LZ4_BOX_FULL_W * (preset.lz4 / preset.raw), stage3T)
+                return (
+                  <>
+                    <rect
+                      x={LZ4_BOX_X}
+                      y={TOP_CY - BOX_H / 2 - 6}
+                      width={w}
+                      height={BOX_H + 12}
+                      rx="4"
+                      fill={lz4Fill}
+                      stroke={lz4Accent}
+                      strokeWidth="1.5"
+                    />
+                    <text
+                      x={LZ4_BOX_X + w / 2}
+                      y={TOP_CY + 4}
+                      textAnchor="middle"
+                      fontSize="11"
+                      fontWeight="700"
+                      fill={lz4Accent}
+                      letterSpacing="0.08em"
+                    >
+                      LZ4
+                    </text>
+                  </>
+                )
+              })()}
               <text
                 x={W / 2}
-                y={TOP_CY + 32}
+                y={TOP_CY + BOX_H / 2 + 20}
                 textAnchor="middle"
                 fontSize="15"
                 fontWeight="700"
@@ -708,17 +688,17 @@ export default function TokenCompressionAnimated() {
               >
                 {Math.round(lz4CurBytes).toLocaleString()}B &middot; {lz4CurRatio.toFixed(2)}×
               </text>
-              <text x={W / 2} y={TOP_CY + 46} textAnchor="middle" fontSize="8" fill={textMuted}>
-                compressed output (from {preset.raw.toLocaleString()}B raw)
+              <text
+                x={W / 2}
+                y={TOP_CY + BOX_H / 2 + 34}
+                textAnchor="middle"
+                fontSize="8"
+                fill={textMuted}
+              >
+                LZ4 output (from {preset.raw.toLocaleString()}B raw)
               </text>
             </>
           )}
-
-          <defs>
-            <marker id="arrowLz4" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-              <path d="M0,0 L6,3 L0,6 Z" fill={lz4Accent} />
-            </marker>
-          </defs>
         </g>
 
         <line x1={0} y1={DIVIDER_Y} x2={W} y2={DIVIDER_Y} stroke={divider} strokeWidth="1" />
@@ -799,41 +779,129 @@ export default function TokenCompressionAnimated() {
           </g>
         )}
 
-        {progress >= P1 && (
+        {progress >= P1 && progress < P2 && (
           <g opacity={splitOpacity}>
-            <text x={W / 2} y={BOT_CY - 30} textAnchor="middle" fontSize="10" fill={textMuted}>
-              {preset.tokens.toLocaleString()} tokens
-            </text>
-            <rect
-              x={(W - BAR_MAX_W) / 2}
-              y={BOT_CY - 9}
-              width={BAR_MAX_W}
-              height="18"
-              rx="3"
-              fill="none"
-              stroke={divider}
-              strokeWidth="1"
-            />
-            <rect
-              x={(W - BAR_MAX_W) / 2}
-              y={BOT_CY - 9}
-              width={barW(curBytes)}
-              height="18"
-              rx="3"
-              fill={curColor}
-            />
+            {/* beat 1 (wrap + fade): an ANS container closes over the token-ID
+                chips; the ID text fades and the "ANS" label fades in. */}
             <text
               x={W / 2}
-              y={BOT_CY + 32}
+              y={BOT_CY - CHIP_H / 2 - 14}
+              textAnchor="middle"
+              fontSize="10"
+              fill={textMuted}
+            >
+              {preset.tokens.toLocaleString()} tokens
+            </text>
+            {chipLayout.map((c, i) => (
+              <g key={i} opacity={1 - stage2T}>
+                <rect
+                  x={c.x}
+                  y={BOT_CY - CHIP_H / 2}
+                  width={c.w}
+                  height={CHIP_H}
+                  rx="4"
+                  fill={tokFill}
+                  stroke={tokStroke}
+                  strokeWidth="1.25"
+                />
+                <text
+                  x={c.x + c.w / 2}
+                  y={BOT_CY + CHIP_H / 2 - 11.5}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fontFamily="monospace"
+                  fontWeight="600"
+                  fill={tokText}
+                >
+                  #{c.id}
+                </text>
+              </g>
+            ))}
+            <rect
+              x={ANS_BOX_X}
+              y={BOT_CY - CHIP_H / 2 - 6}
+              width={ANS_BOX_FULL_W}
+              height={CHIP_H + 12}
+              rx="4"
+              fill={tokFill}
+              stroke={tokStroke}
+              strokeWidth="1.5"
+              opacity={0.4 + 0.6 * stage2T}
+            />
+            <text
+              x={ANS_BOX_X + ANS_BOX_FULL_W / 2}
+              y={BOT_CY + 4}
+              textAnchor="middle"
+              fontSize="11"
+              fontWeight="700"
+              fill={tokStroke}
+              letterSpacing="0.08em"
+              opacity={stage2T}
+            >
+              ANS
+            </text>
+          </g>
+        )}
+
+        {progress >= P2 && (
+          <g opacity={splitOpacity}>
+            {/* beat 2 (shrink): the labeled ANS container pulls its right edge in
+                to ans/raw of its wrapped length — far more than LZ4. */}
+            <text
+              x={W / 2}
+              y={BOT_CY - CHIP_H / 2 - 14}
+              textAnchor="middle"
+              fontSize="10"
+              fill={textMuted}
+            >
+              {preset.tokens.toLocaleString()} tokens
+            </text>
+            {(() => {
+              const w = lerp(ANS_BOX_FULL_W, ANS_BOX_FULL_W * (preset.ans / preset.raw), stage3T)
+              return (
+                <>
+                  <rect
+                    x={ANS_BOX_X}
+                    y={BOT_CY - CHIP_H / 2 - 6}
+                    width={w}
+                    height={CHIP_H + 12}
+                    rx="4"
+                    fill={tokFill}
+                    stroke={tokStroke}
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x={ANS_BOX_X + w / 2}
+                    y={BOT_CY + 4}
+                    textAnchor="middle"
+                    fontSize="11"
+                    fontWeight="700"
+                    fill={tokStroke}
+                    letterSpacing="0.08em"
+                  >
+                    ANS
+                  </text>
+                </>
+              )
+            })()}
+            <text
+              x={W / 2}
+              y={BOT_CY + CHIP_H / 2 + 20}
               textAnchor="middle"
               fontSize="15"
               fontWeight="700"
-              fill={curColor}
+              fill={accent}
             >
-              {Math.round(curBytes).toLocaleString()}B &middot; {curRatio.toFixed(2)}×
+              {Math.round(tokCurBytes).toLocaleString()}B &middot; {tokCurRatio.toFixed(2)}×
             </text>
-            <text x={W / 2} y={BOT_CY + 46} textAnchor="middle" fontSize="8" fill={textMuted}>
-              {curLabel} (from {preset.raw.toLocaleString()}B raw)
+            <text
+              x={W / 2}
+              y={BOT_CY + CHIP_H / 2 + 34}
+              textAnchor="middle"
+              fontSize="8"
+              fill={textMuted}
+            >
+              ANS output (from {preset.raw.toLocaleString()}B raw)
             </text>
           </g>
         )}
