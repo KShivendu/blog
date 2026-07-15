@@ -2,7 +2,7 @@
 title: 'Token-Native LLM APIs: Input and Output as Token IDs'
 date: '2026-07-21'
 tags: ['vector-databases', 'compression', 'internals', 'llm', 'nlp']
-draft: false
+draft: true
 summary: "OpenAI's and Anthropic's chat APIs take text in and give text out, even though the model underneath samples token IDs at every step. There is precedent for token-ID input (OpenAI's legacy Completions prompt field, vLLM's prompt_token_ids), but no major hosted chat API exposes it end to end. This post analyzes the current input/output shapes and proposes a concrete, opt-in token-ID mode using the same string-or-array interface pattern from the token-native storage post."
 authors: ['default']
 ---
