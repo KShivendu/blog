@@ -618,6 +618,23 @@ body {
   color: var(--tty-accent);
 }
 
+/* Links read as underlined body text, not coloured text: keep the reading ink,
+   mark the link with an accent underline; hover fills the text with the accent.
+   (.prose-tty / .dark .prose-tty out-specificity the typography plugin's a{}.) */
+.prose-tty.prose a,
+.dark .prose-tty.prose a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--tty-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.prose-tty.prose a:hover,
+.dark .prose-tty.prose a:hover {
+  color: var(--tty-accent);
+  text-decoration-color: var(--tty-accent);
+}
+
 /* ── Tables: bordered, uppercase muted header, tabular figures ───────────── */
 .prose-tty table {
   /* Fill the shared content width; auto layout distributes columns (no gutter). */
