@@ -232,6 +232,7 @@ function ChartImpl({
   const tipRef = useRef(null)
   const hLineRef = useRef(null)
   const activeXRef = useRef(null)
+  const lockedRef = useRef(false) // click-to-lock: keep a point focused after leave
   const [activeX, setActiveX] = useState(null)
   const [hidden, setHidden] = useState(() => new Set())
 
@@ -431,6 +432,7 @@ function ChartImpl({
             onPointerEnter={(e) => onMarkerHover(e, x, py)}
             onPointerMove={(e) => onMarkerHover(e, x, py)}
             onPointerLeave={onCrosshairLeave}
+            onClick={(e) => onMarkerClick(e, x, py)}
           />
         )
       })
@@ -497,12 +499,14 @@ function ChartImpl({
     return (
       `<div style="font-weight:600;color:#fff;padding-bottom:5px;margin-bottom:3px;` +
       `border-bottom:1px solid rgba(255,255,255,0.14)">` +
-      `${esc(xLabel || 'x')}: ${esc(xLabelFor(ux))}${esc(xUnit)}</div>` +
+      // Just the x value + unit — the full axis title in the header is redundant.
+      `${esc(xLabelFor(ux))}${esc(xUnit)}</div>` +
       rows
     )
   }
 
   const onCrosshairMove = (e) => {
+    if (lockedRef.current) return
     if (!unionXs.length) return
     const rect = e.currentTarget.getBoundingClientRect()
     if (!rect.width || !rect.height) return
@@ -534,11 +538,15 @@ function ChartImpl({
     else hideTip()
   }
 
-  const onCrosshairLeave = () => {
+  const clearActive = () => {
     activeXRef.current = null
     setActiveX(null)
     if (hLineRef.current) hLineRef.current.style.opacity = '0'
     hideTip()
+  }
+  const onCrosshairLeave = () => {
+    if (lockedRef.current) return // stay put while a point is locked
+    clearActive()
   }
 
   // Hovering a marker's hit-target: snap the crosshair straight to that point's
@@ -546,6 +554,7 @@ function ChartImpl({
   // reachable) and show the same tooltip. buildTipHtml(ux) lists every visible
   // series with a point at that x, so line series keep their column readout.
   const onMarkerHover = (e, ux, py) => {
+    if (lockedRef.current) return
     if (ux !== activeXRef.current) {
       activeXRef.current = ux
       setActiveX(ux)
@@ -559,6 +568,27 @@ function ChartImpl({
     const html = buildTipHtml(ux)
     if (html) showTip(e, html)
     else hideTip()
+  }
+
+  // Click a marker to LOCK focus on it (tooltip + highlight persist after the
+  // pointer leaves). Click the same point again — or click empty plot — to unlock.
+  const onMarkerClick = (e, ux, py) => {
+    if (lockedRef.current && activeXRef.current === ux) {
+      lockedRef.current = false
+      clearActive()
+      return
+    }
+    lockedRef.current = true
+    activeXRef.current = ux
+    setActiveX(ux)
+    const hl = hLineRef.current
+    if (hl) {
+      hl.setAttribute('y1', py)
+      hl.setAttribute('y2', py)
+      hl.style.opacity = '0.45'
+    }
+    const html = buildTipHtml(ux)
+    if (html) showTip(e, html)
   }
 
   const legendSwatch = (s, i) => {
@@ -693,6 +723,13 @@ function ChartImpl({
             onPointerLeave={onCrosshairLeave}
             onPointerUp={onCrosshairLeave}
             onPointerCancel={onCrosshairLeave}
+            onClick={() => {
+              // Click on empty plot clears a locked point.
+              if (lockedRef.current) {
+                lockedRef.current = false
+                clearActive()
+              }
+            }}
           />
           {/* Per-marker hit-targets on top of the overlay so a marker (or a small
               radius around it) is directly hoverable, even for clustered scatter

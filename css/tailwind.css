@@ -718,12 +718,15 @@ body {
 .prose-tty tbody tr:last-child {
   border-bottom: 0;
 }
-/* Zebra striping: a faint wash on even rows for easier row-tracking. */
-.prose-tty tbody tr:nth-child(even) {
-  background-color: rgba(95, 101, 112, 0.06);
+/* Soft row highlight on hover (no zebra striping). */
+.prose-tty tbody tr {
+  transition: background-color 0.12s ease;
 }
-.dark .prose-tty tbody tr:nth-child(even) {
-  background-color: rgba(255, 255, 255, 0.035);
+.prose-tty tbody tr:hover {
+  background-color: rgba(95, 101, 112, 0.08);
+}
+.dark .prose-tty tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.045);
 }
 
 /* ── Figure captions: `fig.N — caption` terminal style ───────────────────── */
