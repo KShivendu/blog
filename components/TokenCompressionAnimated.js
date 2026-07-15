@@ -331,9 +331,13 @@ export default function TokenCompressionAnimated() {
 
   // Live byte counts shown under each lane in stage 3. Both stay at raw until
   // P2, then shrink toward each codec's compressed size as stage3T advances.
+  // Byte lane: raw until LZ4 actually runs (LZ4 doesn't compress until the
+  // shrink), then raw -> lz4.
   const lz4CurBytes = progress < P2 ? preset.raw : lerp(preset.raw, preset.lz4, stage3T)
   const lz4CurRatio = preset.raw / lz4CurBytes
-  const tokCurBytes = progress < P2 ? preset.raw : lerp(preset.raw, preset.ans, stage3T)
+  // Token lane is ALREADY compressed by the time we have token IDs (tokenization
+  // + packing), so it starts at `packed` (not raw), then ANS shrinks it further.
+  const tokCurBytes = progress < P2 ? preset.packed : lerp(preset.packed, preset.ans, stage3T)
   const tokCurRatio = preset.raw / tokCurBytes
 
   // Wrap-container geometry, shared by beat 1 (wrap) and beat 2 (shrink).
@@ -678,6 +682,13 @@ export default function TokenCompressionAnimated() {
                   </>
                 )
               })()}
+            </>
+          )}
+
+          {/* bytes · ratio from the wrap phase on (not just the shrink). Byte
+              lane stays 1.00× until LZ4 actually runs in the shrink. */}
+          {progress >= P1 && (
+            <>
               <text
                 x={W / 2}
                 y={TOP_CY + BOX_H / 2 + 20}
@@ -695,7 +706,9 @@ export default function TokenCompressionAnimated() {
                 fontSize="8"
                 fill={textMuted}
               >
-                LZ4 output (from {preset.raw.toLocaleString()}B raw)
+                {progress < P2
+                  ? 'raw bytes — LZ4 not run yet'
+                  : `LZ4 output (from ${preset.raw.toLocaleString()}B raw)`}
               </text>
             </>
           )}
@@ -884,6 +897,13 @@ export default function TokenCompressionAnimated() {
                 </>
               )
             })()}
+          </g>
+        )}
+
+        {/* bytes · ratio from the wrap phase on — the token lane is ALREADY
+            compressed (~packed) before ANS shrinks it further. */}
+        {progress >= P1 && (
+          <g opacity={splitOpacity}>
             <text
               x={W / 2}
               y={BOT_CY + CHIP_H / 2 + 20}
@@ -901,7 +921,9 @@ export default function TokenCompressionAnimated() {
               fontSize="8"
               fill={textMuted}
             >
-              ANS output (from {preset.raw.toLocaleString()}B raw)
+              {progress < P2
+                ? 'packed token IDs (before ANS)'
+                : `ANS output (from ${preset.raw.toLocaleString()}B raw)`}
             </text>
           </g>
         )}
