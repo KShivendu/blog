@@ -10,7 +10,7 @@ images: ['/static/images/blogs/tokenization-compression.jpg']
 authors: ['default']
 ---
 
-![Token-Native Storage Image](/static/images/blogs/tokenization-compression.jpg)
+<!-- ![Token-Native Storage Image](/static/images/blogs/tokenization-compression.jpg) -->
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
@@ -20,7 +20,10 @@ In other words, **if agents are going to be the [biggest users](https://x.com/ea
 
 ## How Token-Native Storage Works
 
-<TokenCompressionPipeline />
+{/* Static version kept for reference — shipping the animated one below. */}
+{/* <TokenCompressionPipeline /> */}
+
+<TokenCompressionAnimated />
 
 The top path is what databases do today: store UTF-8 bytes, compress with a generic codec. The bottom path is token-native storage: tokenize first, then compress (here entropy-code) the token IDs.
 
