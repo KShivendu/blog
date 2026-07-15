@@ -24,6 +24,9 @@ const PRESETS = [
     bytePreview: 'Token-native compres'.split(''),
     tokenPreview: ['Token', '-', 'native', ' compression', ' stores', ' the', ' token', ' IDs'],
     tokenIds: [30642, 12, 30191],
+    // How the shared character row groups into tokens (char counts, summing to
+    // bytePreview.length): "Token"|"-"|"native"|" compres". First groups get IDs.
+    tokenGroups: [5, 1, 6, 8],
     byteHex: [
       '54',
       '6F',
@@ -59,6 +62,8 @@ const PRESETS = [
     bytePreview: 'from django.apps im'.split(''),
     tokenPreview: ['from', ' django', '.apps', ' import', ' AppConfig', '↵', 'from', ' django'],
     tokenIds: [1527, 8426, 40813],
+    // "from"|" django"|".apps"|" im"
+    tokenGroups: [4, 7, 5, 3],
     byteHex: [
       '66',
       '72',
@@ -93,6 +98,8 @@ const PRESETS = [
     bytePreview: 'मोहनदास करमचन्द '.split(''),
     tokenPreview: ['मो', 'हन', 'द', 'ास', ' कर', 'म', 'च', 'न्द'],
     tokenIds: [132049, 70527, 2587, 6750, 4026, 1637, 3774, 21839],
+    // "मो"|"हन"|"द"|"ास"|" कर"|"म"|"च"|"न्द " (trailing space folded into last)
+    tokenGroups: [2, 2, 1, 2, 3, 1, 1, 4],
     byteHex: [
       'E0',
       'A4',
@@ -165,10 +172,12 @@ function smoothstep(t) {
 // staying fixed at the tallest phase's height for the whole loop (which
 // left a huge blank strip under the shorter phases). It eases across each
 // phase boundary instead of popping.
-const H_PHASE0 = 110 // just the shared byte row
-const H_PHASE1 = 380 // BPE token boxes reach the lowest
-const H_PHASE2 = 340 // wrap: labeled LZ4 / ANS containers
-const H_PHASE3 = 340 // shrink: compressed containers + bytes·ratio
+// Both lanes are on screen from t=0 now (two identical rows that then diverge),
+// so the canvas is a constant height for the whole loop.
+const H_PHASE0 = 340
+const H_PHASE1 = 340
+const H_PHASE2 = 340
+const H_PHASE3 = 340
 const H_TRANS = 0.025 // fraction of the cycle spent easing between heights
 
 // Grows/shrinks starting exactly AT each phase boundary (never before it) so
@@ -245,92 +254,73 @@ export default function TokenCompressionAnimated() {
 
   const W = 640
   const H = heightAt(progress)
-  const BOX_H = 26
-  const BYTE_W = 14,
-    BYTE_G = 2
-  const bytePreviewFull = [...preset.bytePreview, '…']
-  const totalByteW = bytePreviewFull.length * (BYTE_W + BYTE_G) - BYTE_G
-  const rowStartX = (W - totalByteW) / 2
+  const CELL_H = 26
 
-  // Byte-hex row for the LZ4 lane. Sized to fit width W across all presets:
-  // ASCII presets (~20 bytes) show every byte; Hindi (~43 bytes) is capped at
-  // MAX_HEX with a trailing "…". Hex is 2 chars, so cells are narrower than the
-  // char cells used in the shared P0 row.
-  const HEX_W = 15,
-    HEX_G = 2
-  const HEX_CELL = HEX_W + HEX_G
-  const MAX_HEX = 26
-  const hexTrunc = preset.byteHex.length > MAX_HEX
-  const hexDisplay = hexTrunc ? [...preset.byteHex.slice(0, MAX_HEX), '…'] : preset.byteHex.slice()
-  const totalHexW = hexDisplay.length * HEX_CELL - HEX_G
-  const hexStartX = (W - totalHexW) / 2
+  // Both lanes start from the SAME characters. The byte lane then wraps EACH
+  // character in its own box (1 byte stays 1 unit, yellow); the token lane
+  // wraps ADJACENT characters together into tokens (BPE merges, green).
+  const CELL_W = 16
+  const CELL_G = 3
+  const CELL_STEP = CELL_W + CELL_G
+  const GROUP_PAD = 3
+  const charCells = preset.bytePreview
+  const totalRowW = charCells.length * CELL_STEP - CELL_G
+  const rowStartX = (W - totalRowW) / 2
+  const cellX = (i) => rowStartX + i * CELL_STEP
 
-  const SHARED_Y = 40 // shared raw-byte row, phase 0 only
-  const TOP_LABEL_Y = 98
-  const TOP_CY = 150 // byte-codec (LZ4) lane
-  const DIVIDER_Y = 202
-  const BOT_LABEL_Y = 224
-  const BOT_CY = 268 // token-path lane
-
-  // Token-ID chips shown in the token lane (post-P0). The token lane is a
-  // SEPARATE representation of the same input — pure token IDs, no bytes and no
-  // readable glyphs. tokenPreview only decides HOW MANY IDs we have real values
-  // for; the chips themselves render just the numeric IDs.
-  const idChips = []
-  for (let ti = 0; ti < preset.tokenPreview.length; ti++) {
-    if (preset.tokenIds[ti] == null) break
-    idChips.push({ id: preset.tokenIds[ti] })
-  }
-  const leftoverTokenCount = preset.tokens - idChips.length
-
-  // Lay the ID chips out in one centered row, widths driven by the ID text so
-  // 3 short IDs (English/Python) and 8 longer IDs (Hindi) both fit within W.
-  const CHIP_H = 30
-  const CHIP_PAD = 14
-  const CHIP_GAP = 8
-  const CHIP_CHAR_W = 6.3
-  const chipLayout = (() => {
-    const widths = idChips.map((c) => ('#' + c.id).length * CHIP_CHAR_W + CHIP_PAD)
-    const total = widths.reduce((a, w) => a + w, 0) + CHIP_GAP * Math.max(0, idChips.length - 1)
-    let cursor = (W - total) / 2
-    return idChips.map((c, i) => {
-      const x = cursor
-      cursor += widths[i] + CHIP_GAP
-      return { id: c.id, x, w: widths[i] }
+  // Token groupings laid over the same character row. Each group spans `len`
+  // adjacent cells; the first groups carry real token IDs, the rest are part
+  // of the (much longer) document and aren't drawn.
+  const groups = (() => {
+    const out = []
+    let s = 0
+    ;(preset.tokenGroups || []).forEach((len, gi) => {
+      const x = cellX(s) - GROUP_PAD
+      const right = cellX(s + len - 1) + CELL_W + GROUP_PAD
+      out.push({ gi, len, s, x, w: right - x, id: preset.tokenIds[gi] })
+      s += len
     })
+    return out
   })()
+  const idGroupCount = groups.filter((g) => g.id != null).length
+  const leftoverTokenCount = preset.tokens - idGroupCount
+
+  // Two stacked rows: byte codec lane (top) and token lane (bottom).
+  const TOP_LABEL_Y = 40
+  const TOP_CY = 96 // byte-codec (LZ4) lane row
+  const DIVIDER_Y = 176
+  const BOT_LABEL_Y = 208
+  const BOT_CY = 264 // token-path lane row
 
   const inPhase = (start, end) => Math.max(0, Math.min(1, (progress - start) / (end - start)))
   const bytesT = inPhase(0, P0)
   const stage1T = inPhase(P0, P1)
   const stage2T = inPhase(P1, P2)
   const stage3T = inPhase(P2, P3)
-  // Quick, non-overlapping crossfade: the shared row is gone before the
-  // lane's own copy is more than a third in, instead of both rows sitting
-  // at partial opacity on top of each other for a big chunk of phase 1.
-  const sharedOpacity = 1 - Math.min(1, stage1T / 0.12)
-  const splitOpacity = Math.min(1, Math.max(0, (stage1T - 0.04) / 0.16))
-  // The diverging connector lines are a one-time "it just split" flourish,
-  // not a permanent fixture — they flash in and back out early in phase 1
-  // instead of hanging in mid-air, disconnected from anything, for the
-  // rest of the loop.
-  const linesOpacity = Math.max(0, Math.min(1, stage1T * 8) - Math.max(0, (stage1T - 0.25) * 8))
+  const labelOpacity = Math.min(1, progress / 0.03)
+
+  // Per-box "draw-on" progress, cascading left-to-right across stage 1. Each
+  // box's outline circles into place over ~0.42 of the stage.
+  const byteBoxT = (i) =>
+    Math.max(0, Math.min(1, (stage1T - i * (0.55 / Math.max(1, charCells.length))) / 0.42))
+  const groupBoxT = (g) =>
+    Math.max(0, Math.min(1, (stage1T - g * (0.55 / Math.max(1, groups.length))) / 0.42))
 
   const phaseLabel =
     progress < P0
-      ? 'Reading raw UTF-8 bytes (shared input, about to split)'
+      ? 'Same bytes, read two ways (byte codec vs. tokens)'
       : progress < P1
-      ? 'LZ4: sliding-window match search   ·   tokens: BPE merges bytes into subwords'
+      ? 'bytes: box each byte on its own   ·   tokens: merge adjacent bytes (BPE)'
       : progress < P2
       ? 'wrapping: LZ4 · ANS'
       : 'compressing to output'
 
   // Compact phase name for the timestamp readout (reuses P0..P3 boundaries).
   const phaseName =
-    progress < P0 ? 'bytes' : progress < P1 ? 'match' : progress < P2 ? 'wrap' : 'output'
+    progress < P0 ? 'copy' : progress < P1 ? 'group' : progress < P2 ? 'wrap' : 'output'
 
-  // Live byte counts shown under each lane in stage 3. Both stay at raw until
-  // P2, then shrink toward each codec's compressed size as stage3T advances.
+  // Live byte counts shown under each lane in stage 3. Both stay at their
+  // pre-shrink size until P2, then shrink toward each codec's output size.
   // Byte lane: raw until LZ4 actually runs (LZ4 doesn't compress until the
   // shrink), then raw -> lz4.
   const lz4CurBytes = progress < P2 ? preset.raw : lerp(preset.raw, preset.lz4, stage3T)
@@ -340,15 +330,64 @@ export default function TokenCompressionAnimated() {
   const tokCurBytes = progress < P2 ? preset.packed : lerp(preset.packed, preset.ans, stage3T)
   const tokCurRatio = preset.raw / tokCurBytes
 
-  // Wrap-container geometry, shared by beat 1 (wrap) and beat 2 (shrink).
-  // LZ4 container hugs the byte-hex row; ANS container hugs the ID chips.
-  const LZ4_BOX_X = hexStartX - 6
-  const LZ4_BOX_FULL_W = totalHexW + 12
-  const lastChip = chipLayout[chipLayout.length - 1]
-  const chipsLeft = chipLayout.length ? chipLayout[0].x : W / 2
-  const chipsRight = lastChip ? lastChip.x + lastChip.w : W / 2
-  const ANS_BOX_X = chipsLeft - 8
-  const ANS_BOX_FULL_W = chipsRight - chipsLeft + 16
+  // Wrap containers span the shared character row (both lanes, same width).
+  const LZ4_BOX_X = rowStartX - 6
+  const LZ4_BOX_FULL_W = totalRowW + 12
+  const ANS_BOX_X = rowStartX - 6
+  const ANS_BOX_FULL_W = totalRowW + 12
+
+  // A rectangle whose border "draws on" (circling animation) as t goes 0->1;
+  // the fill fades in once the outline is mostly complete.
+  const drawRect = (key, { x, y, w, h, rx, stroke, strokeWidth, fill, t }) => {
+    const perim = 2 * (w + h)
+    return (
+      <rect
+        key={key}
+        x={x}
+        y={y}
+        width={w}
+        height={h}
+        rx={rx}
+        fill={fill || 'none'}
+        fillOpacity={fill ? Math.max(0, (t - 0.55) / 0.45) : 0}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        strokeDasharray={perim}
+        strokeDashoffset={perim * (1 - t)}
+        strokeLinecap="round"
+      />
+    )
+  }
+
+  // The shared character row (identical in both lanes), revealed L->R by revealT.
+  const charRow = (cy, revealT) =>
+    charCells.map((ch, i) => {
+      if (revealT < i / charCells.length) return null
+      return (
+        <g key={'c' + i}>
+          <rect
+            x={cellX(i)}
+            y={cy - CELL_H / 2}
+            width={CELL_W}
+            height={CELL_H}
+            rx="2"
+            fill={byteFill}
+            stroke={byteStroke}
+            strokeWidth="0.75"
+          />
+          <text
+            x={cellX(i) + CELL_W / 2}
+            y={cy + 3}
+            textAnchor="middle"
+            fontSize={ch.length > 1 ? '7' : '8.5'}
+            fontFamily="monospace"
+            fill={byteText}
+          >
+            {ch}
+          </text>
+        </g>
+      )
+    })
 
   return (
     <div
@@ -461,71 +500,12 @@ export default function TokenCompressionAnimated() {
       <svg
         viewBox={`0 0 ${W} ${H}`}
         style={{ width: '100%', display: 'block', margin: '0 auto', fontFamily: MONO }}
-        aria-label="Same raw bytes, split into a parallel LZ4 path and a token path, phases synced"
+        aria-label="The same bytes, read two ways: the byte codec boxes each byte on its own while the token path merges adjacent bytes into tokens, then both compress"
       >
         <rect width={W} height={H} rx="2" fill={bg} />
 
-        {/* Shared raw-byte row: both paths read the exact same bytes before
-            diverging. Fades out right as the two lanes fade in. */}
-        <g opacity={sharedOpacity}>
-          <text x={rowStartX} y={SHARED_Y - BOX_H / 2 - 8} fontSize="8" fill={textMuted}>
-            raw text -&gt; UTF-8 bytes (shared)
-          </text>
-          {bytePreviewFull.map((ch, i) => {
-            const revealAt = i / bytePreviewFull.length
-            if (bytesT < revealAt) return null
-            return (
-              <g key={i}>
-                <rect
-                  x={rowStartX + i * (BYTE_W + BYTE_G)}
-                  y={SHARED_Y - BOX_H / 2}
-                  width={BYTE_W}
-                  height={BOX_H}
-                  rx="2"
-                  fill={byteFill}
-                  stroke={byteStroke}
-                  strokeWidth="0.75"
-                />
-                <text
-                  x={rowStartX + i * (BYTE_W + BYTE_G) + BYTE_W / 2}
-                  y={SHARED_Y + 3}
-                  textAnchor="middle"
-                  fontSize={ch.length > 1 ? '6.5' : '7.5'}
-                  fontFamily="monospace"
-                  fill={byteText}
-                >
-                  {ch}
-                </text>
-              </g>
-            )
-          })}
-        </g>
-
-        {/* Diverging split: one input, two paths. A brief flourish, not a
-            permanent fixture — see linesOpacity. */}
-        <g opacity={linesOpacity}>
-          <line
-            x1={W / 2}
-            y1={SHARED_Y + BOX_H / 2 + 2}
-            x2={W / 2 - 70}
-            y2={TOP_LABEL_Y - 10}
-            stroke={lz4Accent}
-            strokeWidth="1"
-            opacity="0.5"
-          />
-          <line
-            x1={W / 2}
-            y1={SHARED_Y + BOX_H / 2 + 2}
-            x2={W / 2 + 70}
-            y2={BOT_LABEL_Y - 10}
-            stroke={tokStroke}
-            strokeWidth="1"
-            opacity="0.5"
-          />
-        </g>
-
         {/* ── Lane 1: byte codec path (LZ4) ───────────────────────────── */}
-        <g opacity={splitOpacity}>
+        <g opacity={labelOpacity}>
           <text
             x={8}
             y={TOP_LABEL_Y}
@@ -536,188 +516,152 @@ export default function TokenCompressionAnimated() {
           >
             BYTE CODEC PATH (LZ4)
           </text>
-
-          {progress < P1 && (
-            <>
-              {/* stage 1: sliding-window match search over the raw UTF-8 bytes
-                  (shown as hex cells — no readable characters past P0) */}
-              {hexDisplay.map((hx, i) => (
-                <g key={i}>
-                  <rect
-                    x={hexStartX + i * HEX_CELL}
-                    y={TOP_CY - BOX_H / 2}
-                    width={HEX_W}
-                    height={BOX_H}
-                    rx="2"
-                    fill={byteFill}
-                    stroke={byteStroke}
-                    strokeWidth="0.75"
-                  />
-                  <text
-                    x={hexStartX + i * HEX_CELL + HEX_W / 2}
-                    y={TOP_CY + 3}
-                    textAnchor="middle"
-                    fontSize="7"
-                    fontFamily="monospace"
-                    fill={byteText}
-                  >
-                    {hx}
-                  </text>
-                </g>
-              ))}
-              {(() => {
-                const winBoxes = 5
-                const winW = winBoxes * HEX_CELL - HEX_G + 4
-                const maxSlide = totalHexW - winW
-                const winX = hexStartX - 2 + lerp(0, Math.max(0, maxSlide), stage1T)
-                return (
-                  <rect
-                    x={winX}
-                    y={TOP_CY - BOX_H / 2 - 4}
-                    width={winW}
-                    height={BOX_H + 8}
-                    rx="3"
-                    fill="none"
-                    stroke={lz4Accent}
-                    strokeWidth="1.5"
-                  />
-                )
-              })()}
-              <text
-                x={W / 2}
-                y={TOP_CY + BOX_H / 2 + 16}
-                textAnchor="middle"
-                fontSize="8"
-                fill={textMuted}
-              >
-                scanning for repeated byte sequences (match window)
-              </text>
-            </>
-          )}
-
-          {progress >= P1 && progress < P2 && (
-            <>
-              {/* beat 1 (wrap + fade): an LZ4 container closes over the byte-hex
-                  cells; the raw byte values fade out and the "LZ4" label fades in
-                  so you're left with a labeled container, not raw bytes. */}
-              {hexDisplay.map((hx, i) => (
-                <g key={i} opacity={1 - stage2T}>
-                  <rect
-                    x={hexStartX + i * HEX_CELL}
-                    y={TOP_CY - BOX_H / 2}
-                    width={HEX_W}
-                    height={BOX_H}
-                    rx="2"
-                    fill={byteFill}
-                    stroke={byteStroke}
-                    strokeWidth="0.75"
-                  />
-                  <text
-                    x={hexStartX + i * HEX_CELL + HEX_W / 2}
-                    y={TOP_CY + 3}
-                    textAnchor="middle"
-                    fontSize="7"
-                    fontFamily="monospace"
-                    fill={byteText}
-                  >
-                    {hx}
-                  </text>
-                </g>
-              ))}
-              <rect
-                x={LZ4_BOX_X}
-                y={TOP_CY - BOX_H / 2 - 6}
-                width={LZ4_BOX_FULL_W}
-                height={BOX_H + 12}
-                rx="4"
-                fill={lz4Fill}
-                stroke={lz4Accent}
-                strokeWidth="1.5"
-                opacity={0.4 + 0.6 * stage2T}
-              />
-              <text
-                x={LZ4_BOX_X + LZ4_BOX_FULL_W / 2}
-                y={TOP_CY + 4}
-                textAnchor="middle"
-                fontSize="11"
-                fontWeight="700"
-                fill={lz4Accent}
-                letterSpacing="0.08em"
-                opacity={stage2T}
-              >
-                LZ4
-              </text>
-            </>
-          )}
-
-          {progress >= P2 && (
-            <>
-              {/* beat 2 (shrink): the labeled LZ4 container pulls its right edge
-                  in to lz4/raw of its wrapped length. */}
-              {(() => {
-                const w = lerp(LZ4_BOX_FULL_W, LZ4_BOX_FULL_W * (preset.lz4 / preset.raw), stage3T)
-                return (
-                  <>
-                    <rect
-                      x={LZ4_BOX_X}
-                      y={TOP_CY - BOX_H / 2 - 6}
-                      width={w}
-                      height={BOX_H + 12}
-                      rx="4"
-                      fill={lz4Fill}
-                      stroke={lz4Accent}
-                      strokeWidth="1.5"
-                    />
-                    <text
-                      x={LZ4_BOX_X + w / 2}
-                      y={TOP_CY + 4}
-                      textAnchor="middle"
-                      fontSize="11"
-                      fontWeight="700"
-                      fill={lz4Accent}
-                      letterSpacing="0.08em"
-                    >
-                      LZ4
-                    </text>
-                  </>
-                )
-              })()}
-            </>
-          )}
-
-          {/* bytes · ratio from the wrap phase on (not just the shrink). Byte
-              lane stays 1.00× until LZ4 actually runs in the shrink. */}
-          {progress >= P1 && (
-            <>
-              <text
-                x={W / 2}
-                y={TOP_CY + BOX_H / 2 + 20}
-                textAnchor="middle"
-                fontSize="15"
-                fontWeight="700"
-                fill={lz4Accent}
-              >
-                {Math.round(lz4CurBytes).toLocaleString()}B &middot; {lz4CurRatio.toFixed(2)}×
-              </text>
-              <text
-                x={W / 2}
-                y={TOP_CY + BOX_H / 2 + 34}
-                textAnchor="middle"
-                fontSize="8"
-                fill={textMuted}
-              >
-                {progress < P2
-                  ? 'raw bytes — LZ4 not run yet'
-                  : `LZ4 output (from ${preset.raw.toLocaleString()}B raw)`}
-              </text>
-            </>
-          )}
         </g>
+
+        {/* P0 + stage 1: the shared character row, then each byte gets its OWN
+            yellow box (1 byte stays 1 unit — nothing merges). */}
+        {progress < P1 && (
+          <>
+            {charRow(TOP_CY, progress < P0 ? bytesT : 1)}
+            {charCells.map((ch, i) => {
+              const t = byteBoxT(i)
+              if (t <= 0) return null
+              return drawRect('yb' + i, {
+                x: cellX(i) - 2,
+                y: TOP_CY - CELL_H / 2 - 2,
+                w: CELL_W + 4,
+                h: CELL_H + 4,
+                rx: 3,
+                stroke: lz4Accent,
+                strokeWidth: 1.5,
+                fill: lz4Fill,
+                t,
+              })
+            })}
+            {progress >= P0 && (
+              <text
+                x={W / 2}
+                y={TOP_CY + CELL_H / 2 + 18}
+                textAnchor="middle"
+                fontSize="8"
+                fill={textMuted}
+                opacity={Math.min(1, stage1T * 3)}
+              >
+                each byte kept separate — 1 box = 1 byte
+              </text>
+            )}
+          </>
+        )}
+
+        {/* stage 2 (wrap): fade the boxed byte row, grow the LZ4 container. */}
+        {progress >= P1 && progress < P2 && (
+          <>
+            <g opacity={1 - stage2T}>
+              {charRow(TOP_CY, 1)}
+              {charCells.map((ch, i) =>
+                drawRect('yb' + i, {
+                  x: cellX(i) - 2,
+                  y: TOP_CY - CELL_H / 2 - 2,
+                  w: CELL_W + 4,
+                  h: CELL_H + 4,
+                  rx: 3,
+                  stroke: lz4Accent,
+                  strokeWidth: 1.5,
+                  fill: lz4Fill,
+                  t: 1,
+                })
+              )}
+            </g>
+            <rect
+              x={LZ4_BOX_X}
+              y={TOP_CY - CELL_H / 2 - 6}
+              width={LZ4_BOX_FULL_W}
+              height={CELL_H + 12}
+              rx="4"
+              fill={lz4Fill}
+              stroke={lz4Accent}
+              strokeWidth="1.5"
+              opacity={0.4 + 0.6 * stage2T}
+            />
+            <text
+              x={LZ4_BOX_X + LZ4_BOX_FULL_W / 2}
+              y={TOP_CY + 4}
+              textAnchor="middle"
+              fontSize="11"
+              fontWeight="700"
+              fill={lz4Accent}
+              letterSpacing="0.08em"
+              opacity={stage2T}
+            >
+              LZ4
+            </text>
+          </>
+        )}
+
+        {/* stage 3 (shrink): the labeled LZ4 container pulls its right edge in
+            to lz4/raw of its wrapped length. */}
+        {progress >= P2 &&
+          (() => {
+            const w = lerp(LZ4_BOX_FULL_W, LZ4_BOX_FULL_W * (preset.lz4 / preset.raw), stage3T)
+            return (
+              <>
+                <rect
+                  x={LZ4_BOX_X}
+                  y={TOP_CY - CELL_H / 2 - 6}
+                  width={w}
+                  height={CELL_H + 12}
+                  rx="4"
+                  fill={lz4Fill}
+                  stroke={lz4Accent}
+                  strokeWidth="1.5"
+                />
+                <text
+                  x={LZ4_BOX_X + w / 2}
+                  y={TOP_CY + 4}
+                  textAnchor="middle"
+                  fontSize="11"
+                  fontWeight="700"
+                  fill={lz4Accent}
+                  letterSpacing="0.08em"
+                >
+                  LZ4
+                </text>
+              </>
+            )
+          })()}
+
+        {/* bytes · ratio from the wrap phase on. Byte lane stays 1.00× until
+            LZ4 actually runs in the shrink. */}
+        {progress >= P1 && (
+          <>
+            <text
+              x={W / 2}
+              y={TOP_CY + CELL_H / 2 + 20}
+              textAnchor="middle"
+              fontSize="15"
+              fontWeight="700"
+              fill={lz4Accent}
+            >
+              {Math.round(lz4CurBytes).toLocaleString()}B &middot; {lz4CurRatio.toFixed(2)}×
+            </text>
+            <text
+              x={W / 2}
+              y={TOP_CY + CELL_H / 2 + 34}
+              textAnchor="middle"
+              fontSize="8"
+              fill={textMuted}
+            >
+              {progress < P2
+                ? 'raw bytes — LZ4 not run yet'
+                : `LZ4 output (from ${preset.raw.toLocaleString()}B raw)`}
+            </text>
+          </>
+        )}
 
         <line x1={0} y1={DIVIDER_Y} x2={W} y2={DIVIDER_Y} stroke={divider} strokeWidth="1" />
 
         {/* ── Lane 2: token path ──────────────────────────────────────── */}
-        <g opacity={splitOpacity}>
+        <g opacity={labelOpacity}>
           <text
             x={8}
             y={BOT_LABEL_Y}
@@ -730,111 +674,97 @@ export default function TokenCompressionAnimated() {
           </text>
         </g>
 
-        {progress >= P0 && progress < P1 && (
-          <g opacity={splitOpacity}>
-            {/* The token lane is its OWN representation of the input: pure token
-                IDs. No bytes, no readable glyphs — BPE has already collapsed the
-                text into the numeric IDs shown here. */}
-            <text
-              x={W / 2}
-              y={BOT_CY - CHIP_H / 2 - 12}
-              textAnchor="middle"
-              fontSize="8"
-              fill={textMuted}
-            >
-              BPE merges collapse the text into token IDs
-            </text>
-            {chipLayout.map((c, i) => {
-              const revealAt = i / Math.max(1, chipLayout.length)
-              const localT = Math.min(1, Math.max(0, (stage1T - revealAt) * chipLayout.length))
-              if (localT <= 0) return null
-              const y = BOT_CY - CHIP_H / 2 + (1 - localT) * 8
+        {/* P0 + stage 1: the SAME character row, but ADJACENT bytes get circled
+            together into token boxes (green), collapsing many bytes into one
+            token whose ID is shown below. */}
+        {progress < P1 && (
+          <>
+            {charRow(BOT_CY, progress < P0 ? bytesT : 1)}
+            {groups.map((grp) => {
+              const t = groupBoxT(grp.gi)
+              if (t <= 0) return null
               return (
-                <g key={i} opacity={localT}>
-                  <rect
-                    x={c.x}
-                    y={y}
-                    width={c.w}
-                    height={CHIP_H}
-                    rx="4"
-                    fill={tokFill}
-                    stroke={tokStroke}
-                    strokeWidth="1.25"
-                  />
-                  <text
-                    x={c.x + c.w / 2}
-                    y={y + CHIP_H / 2 + 3.5}
-                    textAnchor="middle"
-                    fontSize="10"
-                    fontFamily="monospace"
-                    fontWeight="600"
-                    fill={tokText}
-                  >
-                    #{c.id}
-                  </text>
+                <g key={'tg' + grp.gi}>
+                  {drawRect('gb' + grp.gi, {
+                    x: grp.x,
+                    y: BOT_CY - CELL_H / 2 - 2,
+                    w: grp.w,
+                    h: CELL_H + 4,
+                    rx: 4,
+                    stroke: tokStroke,
+                    strokeWidth: 1.75,
+                    fill: tokFill,
+                    t,
+                  })}
+                  {grp.id != null && (
+                    <text
+                      x={grp.x + grp.w / 2}
+                      y={BOT_CY + CELL_H / 2 + 14}
+                      textAnchor="middle"
+                      fontSize="7.5"
+                      fontFamily="monospace"
+                      fontWeight="600"
+                      fill={tokText}
+                      opacity={Math.max(0, (t - 0.5) / 0.5)}
+                    >
+                      #{grp.id}
+                    </text>
+                  )}
                 </g>
               )
             })}
-
-            {stage1T > 0.4 && leftoverTokenCount > 0 && (
+            {progress >= P0 && (
               <text
                 x={W / 2}
-                y={BOT_CY + CHIP_H / 2 + 24}
+                y={BOT_CY + CELL_H / 2 + 30}
                 textAnchor="middle"
                 fontSize="8"
                 fill={textMuted}
-                opacity={Math.min(1, (stage1T - 0.4) * 3)}
+                opacity={Math.min(1, stage1T * 3)}
               >
-                + {leftoverTokenCount.toLocaleString()} more token IDs (rest of the document, not
-                shown)
+                adjacent bytes merge into {preset.tokens.toLocaleString()} tokens
+                {leftoverTokenCount > 0
+                  ? ` (+${leftoverTokenCount.toLocaleString()} more, not shown)`
+                  : ''}
               </text>
             )}
-          </g>
+          </>
         )}
 
+        {/* stage 2 (wrap): fade the boxed token row, grow the ANS container. */}
         {progress >= P1 && progress < P2 && (
-          <g opacity={splitOpacity}>
-            {/* beat 1 (wrap + fade): an ANS container closes over the token-ID
-                chips; the ID text fades and the "ANS" label fades in. */}
+          <>
             <text
               x={W / 2}
-              y={BOT_CY - CHIP_H / 2 - 14}
+              y={BOT_CY - CELL_H / 2 - 14}
               textAnchor="middle"
               fontSize="10"
               fill={textMuted}
+              opacity={1 - stage2T}
             >
               {preset.tokens.toLocaleString()} tokens
             </text>
-            {chipLayout.map((c, i) => (
-              <g key={i} opacity={1 - stage2T}>
-                <rect
-                  x={c.x}
-                  y={BOT_CY - CHIP_H / 2}
-                  width={c.w}
-                  height={CHIP_H}
-                  rx="4"
-                  fill={tokFill}
-                  stroke={tokStroke}
-                  strokeWidth="1.25"
-                />
-                <text
-                  x={c.x + c.w / 2}
-                  y={BOT_CY + CHIP_H / 2 - 11.5}
-                  textAnchor="middle"
-                  fontSize="10"
-                  fontFamily="monospace"
-                  fontWeight="600"
-                  fill={tokText}
-                >
-                  #{c.id}
-                </text>
-              </g>
-            ))}
+            <g opacity={1 - stage2T}>
+              {charRow(BOT_CY, 1)}
+              {groups.map((grp) =>
+                drawRect('gb' + grp.gi, {
+                  x: grp.x,
+                  y: BOT_CY - CELL_H / 2 - 2,
+                  w: grp.w,
+                  h: CELL_H + 4,
+                  rx: 4,
+                  stroke: tokStroke,
+                  strokeWidth: 1.75,
+                  fill: tokFill,
+                  t: 1,
+                })
+              )}
+            </g>
             <rect
               x={ANS_BOX_X}
-              y={BOT_CY - CHIP_H / 2 - 6}
+              y={BOT_CY - CELL_H / 2 - 6}
               width={ANS_BOX_FULL_W}
-              height={CHIP_H + 12}
+              height={CELL_H + 12}
               rx="4"
               fill={tokFill}
               stroke={tokStroke}
@@ -853,16 +783,16 @@ export default function TokenCompressionAnimated() {
             >
               ANS
             </text>
-          </g>
+          </>
         )}
 
+        {/* stage 3 (shrink): the labeled ANS container pulls its right edge in
+            to ans/raw — far more than LZ4. */}
         {progress >= P2 && (
-          <g opacity={splitOpacity}>
-            {/* beat 2 (shrink): the labeled ANS container pulls its right edge in
-                to ans/raw of its wrapped length — far more than LZ4. */}
+          <>
             <text
               x={W / 2}
-              y={BOT_CY - CHIP_H / 2 - 14}
+              y={BOT_CY - CELL_H / 2 - 14}
               textAnchor="middle"
               fontSize="10"
               fill={textMuted}
@@ -875,9 +805,9 @@ export default function TokenCompressionAnimated() {
                 <>
                   <rect
                     x={ANS_BOX_X}
-                    y={BOT_CY - CHIP_H / 2 - 6}
+                    y={BOT_CY - CELL_H / 2 - 6}
                     width={w}
-                    height={CHIP_H + 12}
+                    height={CELL_H + 12}
                     rx="4"
                     fill={tokFill}
                     stroke={tokStroke}
@@ -897,16 +827,16 @@ export default function TokenCompressionAnimated() {
                 </>
               )
             })()}
-          </g>
+          </>
         )}
 
         {/* bytes · ratio from the wrap phase on — the token lane is ALREADY
             compressed (~packed) before ANS shrinks it further. */}
         {progress >= P1 && (
-          <g opacity={splitOpacity}>
+          <>
             <text
               x={W / 2}
-              y={BOT_CY + CHIP_H / 2 + 20}
+              y={BOT_CY + CELL_H / 2 + 20}
               textAnchor="middle"
               fontSize="15"
               fontWeight="700"
@@ -916,7 +846,7 @@ export default function TokenCompressionAnimated() {
             </text>
             <text
               x={W / 2}
-              y={BOT_CY + CHIP_H / 2 + 34}
+              y={BOT_CY + CELL_H / 2 + 34}
               textAnchor="middle"
               fontSize="8"
               fill={textMuted}
@@ -925,7 +855,7 @@ export default function TokenCompressionAnimated() {
                 ? 'packed token IDs (before ANS)'
                 : `ANS output (from ${preset.raw.toLocaleString()}B raw)`}
             </text>
-          </g>
+          </>
         )}
       </svg>
 
