@@ -11,6 +11,7 @@ import LineChart from './LineChart'
 import BarChart from './BarChart'
 import SpladeVsIF from './SpladeVsIF'
 import TokenCompressionPipeline from './TokenCompressionPipeline'
+import TokenCompressionAnimated from './TokenCompressionAnimated'
 import CompressionWidget from './CompressionWidget'
 import PerpendicularCircle from './PerpendicularCircle'
 import CosineWalk from './CosineWalk'
@@ -31,6 +32,7 @@ export const MDXComponents = {
   BarChart,
   SpladeVsIF,
   TokenCompressionPipeline,
+  TokenCompressionAnimated,
   CompressionWidget,
   PerpendicularCircle,
   CosineWalk,
