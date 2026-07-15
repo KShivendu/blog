@@ -265,8 +265,13 @@ export default function TokenCompressionAnimated() {
   const GROUP_PAD = 3
   const charCells = preset.bytePreview
   const totalRowW = charCells.length * CELL_STEP - CELL_G
-  const rowStartX = (W - totalRowW) / 2
+  // Both lanes are LEFT-anchored at the same x (not centered) so that when the
+  // containers crush, they shrink toward a shared left edge and the difference
+  // in final width is directly comparable. Summary text centers over the row.
+  const LEFT_X = 46
+  const rowStartX = LEFT_X
   const cellX = (i) => rowStartX + i * CELL_STEP
+  const rowMidX = rowStartX + totalRowW / 2
 
   // Token groupings laid over the same character row. Each group spans `len`
   // adjacent cells; the first groups carry real token IDs, the rest are part
@@ -358,7 +363,7 @@ export default function TokenCompressionAnimated() {
   const tokBoxW = tokBytes * CELL_W + (tokBytes - 1) * CELL_G
   const PACK_GAP = CELL_G * 2
   const packedTotal = groups.length * tokBoxW + Math.max(0, groups.length - 1) * PACK_GAP
-  const packedStartX = (W - packedTotal) / 2
+  const packedStartX = LEFT_X
   const packedX = (gi) => packedStartX + gi * (tokBoxW + PACK_GAP)
 
   // Final phase: the entropy coders wrap each already-tokenized row and shrink
@@ -577,7 +582,7 @@ export default function TokenCompressionAnimated() {
             })}
             {progress >= P0 && (
               <text
-                x={W / 2}
+                x={rowMidX}
                 y={TOP_CY + CELL_H / 2 + 18}
                 textAnchor="middle"
                 fontSize="8"
@@ -675,7 +680,7 @@ export default function TokenCompressionAnimated() {
         {progress >= P1 && (
           <>
             <text
-              x={W / 2}
+              x={rowMidX}
               y={TOP_CY + CELL_H / 2 + 20}
               textAnchor="middle"
               fontSize="15"
@@ -685,7 +690,7 @@ export default function TokenCompressionAnimated() {
               {Math.round(lz4CurBytes).toLocaleString()}B &middot; {lz4CurRatio.toFixed(2)}×
             </text>
             <text
-              x={W / 2}
+              x={rowMidX}
               y={TOP_CY + CELL_H / 2 + 34}
               textAnchor="middle"
               fontSize="8"
@@ -757,7 +762,7 @@ export default function TokenCompressionAnimated() {
             })}
             {progress >= P0 && (
               <text
-                x={W / 2}
+                x={rowMidX}
                 y={BOT_CY + CELL_H / 2 + 30}
                 textAnchor="middle"
                 fontSize="8"
@@ -781,7 +786,7 @@ export default function TokenCompressionAnimated() {
         {progress >= P1 && (
           <>
             <text
-              x={W / 2}
+              x={rowMidX}
               y={BOT_CY - CELL_H / 2 - 14}
               textAnchor="middle"
               fontSize="10"
@@ -867,7 +872,7 @@ export default function TokenCompressionAnimated() {
         {progress >= P1 && (
           <>
             <text
-              x={W / 2}
+              x={rowMidX}
               y={BOT_CY + CELL_H / 2 + 20}
               textAnchor="middle"
               fontSize="15"
@@ -877,7 +882,7 @@ export default function TokenCompressionAnimated() {
               {Math.round(tokCurBytes).toLocaleString()}B &middot; {tokCurRatio.toFixed(2)}×
             </text>
             <text
-              x={W / 2}
+              x={rowMidX}
               y={BOT_CY + CELL_H / 2 + 34}
               textAnchor="middle"
               fontSize="8"
