@@ -140,7 +140,7 @@ export default function ListLayout({ posts, label = 'Blog', meta }) {
               const { slug, date, title } = frontMatter
               return (
                 <li key={slug}>
-                  <Link href={`/blog/${slug}`} className="tty-index-row" title={title}>
+                  <Link href={`/blog/${slug}`} className="tty-index-row">
                     <span className="tty-index-title">
                       <span className="tty-index-label">{title}</span>
                     </span>
