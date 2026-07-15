@@ -157,7 +157,9 @@ const P1 = 0.46 // lane 1: LZ4 sliding-window match search | BPE merge into toke
 const P2 = 0.72 // lane 2: feed the LZ4 engine | pack token IDs into fixed-width bytes
 const P3 = 1.0 // lane 3: LZ4 output bytes | ANS entropy coding
 
-const CYCLE_MS = 8000
+const CYCLE_MS = 16000 // one full pass (2x slower than before)
+const HOLD_MS = 6000 // extra-long pause on the finished frame before looping
+const TOTAL_MS = CYCLE_MS + HOLD_MS
 
 function lerp(a, b, t) {
   return a + (b - a) * Math.max(0, Math.min(1, t))
@@ -206,23 +208,47 @@ export default function TokenCompressionAnimated() {
   const [presetIdx, setPresetIdx] = useState(0)
   const [progress, setProgress] = useState(0) // 0..1
   const [playing, setPlaying] = useState(true)
-  const playingRef = useRef(true) // mirrors `playing` for a hard stop inside the raf loop
+  const [inView, setInView] = useState(false) // only animate while on screen
+  const containerRef = useRef(null)
+  const playingRef = useRef(false) // mirrors `playing && inView` for a hard stop in the raf loop
   const rafRef = useRef(null)
   const lastTsRef = useRef(null)
+  const clockRef = useRef(0) // ms into the extended cycle (animation + hold)
   const preset = PRESETS[presetIdx]
 
+  // Start the animation only once it scrolls into the viewport (and pause it
+  // again when it leaves), so it never runs off-screen.
   useEffect(() => {
-    playingRef.current = playing
-  }, [playing])
+    const node = containerRef.current
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      setInView(true)
+      return
+    }
+    const obs = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), {
+      threshold: 0.25,
+    })
+    obs.observe(node)
+    return () => obs.disconnect()
+  }, [])
+
+  const shouldPlay = playing && inView
 
   useEffect(() => {
-    if (!playing) return
+    playingRef.current = shouldPlay
+  }, [shouldPlay])
+
+  useEffect(() => {
+    if (!shouldPlay) return
     const step = (ts) => {
       if (!playingRef.current) return // hard-stop: never advance or reschedule while paused
       if (lastTsRef.current == null) lastTsRef.current = ts
       const dt = ts - lastTsRef.current
       lastTsRef.current = ts
-      setProgress((p) => (p + dt / CYCLE_MS) % 1)
+      // Advance an extended clock: the last HOLD_MS of it park on the finished
+      // frame (progress pinned at 1) before looping back to 0.
+      clockRef.current = (clockRef.current + dt) % TOTAL_MS
+      const c = clockRef.current
+      setProgress(c < CYCLE_MS ? c / CYCLE_MS : 1)
       rafRef.current = requestAnimationFrame(step)
     }
     rafRef.current = requestAnimationFrame(step)
@@ -230,7 +256,7 @@ export default function TokenCompressionAnimated() {
       cancelAnimationFrame(rafRef.current)
       lastTsRef.current = null
     }
-  }, [playing])
+  }, [shouldPlay])
 
   const MONO = 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)'
   const accent = dark ? '#34d399' : '#047857'
@@ -433,6 +459,7 @@ export default function TokenCompressionAnimated() {
 
   return (
     <div
+      ref={containerRef}
       style={{
         margin: '1.5rem 0',
         border: `1px solid ${divider}`,
@@ -508,7 +535,9 @@ export default function TokenCompressionAnimated() {
         value={Math.round(progress * 1000)}
         onChange={(e) => {
           setPlaying(false)
-          setProgress(Number(e.target.value) / 1000)
+          const p = Number(e.target.value) / 1000
+          setProgress(p)
+          clockRef.current = p * CYCLE_MS // resume continues from the scrubbed spot
         }}
         style={{ width: '100%', marginBottom: 6, accentColor: accent }}
       />
@@ -680,9 +709,9 @@ export default function TokenCompressionAnimated() {
         {progress >= P1 && (
           <>
             <text
-              x={rowMidX}
+              x={rowStartX}
               y={TOP_CY + CELL_H / 2 + 20}
-              textAnchor="middle"
+              textAnchor="start"
               fontSize="15"
               fontWeight="700"
               fill={lz4Accent}
@@ -690,9 +719,9 @@ export default function TokenCompressionAnimated() {
               {Math.round(lz4CurBytes).toLocaleString()}B &middot; {lz4CurRatio.toFixed(2)}×
             </text>
             <text
-              x={rowMidX}
+              x={rowStartX}
               y={TOP_CY + CELL_H / 2 + 34}
-              textAnchor="middle"
+              textAnchor="start"
               fontSize="8"
               fill={textMuted}
             >
@@ -837,7 +866,10 @@ export default function TokenCompressionAnimated() {
             path's second, larger compression win. */}
         {progress >= P2 &&
           (() => {
-            const w = lerp(ANS_FULL_W, ANS_FULL_W * (preset.ans / preset.packed), crushT)
+            // Crush to a width on the SAME raw->pixel scale as LZ4 (bytes) so
+            // the two output boxes are directly comparable: more compression =
+            // smaller box. (Starts at ANS_FULL_W, which hugs the packed boxes.)
+            const w = lerp(ANS_FULL_W, LZ4_FULL_W * (preset.ans / preset.raw), crushT)
             return (
               <>
                 {drawRect('ansbox', {
@@ -872,9 +904,9 @@ export default function TokenCompressionAnimated() {
         {progress >= P1 && (
           <>
             <text
-              x={rowMidX}
+              x={rowStartX}
               y={BOT_CY + CELL_H / 2 + 20}
-              textAnchor="middle"
+              textAnchor="start"
               fontSize="15"
               fontWeight="700"
               fill={accent}
@@ -882,9 +914,9 @@ export default function TokenCompressionAnimated() {
               {Math.round(tokCurBytes).toLocaleString()}B &middot; {tokCurRatio.toFixed(2)}×
             </text>
             <text
-              x={rowMidX}
+              x={rowStartX}
               y={BOT_CY + CELL_H / 2 + 34}
-              textAnchor="middle"
+              textAnchor="start"
               fontSize="8"
               fill={textMuted}
             >
