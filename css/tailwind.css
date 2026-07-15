@@ -474,6 +474,17 @@ body {
 .tty-article-head h1 {
   font-family: var(--font-body);
 }
+/* Softer deck under the title: same (Inter) face, smaller, lighter, muted. */
+.tty-subtitle {
+  max-width: var(--tty-read);
+  margin: 0.6rem auto 0;
+  font-family: var(--font-body);
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--tty-muted);
+  letter-spacing: -0.01em;
+}
 .prose-tty > p,
 .prose-tty > ul,
 .prose-tty > ol,

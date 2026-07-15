@@ -1,6 +1,7 @@
 import Link from '@/components/Link'
 import { useMemo, useState } from 'react'
 import siteMetadata from '@/data/siteMetadata'
+import { fullTitle } from '@/lib/utils/fullTitle'
 
 // Compact, tabular date for the aligned index column: "Jan 15, 2026".
 const formatIndexDate = (date) =>
@@ -63,7 +64,7 @@ function termScore(term, words, fieldStr) {
 const wordsOf = (s) => s.split(/[^a-z0-9]+/i).filter(Boolean)
 
 function scorePost(terms, fm) {
-  const title = (fm.title || '').toLowerCase()
+  const title = (fullTitle(fm) || '').toLowerCase()
   const rest = ((fm.summary || '') + ' ' + (fm.tags || []).join(' ')).toLowerCase()
   const titleWords = wordsOf(title)
   const restWords = wordsOf(rest)
@@ -137,12 +138,12 @@ export default function ListLayout({ posts, label = 'Blog', meta }) {
               </li>
             )}
             {filteredBlogPosts.map((frontMatter) => {
-              const { slug, date, title } = frontMatter
+              const { slug, date } = frontMatter
               return (
                 <li key={slug}>
                   <Link href={`/blog/${slug}`} className="tty-index-row">
                     <span className="tty-index-title">
-                      <span className="tty-index-label">{title}</span>
+                      <span className="tty-index-label">{fullTitle(frontMatter)}</span>
                     </span>
                     <time className="tty-index-date" dateTime={date}>
                       {formatIndexDate(date)}

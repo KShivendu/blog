@@ -8,6 +8,7 @@ import siteMetadata from '@/data/siteMetadata'
 import Comments from '@/components/comments'
 import ScrollTopAndComment from '@/components/ScrollTopAndComment'
 import HeadingLinks from '@/components/HeadingLinks'
+import { fullTitle } from '@/lib/utils/fullTitle'
 
 const editUrl = (fileName) => `${siteMetadata.siteRepo}/blob/master/data/blog/${fileName}`
 const discussUrl = (slug) =>
@@ -18,7 +19,7 @@ const discussUrl = (slug) =>
 const isoDate = (date) => new Date(date).toISOString().slice(0, 10)
 
 export default function PostLayout({ frontMatter, authorDetails, next, prev, children }) {
-  const { slug, fileName, date, title, readingTime } = frontMatter
+  const { slug, fileName, date, title, subtitle, readingTime } = frontMatter
 
   return (
     <SectionContainer>
@@ -57,6 +58,7 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
               </dl>
               <div className="pt-1">
                 <PageTitle>{title}</PageTitle>
+                {subtitle && <p className="tty-subtitle">{subtitle}</p>}
               </div>
             </header>
             <div className="prose-tty prose max-w-none pt-8 pb-2 dark:prose-dark">{children}</div>
@@ -88,7 +90,7 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
                     Previous Article
                   </h2>
                   <div className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400">
-                    <Link href={`/blog/${prev.slug}`}>{prev.title}</Link>
+                    <Link href={`/blog/${prev.slug}`}>{fullTitle(prev)}</Link>
                   </div>
                 </div>
               ) : (
@@ -100,7 +102,7 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
                     Next Article
                   </h2>
                   <div className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400">
-                    <Link href={`/blog/${next.slug}`}>{next.title}</Link>
+                    <Link href={`/blog/${next.slug}`}>{fullTitle(next)}</Link>
                   </div>
                 </div>
               )}

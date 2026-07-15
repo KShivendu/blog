@@ -1,17 +1,20 @@
 import Head from 'next/head'
 import { useRouter } from 'next/router'
 import siteMetadata from '@/data/siteMetadata'
+import { fullTitle } from '@/lib/utils/fullTitle'
 
 // Absolute URLs for the dynamic OG endpoint (`pages/api/og.js`), which renders
 // the social card on the fly and returns a PNG (nothing is stored on disk).
 // The default card is used for the homepage / listing / tag pages.
 const defaultOgImage = `${siteMetadata.siteUrl}/api/og?type=default`
-// A post's card is rendered from its title. Falls back to the default card
-// when no title is available.
-const postOgImage = (title) =>
-  title
-    ? `${siteMetadata.siteUrl}/api/og?title=${encodeURIComponent(title)}&type=post`
-    : defaultOgImage
+// A post's card is rendered from its (head) title + optional subtitle. Falls
+// back to the default card when no title is available. Both fields are passed
+// explicitly; the OG generator no longer splits on a colon at render time.
+const postOgImage = (title, subtitle) => {
+  if (!title) return defaultOgImage
+  const sub = subtitle ? `&subtitle=${encodeURIComponent(subtitle)}` : ''
+  return `${siteMetadata.siteUrl}/api/og?title=${encodeURIComponent(title)}${sub}&type=post`
+}
 
 const CommonSEO = ({ title, description, ogType, ogImage, twImage, canonicalUrl }) => {
   const router = useRouter()
@@ -87,6 +90,7 @@ export const TagSEO = ({ title, description }) => {
 export const BlogSEO = ({
   authorDetails,
   title,
+  subtitle,
   summary,
   date,
   lastmod,
@@ -95,6 +99,8 @@ export const BlogSEO = ({
   canonicalUrl,
 }) => {
   const router = useRouter()
+  // The COMPLETE "Head: Tail" title for <title>/og:title/twitter:title/headline.
+  const completeTitle = fullTitle({ title, subtitle })
   const publishedAt = new Date(date).toISOString()
   const modifiedAt = new Date(lastmod || date).toISOString()
   let imagesArr =
@@ -133,7 +139,7 @@ export const BlogSEO = ({
       '@type': 'WebPage',
       '@id': url,
     },
-    headline: title,
+    headline: completeTitle,
     image: featuredImages,
     datePublished: publishedAt,
     dateModified: modifiedAt,
@@ -152,12 +158,12 @@ export const BlogSEO = ({
   // Branded, dynamically rendered social card is the canonical og/twitter image
   // for every post (overrides the in-article hero). `featuredImages` is still
   // used for JSON-LD structured data below.
-  const socialImageUrl = postOgImage(title)
+  const socialImageUrl = postOgImage(title, subtitle)
 
   return (
     <>
       <CommonSEO
-        title={title}
+        title={completeTitle}
         description={summary}
         ogType="article"
         ogImage={socialImageUrl}

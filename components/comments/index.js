@@ -1,5 +1,6 @@
 import siteMetadata from '@/data/siteMetadata'
 import dynamic from 'next/dynamic'
+import { fullTitle } from '@/lib/utils/fullTitle'
 
 const UtterancesComponent = dynamic(
   () => {
@@ -35,7 +36,7 @@ const Comments = ({ frontMatter }) => {
       term = window.location.href
       break
     case 'title':
-      term = frontMatter.title
+      term = fullTitle(frontMatter)
       break
   }
   return (
