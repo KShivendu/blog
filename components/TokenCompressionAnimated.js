@@ -95,11 +95,13 @@ const PRESETS = [
     packed: 255,
     lz4: 476,
     ans: 232,
-    bytePreview: 'मोहनदास करमचन्द '.split(''),
-    tokenPreview: ['मो', 'हन', 'द', 'ास', ' कर', 'म', 'च', 'न्द'],
-    tokenIds: [132049, 70527, 2587, 6750, 4026, 1637, 3774, 21839],
-    // "मो"|"हन"|"द"|"ास"|" कर"|"म"|"च"|"न्द " (trailing space folded into last)
-    tokenGroups: [2, 2, 1, 2, 3, 1, 1, 4],
+    // Each Devanagari glyph is 3 UTF-8 bytes, so this 7-char word is 21 bytes.
+    // A short word keeps the byte-granular row legible (each byte gets a cell).
+    bytePreview: 'मोहनदास'.split(''),
+    tokenPreview: ['मो', 'हन', 'द', 'ास'],
+    tokenIds: [132049, 70527, 2587, 6750],
+    // "मो"|"हन"|"द"|"ास" — char counts summing to bytePreview.length (7).
+    tokenGroups: [2, 2, 1, 2],
     byteHex: [
       'E0',
       'A4',
@@ -122,29 +124,6 @@ const PRESETS = [
       'E0',
       'A4',
       'B8',
-      '20',
-      'E0',
-      'A4',
-      '95',
-      'E0',
-      'A4',
-      'B0',
-      'E0',
-      'A4',
-      'AE',
-      'E0',
-      'A4',
-      '9A',
-      'E0',
-      'A4',
-      'A8',
-      'E0',
-      'A5',
-      '8D',
-      'E0',
-      'A4',
-      'A6',
-      '20',
     ],
   },
 ]
@@ -282,34 +261,67 @@ export default function TokenCompressionAnimated() {
   const H = heightAt(progress)
   const CELL_H = 26
 
-  // Both lanes start from the SAME characters. The byte lane then wraps EACH
-  // character in its own box (1 byte stays 1 unit, yellow); the token lane
-  // wraps ADJACENT characters together into tokens (BPE merges, green).
-  const CELL_W = 16
-  const CELL_G = 3
+  // The UNIT is one BYTE. Each character occupies as many byte-cells as its
+  // UTF-8 length (ASCII = 1, Devanagari = 3), so the byte lane's width honestly
+  // reflects the byte count. Tokens then collapse a run of bytes into a single
+  // fixed `bytesPerToken`-byte ID — which is NARROWER than the bytes it
+  // replaced. (For English 1 char = 1 byte, so it looks unchanged there.)
+  const utf8Len = (ch) => {
+    const cp = ch.codePointAt(0)
+    if (cp <= 0x7f) return 1
+    if (cp <= 0x7ff) return 2
+    if (cp <= 0xffff) return 3
+    return 4
+  }
+  const CELL_W = 15 // one byte cell
+  const CELL_G = 2
   const CELL_STEP = CELL_W + CELL_G
   const GROUP_PAD = 3
-  const charCells = preset.bytePreview
-  const totalRowW = charCells.length * CELL_STEP - CELL_G
   // Both lanes are LEFT-anchored at the same x (not centered) so that when the
   // containers crush, they shrink toward a shared left edge and the difference
   // in final width is directly comparable. Summary text centers over the row.
   const LEFT_X = 46
   const rowStartX = LEFT_X
   const cellX = (i) => rowStartX + i * CELL_STEP
+
+  // Expand the character preview into a flat list of byte cells, plus the byte
+  // span each character covers (for the readable glyph and token grouping).
+  const { byteCells, charSpans } = (() => {
+    const bc = []
+    const cs = []
+    preset.bytePreview.forEach((ch, ci) => {
+      const n = utf8Len(ch)
+      const start = bc.length
+      for (let b = 0; b < n; b++) bc.push({ ch, ci, hex: preset.byteHex[bc.length] || '··' })
+      cs.push({ ch, ci, start, len: n })
+    })
+    return { byteCells: bc, charSpans: cs }
+  })()
+  const totalRowW = byteCells.length * CELL_STEP - CELL_G
   const rowMidX = rowStartX + totalRowW / 2
 
-  // Token groupings laid over the same character row. Each group spans `len`
-  // adjacent cells; the first groups carry real token IDs, the rest are part
-  // of the (much longer) document and aren't drawn.
+  // Token groupings — boundaries are given in CHARACTERS (tokenGroups); we map
+  // each onto the BYTE span it covers. The first groups carry real token IDs.
   const groups = (() => {
     const out = []
-    let s = 0
-    ;(preset.tokenGroups || []).forEach((len, gi) => {
-      const x = cellX(s) - GROUP_PAD
-      const right = cellX(s + len - 1) + CELL_W + GROUP_PAD
-      out.push({ gi, len, s, x, w: right - x, id: preset.tokenIds[gi] })
-      s += len
+    let charStart = 0
+    ;(preset.tokenGroups || []).forEach((charLen, gi) => {
+      const first = charSpans[charStart]
+      const last = charSpans[charStart + charLen - 1]
+      if (!first || !last) return
+      const byteStart = first.start
+      const byteEnd = last.start + last.len - 1
+      const x = cellX(byteStart) - GROUP_PAD
+      const right = cellX(byteEnd) + CELL_W + GROUP_PAD
+      out.push({
+        gi,
+        byteStart,
+        byteLen: byteEnd - byteStart + 1,
+        x,
+        w: right - x,
+        id: preset.tokenIds[gi],
+      })
+      charStart += charLen
     })
     return out
   })()
@@ -351,7 +363,7 @@ export default function TokenCompressionAnimated() {
   // Per-box "draw-on" progress, cascading left-to-right across stage 1. Each
   // box's outline circles into place over ~0.42 of the stage.
   const byteBoxT = (i) =>
-    Math.max(0, Math.min(1, (stage1T - i * (0.55 / Math.max(1, charCells.length))) / 0.42))
+    Math.max(0, Math.min(1, (stage1T - i * (0.55 / Math.max(1, byteCells.length))) / 0.42))
   const groupBoxT = (g) =>
     Math.max(0, Math.min(1, (stage1T - g * (0.55 / Math.max(1, groups.length))) / 0.42))
 
@@ -361,7 +373,7 @@ export default function TokenCompressionAnimated() {
       : progress < P1
       ? 'bytes: box each byte on its own   ·   tokens: merge adjacent bytes (BPE)'
       : progress < P2
-      ? 'chars → IDs; each token shrinks to a fixed 2-byte ID'
+      ? `chars → IDs; each token shrinks to a fixed ${tokInfo.bytesPerToken}-byte ID`
       : 'now LZ4 (bytes) and ANS (tokens) entropy-code each path'
 
   // Compact phase name for the timestamp readout (reuses P0..P3 boundaries).
@@ -386,7 +398,7 @@ export default function TokenCompressionAnimated() {
   // `bytesPerToken` bytes — so each token box shrinks from its (many) byte-wide
   // char span down to exactly that many BYTE-sized cells, then packs together.
   const tokBytes = tokInfo.bytesPerToken
-  const tokBoxW = tokBytes * CELL_W + (tokBytes - 1) * CELL_G
+  const tokBoxW = tokBytes * CELL_W + (tokBytes - 1) * CELL_G // bytesPerToken byte-cells
   const PACK_GAP = CELL_G * 2
   const packedTotal = groups.length * tokBoxW + Math.max(0, groups.length - 1) * PACK_GAP
   const packedStartX = LEFT_X
@@ -399,10 +411,6 @@ export default function TokenCompressionAnimated() {
   const LZ4_FULL_W = totalRowW + 12
   const ANS_X = packedStartX - 6
   const ANS_FULL_W = packedTotal + 12
-
-  // "Byte ID" shown once a char dissolves in the byte lane: its byte value as
-  // two hex digits (schematic — low byte for multi-byte glyphs).
-  const byteIdOf = (ch) => (ch.charCodeAt(0) & 0xff).toString(16).toUpperCase().padStart(2, '0')
 
   // A rectangle whose border "draws on" (circling animation) as t goes 0->1;
   // the fill fades in once the outline is mostly complete.
@@ -427,35 +435,47 @@ export default function TokenCompressionAnimated() {
     )
   }
 
-  // The shared character row (identical in both lanes), revealed L->R by revealT.
-  const charRow = (cy, revealT) =>
-    charCells.map((ch, i) => {
-      if (revealT < i / charCells.length) return null
-      return (
-        <g key={'c' + i}>
-          <rect
-            x={cellX(i)}
-            y={cy - CELL_H / 2}
-            width={CELL_W}
-            height={CELL_H}
-            rx="2"
-            fill={byteFill}
-            stroke={byteStroke}
-            strokeWidth="0.75"
-          />
-          <text
-            x={cellX(i) + CELL_W / 2}
-            y={cy + 3}
-            textAnchor="middle"
-            fontSize={ch.length > 1 ? '7' : '8.5'}
-            fontFamily="monospace"
-            fill={byteText}
-          >
-            {ch}
-          </text>
-        </g>
-      )
-    })
+  // The shared row (identical in both lanes), revealed L->R by revealT: one
+  // grey cell PER BYTE, with each readable character centred over the span of
+  // byte-cells it occupies (a Devanagari glyph straddles its 3 bytes).
+  const spanMidX = (sp) => cellX(sp.start) + (sp.len * CELL_STEP - CELL_G) / 2
+  const charRow = (cy, revealT) => {
+    const shown = revealT * byteCells.length
+    return (
+      <>
+        {byteCells.map((b, i) =>
+          i < shown ? (
+            <rect
+              key={'bc' + i}
+              x={cellX(i)}
+              y={cy - CELL_H / 2}
+              width={CELL_W}
+              height={CELL_H}
+              rx="2"
+              fill={byteFill}
+              stroke={byteStroke}
+              strokeWidth="0.75"
+            />
+          ) : null
+        )}
+        {charSpans.map((sp, i) =>
+          sp.start < shown ? (
+            <text
+              key={'cs' + i}
+              x={spanMidX(sp)}
+              y={cy + 3}
+              textAnchor="middle"
+              fontSize={sp.len > 1 ? '8' : '8.5'}
+              fontFamily="monospace"
+              fill={byteText}
+            >
+              {sp.ch}
+            </text>
+          ) : null
+        )}
+      </>
+    )
+  }
 
   return (
     <div
@@ -594,7 +614,7 @@ export default function TokenCompressionAnimated() {
         {progress < P1 && (
           <>
             {charRow(TOP_CY, progress < P0 ? bytesT : 1)}
-            {charCells.map((ch, i) => {
+            {byteCells.map((b, i) => {
               const t = byteBoxT(i)
               if (t <= 0) return null
               return drawRect('yb' + i, {
@@ -629,7 +649,7 @@ export default function TokenCompressionAnimated() {
             fades in its place. The cells fade out once LZ4 wraps them. */}
         {progress >= P1 && (
           <g opacity={progress < P2 ? 1 : blocksFade}>
-            {charCells.map((ch, i) => (
+            {byteCells.map((b, i) => (
               <g key={'bb' + i}>
                 <rect
                   x={cellX(i) - 2}
@@ -645,26 +665,30 @@ export default function TokenCompressionAnimated() {
                   x={cellX(i) + CELL_W / 2}
                   y={TOP_CY + 3}
                   textAnchor="middle"
-                  fontSize="8.5"
-                  fontFamily="monospace"
-                  fill={byteText}
-                  opacity={dissolveOut}
-                >
-                  {ch}
-                </text>
-                <text
-                  x={cellX(i) + CELL_W / 2}
-                  y={TOP_CY + 3}
-                  textAnchor="middle"
-                  fontSize="7.5"
+                  fontSize="7"
                   fontFamily="monospace"
                   fontWeight="600"
                   fill={byteText}
                   opacity={idIn}
                 >
-                  {byteIdOf(ch)}
+                  {b.hex}
                 </text>
               </g>
+            ))}
+            {/* readable characters dissolving out, centred over their byte spans */}
+            {charSpans.map((sp, i) => (
+              <text
+                key={'bcs' + i}
+                x={spanMidX(sp)}
+                y={TOP_CY + 3}
+                textAnchor="middle"
+                fontSize={sp.len > 1 ? '8' : '8.5'}
+                fontFamily="monospace"
+                fill={byteText}
+                opacity={dissolveOut}
+              >
+                {sp.ch}
+              </text>
             ))}
           </g>
         )}
