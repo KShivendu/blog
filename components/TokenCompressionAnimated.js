@@ -253,7 +253,19 @@ export default function TokenCompressionAnimated() {
   const bytePreviewFull = [...preset.bytePreview, '…']
   const totalByteW = bytePreviewFull.length * (BYTE_W + BYTE_G) - BYTE_G
   const rowStartX = (W - totalByteW) / 2
-  const GROUP_W = BYTE_W * 2 + BYTE_G
+
+  // Byte-hex row for the LZ4 lane. Sized to fit width W across all presets:
+  // ASCII presets (~20 bytes) show every byte; Hindi (~43 bytes) is capped at
+  // MAX_HEX with a trailing "…". Hex is 2 chars, so cells are narrower than the
+  // char cells used in the shared P0 row.
+  const HEX_W = 15,
+    HEX_G = 2
+  const HEX_CELL = HEX_W + HEX_G
+  const MAX_HEX = 26
+  const hexTrunc = preset.byteHex.length > MAX_HEX
+  const hexDisplay = hexTrunc ? [...preset.byteHex.slice(0, MAX_HEX), '…'] : preset.byteHex.slice()
+  const totalHexW = hexDisplay.length * HEX_CELL - HEX_G
+  const hexStartX = (W - totalHexW) / 2
 
   const SHARED_Y = 40 // shared raw-byte row, phase 0 only
   const TOP_LABEL_Y = 98
@@ -261,18 +273,34 @@ export default function TokenCompressionAnimated() {
   const DIVIDER_Y = 202
   const BOT_LABEL_Y = 224
   const BOT_CY = 268 // token-path lane
-  const TOK_BOX_Y = BOT_CY + 38
 
-  // Map preview tokens back onto the exact byte range they were merged from.
-  let consumed = 0
-  const tokenGroups = []
+  // Token-ID chips shown in the token lane (post-P0). The token lane is a
+  // SEPARATE representation of the same input — pure token IDs, no bytes and no
+  // readable glyphs. tokenPreview only decides HOW MANY IDs we have real values
+  // for; the chips themselves render just the numeric IDs.
+  const idChips = []
   for (let ti = 0; ti < preset.tokenPreview.length; ti++) {
-    const t = preset.tokenPreview[ti]
-    if (consumed + t.length > preset.bytePreview.length) break
-    tokenGroups.push({ token: t, id: preset.tokenIds[ti], start: consumed, len: t.length })
-    consumed += t.length
+    if (preset.tokenIds[ti] == null) break
+    idChips.push({ id: preset.tokenIds[ti] })
   }
-  const leftoverTokenCount = preset.tokens - tokenGroups.length
+  const leftoverTokenCount = preset.tokens - idChips.length
+
+  // Lay the ID chips out in one centered row, widths driven by the ID text so
+  // 3 short IDs (English/Python) and 8 longer IDs (Hindi) both fit within W.
+  const CHIP_H = 30
+  const CHIP_PAD = 14
+  const CHIP_GAP = 8
+  const CHIP_CHAR_W = 6.3
+  const chipLayout = (() => {
+    const widths = idChips.map((c) => ('#' + c.id).length * CHIP_CHAR_W + CHIP_PAD)
+    const total = widths.reduce((a, w) => a + w, 0) + CHIP_GAP * Math.max(0, idChips.length - 1)
+    let cursor = (W - total) / 2
+    return idChips.map((c, i) => {
+      const x = cursor
+      cursor += widths[i] + CHIP_GAP
+      return { id: c.id, x, w: widths[i] }
+    })
+  })()
 
   const inPhase = (start, end) => Math.max(0, Math.min(1, (progress - start) / (end - start)))
   const bytesT = inPhase(0, P0)
@@ -298,6 +326,10 @@ export default function TokenCompressionAnimated() {
       : progress < P2
       ? 'LZ4: feeding the match/literal encoder   ·   tokens: packing IDs into fixed-width bytes'
       : 'LZ4: writing compressed output   ·   tokens: ANS entropy coding'
+
+  // Compact phase name for the timestamp readout (reuses P0..P3 boundaries).
+  const phaseName =
+    progress < P0 ? 'bytes' : progress < P1 ? 'match' : progress < P2 ? 'pack' : 'output'
 
   const MAX_RAW = Math.max(...PRESETS.map((p) => p.raw))
   const BAR_MAX_W = 380
@@ -419,6 +451,19 @@ export default function TokenCompressionAnimated() {
         {phaseLabel}
       </div>
 
+      <div
+        style={{
+          fontFamily: MONO,
+          fontSize: 10,
+          color: textMuted,
+          marginBottom: 6,
+          letterSpacing: '0.02em',
+        }}
+      >
+        t {progress.toFixed(2)} · {((progress * CYCLE_MS) / 1000).toFixed(1)}s /{' '}
+        {(CYCLE_MS / 1000).toFixed(1)}s · {phaseName}
+      </div>
+
       <svg
         viewBox={`0 0 ${W} ${H}`}
         style={{ width: '100%', display: 'block', margin: '0 auto', fontFamily: MONO }}
@@ -500,13 +545,14 @@ export default function TokenCompressionAnimated() {
 
           {progress < P1 && (
             <>
-              {/* stage 1: sliding-window match search over the same bytes */}
-              {bytePreviewFull.map((ch, i) => (
+              {/* stage 1: sliding-window match search over the raw UTF-8 bytes
+                  (shown as hex cells — no readable characters past P0) */}
+              {hexDisplay.map((hx, i) => (
                 <g key={i}>
                   <rect
-                    x={rowStartX + i * (BYTE_W + BYTE_G)}
+                    x={hexStartX + i * HEX_CELL}
                     y={TOP_CY - BOX_H / 2}
-                    width={BYTE_W}
+                    width={HEX_W}
                     height={BOX_H}
                     rx="2"
                     fill={byteFill}
@@ -514,22 +560,22 @@ export default function TokenCompressionAnimated() {
                     strokeWidth="0.75"
                   />
                   <text
-                    x={rowStartX + i * (BYTE_W + BYTE_G) + BYTE_W / 2}
+                    x={hexStartX + i * HEX_CELL + HEX_W / 2}
                     y={TOP_CY + 3}
                     textAnchor="middle"
-                    fontSize={ch.length > 1 ? '6.5' : '7.5'}
+                    fontSize="7"
                     fontFamily="monospace"
                     fill={byteText}
                   >
-                    {ch}
+                    {hx}
                   </text>
                 </g>
               ))}
               {(() => {
                 const winBoxes = 5
-                const winW = winBoxes * (BYTE_W + BYTE_G) - BYTE_G + 4
-                const maxSlide = totalByteW - winW
-                const winX = rowStartX - 2 + lerp(0, Math.max(0, maxSlide), stage1T)
+                const winW = winBoxes * HEX_CELL - HEX_G + 4
+                const maxSlide = totalHexW - winW
+                const winX = hexStartX - 2 + lerp(0, Math.max(0, maxSlide), stage1T)
                 return (
                   <rect
                     x={winX}
@@ -559,9 +605,9 @@ export default function TokenCompressionAnimated() {
             <>
               {/* stage 2: feed matches/literals into the LZ4 engine */}
               <rect
-                x={rowStartX}
+                x={hexStartX}
                 y={TOP_CY - 10}
-                width={totalByteW}
+                width={totalHexW}
                 height="16"
                 rx="2"
                 fill={byteFill}
@@ -569,11 +615,11 @@ export default function TokenCompressionAnimated() {
                 strokeWidth="0.75"
                 opacity="0.5"
               />
-              <text x={rowStartX} y={TOP_CY - 16} fontSize="7" fill={textMuted}>
+              <text x={hexStartX} y={TOP_CY - 16} fontSize="7" fill={textMuted}>
                 raw bytes
               </text>
               <line
-                x1={rowStartX + totalByteW + 6}
+                x1={hexStartX + totalHexW + 6}
                 y1={TOP_CY - 2}
                 x2={W / 2 - 55}
                 y2={TOP_CY - 2}
@@ -693,128 +739,45 @@ export default function TokenCompressionAnimated() {
 
         {progress >= P0 && progress < P1 && (
           <g opacity={splitOpacity}>
+            {/* The token lane is its OWN representation of the input: pure token
+                IDs. No bytes, no readable glyphs — BPE has already collapsed the
+                text into the numeric IDs shown here. */}
             <text
-              x={rowStartX}
-              y={BOT_CY - BOX_H / 2 - 8}
-              fontSize="7"
-              fontFamily="monospace"
+              x={W / 2}
+              y={BOT_CY - CHIP_H / 2 - 12}
+              textAnchor="middle"
+              fontSize="8"
               fill={textMuted}
             >
-              real UTF-8 bytes: {preset.byteHex.slice(0, 16).join(' ')}
-              {preset.byteHex.length > 16 ? ' …' : ''}
+              BPE merges collapse the text into token IDs
             </text>
-            {bytePreviewFull.map((ch, i) => {
-              const group = tokenGroups.find((g) => i >= g.start && i < g.start + g.len)
-              const dimmed = group ? Math.min(1, stage1T * 2) : 0
-              const byteOpacity = 1 - dimmed * 0.6
-              return (
-                <g key={i} opacity={byteOpacity}>
-                  <rect
-                    x={rowStartX + i * (BYTE_W + BYTE_G)}
-                    y={BOT_CY - BOX_H / 2}
-                    width={BYTE_W}
-                    height={BOX_H}
-                    rx="2"
-                    fill={byteFill}
-                    stroke={byteStroke}
-                    strokeWidth="0.75"
-                  />
-                  <text
-                    x={rowStartX + i * (BYTE_W + BYTE_G) + BYTE_W / 2}
-                    y={BOT_CY + 3}
-                    textAnchor="middle"
-                    fontSize={ch.length > 1 ? '6.5' : '7.5'}
-                    fontFamily="monospace"
-                    fill={byteText}
-                  >
-                    {ch}
-                  </text>
-                </g>
-              )
-            })}
-
-            {tokenGroups.map((g, gi) => {
-              const revealAt = gi / tokenGroups.length
-              const localT = Math.min(1, Math.max(0, (stage1T - revealAt) * tokenGroups.length))
+            {chipLayout.map((c, i) => {
+              const revealAt = i / Math.max(1, chipLayout.length)
+              const localT = Math.min(1, Math.max(0, (stage1T - revealAt) * chipLayout.length))
               if (localT <= 0) return null
-              const gx = rowStartX + g.start * (BYTE_W + BYTE_G) - 2
-              const gw = g.len * (BYTE_W + BYTE_G) - BYTE_G + 4
+              const y = BOT_CY - CHIP_H / 2 + (1 - localT) * 8
               return (
-                <rect
-                  key={gi}
-                  x={gx}
-                  y={BOT_CY - BOX_H / 2 - 2}
-                  width={gw}
-                  height={BOX_H + 4}
-                  rx="3"
-                  fill="none"
-                  stroke={tokStroke}
-                  strokeWidth="1.5"
-                  opacity={localT}
-                />
-              )
-            })}
-
-            {tokenGroups.map((g, gi) => {
-              const revealAt = gi / tokenGroups.length
-              const localT = Math.min(1, Math.max(0, (stage1T - revealAt) * tokenGroups.length))
-              if (localT <= 0) return null
-              const gx = rowStartX + g.start * (BYTE_W + BYTE_G)
-              const gw = g.len * (BYTE_W + BYTE_G) - BYTE_G
-              const groupCenterX = gx + gw / 2
-              const boxX = groupCenterX - GROUP_W / 2
-              const y = TOK_BOX_Y
-              return (
-                <g key={gi} opacity={localT}>
-                  <line
-                    x1={groupCenterX}
-                    y1={BOT_CY + BOX_H / 2 + 2}
-                    x2={groupCenterX}
-                    y2={y - 2}
-                    stroke={tokStroke}
-                    strokeWidth="1"
-                    opacity="0.6"
-                  />
+                <g key={i} opacity={localT}>
                   <rect
-                    x={boxX}
+                    x={c.x}
                     y={y}
-                    width={BYTE_W}
-                    height={24}
-                    rx="2"
+                    width={c.w}
+                    height={CHIP_H}
+                    rx="4"
                     fill={tokFill}
                     stroke={tokStroke}
-                    strokeWidth="1"
-                  />
-                  <rect
-                    x={boxX + BYTE_W + BYTE_G}
-                    y={y}
-                    width={BYTE_W}
-                    height={24}
-                    rx="2"
-                    fill={tokFill}
-                    stroke={tokStroke}
-                    strokeWidth="1"
+                    strokeWidth="1.25"
                   />
                   <text
-                    x={groupCenterX}
-                    y={y + 24 + 11}
+                    x={c.x + c.w / 2}
+                    y={y + CHIP_H / 2 + 3.5}
                     textAnchor="middle"
-                    fontSize={g.token.length > 3 ? '6' : '7'}
+                    fontSize="10"
                     fontFamily="monospace"
                     fontWeight="600"
                     fill={tokText}
                   >
-                    {g.token}
-                  </text>
-                  <text
-                    x={groupCenterX}
-                    y={y + 24 + 20}
-                    textAnchor="middle"
-                    fontSize="5.5"
-                    fontFamily="monospace"
-                    fill={textMuted}
-                  >
-                    #{g.id}
+                    #{c.id}
                   </text>
                 </g>
               )
@@ -823,13 +786,13 @@ export default function TokenCompressionAnimated() {
             {stage1T > 0.4 && leftoverTokenCount > 0 && (
               <text
                 x={W / 2}
-                y={TOK_BOX_Y + 24 + 34}
+                y={BOT_CY + CHIP_H / 2 + 24}
                 textAnchor="middle"
                 fontSize="8"
                 fill={textMuted}
                 opacity={Math.min(1, (stage1T - 0.4) * 3)}
               >
-                + {leftoverTokenCount.toLocaleString()} more tokens (rest of the document, not
+                + {leftoverTokenCount.toLocaleString()} more token IDs (rest of the document, not
                 shown)
               </text>
             )}
