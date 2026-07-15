@@ -233,6 +233,7 @@ function ChartImpl({
   const hLineRef = useRef(null)
   const activeXRef = useRef(null)
   const lockedRef = useRef(false) // click-to-lock: keep a point focused after leave
+  const wrapRef = useRef(null) // outer wrapper — anchor for a locked tooltip
   const [activeX, setActiveX] = useState(null)
   const [hidden, setHidden] = useState(() => new Set())
 
@@ -254,8 +255,30 @@ function ChartImpl({
     const t = tipRef.current
     if (!t) return
     t.innerHTML = html
+    t.style.position = 'fixed' // cursor-following while hovering
     t.style.opacity = '1'
     moveTip(e)
+  }
+  // Locked tooltip: anchor it absolutely to the chart wrapper (near the point) so
+  // it scrolls WITH the plot instead of floating off (fixed) on scroll. Clamp
+  // inside the wrapper so it never spills past the plot.
+  const lockTip = (markerEl, html) => {
+    const t = tipRef.current
+    const wrap = wrapRef.current
+    if (!t || !wrap) return
+    t.innerHTML = html
+    t.style.position = 'absolute'
+    t.style.opacity = '1'
+    const mr = markerEl.getBoundingClientRect()
+    const wr = wrap.getBoundingClientRect()
+    const tw = t.offsetWidth || 200
+    const th = t.offsetHeight || 80
+    let left = mr.left - wr.left + mr.width / 2 + 12
+    let top = mr.top - wr.top + mr.height / 2 + 12
+    left = Math.max(4, Math.min(left, wrap.clientWidth - tw - 4))
+    top = Math.max(4, Math.min(top, wrap.clientHeight - th - 4))
+    t.style.left = left + 'px'
+    t.style.top = top + 'px'
   }
   const hideTip = () => {
     if (tipRef.current) tipRef.current.style.opacity = '0'
@@ -588,7 +611,7 @@ function ChartImpl({
       hl.style.opacity = '0.45'
     }
     const html = buildTipHtml(ux)
-    if (html) showTip(e, html)
+    if (html) lockTip(e.currentTarget, html)
   }
 
   const legendSwatch = (s, i) => {
@@ -610,7 +633,7 @@ function ChartImpl({
   }
 
   return (
-    <div className="line-chart" style={{ margin: '1.5rem 0' }}>
+    <div className="line-chart" ref={wrapRef} style={{ margin: '1.5rem 0', position: 'relative' }}>
       <div
         style={{
           border: `1px solid ${C.border}`,
