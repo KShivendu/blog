@@ -360,6 +360,13 @@ function ChartImpl({
   const seriesLayer = []
   const markerLayer = []
   const labelLayer = []
+  // Invisible, oversized hit-targets drawn ON TOP of the crosshair overlay so
+  // that hovering a data-point marker (not just its text label) selects that
+  // exact point. Needed for scatter series (showLine:false) whose points can
+  // share a near-identical x — the nearest-x crosshair snap alone can't reach
+  // each one. For connected line series this simply reproduces the crosshair's
+  // column tooltip when the cursor is right on a marker (no regression).
+  const hitLayer = []
   // Per-point label placement → text anchor + pixel offsets from the marker.
   const placeLabel = (pos) => {
     const p = String(pos || 'top right')
@@ -410,6 +417,21 @@ function ChartImpl({
           <g key={`mk${si}-${pi}`} style={{ pointerEvents: 'none' }}>
             {markerNode(shape, px, py, 4, c, `sym${si}-${pi}`, halo)}
           </g>
+        )
+        // Transparent hit-target — a small radius around the marker triggers the
+        // same tooltip/highlight as the crosshair, anchored to THIS point's x.
+        hitLayer.push(
+          <circle
+            key={`hit${si}-${pi}`}
+            cx={px}
+            cy={py}
+            r={9}
+            fill="transparent"
+            style={{ cursor: 'pointer' }}
+            onPointerEnter={(e) => onMarkerHover(e, x, py)}
+            onPointerMove={(e) => onMarkerHover(e, x, py)}
+            onPointerLeave={onCrosshairLeave}
+          />
         )
       })
     }
@@ -517,6 +539,26 @@ function ChartImpl({
     setActiveX(null)
     if (hLineRef.current) hLineRef.current.style.opacity = '0'
     hideTip()
+  }
+
+  // Hovering a marker's hit-target: snap the crosshair straight to that point's
+  // x (bypassing the nearest-x search so clustered scatter points are each
+  // reachable) and show the same tooltip. buildTipHtml(ux) lists every visible
+  // series with a point at that x, so line series keep their column readout.
+  const onMarkerHover = (e, ux, py) => {
+    if (ux !== activeXRef.current) {
+      activeXRef.current = ux
+      setActiveX(ux)
+    }
+    const hl = hLineRef.current
+    if (hl) {
+      hl.setAttribute('y1', py)
+      hl.setAttribute('y2', py)
+      hl.style.opacity = '0.45'
+    }
+    const html = buildTipHtml(ux)
+    if (html) showTip(e, html)
+    else hideTip()
   }
 
   const legendSwatch = (s, i) => {
@@ -652,6 +694,10 @@ function ChartImpl({
             onPointerUp={onCrosshairLeave}
             onPointerCancel={onCrosshairLeave}
           />
+          {/* Per-marker hit-targets on top of the overlay so a marker (or a small
+              radius around it) is directly hoverable, even for clustered scatter
+              points the nearest-x snap can't separate. */}
+          {hitLayer}
           {xLabel && (
             <text
               x={m.l + pw / 2}
