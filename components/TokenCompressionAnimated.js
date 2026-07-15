@@ -299,10 +299,13 @@ export default function TokenCompressionAnimated() {
   const stage3T = inPhase(P2, P3)
   const labelOpacity = Math.min(1, progress / 0.03)
 
-  // Sharp char->ID handoff during the encode stage: the char is gone before
-  // the ID arrives (no muddy half-and-half overlap at the midpoint).
-  const dissolveOut = 1 - Math.min(1, stage2T / 0.45)
-  const idIn = Math.max(0, (stage2T - 0.5) / 0.5)
+  // The encode stage runs in two beats: (a) chars dissolve into IDs, then
+  // (b) each token box resizes to its fixed byte-width. Byte lane never
+  // resizes — a byte is already one byte. Sharp char->ID handoff (the char is
+  // gone before the ID arrives) avoids a muddy half-and-half midpoint.
+  const dissolveOut = 1 - Math.min(1, stage2T / 0.4)
+  const idIn = Math.max(0, Math.min(1, (stage2T - 0.35) / 0.3))
+  const resizeT = smoothstep(Math.max(0, (stage2T - 0.55) / 0.45))
 
   // Per-box "draw-on" progress, cascading left-to-right across stage 1. Each
   // box's outline circles into place over ~0.42 of the stage.
@@ -317,22 +320,25 @@ export default function TokenCompressionAnimated() {
       : progress < P1
       ? 'bytes: box each byte on its own   ·   tokens: merge adjacent bytes (BPE)'
       : progress < P2
-      ? 'chars dissolve into IDs (byte IDs vs. token IDs)'
-      : 'token IDs shrink to their byte-width; bytes stay 1:1'
+      ? 'chars → IDs; each token shrinks to a fixed 2-byte ID'
+      : 'now LZ4 (bytes) and ANS (tokens) entropy-code each path'
 
   // Compact phase name for the timestamp readout (reuses P0..P3 boundaries).
   const phaseName =
-    progress < P0 ? 'copy' : progress < P1 ? 'group' : progress < P2 ? 'encode' : 'pack'
+    progress < P0 ? 'copy' : progress < P1 ? 'group' : progress < P2 ? 'encode' : 'entropy'
 
-  // Live byte counts shown under each lane in stage 3. Both stay at their
-  // pre-shrink size until P2, then shrink toward each codec's output size.
-  // Byte lane: raw until LZ4 actually runs (LZ4 doesn't compress until the
-  // shrink), then raw -> lz4.
+  // Live byte counts under each lane.
+  // Byte lane: raw (bytes only relabel to byte IDs — no compression) until the
+  // LZ4 entropy coder kicks in at P2, then raw -> lz4.
   const lz4CurBytes = progress < P2 ? preset.raw : lerp(preset.raw, preset.lz4, stage3T)
   const lz4CurRatio = preset.raw / lz4CurBytes
-  // Token lane is ALREADY compressed by the time we have token IDs (tokenization
-  // + packing), so it starts at `packed` (not raw), then ANS shrinks it further.
-  const tokCurBytes = progress < P2 ? preset.packed : lerp(preset.packed, preset.ans, stage3T)
+  // Token lane: starts raw, shrinks to `packed` AS the boxes resize during the
+  // encode stage (so the number tracks the visible shrink), then ANS trims it
+  // further from `packed` to `ans` once entropy coding kicks in at P2.
+  const tokCurBytes =
+    progress < P2
+      ? lerp(preset.raw, preset.packed, resizeT)
+      : lerp(preset.packed, preset.ans, stage3T)
   const tokCurRatio = preset.raw / tokCurBytes
 
   // Post-compression, a token is stored as a fixed-width token ID that occupies
@@ -344,6 +350,14 @@ export default function TokenCompressionAnimated() {
   const packedTotal = groups.length * tokBoxW + Math.max(0, groups.length - 1) * PACK_GAP
   const packedStartX = (W - packedTotal) / 2
   const packedX = (gi) => packedStartX + gi * (tokBoxW + PACK_GAP)
+
+  // Final phase: the entropy coders wrap each already-tokenized row and shrink
+  // to their output ratio — LZ4 over the full byte-ID row, ANS over the packed
+  // token-ID row.
+  const LZ4_X = rowStartX - 6
+  const LZ4_FULL_W = totalRowW + 12
+  const ANS_X = packedStartX - 6
+  const ANS_FULL_W = packedTotal + 12
 
   // "Byte ID" shown once a char dissolves in the byte lane: its byte value as
   // two hex digits (schematic — low byte for multi-byte glyphs).
@@ -566,47 +580,82 @@ export default function TokenCompressionAnimated() {
           </>
         )}
 
-        {/* stage 2 (encode) + stage 3 (pack): each byte keeps its OWN box at
-            the SAME 1-byte width — nothing merges — while the char dissolves
-            and the byte's ID (hex) fades in its place. */}
-        {progress >= P1 &&
-          charCells.map((ch, i) => (
-            <g key={'bb' + i}>
-              <rect
-                x={cellX(i) - 2}
-                y={TOP_CY - CELL_H / 2 - 2}
-                width={CELL_W + 4}
-                height={CELL_H + 4}
-                rx="3"
-                fill={lz4Fill}
-                stroke={lz4Accent}
-                strokeWidth="1.5"
-              />
-              <text
-                x={cellX(i) + CELL_W / 2}
-                y={TOP_CY + 3}
-                textAnchor="middle"
-                fontSize="8.5"
-                fontFamily="monospace"
-                fill={byteText}
-                opacity={dissolveOut}
-              >
-                {ch}
-              </text>
-              <text
-                x={cellX(i) + CELL_W / 2}
-                y={TOP_CY + 3}
-                textAnchor="middle"
-                fontSize="7.5"
-                fontFamily="monospace"
-                fontWeight="600"
-                fill={byteText}
-                opacity={idIn}
-              >
-                {byteIdOf(ch)}
-              </text>
-            </g>
-          ))}
+        {/* encode: each byte keeps its OWN box at the SAME 1-byte width —
+            nothing merges — while the char dissolves and the byte's ID (hex)
+            fades in its place. The cells fade out once LZ4 wraps them. */}
+        {progress >= P1 && (
+          <g opacity={progress < P2 ? 1 : 1 - Math.min(1, stage3T * 2)}>
+            {charCells.map((ch, i) => (
+              <g key={'bb' + i}>
+                <rect
+                  x={cellX(i) - 2}
+                  y={TOP_CY - CELL_H / 2 - 2}
+                  width={CELL_W + 4}
+                  height={CELL_H + 4}
+                  rx="3"
+                  fill={lz4Fill}
+                  stroke={lz4Accent}
+                  strokeWidth="1.5"
+                />
+                <text
+                  x={cellX(i) + CELL_W / 2}
+                  y={TOP_CY + 3}
+                  textAnchor="middle"
+                  fontSize="8.5"
+                  fontFamily="monospace"
+                  fill={byteText}
+                  opacity={dissolveOut}
+                >
+                  {ch}
+                </text>
+                <text
+                  x={cellX(i) + CELL_W / 2}
+                  y={TOP_CY + 3}
+                  textAnchor="middle"
+                  fontSize="7.5"
+                  fontFamily="monospace"
+                  fontWeight="600"
+                  fill={byteText}
+                  opacity={idIn}
+                >
+                  {byteIdOf(ch)}
+                </text>
+              </g>
+            ))}
+          </g>
+        )}
+
+        {/* entropy: the LZ4 coder wraps the whole byte-ID row and shrinks it to
+            its (modest) output ratio — the only compression the byte path gets. */}
+        {progress >= P2 &&
+          (() => {
+            const w = lerp(LZ4_FULL_W, LZ4_FULL_W * (preset.lz4 / preset.raw), stage3T)
+            return (
+              <>
+                <rect
+                  x={LZ4_X}
+                  y={TOP_CY - CELL_H / 2 - 6}
+                  width={w}
+                  height={CELL_H + 12}
+                  rx="4"
+                  fill={lz4Fill}
+                  stroke={lz4Accent}
+                  strokeWidth="1.5"
+                />
+                <text
+                  x={LZ4_X + w / 2}
+                  y={TOP_CY + 4}
+                  textAnchor="middle"
+                  fontSize="11"
+                  fontWeight="700"
+                  fill={lz4Accent}
+                  letterSpacing="0.08em"
+                >
+                  LZ4
+                </text>
+              </>
+            )
+          })()}
 
         {/* bytes · ratio from the wrap phase on. Byte lane stays 1.00× until
             LZ4 actually runs in the shrink. */}
@@ -630,7 +679,7 @@ export default function TokenCompressionAnimated() {
               fill={textMuted}
             >
               {progress < P2
-                ? 'each byte → its byte ID (still 1:1)'
+                ? 'raw bytes → byte IDs (1:1, no compression yet)'
                 : `LZ4 output (from ${preset.raw.toLocaleString()}B raw)`}
             </text>
           </>
@@ -709,10 +758,11 @@ export default function TokenCompressionAnimated() {
           </>
         )}
 
-        {/* stage 2 (encode): the chars inside each green token box dissolve and
-            the token ID fades in. stage 3 (pack): each box then shrinks to its
-            true byte-width (bytesPerToken byte-cells) and packs tight — the
-            whole point: many bytes collapse into one small fixed-width ID. */}
+        {/* encode: the chars inside each green token box dissolve, the token ID
+            fades in, and then each box resizes to its FIXED byte-width
+            (bytesPerToken byte-cells) and packs tight — long tokens compress,
+            single-char tokens expand, all to the same small fixed-width ID.
+            The boxes fade out once ANS wraps them. */}
         {progress >= P1 && (
           <>
             <text
@@ -726,39 +776,73 @@ export default function TokenCompressionAnimated() {
             </text>
             {/* chars (in their original per-byte cells) dissolving out */}
             <g opacity={dissolveOut}>{charRow(BOT_CY, 1)}</g>
-            {groups.map((grp) => {
-              const bx = progress < P2 ? grp.x : lerp(grp.x, packedX(grp.gi), stage3T)
-              const bw = progress < P2 ? grp.w : lerp(grp.w, tokBoxW, stage3T)
-              const cx = bx + bw / 2
-              return (
-                <g key={'tb' + grp.gi}>
-                  <rect
-                    x={bx}
-                    y={BOT_CY - CELL_H / 2 - 2}
-                    width={bw}
-                    height={CELL_H + 4}
-                    rx="4"
-                    fill={tokFill}
-                    stroke={tokStroke}
-                    strokeWidth="1.75"
-                  />
-                  <text
-                    x={cx}
-                    y={BOT_CY + 3}
-                    textAnchor="middle"
-                    fontSize="8"
-                    fontFamily="monospace"
-                    fontWeight="700"
-                    fill={tokText}
-                    opacity={idIn}
-                  >
-                    {grp.id != null ? grp.id : '···'}
-                  </text>
-                </g>
-              )
-            })}
+            <g opacity={progress < P2 ? 1 : 1 - Math.min(1, stage3T * 2)}>
+              {groups.map((grp) => {
+                const bx = progress < P2 ? lerp(grp.x, packedX(grp.gi), resizeT) : packedX(grp.gi)
+                const bw = progress < P2 ? lerp(grp.w, tokBoxW, resizeT) : tokBoxW
+                const cx = bx + bw / 2
+                return (
+                  <g key={'tb' + grp.gi}>
+                    <rect
+                      x={bx}
+                      y={BOT_CY - CELL_H / 2 - 2}
+                      width={bw}
+                      height={CELL_H + 4}
+                      rx="4"
+                      fill={tokFill}
+                      stroke={tokStroke}
+                      strokeWidth="1.75"
+                    />
+                    <text
+                      x={cx}
+                      y={BOT_CY + 3}
+                      textAnchor="middle"
+                      fontSize="8"
+                      fontFamily="monospace"
+                      fontWeight="700"
+                      fill={tokText}
+                      opacity={idIn}
+                    >
+                      {grp.id != null ? grp.id : '···'}
+                    </text>
+                  </g>
+                )
+              })}
+            </g>
           </>
         )}
+
+        {/* entropy: the ANS coder wraps the packed token-ID row and shrinks it
+            further — the token path's second, larger compression win. */}
+        {progress >= P2 &&
+          (() => {
+            const w = lerp(ANS_FULL_W, ANS_FULL_W * (preset.ans / preset.packed), stage3T)
+            return (
+              <>
+                <rect
+                  x={ANS_X}
+                  y={BOT_CY - CELL_H / 2 - 6}
+                  width={w}
+                  height={CELL_H + 12}
+                  rx="4"
+                  fill={tokFill}
+                  stroke={tokStroke}
+                  strokeWidth="1.5"
+                />
+                <text
+                  x={ANS_X + w / 2}
+                  y={BOT_CY + 4}
+                  textAnchor="middle"
+                  fontSize="11"
+                  fontWeight="700"
+                  fill={tokStroke}
+                  letterSpacing="0.08em"
+                >
+                  ANS
+                </text>
+              </>
+            )
+          })()}
 
         {/* bytes · ratio from the wrap phase on — the token lane is ALREADY
             compressed (~packed) before ANS shrinks it further. */}
@@ -782,7 +866,7 @@ export default function TokenCompressionAnimated() {
               fill={textMuted}
             >
               {progress < P2
-                ? 'packed token IDs (before ANS)'
+                ? 'tokenize → packed token IDs (before ANS)'
                 : `ANS output (from ${preset.raw.toLocaleString()}B raw)`}
             </text>
           </>
