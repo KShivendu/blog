@@ -53,7 +53,7 @@ First, dataset-size scaling with HNSW disabled (`indexing_threshold = 0`) so eve
   series={[
     {
       name: 'fp32 full scan',
-      color: '#d6336c',
+      color: '#7048e8',
       marker: 'circle',
       points: [
         [100000, 33.2],
@@ -67,7 +67,7 @@ First, dataset-size scaling with HNSW disabled (`indexing_threshold = 0`) so eve
     },
     {
       name: 'binary quant',
-      color: '#1c7ed6',
+      color: 'accent',
       marker: 'square',
       points: [
         [100000, 1.6],
@@ -81,7 +81,7 @@ First, dataset-size scaling with HNSW disabled (`indexing_threshold = 0`) so eve
     },
     {
       name: 'O(N) fit (100k–1M)',
-      color: '#adb5bd',
+      color: '#64748b',
       dashed: true,
       showMarkers: false,
       points: [
@@ -117,7 +117,7 @@ First, dataset-size scaling with HNSW disabled (`indexing_threshold = 0`) so eve
   series={[
     {
       name: 'fp32 full scan',
-      color: '#d6336c',
+      color: '#7048e8',
       marker: 'circle',
       points: [
         [100000, 184.6],
@@ -131,7 +131,7 @@ First, dataset-size scaling with HNSW disabled (`indexing_threshold = 0`) so eve
     },
     {
       name: 'binary quant',
-      color: '#1c7ed6',
+      color: 'accent',
       marker: 'square',
       points: [
         [100000, 413.9],
@@ -184,7 +184,7 @@ Fixing the dataset at 1M vectors and sweeping the embedding dimension (still ful
   series={[
     {
       name: 'fp32 full scan',
-      color: '#d6336c',
+      color: '#7048e8',
       marker: 'circle',
       points: [
         [128, 249.9],
@@ -196,7 +196,7 @@ Fixing the dataset at 1M vectors and sweeping the embedding dimension (still ful
     },
     {
       name: 'binary quant',
-      color: '#1c7ed6',
+      color: 'accent',
       marker: 'square',
       points: [
         [128, 152.8],
@@ -208,7 +208,7 @@ Fixing the dataset at 1M vectors and sweeping the embedding dimension (still ful
     },
     {
       name: 'fit: 0.94·dim + 129',
-      color: '#d6336c',
+      color: '#7048e8',
       dashed: true,
       showMarkers: false,
       points: [
@@ -221,7 +221,7 @@ Fixing the dataset at 1M vectors and sweeping the embedding dimension (still ful
     },
     {
       name: 'fit: constant ≈ 126',
-      color: '#1c7ed6',
+      color: 'accent',
       dashed: true,
       showMarkers: false,
       points: [
@@ -280,7 +280,7 @@ That `O(N log N)` build cost isn't just theory — here's what it looks like on 
   series={[
     {
       name: 'fp32',
-      color: '#d6336c',
+      color: '#7048e8',
       marker: 'circle',
       points: [
         [100000, 20.1],
@@ -293,7 +293,7 @@ That `O(N log N)` build cost isn't just theory — here's what it looks like on 
     },
     {
       name: 'binary quant',
-      color: '#1c7ed6',
+      color: 'accent',
       marker: 'square',
       points: [
         [100000, 4.0],
@@ -332,7 +332,7 @@ Where brute force went from 34 ms to ~1.2 s over 100k→10M, HNSW search barely 
   series={[
     {
       name: 'fp32',
-      color: '#d6336c',
+      color: '#7048e8',
       marker: 'circle',
       points: [
         [100000, 50.3],
@@ -345,7 +345,7 @@ Where brute force went from 34 ms to ~1.2 s over 100k→10M, HNSW search barely 
     },
     {
       name: 'binary quant',
-      color: '#1c7ed6',
+      color: 'accent',
       marker: 'square',
       points: [
         [100000, 24.1],
@@ -359,7 +359,7 @@ Where brute force went from 34 ms to ~1.2 s over 100k→10M, HNSW search barely 
     },
     {
       name: 'fit: 4.3e-5·N·log₂N',
-      color: '#d6336c',
+      color: '#7048e8',
       dashed: true,
       showMarkers: false,
       points: [
@@ -373,7 +373,7 @@ Where brute force went from 34 ms to ~1.2 s over 100k→10M, HNSW search barely 
     },
     {
       name: 'fit: 1.3e-5·N·log₂N',
-      color: '#1c7ed6',
+      color: 'accent',
       dashed: true,
       showMarkers: false,
       points: [
@@ -412,7 +412,7 @@ fp32 build climbs from 50 s (100k) to ~80 min (5M); the **10M fp32 build blew pa
   series={[
     {
       name: 'fp32',
-      color: '#d6336c',
+      color: '#7048e8',
       marker: 'circle',
       points: [
         [128, 565.1],
@@ -424,7 +424,7 @@ fp32 build climbs from 50 s (100k) to ~80 min (5M); the **10M fp32 build blew pa
     },
     {
       name: 'binary quant',
-      color: '#1c7ed6',
+      color: 'accent',
       marker: 'square',
       points: [
         [128, 215.2],
@@ -436,7 +436,7 @@ fp32 build climbs from 50 s (100k) to ~80 min (5M); the **10M fp32 build blew pa
     },
     {
       name: 'fit: 1.39·dim + 495',
-      color: '#d6336c',
+      color: '#7048e8',
       dashed: true,
       showMarkers: false,
       points: [
@@ -449,7 +449,7 @@ fp32 build climbs from 50 s (100k) to ~80 min (5M); the **10M fp32 build blew pa
     },
     {
       name: 'fit: 0.17·dim + 222',
-      color: '#1c7ed6',
+      color: 'accent',
       dashed: true,
       showMarkers: false,
       points: [
