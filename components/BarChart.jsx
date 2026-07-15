@@ -430,9 +430,9 @@ function ChartImpl({
           y={cc + 3.5}
           textAnchor="end"
           fontSize={catLabelFont}
-          fontWeight={activeCat === ci ? 600 : 400}
           fill={activeCat === ci ? C.ink : C.muted}
           fontFamily="var(--font-mono, ui-monospace, monospace)"
+          style={{ transition: 'fill 0.15s ease' }}
         >
           {truncate(raw, m.l - 16, catLabelFont)}
         </text>
@@ -445,10 +445,10 @@ function ChartImpl({
           y={m.t + ph + 12}
           textAnchor="end"
           fontSize={catLabelFont}
-          fontWeight={activeCat === ci ? 600 : 400}
           fill={activeCat === ci ? C.ink : C.muted}
           fontFamily="var(--font-mono, ui-monospace, monospace)"
           transform={`rotate(-35 ${cc} ${m.t + ph + 12})`}
+          style={{ transition: 'fill 0.15s ease' }}
         >
           {truncate(raw, 150, catLabelFont)}
         </text>
