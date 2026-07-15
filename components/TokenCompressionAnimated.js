@@ -297,7 +297,7 @@ export default function TokenCompressionAnimated() {
     if (cp <= 0xffff) return 3
     return 4
   }
-  const CELL_W = compact ? 17 : 15 // one byte cell
+  const CELL_W = compact ? 17 : 24 // one byte cell (desktop widened to fill the frame)
   const CELL_G = 2
   const CELL_STEP = CELL_W + CELL_G
   const GROUP_PAD = 3
