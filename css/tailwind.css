@@ -206,8 +206,9 @@ body {
 .prose-tty h3.tty-anchor-h {
   cursor: pointer;
 }
+/* h2 already carries a leading "## " marker, so it needs no trailing hash.
+   Only h1/h3 (no prefix) get a hover "#" affordance. */
 .prose-tty h1.tty-anchor-h::after,
-.prose-tty h2.tty-anchor-h::after,
 .prose-tty h3.tty-anchor-h::after {
   content: ' #';
   color: var(--tty-accent);
@@ -215,7 +216,6 @@ body {
   transition: opacity 0.12s;
 }
 .prose-tty h1.tty-anchor-h:hover::after,
-.prose-tty h2.tty-anchor-h:hover::after,
 .prose-tty h3.tty-anchor-h:hover::after {
   opacity: 0.6;
 }
