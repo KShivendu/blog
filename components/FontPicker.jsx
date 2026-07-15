@@ -98,8 +98,12 @@ function ensureLoaded(spec) {
 
 function applyFont(spec) {
   ensureLoaded(spec)
+  const emoji =
+    "'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', 'Twemoji Mozilla'"
   const fallback =
-    spec.mono === false ? 'system-ui, sans-serif' : 'ui-monospace, SFMono-Regular, Menlo, monospace'
+    spec.mono === false
+      ? `system-ui, sans-serif, ${emoji}`
+      : `ui-monospace, SFMono-Regular, Menlo, monospace, ${emoji}`
   const stack = `'${spec.name}', ${fallback}`
   let el = document.getElementById('fp-style')
   if (!el) {
