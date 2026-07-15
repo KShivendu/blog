@@ -648,6 +648,13 @@ body {
 .prose-tty tbody tr:last-child {
   border-bottom: 0;
 }
+/* Zebra striping: a faint wash on even rows for easier row-tracking. */
+.prose-tty tbody tr:nth-child(even) {
+  background-color: rgba(95, 101, 112, 0.06);
+}
+.dark .prose-tty tbody tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.035);
+}
 
 /* ── Figure captions: `fig.N — caption` terminal style ───────────────────── */
 .prose-tty figure {
