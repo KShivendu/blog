@@ -94,9 +94,15 @@
 :root {
   /* Graticule's calm faint graph-paper gridline (light) */
   --grat-gridline: #f2f5f8;
+  /* Color-emoji fallback appended to every text stack so emoji render in color
+     on all platforms (the self-hosted Inter/Fira Code/Geist woff2 are
+     latin-subset and carry no emoji glyphs). */
+  --font-emoji: 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji',
+    'Twemoji Mozilla';
   /* Mono = code + terminal chrome; Body = article reading text. */
-  --font-mono: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
+  --font-mono: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace, var(--font-emoji);
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif,
+    var(--font-emoji);
 }
 .dark {
   --grat-gridline: #12171f;
@@ -625,9 +631,14 @@ body {
 .dark .prose-tty.prose a {
   color: inherit;
   text-decoration: underline;
-  text-decoration-color: var(--tty-accent);
-  text-decoration-thickness: 1px;
+  /* Light: a clearly-green, 2px underline (the darker #047857 at 1px read as
+     near-black). Dark keeps the bright accent. */
+  text-decoration-color: #059669;
+  text-decoration-thickness: 2px;
   text-underline-offset: 2px;
+}
+.dark .prose-tty.prose a {
+  text-decoration-color: #34d399;
 }
 .prose-tty.prose a:hover,
 .dark .prose-tty.prose a:hover {
