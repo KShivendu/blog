@@ -2,6 +2,17 @@ import Head from 'next/head'
 import { useRouter } from 'next/router'
 import siteMetadata from '@/data/siteMetadata'
 
+// Absolute URLs for the dynamic OG endpoint (`pages/api/og.js`), which renders
+// the social card on the fly and returns a PNG (nothing is stored on disk).
+// The default card is used for the homepage / listing / tag pages.
+const defaultOgImage = `${siteMetadata.siteUrl}/api/og?type=default`
+// A post's card is rendered from its title. Falls back to the default card
+// when no title is available.
+const postOgImage = (title) =>
+  title
+    ? `${siteMetadata.siteUrl}/api/og?title=${encodeURIComponent(title)}&type=post`
+    : defaultOgImage
+
 const CommonSEO = ({ title, description, ogType, ogImage, twImage, canonicalUrl }) => {
   const router = useRouter()
   return (
@@ -19,6 +30,8 @@ const CommonSEO = ({ title, description, ogType, ogImage, twImage, canonicalUrl 
       ) : (
         <meta property="og:image" content={ogImage} key={ogImage} />
       )}
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:site" content={siteMetadata.twitter} />
       <meta name="twitter:title" content={title} />
@@ -33,8 +46,8 @@ const CommonSEO = ({ title, description, ogType, ogImage, twImage, canonicalUrl 
 }
 
 export const PageSEO = ({ title, description }) => {
-  const ogImageUrl = siteMetadata.siteUrl + siteMetadata.socialBanner
-  const twImageUrl = siteMetadata.siteUrl + siteMetadata.socialBanner
+  const ogImageUrl = defaultOgImage
+  const twImageUrl = defaultOgImage
   return (
     <CommonSEO
       title={title}
@@ -47,8 +60,8 @@ export const PageSEO = ({ title, description }) => {
 }
 
 export const TagSEO = ({ title, description }) => {
-  const ogImageUrl = siteMetadata.siteUrl + siteMetadata.socialBanner
-  const twImageUrl = siteMetadata.siteUrl + siteMetadata.socialBanner
+  const ogImageUrl = defaultOgImage
+  const twImageUrl = defaultOgImage
   const router = useRouter()
   return (
     <>
@@ -136,7 +149,10 @@ export const BlogSEO = ({
     description: summary,
   }
 
-  const twImageUrl = featuredImages[0].url
+  // Branded, dynamically rendered social card is the canonical og/twitter image
+  // for every post (overrides the in-article hero). `featuredImages` is still
+  // used for JSON-LD structured data below.
+  const socialImageUrl = postOgImage(title)
 
   return (
     <>
@@ -144,8 +160,8 @@ export const BlogSEO = ({
         title={title}
         description={summary}
         ogType="article"
-        ogImage={featuredImages}
-        twImage={twImageUrl}
+        ogImage={socialImageUrl}
+        twImage={socialImageUrl}
         canonicalUrl={canonicalUrl}
       />
       <Head>

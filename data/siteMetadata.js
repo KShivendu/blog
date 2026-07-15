@@ -9,7 +9,7 @@ const siteMetadata = {
   siteRepo: 'https://github.com/KShivendu/blog',
   siteLogo: '/static/images/shivendu.jpg',
   image: '/static/images/shivendu.jpg',
-  socialBanner: '/static/images/twitter-card.png',
+  socialBanner: '/api/og?type=default',
   email: 'hi@kshivendu.dev',
   github: 'https://github.com/KShivendu',
   twitter: '@KShivendu_',
