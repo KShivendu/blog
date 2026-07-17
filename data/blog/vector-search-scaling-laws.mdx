@@ -289,6 +289,7 @@ That `O(N log N)` build cost isn't just theory — here's what it looks like on 
         [1000000, 37.6],
         [2000000, 32.6],
         [5000000, 65.2],
+        [10000000, 44.1],
       ],
     },
     {
@@ -341,6 +342,7 @@ Where brute force went from 34 ms to ~1.2 s over 100k→10M, HNSW search barely 
         [1000000, 792.3],
         [2000000, 1812.1],
         [5000000, 4814.3],
+        [10000000, 9391.0],
       ],
     },
     {
@@ -369,6 +371,7 @@ Where brute force went from 34 ms to ~1.2 s over 100k→10M, HNSW search barely 
         [1000000, 859.5],
         [2000000, 1805.2],
         [5000000, 4798.1],
+        [10000000, 10027.6],
       ],
     },
     {
@@ -391,7 +394,7 @@ Where brute force went from 34 ms to ~1.2 s over 100k→10M, HNSW search barely 
 
 The dashed lines are a one-parameter fit to `t = a·N·log₂(N)` — the exact `O(N log N)` the analysis above predicts. It nails the data: **a = 4.3×10⁻⁵ s for fp32 (R² = 0.999)** and **a = 1.3×10⁻⁵ s for BQ (R² = 0.9996)**. Adding a linear `+b·N` term barely moves R², so a single constant is enough — the build really is N log N, no fudge factors. fp32's constant is ~3.2× BQ's: full-precision distance during graph construction is that much costlier than 1-bit-per-dim codes.
 
-fp32 build climbs from 50 s (100k) to ~80 min (5M); the **10M fp32 build blew past a 2-hour cap and is being re-measured** (this chart will get its 10M fp32 point). Binary quant builds **3–6× faster** at every size.
+fp32 build climbs from 50 s (100k) to ~80 min (5M) to **~2.6 h at 10M** (9,391 s — an earlier run hit a 2-hour cap; this is the clean, uncapped re-measure). The 10M point lands ~6% _under_ the `N log N` line extrapolated from the smaller sizes, so if anything the constant eases off slightly at scale rather than blowing up. Binary quant builds **3–6× faster** at every size.
 
 **And the build cost explodes with dimension** — where BQ stays cheap:
 
