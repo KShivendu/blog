@@ -43,6 +43,22 @@ import { useTheme } from 'next-themes'
  *                                 'right' (default 'top right')
  *       textPosition  string      single fallback placement for all points
  *   }
+ *   views      Array of { label, series, yLabel, yScale, yTicks, yUnit,
+ *              yMin, yMax, yTipDecimals, datasets }   optional on-theme
+ *              toggle (top right) switching the whole y-axis + series set
+ *              while keeping the shared x-axis in place — e.g. one chart,
+ *              three buttons for "encode" / "decode" / "ratio", each with
+ *              its own scale and unit. Any field omitted in a view falls
+ *              back to the matching top-level prop. The first view is shown
+ *              by default.
+ *   views[].datasets   Array of { label, series }   optional SECOND,
+ *              independent toggle (top left, smaller/lighter) nested inside
+ *              a view — e.g. "prose" / "code" / "hindi" — for when the same
+ *              metric needs to be split by another dimension. Only `series`
+ *              varies per dataset; yLabel/yScale/yTicks/yUnit stay fixed at
+ *              the view level since they describe the metric, not the
+ *              dataset. The dataset selection persists across metric
+ *              switches (it's an orthogonal axis, not a reset per view).
  *
  * ── Example (brute-force latency vs N, fp32 + bq + O(N) fit) ─────────────────
  *   <LineChart
@@ -210,32 +226,64 @@ function markerNode(shape, x, y, s, color, key, opts = {}) {
 function ChartImpl({
   title,
   xLabel,
-  yLabel,
+  yLabel: yLabelProp,
   xScale = 'linear',
-  yScale = 'linear',
+  yScale: yScaleProp = 'linear',
   xTicks,
-  yTicks,
+  yTicks: yTicksProp,
   xMin,
   xMax,
-  yMin,
-  yMax,
+  yMin: yMinProp,
+  yMax: yMaxProp,
   xUnit = '',
-  yUnit = '',
-  yTipDecimals,
+  yUnit: yUnitProp = '',
+  yTipDecimals: yTipDecimalsProp,
   height = 440,
-  series = [],
+  series: seriesProp = [],
+  views,
 }) {
   const { theme, resolvedTheme } = useTheme()
   const isDark = (resolvedTheme || theme) === 'dark'
   const C = palette(isDark)
 
   const tipRef = useRef(null)
+  // Which series' point the cursor is actually closest to (by pixel distance,
+  // not just x-bucket) -- with many series this is the difference between "a
+  // dozen dots all lit up the same" and "the one you're pointing at, clearly."
+  const [nearestName, setNearestName] = useState(null)
   const hLineRef = useRef(null)
   const activeXRef = useRef(null)
   const lockedRef = useRef(false) // click-to-lock: keep a point focused after leave
   const wrapRef = useRef(null) // outer wrapper — anchor for a locked tooltip
   const [activeX, setActiveX] = useState(null)
   const [hidden, setHidden] = useState(() => new Set())
+
+  // ── views: an on-theme toggle switching the whole y-axis + series set (e.g.
+  // encode / decode / ratio) while keeping the shared x-axis (chunk size) in
+  // place — same pattern as BarChart's `views`, adapted for line charts since
+  // each mode here needs its own scale/ticks/unit, not just different data.
+  //
+  // ── datasets: an optional SECOND, orthogonal toggle nested inside each view
+  // (e.g. prose / code / hindi) — one independent state, so picking a dataset
+  // sticks across metric switches instead of resetting. A view's yLabel/
+  // yScale/yTicks/yUnit describe the METRIC and stay fixed across datasets;
+  // only `series` swaps, so datasets only ever need to supply {label, series}.
+  const [viewIdx, setViewIdx] = useState(0)
+  const [datasetIdx, setDatasetIdx] = useState(0)
+  const activeView = views && views.length ? views[Math.min(viewIdx, views.length - 1)] : null
+  const activeDatasets = activeView?.datasets
+  const activeDataset =
+    activeDatasets && activeDatasets.length
+      ? activeDatasets[Math.min(datasetIdx, activeDatasets.length - 1)]
+      : null
+  const yLabel = activeView?.yLabel ?? yLabelProp
+  const yScale = activeView?.yScale ?? yScaleProp
+  const yTicks = activeView?.yTicks ?? yTicksProp
+  const yMin = activeView?.yMin ?? yMinProp
+  const yMax = activeView?.yMax ?? yMaxProp
+  const yUnit = activeView?.yUnit ?? yUnitProp
+  const yTipDecimals = activeView?.yTipDecimals ?? yTipDecimalsProp
+  const series = activeDataset?.series ?? activeView?.series ?? seriesProp
 
   const toggle = (name) =>
     setHidden((prev) => {
@@ -452,10 +500,10 @@ function ChartImpl({
             r={9}
             fill="transparent"
             style={{ cursor: 'pointer' }}
-            onPointerEnter={(e) => onMarkerHover(e, x, py)}
-            onPointerMove={(e) => onMarkerHover(e, x, py)}
+            onPointerEnter={(e) => onMarkerHover(e, x, py, s.name)}
+            onPointerMove={(e) => onMarkerHover(e, x, py, s.name)}
             onPointerLeave={onCrosshairLeave}
-            onClick={(e) => onMarkerClick(e, x, py)}
+            onClick={(e) => onMarkerClick(e, x, py, s.name)}
           />
         )
       })
@@ -504,19 +552,35 @@ function ChartImpl({
   const unionXs = [...xSet].sort((a, b) => a - b)
   const unionPx = unionXs.map((x) => xS(x))
 
-  const buildTipHtml = (ux) => {
+  const buildTipHtml = (ux, nearest) => {
+    // Rows are ordered by value at this x (largest on top) so the readout
+    // matches the vertical stacking of the lines at the crosshair, instead of
+    // raw series order (which puts a low line above a high one). The nearest
+    // row is bolded and highlighted.
     const rows = visSeries
       .map(({ s, c }) => {
         const pt = (s.points || []).find(([x]) => x === ux)
-        if (!pt || pt[1] == null) return ''
-        return (
-          `<div style="display:flex;align-items:center;gap:6px;margin-top:3px">` +
-          `<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${c};flex:none"></span>` +
-          `<span style="flex:1 1 auto">${esc(s.name)}</span>` +
-          `<b style="color:#fff;margin-left:10px">${esc(fmtTipY(pt[1]))}</b></div>`
-        )
+        return pt && pt[1] != null ? { s, c, y: pt[1] } : null
       })
       .filter(Boolean)
+      .sort((a, b) => b.y - a.y)
+      .map(({ s, c, y }) => {
+        const isNear = s.name === nearest
+        return (
+          `<div style="display:flex;align-items:center;gap:6px;margin-top:3px;` +
+          `padding:${isNear ? '2px 4px' : '0'};margin-left:${isNear ? '-4px' : '0'};` +
+          `border-radius:4px;background:${isNear ? 'rgba(255,255,255,0.12)' : 'transparent'}">` +
+          `<span style="display:inline-block;width:${isNear ? 11 : 9}px;height:${
+            isNear ? 11 : 9
+          }px;` +
+          `border-radius:2px;background:${c};flex:none;` +
+          `box-shadow:${isNear ? `0 0 0 2px rgba(255,255,255,0.5)` : 'none'}"></span>` +
+          `<span style="flex:1 1 auto;font-weight:${isNear ? 700 : 400};` +
+          `color:${isNear ? '#fff' : 'rgba(255,255,255,0.75)'}">${esc(s.name)}</span>` +
+          `<b style="color:#fff;margin-left:10px;font-size:${isNear ? '1.05em' : '1em'}">` +
+          `${esc(fmtTipY(y))}</b></div>`
+        )
+      })
       .join('')
     if (!rows) return ''
     return (
@@ -548,15 +612,37 @@ function ChartImpl({
       activeXRef.current = ux
       setActiveX(ux)
     }
-    // Horizontal follow-line: imperative, clamped to the plot area.
-    const hy = Math.max(m.t, Math.min(m.t + ph, ((e.clientY - rect.top) / rect.height) * H))
+    // Which series is the cursor actually closest to at this x (pixel Y
+    // distance, in the raw un-clamped cursor position) -- this is what makes
+    // one point pop out of a dozen lookalikes instead of all lighting up
+    // identically.
+    const rawY = ((e.clientY - rect.top) / rect.height) * H
+    let nearest = null
+    let nearestDy = Infinity
+    let nearestPy = null
+    visSeries.forEach(({ s }) => {
+      const pt = (s.points || []).find(([x]) => x === ux)
+      if (!pt || pt[1] == null) return
+      const py = yS(pt[1])
+      const dy = Math.abs(py - rawY)
+      if (dy < nearestDy) {
+        nearestDy = dy
+        nearest = s.name
+        nearestPy = py
+      }
+    })
+    if (nearest !== nearestName) setNearestName(nearest)
+    // Horizontal follow-line snaps to the NEAREST point's actual y (not the
+    // raw cursor y) so the dashed line visibly passes through the point
+    // being highlighted, instead of just tracking the mouse.
+    const hy = nearestPy != null ? nearestPy : Math.max(m.t, Math.min(m.t + ph, rawY))
     const hl = hLineRef.current
     if (hl) {
       hl.setAttribute('y1', hy)
       hl.setAttribute('y2', hy)
       hl.style.opacity = '0.45'
     }
-    const html = buildTipHtml(ux)
+    const html = buildTipHtml(ux, nearest)
     if (html) showTip(e, html)
     else hideTip()
   }
@@ -564,6 +650,7 @@ function ChartImpl({
   const clearActive = () => {
     activeXRef.current = null
     setActiveX(null)
+    setNearestName(null)
     if (hLineRef.current) hLineRef.current.style.opacity = '0'
     hideTip()
   }
@@ -576,26 +663,29 @@ function ChartImpl({
   // x (bypassing the nearest-x search so clustered scatter points are each
   // reachable) and show the same tooltip. buildTipHtml(ux) lists every visible
   // series with a point at that x, so line series keep their column readout.
-  const onMarkerHover = (e, ux, py) => {
+  // The hovered marker's OWN series is unambiguously "nearest" here — no
+  // distance calculation needed like the general crosshair-move case.
+  const onMarkerHover = (e, ux, py, name) => {
     if (lockedRef.current) return
     if (ux !== activeXRef.current) {
       activeXRef.current = ux
       setActiveX(ux)
     }
+    if (name !== nearestName) setNearestName(name)
     const hl = hLineRef.current
     if (hl) {
       hl.setAttribute('y1', py)
       hl.setAttribute('y2', py)
       hl.style.opacity = '0.45'
     }
-    const html = buildTipHtml(ux)
+    const html = buildTipHtml(ux, name)
     if (html) showTip(e, html)
     else hideTip()
   }
 
   // Click a marker to LOCK focus on it (tooltip + highlight persist after the
   // pointer leaves). Click the same point again — or click empty plot — to unlock.
-  const onMarkerClick = (e, ux, py) => {
+  const onMarkerClick = (e, ux, py, name) => {
     if (lockedRef.current && activeXRef.current === ux) {
       lockedRef.current = false
       clearActive()
@@ -604,13 +694,14 @@ function ChartImpl({
     lockedRef.current = true
     activeXRef.current = ux
     setActiveX(ux)
+    setNearestName(name)
     const hl = hLineRef.current
     if (hl) {
       hl.setAttribute('y1', py)
       hl.setAttribute('y2', py)
       hl.style.opacity = '0.45'
     }
-    const html = buildTipHtml(ux)
+    const html = buildTipHtml(ux, name)
     if (html) lockTip(e.currentTarget, html)
   }
 
@@ -642,6 +733,96 @@ function ChartImpl({
           background: C.card,
         }}
       >
+        {((views && views.length > 1) || (activeDatasets && activeDatasets.length > 1)) && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '6px',
+              padding: '2px 2px 6px',
+              fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+            }}
+          >
+            {/* Secondary toggle (e.g. dataset): independent of the metric
+                toggle, so the selection sticks when switching metrics. A
+                lighter, smaller style keeps it visually subordinate to the
+                primary toggle instead of the two competing for attention. */}
+            <div style={{ display: 'flex' }}>
+              {activeDatasets &&
+                activeDatasets.length > 1 &&
+                activeDatasets.map((d, i) => {
+                  const on = i === Math.min(datasetIdx, activeDatasets.length - 1)
+                  return (
+                    <button
+                      key={d.label}
+                      type="button"
+                      onClick={() => {
+                        setDatasetIdx(i)
+                        setActiveX(null)
+                        lockedRef.current = false
+                        hideTip()
+                      }}
+                      style={{
+                        appearance: 'none',
+                        cursor: 'pointer',
+                        fontSize: '10px',
+                        lineHeight: 1,
+                        padding: '4px 9px',
+                        border: `1px solid ${on ? C.muted : 'transparent'}`,
+                        marginLeft: i === 0 ? 0 : '-1px',
+                        background: 'transparent',
+                        color: on ? C.ink : C.muted,
+                        fontFamily: 'inherit',
+                        fontWeight: on ? 600 : 400,
+                        position: 'relative',
+                      }}
+                    >
+                      {d.label}
+                    </button>
+                  )
+                })}
+            </div>
+            {/* Primary toggle (metric): bold on-theme segmented buttons. */}
+            <div style={{ display: 'flex' }}>
+              {views &&
+                views.length > 1 &&
+                views.map((v, i) => {
+                  const on = i === Math.min(viewIdx, views.length - 1)
+                  return (
+                    <button
+                      key={v.label}
+                      type="button"
+                      onClick={() => {
+                        setViewIdx(i)
+                        setActiveX(null)
+                        lockedRef.current = false
+                        hideTip()
+                      }}
+                      style={{
+                        appearance: 'none',
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        lineHeight: 1,
+                        padding: '5px 11px',
+                        border: `1px solid ${on ? C.ink : C.border}`,
+                        marginLeft: i === 0 ? 0 : '-1px',
+                        background: on ? C.ink : 'transparent',
+                        color: on ? C.card : C.muted,
+                        fontFamily: 'inherit',
+                        fontWeight: on ? 600 : 400,
+                        zIndex: on ? 1 : 0,
+                        position: 'relative',
+                      }}
+                    >
+                      {v.label}
+                    </button>
+                  )
+                })}
+            </div>
+          </div>
+        )}
         <svg
           viewBox={`0 0 ${W} ${H}`}
           role="img"
@@ -694,30 +875,62 @@ function ChartImpl({
                   pointerEvents="none"
                 />,
               ]
+              // Draw the non-nearest points first (dimmed, small, so they stay
+              // legible as context) and the nearest one LAST (drawn on top, so
+              // it's never occluded by a neighbour) with a much bigger, fully
+              // opaque halo + a bright outer ring — the single point the
+              // cursor is actually on should be unmistakable among ~10 others.
+              const rest = []
+              let nearestNode = null
               visSeries.forEach(({ s, i, c }) => {
                 const pt = (s.points || []).find(([x]) => x === activeX)
                 if (!pt || pt[1] == null) return
                 const px = xS(pt[0])
                 const py = yS(pt[1])
-                nodes.push(
-                  <circle
-                    key={`cx-halo-${i}`}
-                    cx={px}
-                    cy={py}
-                    r={7.5}
-                    fill="none"
-                    stroke={c}
-                    strokeWidth={1.5}
-                    strokeOpacity={0.55}
-                    pointerEvents="none"
-                  />
-                )
-                nodes.push(
-                  markerNode(s.marker || 'circle', px, py, 4.5, c, `cx-sym-${i}`, {
-                    pointerEvents: 'none',
-                  })
-                )
+                const isNear = nearestName != null && s.name === nearestName
+                if (isNear) {
+                  nearestNode = (
+                    <g key={`cx-near-${i}`} pointerEvents="none">
+                      <circle
+                        cx={px}
+                        cy={py}
+                        r={12}
+                        fill="none"
+                        stroke={c}
+                        strokeOpacity={0.28}
+                        strokeWidth={5}
+                      />
+                      <circle cx={px} cy={py} r={9} fill="none" stroke={C.card} strokeWidth={2.5} />
+                      <circle cx={px} cy={py} r={9} fill="none" stroke={c} strokeWidth={1.75} />
+                      {markerNode(s.marker || 'circle', px, py, 6, c, `cx-sym-${i}`, {
+                        pointerEvents: 'none',
+                      })}
+                    </g>
+                  )
+                } else {
+                  rest.push(
+                    <circle
+                      key={`cx-halo-${i}`}
+                      cx={px}
+                      cy={py}
+                      r={6}
+                      fill="none"
+                      stroke={c}
+                      strokeWidth={1.25}
+                      strokeOpacity={nearestName != null ? 0.28 : 0.55}
+                      pointerEvents="none"
+                    />
+                  )
+                  rest.push(
+                    markerNode(s.marker || 'circle', px, py, 3.5, c, `cx-sym-${i}`, {
+                      pointerEvents: 'none',
+                      opacity: nearestName != null ? 0.55 : 1,
+                    })
+                  )
+                }
               })
+              nodes.push(...rest)
+              if (nearestNode) nodes.push(nearestNode)
               return <g>{nodes}</g>
             })()}
           {/* Faint horizontal follow-line (imperative y, no re-render) */}
