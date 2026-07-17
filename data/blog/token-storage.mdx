@@ -18,6 +18,8 @@ Every vector search engine stores two things for each point: the vector and the 
 
 In other words, **if agents are going to be the [biggest users](https://x.com/eastdakota/status/2062212701414187452) of your system, then your system should speak their language: tokens**. This post argues for **token-native storage** (read/write text as BPE token IDs, not UTF-8 bytes) anywhere models are the primary readers and writers: search engines, local files, LLM agent traces, text-heavy APIs, and eventually the web. I'll show my point with experiments, talk about limitations, and how the community can help get rid of them.
 
+Two separate claims live in this post, and it's worth keeping them apart: **token-native storage itself** (store IDs, not bytes — the core argument) is the settled part. **Which entropy coder to layer on top** (ANS, frequency-remap, something else) is a genuinely open sub-problem I'm still actively working — see the [faster-alternative section](#a-faster-alternative-to-ans-frequency-sorted-token-ids) and its own follow-up experiments. Don't read "ANS gets 3.37x" as the ceiling of the idea; read "storing IDs instead of bytes" as the idea, with the coder as a swappable, improvable detail.
+
 ## How Token-Native Storage Works
 
 {/* Static version kept for reference — shipping the animated one below. */}
@@ -194,6 +196,8 @@ Observations:
 3. cl100k and o200k just need the right container: switching from naive uint32 (4-byte) packing (left off the chart above, see the [glossary](#glossary) for why) to 3-byte packing, with no entropy coder at all, already gets them to 1.49x and 1.52x. **ANS recovers further still, to 3.30x (cl100k) and 3.32x (o200k)**.
 4. The fairest competitor to r50k+ANS is [`zstd --train`](https://github.com/facebook/zstd/wiki/Zstandard-Dictionary-Compression-format), since it also learns a vocab from the corpus. It reaches 2.61x, still 30% behind! (and its vocab isn't standardized like the tokenizers)
 
+WikiText is one curated corpus, though — I reran this full comparison on real, non-overlapping prose/code/Hindi corpora at realistic RAG chunk sizes (256-2,000 tokens) in a [follow-up post](/blog/token-storage-extra#does-335-hold-outside-wikitext-103), toggle-able by dataset. The headline number holds up reasonably well on prose (~3.3-3.4x) and code (~3.1-3.2x), but Hindi is the interesting outlier: r50k and cl100k raw-pack it to **0.84-0.87x, worse than doing nothing**, because neither tokenizer ever learned real Devanagari merges, while o200k (which did) reaches **5.5-6.1x** on the exact same text. Same idea, same method, opposite outcome — purely a function of whether your tokenizer's vocabulary actually covers your script.
+
 <details>
 <summary>Digging deeper: does this hold for every tokenizer, and how much is the entropy coder vs. the tokenizer?</summary>
 
@@ -339,7 +343,7 @@ Observations:
 
 2. **Tokenization is expensive but it's anyways a mandatory step to pass text to the model** so it's free lunch and more importantly, re-usable. Detokenization is fast so it's easy to also show text back to humans.
 
-3. ANS encoding and decoding steps turned out to be slow. I've propose a cheaper and intermediate path [here](#a-faster-alternative-to-ans-frequency-sorted-token-ids)
+3. ANS decode looks slow next to LZ4's raw decompress — but that comparison isn't fair to the actual consumer. An agent needs token IDs regardless of storage format, so a byte-codec payload still owes it a tokenize step _after_ decompressing, a cost the naive comparison doesn't charge. Charge it fairly and ANS decode comes out **2-8x faster** than decompress+tokenize, measured across prose/code/Hindi in the [follow-up post](/blog/token-storage-extra#does-the-faster-than-ans-alternative-hold-outside-wikitext-too). ANS is still the slower of the two token-native options below it, though, which is why the frequency-sorted alternative still has a place — just not because ANS decode is slow in isolation.
 
 4. zstd dict's encoder is surprisingly slow at 128µs, though it decompresses in 2µs.
 
@@ -455,6 +459,8 @@ ANS gets close to the entropy limit, but it's just one option, and it turned out
 | o200k     |           1.14x |            1.52x (3-byte) |       2.60x (~1µs decode) | 3.32x (~20µs decode) |
 
 **No fixed width fixes this, wider just wastes more** (see the glossary above for why cl100k/o200k need 3 bytes at all). Reassigning IDs by frequency rank and packing with [`streamvbyte`](https://github.com/lemire/streamvbyte) (a real SIMD-vectorized library from the FastPFOR family) gets most of the way to ANS's ratio with no entropy coder at all, at a ~15-20x faster decode, a genuine, deployable middle ground.
+
+This holds up beyond WikiText too: re-measured on prose/code/Hindi at 256-2,000 token chunks (same [follow-up post](/blog/token-storage-extra#does-the-faster-than-ans-alternative-hold-outside-wikitext-too)), frequency-remap consistently decodes 1.5-5.7x faster than ANS for roughly 15-26% less compression, at every domain and chunk size tested. If your workload weighs decode latency heavily (an agent-serving hot path), it's a competitive default, not just a fallback. If ratio matters most (cold storage, egress, backups), ANS keeps a real, consistent edge. Nothing stops mixing the two — ANS at rest, frequency-remap for a hot cache tier — since both round-trip through the same token IDs.
 
 ## What AI Labs Could Fix for Free
 
