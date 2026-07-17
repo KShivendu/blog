@@ -13,6 +13,1330 @@ authors: ['default']
 
 In [the compression post](/blog/tokenization-compression) I showed that storing vector-DB text payloads as BPE token IDs with a static entropy coder gives ~3.35× lossless compression (and ~4.7× with a bigram model). That post is about the ratio. This one is about everything else that falls out of the representation change — consequences that need no new benchmarks, or that turned out to be more interesting than the ratio itself.
 
+## Does ~3.35× Hold Outside WikiText-103?
+
+The original number came from WikiText-103, and that corpus turned out to be unusually compressible — curated encyclopedia prose, not the messy web/code/multilingual mix a real deployment actually stores. So I reran the full comparison (byte codecs, raw token-ID packing, and tokenizer+static-ANS, for all three tiktoken vocabularies) on three real, held-out, non-overlapping corpora instead: prose (C4), code (codeparrot-clean, Python), and Hindi (Wikipedia) — at chunk sizes that actually matter for retrieval: 256 and 512 tokens (typical embedding-model chunk sizes — mixedbread and most RAG setups chunk well under 1,000 tokens), plus 2,000 as a longer-context reference point. Every number below is measured, not estimated: real tokenizers, a real compiled ANS coder (`constriction`), real `gzip`/`zstd`/`lz4`/`brotli`, with a train/test split so the static frequency table never sees the documents it's evaluated on.
+
+<BarChart
+  orientation="horizontal"
+  title="Compression ratio vs raw UTF-8 bytes"
+  subtitle="toggle chunk size — grouped by dataset, so you can compare all methods within one domain at a glance"
+  valueLabel="compression ratio (higher is better)"
+  valueUnit="×"
+  valueMax={6.4}
+  valueTicks={[0, 1, 2, 3, 4, 5, 6]}
+  height={620}
+  views={[
+    {
+      label: '256 tok',
+      categories: ['prose (C4)', 'code (Python)', 'hindi (Wikipedia)'],
+      series: [
+        { name: 'LZ4', color: '#94a3b8', values: [1.17, 1.51, 1.34] },
+        { name: 'LZ4 (ES blocks)', color: '#ec4899', values: [1.43, 1.86, 1.86] },
+        { name: 'gzip-9', color: '#64748b', values: [1.78, 2.0, 1.95] },
+        { name: 'zstd-19', color: '#475569', values: [1.79, 2.05, 1.97] },
+        { name: 'brotli-q11', color: '#0ea5e9', values: [2.4, 2.37, 2.4] },
+        { name: 'r50k raw', color: '#fde68a', values: [2.2, 1.06, 0.85] },
+        { name: 'cl100k raw', color: '#f59e0b', values: [1.57, 1.47, 0.87] },
+        { name: 'o200k raw', color: '#b45309', values: [1.59, 1.46, 2.47] },
+        { name: 'r50k +ANS', color: '#6ee7b7', values: [3.3, 2.56, 2.93] },
+        { name: 'cl100k +ANS', color: '#10b981', values: [3.41, 3.21, 3.48] },
+        { name: 'o200k +ANS', color: '#047857', values: [3.45, 3.19, 5.54] },
+      ],
+    },
+    {
+      label: '512 tok',
+      categories: ['prose (C4)', 'code (Python)', 'hindi (Wikipedia)'],
+      series: [
+        { name: 'LZ4', color: '#94a3b8', values: [1.27, 1.76, 1.52] },
+        { name: 'LZ4 (ES blocks)', color: '#ec4899', values: [1.43, 2.01, 1.92] },
+        { name: 'gzip-9', color: '#64748b', values: [1.92, 2.46, 2.38] },
+        { name: 'zstd-19', color: '#475569', values: [1.94, 2.45, 2.42] },
+        { name: 'brotli-q11', color: '#0ea5e9', values: [2.57, 2.87, 2.89] },
+        { name: 'r50k raw', color: '#fde68a', values: [2.25, 1.07, 0.84] },
+        { name: 'cl100k raw', color: '#f59e0b', values: [1.55, 1.49, 0.86] },
+        { name: 'o200k raw', color: '#b45309', values: [1.59, 1.49, 2.55] },
+        { name: 'r50k +ANS', color: '#6ee7b7', values: [3.3, 2.58, 2.97] },
+        { name: 'cl100k +ANS', color: '#10b981', values: [3.37, 3.19, 3.48] },
+        { name: 'o200k +ANS', color: '#047857', values: [3.4, 3.16, 5.9] },
+      ],
+    },
+    {
+      label: '2,000 tok',
+      categories: ['prose (C4)', 'code (Python)', 'hindi (Wikipedia)'],
+      series: [
+        { name: 'LZ4', color: '#94a3b8', values: [1.44, 2.06, 1.85] },
+        { name: 'LZ4 (ES blocks)', color: '#ec4899', values: [1.44, 2.29, 2.01] },
+        { name: 'gzip-9', color: '#64748b', values: [2.17, 3.17, 3.29] },
+        { name: 'zstd-19', color: '#475569', values: [2.24, 3.22, 3.4] },
+        { name: 'brotli-q11', color: '#0ea5e9', values: [2.84, 3.72, 3.84] },
+        { name: 'r50k raw', color: '#fde68a', values: [2.3, 1.09, 0.84] },
+        { name: 'cl100k raw', color: '#f59e0b', values: [1.59, 1.47, 0.87] },
+        { name: 'o200k raw', color: '#b45309', values: [1.6, 1.47, 2.62] },
+        { name: 'r50k +ANS', color: '#6ee7b7', values: [3.29, 2.5, 3.0] },
+        { name: 'cl100k +ANS', color: '#10b981', values: [3.35, 3.13, 3.57] },
+        { name: 'o200k +ANS', color: '#047857', values: [3.38, 3.08, 6.13] },
+      ],
+    },
+  ]}
+/>
+
+Two findings that change the story from the WikiText-only version:
+
+- **WikiText overstated the ratio badly.** Real prose (C4) at 2,000 tokens gets 3.38× (o200k+ANS) — a real win, but nowhere near the number a curated Wikipedia corpus implied. Domain matters enormously: code compresses better (up to 3.21×) and Hindi Wikipedia best of all (6.13× with o200k), but that last one is partly an artifact — see the latency section below.
+- **Raw token-ID packing alone is not a free lunch.** Look at the "raw" rows before ANS: on code, r50k raw packing barely breaks even (1.06-1.09×); on Hindi, r50k and cl100k raw packing are _worse_ than doing nothing (0.84-0.87×, because those two tokenizers fall back to near-byte-level tokens for Devanagari). The compression only shows up reliably once the static entropy coder is added — "tokenization gives you free compression" is really "tokenization _plus ANS_ gives you compression," and that distinction matters if you were planning to skip the entropy-coding step.
+
+**"LZ4" above compresses each document alone — that's not what a real search engine does.** Elasticsearch/Lucene's actual stored-fields codec batches documents into ~16KB (or 128-doc) blocks and compresses the whole block as one LZ4 stream, giving it a much bigger dictionary to find cross-document redundancy in. I added that as its own method ("LZ4 (ES blocks)") to all three charts, simulated the way real Lucene actually does it — verified against the `CompressingStoredFieldsWriter` source, not guessed: documents grouped in corpus order, batched to the 16KB/128-doc limit, and critically, **a trailing partial block still gets compressed at segment flush rather than left raw** (Lucene marks it a "dirty chunk" for later merge-time cleanup, but never skips compressing it — my first pass here wrongly discarded those instead).
+
+That fix changes the story for prose specifically: at 2,000-token chunks, each document is already ~9KB, so two of them don't fit in one 16KB block — almost every block ends up holding exactly 1 document, and the ratio (1.44×) converges to _exactly_ what plain per-document LZ4 already gets (also 1.44×). Batching only helps once several documents actually fit in a block together; on code and Hindi, where individual documents are smaller, the benefit holds up (code: 1.86-2.29× vs 1.51-2.06× per-document; Hindi: 1.86-2.01× vs 1.34-1.85×). The mechanism is exactly what you'd expect: batching only pays off when _multiple_ documents fit in one block, and that gets less likely as documents approach the block size themselves. It still falls well short of tokenizer+ANS at every size, and even loses to plain per-document brotli. The real catch is on the decode side: **retrieving a single document means decompressing its entire block**, a tax that scales with the block's byte size, not the number of documents packed into it — batching helps bulk-write throughput and ratio, not point-read latency, which is the access pattern that matters for RAG.
+
+<BarChart
+  orientation="horizontal"
+  title="Decode latency, µs per chunk"
+  subtitle="log scale — toggle chunk size. Grouped by dataset. This is the number that matters for feeding retrieved chunks to an LLM"
+  valueLabel="microseconds (log scale)"
+  valueUnit="µs"
+  valueScale="log"
+  valueMin={1}
+  valueMax={1000}
+  valueTicks={[1, 10, 100, 1000]}
+  height={620}
+  views={[
+    {
+      label: '256 tok',
+      categories: ['prose (C4)', 'code (Python)', 'hindi (Wikipedia)'],
+      series: [
+        { name: 'LZ4', color: '#94a3b8', values: [2.6, 2.4, 2.1] },
+        { name: 'LZ4 (ES blocks)', color: '#ec4899', values: [20.5, 18.0, 23.9] },
+        { name: 'gzip-9', color: '#64748b', values: [22.2, 16.4, 15.5] },
+        { name: 'zstd-19', color: '#475569', values: [16.4, 11.8, 11.8] },
+        { name: 'brotli-q11', color: '#0ea5e9', values: [47.9, 35.6, 27.5] },
+        { name: 'r50k raw', color: '#fde68a', values: [42.6, 28.2, 16.1] },
+        { name: 'cl100k raw', color: '#f59e0b', values: [48.2, 23.1, 9.9] },
+        { name: 'o200k raw', color: '#b45309', values: [44.8, 25.2, 16.1] },
+        { name: 'r50k +ANS', color: '#6ee7b7', values: [65.0, 97.3, 65.4] },
+        { name: 'cl100k +ANS', color: '#10b981', values: [130.2, 74.8, 62.5] },
+        { name: 'o200k +ANS', color: '#047857', values: [142.3, 73.1, 49.7] },
+      ],
+    },
+    {
+      label: '512 tok',
+      categories: ['prose (C4)', 'code (Python)', 'hindi (Wikipedia)'],
+      series: [
+        { name: 'LZ4', color: '#94a3b8', values: [4.4, 3.0, 2.6] },
+        { name: 'LZ4 (ES blocks)', color: '#ec4899', values: [19.1, 16.6, 12.7] },
+        { name: 'gzip-9', color: '#64748b', values: [34.5, 19.7, 18.7] },
+        { name: 'zstd-19', color: '#475569', values: [25.9, 12.8, 18.5] },
+        { name: 'brotli-q11', color: '#0ea5e9', values: [63.3, 40.4, 40.3] },
+        { name: 'r50k raw', color: '#fde68a', values: [81.1, 48.3, 31.5] },
+        { name: 'cl100k raw', color: '#f59e0b', values: [86.7, 22.8, 29.5] },
+        { name: 'o200k raw', color: '#b45309', values: [87.2, 45.1, 27.6] },
+        { name: 'r50k +ANS', color: '#6ee7b7', values: [199.0, 150.7, 127.8] },
+        { name: 'cl100k +ANS', color: '#10b981', values: [207.0, 126.5, 110.0] },
+        { name: 'o200k +ANS', color: '#047857', values: [235.7, 142.3, 88.3] },
+      ],
+    },
+    {
+      label: '2,000 tok',
+      categories: ['prose (C4)', 'code (Python)', 'hindi (Wikipedia)'],
+      series: [
+        { name: 'LZ4', color: '#94a3b8', values: [11.5, 4.0, 6.3] },
+        { name: 'LZ4 (ES blocks)', color: '#ec4899', values: [11.3, 14.4, 18.7] },
+        { name: 'gzip-9', color: '#64748b', values: [95.4, 44.8, 28.1] },
+        { name: 'zstd-19', color: '#475569', values: [65.2, 40.3, 41.4] },
+        { name: 'brotli-q11', color: '#0ea5e9', values: [143.1, 64.3, 57.6] },
+        { name: 'r50k raw', color: '#fde68a', values: [254.6, 154.6, 106.1] },
+        { name: 'cl100k raw', color: '#f59e0b', values: [308.1, 143.7, 108.7] },
+        { name: 'o200k raw', color: '#b45309', values: [229.3, 117.5, 82.4] },
+        { name: 'r50k +ANS', color: '#6ee7b7', values: [725.9, 579.8, 450.0] },
+        { name: 'cl100k +ANS', color: '#10b981', values: [801.9, 415.1, 351.1] },
+        { name: 'o200k +ANS', color: '#047857', values: [834.5, 410.3, 274.1] },
+      ],
+    },
+  ]}
+/>
+
+<BarChart
+  orientation="horizontal"
+  title="Encode latency, µs per chunk"
+  subtitle="log scale — toggle chunk size. Grouped by dataset. Watch brotli's bar: its cost grows faster than the input does"
+  valueLabel="microseconds (log scale)"
+  valueUnit="µs"
+  valueScale="log"
+  valueMin={1}
+  valueMax={100000}
+  valueTicks={[1, 10, 100, 1000, 10000, 100000]}
+  height={620}
+  views={[
+    {
+      label: '256 tok',
+      categories: ['prose (C4)', 'code (Python)', 'hindi (Wikipedia)'],
+      series: [
+        { name: 'LZ4', color: '#94a3b8', values: [5.8, 3.9, 3.4] },
+        { name: 'LZ4 (ES blocks)', color: '#ec4899', values: [5.4, 2.1, 1.4] },
+        { name: 'gzip-9', color: '#64748b', values: [61.5, 43.6, 41.0] },
+        { name: 'zstd-19', color: '#475569', values: [311.3, 204.3, 164.3] },
+        { name: 'brotli-q11', color: '#0ea5e9', values: [4664.3, 3176.1, 1954.5] },
+        { name: 'r50k raw', color: '#fde68a', values: [221.9, 178.7, 121.3] },
+        { name: 'cl100k raw', color: '#f59e0b', values: [252.4, 162.7, 65.0] },
+        { name: 'o200k raw', color: '#b45309', values: [167.8, 102.3, 62.8] },
+        { name: 'r50k +ANS', color: '#6ee7b7', values: [156.1, 232.1, 152.4] },
+        { name: 'cl100k +ANS', color: '#10b981', values: [311.9, 199.3, 144.3] },
+        { name: 'o200k +ANS', color: '#047857', values: [223.9, 145.1, 87.1] },
+      ],
+    },
+    {
+      label: '512 tok',
+      categories: ['prose (C4)', 'code (Python)', 'hindi (Wikipedia)'],
+      series: [
+        { name: 'LZ4', color: '#94a3b8', values: [11.4, 5.8, 5.2] },
+        { name: 'LZ4 (ES blocks)', color: '#ec4899', values: [10.9, 3.9, 2.2] },
+        { name: 'gzip-9', color: '#64748b', values: [107.1, 55.8, 60.6] },
+        { name: 'zstd-19', color: '#475569', values: [704.2, 391.1, 383.3] },
+        { name: 'brotli-q11', color: '#0ea5e9', values: [8226.9, 4580.0, 3414.7] },
+        { name: 'r50k raw', color: '#fde68a', values: [439.8, 326.0, 248.0] },
+        { name: 'cl100k raw', color: '#f59e0b', values: [508.0, 177.6, 213.5] },
+        { name: 'o200k raw', color: '#b45309', values: [315.7, 210.4, 115.3] },
+        { name: 'r50k +ANS', color: '#6ee7b7', values: [505.5, 397.7, 305.8] },
+        { name: 'cl100k +ANS', color: '#10b981', values: [563.9, 380.1, 292.7] },
+        { name: 'o200k +ANS', color: '#047857', values: [412.0, 271.6, 157.1] },
+      ],
+    },
+    {
+      label: '2,000 tok',
+      categories: ['prose (C4)', 'code (Python)', 'hindi (Wikipedia)'],
+      series: [
+        { name: 'LZ4', color: '#94a3b8', values: [40.4, 13.3, 15.2] },
+        { name: 'LZ4 (ES blocks)', color: '#ec4899', values: [40.9, 13.8, 10.4] },
+        { name: 'gzip-9', color: '#64748b', values: [362.8, 180.7, 186.0] },
+        { name: 'zstd-19', color: '#475569', values: [3743.0, 2108.8, 1873.5] },
+        { name: 'brotli-q11', color: '#0ea5e9', values: [82863.1, 56881.0, 13317.9] },
+        { name: 'r50k raw', color: '#fde68a', values: [1720.3, 1267.5, 919.4] },
+        { name: 'cl100k raw', color: '#f59e0b', values: [1978.8, 1239.2, 866.0] },
+        { name: 'o200k raw', color: '#b45309', values: [1080.5, 748.1, 417.4] },
+        { name: 'r50k +ANS', color: '#6ee7b7', values: [2037.7, 1603.6, 1158.2] },
+        { name: 'cl100k +ANS', color: '#10b981', values: [2260.3, 1453.0, 1010.5] },
+        { name: 'o200k +ANS', color: '#047857', values: [1529.6, 917.6, 559.2] },
+      ],
+    },
+  ]}
+/>
+
+Reading the two latency charts together against the ratio chart is the real point: **brotli gets closest to matching tokenizer+ANS on ratio, but its encode cost is 20-100×+ higher and grows super-linearly with chunk size** (256→2,000 tokens is 8× the input, but ~18-35× the brotli-encode time — its quality-11 search doesn't amortize). Tokenizer+ANS latency, by contrast, stays close to linear in token count. So the smaller the chunk — i.e. the more realistic the embedding-chunk scenario — the worse brotli's already-bad latency story gets _relative to_ token-native storage, while the ratio gap barely moves. Hindi's 5.5-6.1× ratio needs its own caveat too: r50k and cl100k fall back to near-byte-level tokens for Devanagari (no real merges learned), so o200k's win there is a real, measured effect of having actual Devanagari BPE merges, not a fluke of the entropy coder.
+
+The bar charts above only show three snapshots (256/512/2,000 tokens); here's the same data as a continuous trend so the scaling behavior is easier to read at a glance — toggle between decode/encode/ratio on the right, and prose/code/hindi on the left, independently:
+
+<LineChart
+  title="Scaling vs chunk size"
+  xLabel="chunk size (tokens)"
+  xScale="log"
+  xTicks={[
+    [256, '256'],
+    [512, '512'],
+    [2000, '2,000'],
+  ]}
+  views={[
+    {
+      label: 'decode',
+      yLabel: 'decode latency (µs, log scale)',
+      yScale: 'log',
+      yUnit: ' µs',
+      yTicks: [
+        [1, '1'],
+        [10, '10'],
+        [100, '100'],
+        [1000, '1,000'],
+      ],
+      datasets: [
+        {
+          label: 'prose',
+          series: [
+            {
+              name: 'LZ4',
+              color: '#94a3b8',
+              marker: 'circle',
+              points: [
+                [256, 2.6],
+                [512, 4.4],
+                [2000, 11.5],
+              ],
+            },
+            {
+              name: 'LZ4 (ES blocks)',
+              color: '#ec4899',
+              marker: 'square',
+              points: [
+                [256, 20.5],
+                [512, 19.1],
+                [2000, 11.3],
+              ],
+            },
+            {
+              name: 'gzip-9',
+              color: '#64748b',
+              marker: 'circle',
+              points: [
+                [256, 22.2],
+                [512, 34.5],
+                [2000, 95.4],
+              ],
+            },
+            {
+              name: 'zstd-19',
+              color: '#475569',
+              marker: 'circle',
+              points: [
+                [256, 16.4],
+                [512, 25.9],
+                [2000, 65.2],
+              ],
+            },
+            {
+              name: 'brotli-q11',
+              color: '#0ea5e9',
+              marker: 'triangle',
+              points: [
+                [256, 47.9],
+                [512, 63.3],
+                [2000, 143.1],
+              ],
+            },
+            {
+              name: 'r50k raw',
+              color: '#fde68a',
+              marker: 'diamond',
+              points: [
+                [256, 42.6],
+                [512, 81.1],
+                [2000, 254.6],
+              ],
+            },
+            {
+              name: 'cl100k raw',
+              color: '#f59e0b',
+              marker: 'diamond',
+              points: [
+                [256, 48.2],
+                [512, 86.7],
+                [2000, 308.1],
+              ],
+            },
+            {
+              name: 'o200k raw',
+              color: '#b45309',
+              marker: 'diamond',
+              points: [
+                [256, 44.8],
+                [512, 87.2],
+                [2000, 229.3],
+              ],
+            },
+            {
+              name: 'r50k +ANS',
+              color: '#6ee7b7',
+              marker: 'star',
+              points: [
+                [256, 65.0],
+                [512, 199.0],
+                [2000, 725.9],
+              ],
+            },
+            {
+              name: 'cl100k +ANS',
+              color: '#10b981',
+              marker: 'star',
+              points: [
+                [256, 130.2],
+                [512, 207.0],
+                [2000, 801.9],
+              ],
+            },
+            {
+              name: 'o200k +ANS',
+              color: '#047857',
+              marker: 'star',
+              points: [
+                [256, 142.3],
+                [512, 235.7],
+                [2000, 834.5],
+              ],
+            },
+          ],
+        },
+        {
+          label: 'code',
+          series: [
+            {
+              name: 'LZ4',
+              color: '#94a3b8',
+              marker: 'circle',
+              points: [
+                [256, 2.4],
+                [512, 3.0],
+                [2000, 4.0],
+              ],
+            },
+            {
+              name: 'LZ4 (ES blocks)',
+              color: '#ec4899',
+              marker: 'square',
+              points: [
+                [256, 18.0],
+                [512, 16.6],
+                [2000, 14.4],
+              ],
+            },
+            {
+              name: 'gzip-9',
+              color: '#64748b',
+              marker: 'circle',
+              points: [
+                [256, 16.4],
+                [512, 19.7],
+                [2000, 44.8],
+              ],
+            },
+            {
+              name: 'zstd-19',
+              color: '#475569',
+              marker: 'circle',
+              points: [
+                [256, 11.8],
+                [512, 12.8],
+                [2000, 40.3],
+              ],
+            },
+            {
+              name: 'brotli-q11',
+              color: '#0ea5e9',
+              marker: 'triangle',
+              points: [
+                [256, 35.6],
+                [512, 40.4],
+                [2000, 64.3],
+              ],
+            },
+            {
+              name: 'r50k raw',
+              color: '#fde68a',
+              marker: 'diamond',
+              points: [
+                [256, 28.2],
+                [512, 48.3],
+                [2000, 154.6],
+              ],
+            },
+            {
+              name: 'cl100k raw',
+              color: '#f59e0b',
+              marker: 'diamond',
+              points: [
+                [256, 23.1],
+                [512, 22.8],
+                [2000, 143.7],
+              ],
+            },
+            {
+              name: 'o200k raw',
+              color: '#b45309',
+              marker: 'diamond',
+              points: [
+                [256, 25.2],
+                [512, 45.1],
+                [2000, 117.5],
+              ],
+            },
+            {
+              name: 'r50k +ANS',
+              color: '#6ee7b7',
+              marker: 'star',
+              points: [
+                [256, 97.3],
+                [512, 150.7],
+                [2000, 579.8],
+              ],
+            },
+            {
+              name: 'cl100k +ANS',
+              color: '#10b981',
+              marker: 'star',
+              points: [
+                [256, 74.8],
+                [512, 126.5],
+                [2000, 415.1],
+              ],
+            },
+            {
+              name: 'o200k +ANS',
+              color: '#047857',
+              marker: 'star',
+              points: [
+                [256, 73.1],
+                [512, 142.3],
+                [2000, 410.3],
+              ],
+            },
+          ],
+        },
+        {
+          label: 'hindi',
+          series: [
+            {
+              name: 'LZ4',
+              color: '#94a3b8',
+              marker: 'circle',
+              points: [
+                [256, 2.1],
+                [512, 2.6],
+                [2000, 6.3],
+              ],
+            },
+            {
+              name: 'LZ4 (ES blocks)',
+              color: '#ec4899',
+              marker: 'square',
+              points: [
+                [256, 23.9],
+                [512, 12.7],
+                [2000, 18.7],
+              ],
+            },
+            {
+              name: 'gzip-9',
+              color: '#64748b',
+              marker: 'circle',
+              points: [
+                [256, 15.5],
+                [512, 18.7],
+                [2000, 28.1],
+              ],
+            },
+            {
+              name: 'zstd-19',
+              color: '#475569',
+              marker: 'circle',
+              points: [
+                [256, 11.8],
+                [512, 18.5],
+                [2000, 41.4],
+              ],
+            },
+            {
+              name: 'brotli-q11',
+              color: '#0ea5e9',
+              marker: 'triangle',
+              points: [
+                [256, 27.5],
+                [512, 40.3],
+                [2000, 57.6],
+              ],
+            },
+            {
+              name: 'r50k raw',
+              color: '#fde68a',
+              marker: 'diamond',
+              points: [
+                [256, 16.1],
+                [512, 31.5],
+                [2000, 106.1],
+              ],
+            },
+            {
+              name: 'cl100k raw',
+              color: '#f59e0b',
+              marker: 'diamond',
+              points: [
+                [256, 9.9],
+                [512, 29.5],
+                [2000, 108.7],
+              ],
+            },
+            {
+              name: 'o200k raw',
+              color: '#b45309',
+              marker: 'diamond',
+              points: [
+                [256, 16.1],
+                [512, 27.6],
+                [2000, 82.4],
+              ],
+            },
+            {
+              name: 'r50k +ANS',
+              color: '#6ee7b7',
+              marker: 'star',
+              points: [
+                [256, 65.4],
+                [512, 127.8],
+                [2000, 450.0],
+              ],
+            },
+            {
+              name: 'cl100k +ANS',
+              color: '#10b981',
+              marker: 'star',
+              points: [
+                [256, 62.5],
+                [512, 110.0],
+                [2000, 351.1],
+              ],
+            },
+            {
+              name: 'o200k +ANS',
+              color: '#047857',
+              marker: 'star',
+              points: [
+                [256, 49.7],
+                [512, 88.3],
+                [2000, 274.1],
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      label: 'encode',
+      yLabel: 'encode latency (µs, log scale)',
+      yScale: 'log',
+      yUnit: ' µs',
+      yTicks: [
+        [1, '1'],
+        [10, '10'],
+        [100, '100'],
+        [1000, '1,000'],
+        [10000, '10,000'],
+        [100000, '100,000'],
+      ],
+      datasets: [
+        {
+          label: 'prose',
+          series: [
+            {
+              name: 'LZ4',
+              color: '#94a3b8',
+              marker: 'circle',
+              points: [
+                [256, 5.8],
+                [512, 11.4],
+                [2000, 40.4],
+              ],
+            },
+            {
+              name: 'LZ4 (ES blocks)',
+              color: '#ec4899',
+              marker: 'square',
+              points: [
+                [256, 5.4],
+                [512, 10.9],
+                [2000, 40.9],
+              ],
+            },
+            {
+              name: 'gzip-9',
+              color: '#64748b',
+              marker: 'circle',
+              points: [
+                [256, 61.5],
+                [512, 107.1],
+                [2000, 362.8],
+              ],
+            },
+            {
+              name: 'zstd-19',
+              color: '#475569',
+              marker: 'circle',
+              points: [
+                [256, 311.3],
+                [512, 704.2],
+                [2000, 3743.0],
+              ],
+            },
+            {
+              name: 'brotli-q11',
+              color: '#0ea5e9',
+              marker: 'triangle',
+              points: [
+                [256, 4664.3],
+                [512, 8226.9],
+                [2000, 82863.1],
+              ],
+            },
+            {
+              name: 'r50k raw',
+              color: '#fde68a',
+              marker: 'diamond',
+              points: [
+                [256, 221.9],
+                [512, 439.8],
+                [2000, 1720.3],
+              ],
+            },
+            {
+              name: 'cl100k raw',
+              color: '#f59e0b',
+              marker: 'diamond',
+              points: [
+                [256, 252.4],
+                [512, 508.0],
+                [2000, 1978.8],
+              ],
+            },
+            {
+              name: 'o200k raw',
+              color: '#b45309',
+              marker: 'diamond',
+              points: [
+                [256, 167.8],
+                [512, 315.7],
+                [2000, 1080.5],
+              ],
+            },
+            {
+              name: 'r50k +ANS',
+              color: '#6ee7b7',
+              marker: 'star',
+              points: [
+                [256, 156.1],
+                [512, 505.5],
+                [2000, 2037.7],
+              ],
+            },
+            {
+              name: 'cl100k +ANS',
+              color: '#10b981',
+              marker: 'star',
+              points: [
+                [256, 311.9],
+                [512, 563.9],
+                [2000, 2260.3],
+              ],
+            },
+            {
+              name: 'o200k +ANS',
+              color: '#047857',
+              marker: 'star',
+              points: [
+                [256, 223.9],
+                [512, 412.0],
+                [2000, 1529.6],
+              ],
+            },
+          ],
+        },
+        {
+          label: 'code',
+          series: [
+            {
+              name: 'LZ4',
+              color: '#94a3b8',
+              marker: 'circle',
+              points: [
+                [256, 3.9],
+                [512, 5.8],
+                [2000, 13.3],
+              ],
+            },
+            {
+              name: 'LZ4 (ES blocks)',
+              color: '#ec4899',
+              marker: 'square',
+              points: [
+                [256, 2.1],
+                [512, 3.9],
+                [2000, 13.8],
+              ],
+            },
+            {
+              name: 'gzip-9',
+              color: '#64748b',
+              marker: 'circle',
+              points: [
+                [256, 43.6],
+                [512, 55.8],
+                [2000, 180.7],
+              ],
+            },
+            {
+              name: 'zstd-19',
+              color: '#475569',
+              marker: 'circle',
+              points: [
+                [256, 204.3],
+                [512, 391.1],
+                [2000, 2108.8],
+              ],
+            },
+            {
+              name: 'brotli-q11',
+              color: '#0ea5e9',
+              marker: 'triangle',
+              points: [
+                [256, 3176.1],
+                [512, 4580.0],
+                [2000, 56881.0],
+              ],
+            },
+            {
+              name: 'r50k raw',
+              color: '#fde68a',
+              marker: 'diamond',
+              points: [
+                [256, 178.7],
+                [512, 326.0],
+                [2000, 1267.5],
+              ],
+            },
+            {
+              name: 'cl100k raw',
+              color: '#f59e0b',
+              marker: 'diamond',
+              points: [
+                [256, 162.7],
+                [512, 177.6],
+                [2000, 1239.2],
+              ],
+            },
+            {
+              name: 'o200k raw',
+              color: '#b45309',
+              marker: 'diamond',
+              points: [
+                [256, 102.3],
+                [512, 210.4],
+                [2000, 748.1],
+              ],
+            },
+            {
+              name: 'r50k +ANS',
+              color: '#6ee7b7',
+              marker: 'star',
+              points: [
+                [256, 232.1],
+                [512, 397.7],
+                [2000, 1603.6],
+              ],
+            },
+            {
+              name: 'cl100k +ANS',
+              color: '#10b981',
+              marker: 'star',
+              points: [
+                [256, 199.3],
+                [512, 380.1],
+                [2000, 1453.0],
+              ],
+            },
+            {
+              name: 'o200k +ANS',
+              color: '#047857',
+              marker: 'star',
+              points: [
+                [256, 145.1],
+                [512, 271.6],
+                [2000, 917.6],
+              ],
+            },
+          ],
+        },
+        {
+          label: 'hindi',
+          series: [
+            {
+              name: 'LZ4',
+              color: '#94a3b8',
+              marker: 'circle',
+              points: [
+                [256, 3.4],
+                [512, 5.2],
+                [2000, 15.2],
+              ],
+            },
+            {
+              name: 'LZ4 (ES blocks)',
+              color: '#ec4899',
+              marker: 'square',
+              points: [
+                [256, 1.4],
+                [512, 2.2],
+                [2000, 10.4],
+              ],
+            },
+            {
+              name: 'gzip-9',
+              color: '#64748b',
+              marker: 'circle',
+              points: [
+                [256, 41.0],
+                [512, 60.6],
+                [2000, 186.0],
+              ],
+            },
+            {
+              name: 'zstd-19',
+              color: '#475569',
+              marker: 'circle',
+              points: [
+                [256, 164.3],
+                [512, 383.3],
+                [2000, 1873.5],
+              ],
+            },
+            {
+              name: 'brotli-q11',
+              color: '#0ea5e9',
+              marker: 'triangle',
+              points: [
+                [256, 1954.5],
+                [512, 3414.7],
+                [2000, 13317.9],
+              ],
+            },
+            {
+              name: 'r50k raw',
+              color: '#fde68a',
+              marker: 'diamond',
+              points: [
+                [256, 121.3],
+                [512, 248.0],
+                [2000, 919.4],
+              ],
+            },
+            {
+              name: 'cl100k raw',
+              color: '#f59e0b',
+              marker: 'diamond',
+              points: [
+                [256, 65.0],
+                [512, 213.5],
+                [2000, 866.0],
+              ],
+            },
+            {
+              name: 'o200k raw',
+              color: '#b45309',
+              marker: 'diamond',
+              points: [
+                [256, 62.8],
+                [512, 115.3],
+                [2000, 417.4],
+              ],
+            },
+            {
+              name: 'r50k +ANS',
+              color: '#6ee7b7',
+              marker: 'star',
+              points: [
+                [256, 152.4],
+                [512, 305.8],
+                [2000, 1158.2],
+              ],
+            },
+            {
+              name: 'cl100k +ANS',
+              color: '#10b981',
+              marker: 'star',
+              points: [
+                [256, 144.3],
+                [512, 292.7],
+                [2000, 1010.5],
+              ],
+            },
+            {
+              name: 'o200k +ANS',
+              color: '#047857',
+              marker: 'star',
+              points: [
+                [256, 87.1],
+                [512, 157.1],
+                [2000, 559.2],
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      label: 'ratio',
+      yLabel: 'compression ratio vs raw UTF-8 (×)',
+      yScale: 'linear',
+      yUnit: '×',
+      yTicks: [1, 2, 3, 4, 5, 6],
+      datasets: [
+        {
+          label: 'prose',
+          series: [
+            {
+              name: 'LZ4',
+              color: '#94a3b8',
+              marker: 'circle',
+              points: [
+                [256, 1.17],
+                [512, 1.27],
+                [2000, 1.44],
+              ],
+            },
+            {
+              name: 'LZ4 (ES blocks)',
+              color: '#ec4899',
+              marker: 'square',
+              points: [
+                [256, 1.43],
+                [512, 1.43],
+                [2000, 1.44],
+              ],
+            },
+            {
+              name: 'gzip-9',
+              color: '#64748b',
+              marker: 'circle',
+              points: [
+                [256, 1.78],
+                [512, 1.92],
+                [2000, 2.17],
+              ],
+            },
+            {
+              name: 'zstd-19',
+              color: '#475569',
+              marker: 'circle',
+              points: [
+                [256, 1.79],
+                [512, 1.94],
+                [2000, 2.24],
+              ],
+            },
+            {
+              name: 'brotli-q11',
+              color: '#0ea5e9',
+              marker: 'triangle',
+              points: [
+                [256, 2.4],
+                [512, 2.57],
+                [2000, 2.84],
+              ],
+            },
+            {
+              name: 'r50k raw',
+              color: '#fde68a',
+              marker: 'diamond',
+              points: [
+                [256, 2.2],
+                [512, 2.25],
+                [2000, 2.3],
+              ],
+            },
+            {
+              name: 'cl100k raw',
+              color: '#f59e0b',
+              marker: 'diamond',
+              points: [
+                [256, 1.57],
+                [512, 1.55],
+                [2000, 1.59],
+              ],
+            },
+            {
+              name: 'o200k raw',
+              color: '#b45309',
+              marker: 'diamond',
+              points: [
+                [256, 1.59],
+                [512, 1.59],
+                [2000, 1.6],
+              ],
+            },
+            {
+              name: 'r50k +ANS',
+              color: '#6ee7b7',
+              marker: 'star',
+              points: [
+                [256, 3.3],
+                [512, 3.3],
+                [2000, 3.29],
+              ],
+            },
+            {
+              name: 'cl100k +ANS',
+              color: '#10b981',
+              marker: 'star',
+              points: [
+                [256, 3.41],
+                [512, 3.37],
+                [2000, 3.35],
+              ],
+            },
+            {
+              name: 'o200k +ANS',
+              color: '#047857',
+              marker: 'star',
+              points: [
+                [256, 3.45],
+                [512, 3.4],
+                [2000, 3.38],
+              ],
+            },
+          ],
+        },
+        {
+          label: 'code',
+          series: [
+            {
+              name: 'LZ4',
+              color: '#94a3b8',
+              marker: 'circle',
+              points: [
+                [256, 1.51],
+                [512, 1.76],
+                [2000, 2.06],
+              ],
+            },
+            {
+              name: 'LZ4 (ES blocks)',
+              color: '#ec4899',
+              marker: 'square',
+              points: [
+                [256, 1.86],
+                [512, 2.01],
+                [2000, 2.29],
+              ],
+            },
+            {
+              name: 'gzip-9',
+              color: '#64748b',
+              marker: 'circle',
+              points: [
+                [256, 2.0],
+                [512, 2.46],
+                [2000, 3.17],
+              ],
+            },
+            {
+              name: 'zstd-19',
+              color: '#475569',
+              marker: 'circle',
+              points: [
+                [256, 2.05],
+                [512, 2.45],
+                [2000, 3.22],
+              ],
+            },
+            {
+              name: 'brotli-q11',
+              color: '#0ea5e9',
+              marker: 'triangle',
+              points: [
+                [256, 2.37],
+                [512, 2.87],
+                [2000, 3.72],
+              ],
+            },
+            {
+              name: 'r50k raw',
+              color: '#fde68a',
+              marker: 'diamond',
+              points: [
+                [256, 1.06],
+                [512, 1.07],
+                [2000, 1.09],
+              ],
+            },
+            {
+              name: 'cl100k raw',
+              color: '#f59e0b',
+              marker: 'diamond',
+              points: [
+                [256, 1.47],
+                [512, 1.49],
+                [2000, 1.47],
+              ],
+            },
+            {
+              name: 'o200k raw',
+              color: '#b45309',
+              marker: 'diamond',
+              points: [
+                [256, 1.46],
+                [512, 1.49],
+                [2000, 1.47],
+              ],
+            },
+            {
+              name: 'r50k +ANS',
+              color: '#6ee7b7',
+              marker: 'star',
+              points: [
+                [256, 2.56],
+                [512, 2.58],
+                [2000, 2.5],
+              ],
+            },
+            {
+              name: 'cl100k +ANS',
+              color: '#10b981',
+              marker: 'star',
+              points: [
+                [256, 3.21],
+                [512, 3.19],
+                [2000, 3.13],
+              ],
+            },
+            {
+              name: 'o200k +ANS',
+              color: '#047857',
+              marker: 'star',
+              points: [
+                [256, 3.19],
+                [512, 3.16],
+                [2000, 3.08],
+              ],
+            },
+          ],
+        },
+        {
+          label: 'hindi',
+          series: [
+            {
+              name: 'LZ4',
+              color: '#94a3b8',
+              marker: 'circle',
+              points: [
+                [256, 1.34],
+                [512, 1.52],
+                [2000, 1.85],
+              ],
+            },
+            {
+              name: 'LZ4 (ES blocks)',
+              color: '#ec4899',
+              marker: 'square',
+              points: [
+                [256, 1.86],
+                [512, 1.92],
+                [2000, 2.01],
+              ],
+            },
+            {
+              name: 'gzip-9',
+              color: '#64748b',
+              marker: 'circle',
+              points: [
+                [256, 1.95],
+                [512, 2.38],
+                [2000, 3.29],
+              ],
+            },
+            {
+              name: 'zstd-19',
+              color: '#475569',
+              marker: 'circle',
+              points: [
+                [256, 1.97],
+                [512, 2.42],
+                [2000, 3.4],
+              ],
+            },
+            {
+              name: 'brotli-q11',
+              color: '#0ea5e9',
+              marker: 'triangle',
+              points: [
+                [256, 2.4],
+                [512, 2.89],
+                [2000, 3.84],
+              ],
+            },
+            {
+              name: 'r50k raw',
+              color: '#fde68a',
+              marker: 'diamond',
+              points: [
+                [256, 0.85],
+                [512, 0.84],
+                [2000, 0.84],
+              ],
+            },
+            {
+              name: 'cl100k raw',
+              color: '#f59e0b',
+              marker: 'diamond',
+              points: [
+                [256, 0.87],
+                [512, 0.86],
+                [2000, 0.87],
+              ],
+            },
+            {
+              name: 'o200k raw',
+              color: '#b45309',
+              marker: 'diamond',
+              points: [
+                [256, 2.47],
+                [512, 2.55],
+                [2000, 2.62],
+              ],
+            },
+            {
+              name: 'r50k +ANS',
+              color: '#6ee7b7',
+              marker: 'star',
+              points: [
+                [256, 2.93],
+                [512, 2.97],
+                [2000, 3.0],
+              ],
+            },
+            {
+              name: 'cl100k +ANS',
+              color: '#10b981',
+              marker: 'star',
+              points: [
+                [256, 3.48],
+                [512, 3.48],
+                [2000, 3.57],
+              ],
+            },
+            {
+              name: 'o200k +ANS',
+              color: '#047857',
+              marker: 'star',
+              points: [
+                [256, 5.54],
+                [512, 5.9],
+                [2000, 6.13],
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+Three things jump out switching between the tabs (defaults shown are prose — flip the left toggle to check code or Hindi, the shapes aren't identical across datasets). **Decode**: "LZ4 (ES blocks)" is the one line that doesn't fit the pattern — on prose it _falls_ as chunk size grows (20.5→19.1→11.3µs) while everything else climbs, because its decode cost tracks the _block's_ byte size (capped at ~16KB), and prose documents get so close to that cap at 2,000 tokens that almost every block holds exactly one of them — smaller blocks, faster decode, but no batching benefit left either (see the ratio tab). Code shows the same falling shape but less dramatically (18.0→16.6→14.4µs, smaller documents leave more batching headroom); Hindi dips at 512 instead of falling monotonically — same underlying mechanism, different byte sizes per document, different curve. **Encode**: brotli's line isn't just the highest, it's the steepest on this log-log plot — every other method is roughly straight (near-linear cost in token count), but brotli visibly bends upward, confirming its quality-11 search cost grows faster than the input itself, in all three datasets. **Ratio**: tokenizer+ANS (the top three lines) barely moves across a nearly 8× range of chunk sizes, while every byte codec climbs with more context to work with — extrapolate leftward past 256 tokens, toward the very small chunks some embedding models push toward, and the byte codecs would keep dropping while tokenizer+ANS stays roughly where it is, since the static table never depended on a per-chunk dictionary window in the first place.
+
+## Does the Faster-Than-ANS Alternative Hold Outside WikiText Too?
+
+[The main post](/blog/token-storage#a-faster-alternative-to-ans-frequency-sorted-token-ids) proposed frequency-sorted token IDs + `streamvbyte` as a cheaper middle ground between raw packing and ANS, measured on WikiText. Same question as the rest of this post: does it hold on prose/code/Hindi, at realistic chunk sizes, and does it survive the same "agent vs human" decode-cost correction from below?
+
+I re-ran it on the same three corpora, same chunk sizes, same train/test split, and — critically — measured decode the same honest way: **agent-decode** is `streamvbyte`-decode + reverse-rank lookup straight to token IDs (no detokenize), the number that matters for feeding retrieved chunks back into a model. Native tokenizer per domain (r50k/prose, cl100k/code, o200k/hindi):
+
+| domain        | chunk | freq-remap ratio | freq-remap agent-decode | ANS ratio | ANS agent-decode | ANS decode penalty |
+| ------------- | ----: | ---------------: | ----------------------: | --------: | ---------------: | -----------------: |
+| prose (r50k)  |   256 |            2.60× |                  22.6µs |     3.30× |           34.5µs |        1.5× slower |
+| prose (r50k)  |   512 |            2.62× |                  30.3µs |     3.30× |           75.4µs |        2.5× slower |
+| prose (r50k)  | 2,000 |            2.61× |                  80.7µs |     3.29× |          221.1µs |        2.7× slower |
+| code (cl100k) |   256 |            2.50× |                  19.8µs |     3.21× |           35.1µs |        1.8× slower |
+| code (cl100k) |   512 |            2.57× |                  24.5µs |     3.19× |           40.1µs |        1.6× slower |
+| code (cl100k) | 2,000 |            2.51× |                  46.2µs |     3.13× |          166.8µs |        3.6× slower |
+| hindi (o200k) |   256 |            4.32× |                  14.1µs |     5.54× |           25.7µs |        1.8× slower |
+| hindi (o200k) |   512 |            4.39× |                   7.6µs |     5.90× |           43.1µs |        5.7× slower |
+| hindi (o200k) | 2,000 |            4.53× |                  27.8µs |     6.13× |          124.1µs |        4.5× slower |
+
+The trade holds up outside WikiText, and it's more consistent than I expected: **freq-remap decodes 1.5-5.7× faster than ANS at every domain and chunk size, for roughly 15-26% less compression.** Encode cost is close to a wash (both are dominated by the shared tokenize step). And the same Hindi caveat from above applies here too — r50k/cl100k give freq-remap only 1.3-1.4× on Hindi, same near-byte-fallback problem, so o200k is doing the real work, not the remap.
+
+If you weight decode latency heavily (agent-serving workloads, hot-path retrieval), freq-remap is a genuinely competitive default, not just a fallback for when ANS is too slow. If ratio matters most (cold storage, backups, egress), ANS is still ahead by a real, consistent margin. This isn't an either/or: nothing stops a system from using ANS for storage-at-rest and re-encoding to freq-remap for a hot cache tier, since both round-trip through the same token IDs.
+
 ## The Multiplier Hits Every Copy of the Bytes
 
 Compression headlines always quote primary storage: "31.5 GB becomes 9.4 GB." But a database never stores bytes once. The same 3.35× applies mechanically to:
