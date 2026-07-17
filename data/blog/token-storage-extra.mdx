@@ -1317,9 +1317,9 @@ Three things jump out switching between the tabs (defaults shown are prose — f
 
 ## Does the Faster-Than-ANS Alternative Hold Outside WikiText Too?
 
-[The main post](/blog/token-storage#a-faster-alternative-to-ans-frequency-sorted-token-ids) proposed frequency-sorted token IDs + `streamvbyte` as a cheaper middle ground between raw packing and ANS, measured on WikiText. Same question as the rest of this post: does it hold on prose/code/Hindi, at realistic chunk sizes, and does it survive the same "agent vs human" decode-cost correction from below?
+[The main post](/blog/token-storage#a-faster-alternative-to-ans-frequency-sorted-token-ids) proposed frequency-sorted token IDs + `streamvbyte` as a cheaper alternative to ANS, but only measured it on WikiText. So does it hold up on real prose/code/Hindi too?
 
-I re-ran it on the same three corpora, same chunk sizes, same train/test split, and — critically — measured decode the same honest way: **agent-decode** is `streamvbyte`-decode + reverse-rank lookup straight to token IDs (no detokenize), the number that matters for feeding retrieved chunks back into a model. Native tokenizer per domain (r50k/prose, cl100k/code, o200k/hindi):
+Same corpora, same chunk sizes, same train/test split as everywhere else in this post. I measured decode as **agent-decode**: `streamvbyte`-decode plus a rank lookup straight to token IDs, no detokenize, because a model reading a retrieved chunk wants IDs, not text. Native tokenizer per domain (r50k/prose, cl100k/code, o200k/hindi):
 
 | domain        | chunk | freq-remap ratio | freq-remap agent-decode | ANS ratio | ANS agent-decode | ANS decode penalty |
 | ------------- | ----: | ---------------: | ----------------------: | --------: | ---------------: | -----------------: |
@@ -1333,9 +1333,29 @@ I re-ran it on the same three corpora, same chunk sizes, same train/test split, 
 | hindi (o200k) |   512 |            4.39× |                   7.6µs |     5.90× |           43.1µs |        5.7× slower |
 | hindi (o200k) | 2,000 |            4.53× |                  27.8µs |     6.13× |          124.1µs |        4.5× slower |
 
-The trade holds up outside WikiText, and it's more consistent than I expected: **freq-remap decodes 1.5-5.7× faster than ANS at every domain and chunk size, for roughly 15-26% less compression.** Encode cost is close to a wash (both are dominated by the shared tokenize step). And the same Hindi caveat from above applies here too — r50k/cl100k give freq-remap only 1.3-1.4× on Hindi, same near-byte-fallback problem, so o200k is doing the real work, not the remap.
+It holds, and more consistently than I expected. **Freq-remap decodes 1.5-5.7× faster than ANS everywhere, for about 15-26% less compression.** Encode is basically a wash since both spend most of their time in the shared tokenize step anyway. The usual Hindi catch shows up here too: r50k/cl100k only get 1.3-1.4× on Hindi, which is a tokenizer problem, not a remap problem.
 
-If you weight decode latency heavily (agent-serving workloads, hot-path retrieval), freq-remap is a genuinely competitive default, not just a fallback for when ANS is too slow. If ratio matters most (cold storage, backups, egress), ANS is still ahead by a real, consistent margin. This isn't an either/or: nothing stops a system from using ANS for storage-at-rest and re-encoding to freq-remap for a hot cache tier, since both round-trip through the same token IDs.
+Which one you'd actually reach for depends on what you're optimizing for. Care about decode latency (agents on the hot path)? Freq-remap. Care about ratio (cold storage, egress)? ANS. Nothing stops you running both either, ANS at rest and freq-remap for a hot cache, since they're the same token IDs underneath.
+
+## What About zstd --train Beyond WikiText?
+
+The main post's fairest byte-codec competitor is `zstd --train`, a dictionary trained on the corpus itself rather than the generic zstd tables. On WikiText it reached 2.61x, a real number but still 30% behind r50k+ANS's 3.37x. I trained the same 112KB dictionary on each domain's own train split and ran it at 256/512/2,000 tokens:
+
+| domain | chunk | zstd-dict ratio | encode µs | decode µs |
+| ------ | ----: | --------------: | --------: | --------: |
+| prose  |   256 |           2.60× |     541.7 |       9.0 |
+| prose  |   512 |           2.66× |    1212.1 |      18.5 |
+| prose  | 2,000 |           2.87× |   11874.5 |      78.1 |
+| code   |   256 |           2.93× |     304.4 |       6.4 |
+| code   |   512 |           3.24× |     731.9 |      12.7 |
+| code   | 2,000 |           4.43× |    5053.0 |      40.2 |
+| hindi  |   256 |           3.94× |     293.7 |       3.3 |
+| hindi  |   512 |           4.56× |     614.0 |       5.3 |
+| hindi  | 2,000 |           5.09× |    2599.7 |      30.0 |
+
+The WikiText gap doesn't hold everywhere. On prose it's about the same story as WikiText (2.87x vs r50k+ANS's 3.29-3.45x, ANS still ahead by a real margin). But on code, zstd-dict actually beats cl100k+ANS at 512 and 2,000 tokens (3.24x and 4.43x vs roughly 3.19x and 3.13x). Code has a lot of repeated structure, imports, indentation, common function signatures, and a trained dictionary's LZ77 matching picks that up better than a static token-frequency table does. On Hindi it closes most of the gap too (5.09x vs o200k+ANS's 6.13x), and it does that without needing a tokenizer that actually has Devanagari merges in the first place.
+
+Decode stays cheap regardless, single-digit to double-digit microseconds, since attaching a dictionary doesn't change how fast zstd decompresses. Encode is the cost here, and it's steep: prose at 2,000 tokens takes almost 12ms, by far the slowest encode of anything in this post. So zstd-dict isn't a blanket win, it's a domain-dependent one. For code specifically, it's a legitimate alternative to tokenizer+ANS, and one that doesn't require picking a tokenizer at all.
 
 ## The Multiplier Hits Every Copy of the Bytes
 
