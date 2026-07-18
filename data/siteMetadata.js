@@ -10,7 +10,7 @@ const siteMetadata = {
   siteLogo: '/static/images/shivendu.jpg',
   image: '/static/images/shivendu.jpg',
   socialBanner: '/api/og?type=default',
-  email: 'hi@kshivendu.dev',
+  email: 'mail@kshivendu.dev',
   github: 'https://github.com/KShivendu',
   twitter: '@KShivendu_', // handle, used for the twitter:site SEO meta tag
   twitterUrl: 'https://x.com/KShivendu_',
