@@ -89,112 +89,100 @@ def decompress(data):
 
 ### Storage efficiency
 
-Measured across 1,773 [WikiText-103](https://huggingface.co/datasets/Salesforce/wikitext) test articles (≥30 words). The ANS frequency table was trained on the WikiText-103 train split, a shared static model with no per-document overhead. All methods below are lossless (0% character error rate on full round trip).
+I ran benchmarks on three real, held-out, non-overlapping corpora: English ([C4](https://huggingface.co/datasets/allenai/c4)), code ([codeparrot-clean](https://huggingface.co/datasets/codeparrot/codeparrot-clean), Python), and Hindi ([Wikipedia](https://huggingface.co/datasets/wikimedia/wikipedia)), at 512-token chunks ([recommended](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1) chunk size for embedding models). The ANS frequency table is trained on each domain's train split only, and every method below is lossless.
 
 {/* <CompressionWidget /> */}
 
-export const storageData = {
-  x: [1.0, 1.15, 1.66, 1.68, 2.26, 2.33, 1.49, 1.52, 2.61, 3.37, 3.3, 3.32],
-  y: [
-    'Raw UTF-8',
-    'LZ4 (used in Qdrant/Elastic)',
-    'gzip -9',
-    'zstd -22',
-    'brotli q=11',
-    'r50k uint16 raw',
-    'cl100k 3-byte raw',
-    'o200k 3-byte raw',
-    'zstd corpus trained dict',
-    'r50k + static ANS',
-    'cl100k + static ANS',
-    'o200k + static ANS',
-  ],
-  color: [
-    '#94a3b8',
-    '#94a3b8',
-    '#94a3b8',
-    '#94a3b8',
-    '#94a3b8',
-    '#60a5fa',
-    '#93c5fd',
-    '#93c5fd',
-    '#f59e0b',
-    '#10b981',
-    '#34d399',
-    '#6ee7b7',
-  ],
-  opacity: [0.75, 0.75, 0.75, 0.75, 0.75, 1, 1, 1, 0.75, 1, 1, 1],
-  text: [
-    '1.0×',
-    '1.15×',
-    '1.66×',
-    '1.68×',
-    '2.26×',
-    '2.33×',
-    '1.49×',
-    '1.52×',
-    '2.61×',
-    '3.37×',
-    '3.30×',
-    '3.32×',
-  ],
+export const ratioCategories = [
+  'Raw UTF-8',
+  'LZ4',
+  'gzip-9',
+  'zstd-19',
+  'brotli-q11',
+  'zstd --train',
+  'r50k raw',
+  'cl100k raw',
+  'o200k raw',
+  'r50k +freq',
+  'cl100k +freq',
+  'o200k +freq',
+  'r50k +ANS',
+  'cl100k +ANS',
+  'o200k +ANS',
+]
+export const ratioColors = [
+  '#94a3b8',
+  '#94a3b8',
+  '#94a3b8',
+  '#94a3b8',
+  '#94a3b8',
+  '#94a3b8',
+  '#60a5fa',
+  '#60a5fa',
+  '#60a5fa',
+  '#a78bfa',
+  '#a78bfa',
+  '#a78bfa',
+  '#10b981',
+  '#10b981',
+  '#10b981',
+]
+export const ratioOpacities = [0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+export const ratioValues = {
+  english: [1.0, 1.27, 1.92, 1.94, 2.57, 2.66, 2.25, 1.55, 1.59, 2.62, 2.71, 2.76, 3.3, 3.37, 3.4],
+  code: [1.0, 1.76, 2.46, 2.45, 2.87, 3.24, 1.07, 1.49, 1.49, 1.42, 2.57, 2.53, 2.58, 3.19, 3.16],
+  hindi: [1.0, 1.52, 2.38, 2.42, 2.89, 4.56, 0.84, 0.86, 2.55, 1.33, 2.04, 4.39, 2.97, 3.48, 5.9],
+}
+export const ratioFocusIdx = [0, 1, 5, 6, 8, 9, 11, 12, 14] // Raw UTF-8, LZ4, zstd --train, r50k raw, o200k raw, r50k +freq, o200k +freq, r50k +ANS, o200k +ANS
+export const fmtRatio = (vals) => vals.map((v) => v.toFixed(2) + '×')
+export const ratioDataset = (domain, idx) => {
+  const cats = idx ? idx.map((i) => ratioCategories[i]) : ratioCategories
+  const vals = idx ? idx.map((i) => ratioValues[domain][i]) : ratioValues[domain]
+  const cols = idx ? idx.map((i) => ratioColors[i]) : ratioColors
+  const ops = idx ? idx.map((i) => ratioOpacities[i]) : ratioOpacities
+  return {
+    label: domain[0].toUpperCase() + domain.slice(1),
+    categories: cats,
+    series: [
+      {
+        name: 'compression ratio',
+        values: vals,
+        colors: cols,
+        opacities: ops,
+        text: fmtRatio(vals),
+        textPosition: 'outside',
+      },
+    ],
+  }
 }
 
 <BarChart
   orientation="horizontal"
-  title="Median compression ratio, 1,773 WikiText-103 articles"
-  subtitle="faded = byte codecs, full color = token-native approach (raw or + ANS)"
+  title="Median compression ratio vs raw UTF-8, 512-token chunks"
+  subtitle="toggle dataset (left) and All/Focus (right) — faded = byte codecs, full color = token-native (raw or + ANS)"
   valueLabel="compression ratio (higher is better)"
   valueUnit="×"
-  valueMax={4.2}
-  valueTicks={[0, 1, 2, 3, 4]}
+  valueMax={6.4}
+  valueTicks={[0, 1, 2, 3, 4, 5, 6]}
   views={[
-    {
-      label: 'All',
-      categories: storageData.y,
-      series: [
-        {
-          name: 'compression ratio',
-          values: storageData.x,
-          colors: storageData.color,
-          opacities: storageData.opacity,
-          text: storageData.text,
-          textPosition: 'outside',
-        },
-      ],
-    },
+    { label: 'All', datasets: ['english', 'code', 'hindi'].map((d) => ratioDataset(d)) },
     {
       label: 'Focus',
-      categories: [
-        'Raw UTF-8',
-        'LZ4 (used in Qdrant/Elastic)',
-        'r50k uint16 raw',
-        'o200k 3-byte raw',
-        'r50k + static ANS',
-        'o200k + static ANS',
-      ],
-      series: [
-        {
-          name: 'compression ratio',
-          values: [1.0, 1.15, 2.33, 1.52, 3.37, 3.32],
-          colors: ['#94a3b8', '#94a3b8', '#60a5fa', '#93c5fd', '#10b981', '#6ee7b7'],
-          opacities: [0.75, 0.75, 1, 1, 1, 1],
-          text: ['1.0×', '1.15×', '2.33×', '1.52×', '3.37×', '3.32×'],
-          textPosition: 'outside',
-        },
-      ],
+      datasets: ['english', 'code', 'hindi'].map((d) => ratioDataset(d, ratioFocusIdx)),
     },
   ]}
 />
 
 Observations:
 
-1. **r50k raw uint16 already beats every byte codec compression algorithm!**
-2. r50k + static ANS **beats everything by a wide margin.**
-3. cl100k and o200k just need the right container: switching from naive uint32 (4-byte) packing (left off the chart above, see the [glossary](#glossary) for why) to 3-byte packing, with no entropy coder at all, already gets them to 1.49x and 1.52x. **ANS recovers further still, to 3.30x (cl100k) and 3.32x (o200k)**.
-4. The fairest competitor to r50k+ANS is [`zstd --train`](https://github.com/facebook/zstd/wiki/Zstandard-Dictionary-Compression-format), since it also learns a vocab from the corpus. It reaches 2.61x, still 30% behind! (and its vocab isn't standardized like the tokenizers)
+1. **Raw Token IDs beat the popular byte codecs (LZ4, gzip, zstd) on English and Hindi** r50k raw hits 2.25x on English, o200k reaches 2.55x on Hindi (r50k & cl100k perform poorly on Hindi only because they never learnt the Hindi/Devanagari vocabulary).
+2. Raw Token IDs perform relatively poorly on code because it has lots of re-occuring terms.
+3. ANS pushes all three further: 3.3-3.4x on English, 2.6-3.2x on code.
+4. The fairest byte-codec competitor is [`zstd --train`](https://github.com/facebook/zstd/wiki/Zstandard-Dictionary-Compression-format), since it also learns a vocab from the corpus and achieves similar and sometimes slightly better compression. However, unlike tokenizers, its vocabulary isn't standarized for reuse and encoding latency is much higher.
+5. brotli is another interesting algorithm that achieves
+6. The `+freq` bars sit between raw and ANS, as expected: 2.6-2.8x on English, 4.4x on Hindi with o200k, and a real ratio hit vs ANS everywhere. What that trade actually buys you is in the [latency](#latency) section right below.
 
-But WikiText is one curated corpus, so I reran everything on real prose/code/Hindi corpora at realistic RAG chunk sizes in a [follow-up post](/blog/token-storage-extra#does-335-hold-outside-wikitext-103). Prose and code hold up fine (~3.3-3.4x, ~3.1-3.2x). Hindi is the fun one: r50k and cl100k raw-pack it to **0.84-0.87x, worse than doing nothing**, because neither ever learned real Devanagari merges. o200k, which did learn them, gets **5.5-6.1x** on the exact same text. Same method, opposite outcome, all down to whether your tokenizer actually covers your script.
+The [follow-up post](/blog/token-storage-extra#does-335-hold-outside-wikitext-103) has the full breakdown across three chunk sizes (256/512/2,000 tokens) if you want to see how these numbers move as chunks grow.
 
 <details>
 <summary>Digging deeper: does this hold for every tokenizer, and how much is the entropy coder vs. the tokenizer?</summary>
@@ -218,132 +206,98 @@ Gemma has the biggest vocabulary of the six and still comes out with the best co
 
 ### Latency
 
-Measured across 200 WikiText-103 articles (50–500 words), static corpus ANS model:
+Same three corpora, same 512-token chunks as above:
 
-export const latencyData = {
-  categories: [
-    'LZ4',
-    'gzip -9',
-    'zstd -22',
-    'zstd dict',
-    'r50k tokenizer',
-    'cl100k tokenizer',
-    'o200k tokenizer',
-    'cl100k + 3-byte',
-    'o200k + 3-byte',
-    'r50k + ANS',
-    'cl100k + ANS',
-    'o200k + ANS',
-  ],
-  encRaw: [15, 27, 72, 128, 43, 54, 104, 68, 116, 43, 54, 104],
-  encRawText: [
-    '15µs',
-    '27µs',
-    '72µs',
-    '128µs',
-    '43µs',
-    '54µs',
-    '104µs',
-    '68µs',
-    '116µs',
-    '43µs',
-    '54µs',
-    '104µs',
-  ],
-  decRaw: [1, 21, 3, 2, 4, 4, 4, 12, 13, 4, 4, 4],
-  decRawText: [
-    '1µs',
-    '21µs',
-    '3µs',
-    '2µs',
-    '4µs',
-    '4µs',
-    '4µs',
-    '12µs',
-    '13µs',
-    '4µs',
-    '4µs',
-    '4µs',
-  ],
-  rawOpacity: [0.6, 0.6, 0.6, 0.6, 1, 1, 1, 1, 1, 1, 1, 1],
-  encAns: [0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 10, 9],
-  encAnsText: ['', '', '', '', '', '', '', '', '', '9µs', '10µs', '9µs'],
-  decAns: [0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 17, 20],
-  decAnsText: ['', '', '', '', '', '', '', '', '', '15µs', '17µs', '20µs'],
+Decode splits into two very different numbers depending on who's reading: an agent wants token IDs and stops there, a human wants text, which means detokenizing on top. **Human** decode = full round trip to text (unpack/ANS-decode + detokenize for token-native methods; byte codecs are already text, so just decompress). **Agent** decode = only what it takes to get token IDs: raw/+freq/+ANS skip detokenize entirely, while byte codecs (which only decompress to bytes) still owe a tokenize step, charged here. Encode is identical either way, since the write path doesn't know who'll read it later.
+
+// +freq decode = streamvbyte-decode + rank-lookup (+ detokenize for Human).
+// Agent-mode ANS/raw/freq skip detokenize; byte codecs pay decompress + tokenize
+// instead, since an agent needs IDs and a byte-codec payload doesn't have them.
+// decAgent for raw/ANS/byte-decompress is the median of 30 back-to-back reps
+// per chunk, not a single perf_counter() shot: a single shot on a sub-10us op
+// (e.g. r50k's raw unpack, a zero-copy np.frombuffer reinterpret) is dominated
+// by GC/scheduler noise, not the operation, and the first cut of this chart
+// briefly showed r50k unpack SLOWER than LZ4 decompress because of exactly that.
+export const latValues = {
+english: {
+enc: [11.4, 107.1, 704.2, 8226.9, 1212.1, 439.8, 508.0, 315.7, 553.5, 328.3, 383.2, 505.5, 563.9, 412.0],
+decHuman: [4.4, 34.5, 25.9, 63.3, 18.5, 81.1, 86.7, 87.2, 170.1, 81.8, 174.6, 199.0, 207.0, 235.7],
+decAgent: [449.7, 459.1, 455.3, 467.2, 454.1, 1.3, 13.8, 13.5, 30.3, 13.8, 29.6, 36.8, 38.6, 41.7],
+},
+code: {
+enc: [5.8, 55.8, 391.1, 4580.0, 731.9, 326.0, 177.6, 210.4, 443.5, 372.0, 154.2, 397.7, 380.1, 271.6],
+decHuman: [3.0, 19.7, 12.8, 40.4, 12.7, 48.3, 22.8, 45.1, 138.3, 97.7, 57.1, 150.7, 126.5, 142.3],
+decAgent: [347.8, 358.1, 350.6, 356.1, 348.1, 1.4, 12.5, 12.0, 26.5, 24.5, 10.1, 38.0, 23.9, 25.1],
+},
+hindi: {
+enc: [5.2, 60.6, 383.3, 3414.7, 614.0, 248.0, 213.5, 115.3, 337.1, 174.9, 83.3, 305.8, 292.7, 157.1],
+decHuman: [2.6, 18.7, 18.5, 40.3, 5.3, 31.5, 29.5, 27.6, 103.1, 51.7, 32.7, 127.8, 110.0, 88.3],
+decAgent: [103.6, 112.7, 107.8, 111.4, 102.2, 1.3, 12.6, 11.5, 21.2, 11.0, 7.6, 34.8, 25.6, 13.8],
+},
 }
-
-export const latencyFocus = {
-  categories: ['LZ4', 'r50k tokenizer', 'o200k tokenizer', 'r50k + ANS', 'o200k + ANS'],
-  encRaw: [15, 43, 104, 43, 104],
-  decRaw: [1, 4, 4, 4, 4],
-  encAns: [0, 0, 0, 9, 9],
-  decAns: [0, 0, 0, 15, 20],
-  rawOpacity: [0.6, 1, 1, 1, 1],
-  encRawText: ['15µs', '43µs', '104µs', '43µs', '104µs'],
-  decRawText: ['1µs', '4µs', '4µs', '4µs', '4µs'],
-  encAnsText: ['', '', '', '9µs', '9µs'],
-  decAnsText: ['', '', '', '15µs', '20µs'],
+export const fmtUs = (vals) => vals.map((v) => v.toFixed(1) + 'µs')
+export const latFocusIdx = [0, 4, 5, 7, 8, 10, 11, 13] // LZ4, zstd --train, r50k raw, o200k raw, r50k +freq, o200k +freq, r50k +ANS, o200k +ANS
+export const latVariant = (domain, mode, idx) => {
+// Same per-method colors as the ratio chart, so a method is identifiable
+// by color in both charts. encode/decode are told apart by opacity instead
+// of hue: encode dimmed, decode at the method's own ratio-chart opacity.
+const cats = idx ? idx.map((i) => ratioCategories[i + 1]) : ratioCategories.slice(1)
+const cols = idx ? idx.map((i) => ratioColors[i + 1]) : ratioColors.slice(1)
+const decOps = idx ? idx.map((i) => ratioOpacities[i + 1]) : ratioOpacities.slice(1)
+const encOps = cols.map(() => 0.45)
+const encSrc = latValues[domain].enc
+const decSrc = mode === 'agent' ? latValues[domain].decAgent : latValues[domain].decHuman
+const enc = idx ? idx.map((i) => encSrc[i]) : encSrc
+const dec = idx ? idx.map((i) => decSrc[i]) : decSrc
+return {
+categories: cats,
+series: [
+{ name: 'encode', group: 'encode', colors: cols, opacities: encOps, values: enc, text: fmtUs(enc) },
+{ name: 'decode', group: 'decode', colors: cols, opacities: decOps, values: dec, text: fmtUs(dec) },
+],
 }
-
-export const latencySeries = (d, showText = true) => [
-  {
-    name: 'encode (raw)',
-    group: 'encode',
-    color: '#60a5fa',
-    values: d.encRaw,
-    opacities: d.rawOpacity,
-    text: showText ? d.encRawText : undefined,
-  },
-  {
-    name: 'decode (raw)',
-    group: 'decode',
-    color: '#10b981',
-    values: d.decRaw,
-    opacities: d.rawOpacity,
-    text: showText ? d.decRawText : undefined,
-  },
-  {
-    name: 'encode (+ ANS)',
-    group: 'encode',
-    color: '#1d4ed8',
-    values: d.encAns,
-    text: showText ? d.encAnsText : undefined,
-  },
-  {
-    name: 'decode (+ ANS)',
-    group: 'decode',
-    color: '#065f46',
-    values: d.decAns,
-    text: showText ? d.decAnsText : undefined,
-  },
+}
+export const latScales = [
+{
+label: 'Log',
+valueScale: 'log',
+valueMin: 1,
+valueMax: 10000,
+valueTicks: [1, 10, 100, 1000, 10000],
+valueLabel: 'microseconds (log scale)',
+},
+{ label: 'Linear', valueScale: 'linear', valueLabel: 'microseconds' },
 ]
+export const latDataset = (domain, mode) => ({
+label: domain[0].toUpperCase() + domain.slice(1),
+...latVariant(domain, mode),
+variants: [
+{ label: 'All', ...latVariant(domain, mode), scales: latScales },
+{ label: 'Focus', ...latVariant(domain, mode, latFocusIdx), scales: latScales },
+],
+})
 
 <BarChart
   orientation="vertical"
   stacked
-  title="Encode/decode latency, median, 200 WikiText-103 articles"
-  subtitle="faded = byte codecs, full color = token-native approach (tokenizer, with or without ANS)"
-  valueLabel="microseconds"
+  title="Encode/decode latency, median, 512-token chunks"
+  subtitle="toggle dataset (left), Agent/Human decode (right), All/Focus and Linear/Log (below)"
   valueUnit="µs"
   views={[
-    { label: 'All', categories: latencyData.categories, series: latencySeries(latencyData, false) },
-    {
-      label: 'Focus',
-      categories: latencyFocus.categories,
-      series: latencySeries(latencyFocus, true),
-    },
+    { label: 'Agent', datasets: ['english', 'code', 'hindi'].map((d) => latDataset(d, 'agent')) },
+    { label: 'Human', datasets: ['english', 'code', 'hindi'].map((d) => latDataset(d, 'human')) },
   ]}
 />
 
 Observations:
 
-1. LZ4 compresses in 15µs and decompresses in 1µs (it's designed entirely for speed!)
+1. **The two modes tell opposite stories about which method is fast, that's the point of splitting them.** LZ4 "decodes" in 2.8-4µs, but only if nobody needs token IDs. Switch to Agent (the default) and LZ4 jumps to 100-470µs, because now it owes a tokenize step, same as every byte codec. Meanwhile raw/+freq/+ANS drop to single-digit-to-40µs in Agent mode (they already have IDs, no detokenize needed) and only get expensive in Human mode.
 
-2. **Tokenization is expensive but it's anyways a mandatory step to pass text to the model** so it's free lunch and more importantly, re-usable. Detokenization is fast so it's easy to also show text back to humans.
+2. **Tokenization is the cost that never goes away, only who pays it and when changes.** Byte codecs defer it to every single read. Token-native methods pay it once at write time and never again, which is why their Agent-mode decode numbers are so much smaller: they're not skipping the work, they already did it.
 
-3. ANS decode looks slow next to LZ4's raw decompress, but that's not a fair fight: an agent needs token IDs either way, so a byte-codec payload still owes it a tokenize step after decompressing. Charge that fairly and ANS decode comes out **2-8x faster** ([measured](/blog/token-storage-extra#does-the-faster-than-ans-alternative-hold-outside-wikitext-too) across prose/code/Hindi). It's still slower than the frequency-sorted alternative below, just not "slow" on its own.
+3. In Agent mode, ANS decode comes out **2-8x faster** than a byte codec's decompress+tokenize ([full breakdown](/blog/token-storage-extra#does-the-faster-than-ans-alternative-hold-outside-wikitext-too) across English/code/Hindi). It's still slower than `+freq` though, which is the trade the [next section](#a-faster-alternative-to-ans-frequency-sorted-token-ids) is about.
 
-4. zstd dict's encoder is surprisingly slow at 128µs, though it decompresses in 2µs.
+4. brotli's encode cost is brutal regardless of mode, 3.4-8.2ms per chunk, 10-20x slower than zstd for a ratio gain that ANS beats anyway without the wait.
 
 <a id="glossary"></a>
 
@@ -460,7 +414,7 @@ ANS gets close to the entropy limit, but it's just one option, and it turned out
 
 **No fixed width fixes this, wider just wastes more** (see the glossary above for why cl100k/o200k need 3 bytes at all). Reassigning IDs by frequency rank and packing with [`streamvbyte`](https://github.com/lemire/streamvbyte) (a real SIMD-vectorized library from the FastPFOR family) gets most of the way to ANS's ratio with no entropy coder at all, at a ~15-20x faster decode, a genuine, deployable middle ground.
 
-This holds up beyond WikiText too. I [re-measured](/blog/token-storage-extra#does-the-faster-than-ans-alternative-hold-outside-wikitext-too) it on prose/code/Hindi and frequency-remap decodes 1.5-5.7x faster than ANS every time, for about 15-26% less ratio. So it comes down to what you care about: decode latency (agents on the hot path) points you to frequency-remap, ratio (cold storage, egress) points you to ANS. Or just run both, ANS at rest and frequency-remap for a hot cache, since under the hood they're both just token IDs.
+This holds up beyond WikiText too. I [re-measured](/blog/token-storage-extra#does-the-faster-than-ans-alternative-hold-outside-wikitext-too) it on English/code/Hindi and frequency-remap decodes 1.5-5.7x faster than ANS every time, for about 15-26% less ratio. So it comes down to what you care about: decode latency (agents on the hot path) points you to frequency-remap, ratio (cold storage, egress) points you to ANS. Or just run both, ANS at rest and frequency-remap for a hot cache, since under the hood they're both just token IDs.
 
 ## What AI Labs Could Fix for Free
 
