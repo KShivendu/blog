@@ -57,6 +57,15 @@ import { useTheme } from 'next-themes'
  *                                         also used verbatim in the tooltip
  *       textPosition 'inside' | 'outside' | 'none'  (default: outside for
  *                                         horizontal, inside for vertical)
+ *       breakdown    Array<Array<{label, value}> | null>   per-category
+ *                                         sub-components shown as extra
+ *                                         indented lines in the tooltip under
+ *                                         that bar's main row (e.g. a decode
+ *                                         bar split into "decompress" +
+ *                                         "tokenize"). Purely a tooltip
+ *                                         annotation — doesn't affect the bar
+ *                                         itself, which still just draws
+ *                                         `values[ci]`.
  *   }>
  *   views        Array<{ label, categories, series }>   toggle datasets. The
  *                first is shown by default. Renders on-theme segmented buttons.
@@ -209,7 +218,16 @@ function ChartImpl({
   // Which grouped bar (by group key) the cursor is actually closest to, so
   // that one bar — not the whole hovered category — gets a visible outline.
   const [nearestKey, setNearestKey] = useState(null)
-  const [viewIdx, setViewIdx] = useState(0)
+  // A view can opt into being the default via `default: true`, independent of
+  // its position in the array (e.g. displayed as "Human | Agent" but Agent
+  // is what should be selected first).
+  const defaultViewIdx = views
+    ? Math.max(
+        0,
+        views.findIndex((v) => v.default)
+      )
+    : 0
+  const [viewIdx, setViewIdx] = useState(defaultViewIdx)
   // Secondary, independent toggle axis (e.g. dataset) nested under each view —
   // mirrors LineChart's views[].datasets so selection persists across views.
   const [datasetIdx, setDatasetIdx] = useState(0)
@@ -236,8 +254,8 @@ function ChartImpl({
   const focusIdx = views ? views.findIndex((v) => /focus/i.test(v.label)) : -1
   useEffect(() => {
     if (userPicked.current) return
-    setViewIdx(mobile && focusIdx >= 0 ? focusIdx : 0)
-  }, [mobile, focusIdx])
+    setViewIdx(mobile && focusIdx >= 0 ? focusIdx : defaultViewIdx)
+  }, [mobile, focusIdx, defaultViewIdx])
 
   // Resolve the active dataset (a view, or the flat props as a single view).
   const activeView =
@@ -512,9 +530,17 @@ function ChartImpl({
         if (groupOf(s, si) !== gk) return
         const v = Math.max(0, s.values?.[ci] || 0)
         if (v <= 0) return
+        const rawEnd = cum + v
+        // A value that overshoots the configured axis max gets its bar
+        // clamped to the ceiling instead of drawn (or overflowing) past it —
+        // paired with a torn top edge + an overflow label showing the real
+        // number, so an outlier reads as "there's more, off-chart" rather
+        // than silently vanishing or breaking the plot's bounds.
+        const clipped = !isLog && rawEnd > vMax
+        const drawEnd = clipped ? vMax : rawEnd
         const p0 = valPx(cum)
-        const p1 = valPx(cum + v)
-        cum += v
+        const p1 = valPx(drawEnd)
+        cum = rawEnd
         const c = colorOf(s, ci)
         const op = opacityOf(s, ci)
         // Hover shows the tooltip only — bars keep their exact colour/opacity.
@@ -539,23 +565,86 @@ function ChartImpl({
             height: Math.abs(p1 - p0),
           }
         }
-        barLayer.push(
-          <rect
-            key={`b${ci}-${si}`}
-            {...rect}
-            rx={1.5}
-            fill={c}
-            opacity={op}
-            stroke={isNear ? C.ink : 'none'}
-            strokeWidth={isNear ? 2 : 0}
-            pointerEvents="none"
-          />
-        )
+        if (!clipped) {
+          barLayer.push(
+            <rect
+              key={`b${ci}-${si}`}
+              {...rect}
+              rx={1.5}
+              fill={c}
+              opacity={op}
+              stroke={isNear ? C.ink : 'none'}
+              strokeWidth={isNear ? 2 : 0}
+              pointerEvents="none"
+            />
+          )
+        } else {
+          // The bar's own fill follows a jagged edge at the clamp line —
+          // not a flat rect with a decorative line drawn over it, which left
+          // the true flat top still solid and visible above the "tear."
+          const teeth = 5
+          const amp = 3.5
+          const zig = []
+          let base1, base2
+          if (horizontal) {
+            const edgeX = Math.max(p0, p1)
+            const baseX = Math.min(p0, p1)
+            // Bottom-to-top, so it connects cleanly from base1 (bottom-left)
+            // without crossing the shape.
+            const y0 = rect.y + rect.height
+            const step = -rect.height / teeth
+            for (let k = 0; k <= teeth; k++) {
+              const y = y0 + k * step
+              zig.push(`${edgeX + (k % 2 === 0 ? -amp : amp)},${y}`)
+            }
+            base1 = `${baseX},${rect.y + rect.height}`
+            base2 = `${baseX},${rect.y}`
+          } else {
+            const edgeY = Math.min(p0, p1)
+            const baseY = Math.max(p0, p1)
+            const x0 = rect.x
+            const step = rect.width / teeth
+            for (let k = 0; k <= teeth; k++) {
+              const x = x0 + k * step
+              zig.push(`${x},${edgeY + (k % 2 === 0 ? -amp : amp)}`)
+            }
+            base1 = `${rect.x},${baseY}`
+            base2 = `${rect.x + rect.width},${baseY}`
+          }
+          barLayer.push(
+            <polygon
+              key={`b${ci}-${si}`}
+              points={`${base1} ${zig.join(' ')} ${base2}`}
+              fill={c}
+              opacity={op}
+              stroke={isNear ? C.ink : 'none'}
+              strokeWidth={isNear ? 2 : 0}
+              pointerEvents="none"
+            />
+          )
+          // Same plain style/position as a normal in-bar label (centered,
+          // regular weight) — the torn edge already signals "this is capped,"
+          // no need for the label itself to shout too.
+          const trueLabel = (s.text && s.text[ci]) || trim(v) + valueUnit
+          textLayer.push(
+            <text
+              key={`ov${ci}-${si}`}
+              x={horizontal ? (rect.x + rect.x + rect.width) / 2 : barC}
+              y={horizontal ? barC + 3.4 : (p0 + p1) / 2 + 3.2}
+              textAnchor="middle"
+              fontSize={fBarTxtSm}
+              fill={readableInk(blend(c, op, C.card))}
+              fontFamily="var(--font-mono, ui-monospace, monospace)"
+            >
+              {trueLabel}
+            </text>
+          )
+        }
 
-        // per-bar text label
+        // per-bar text label (skipped when clipped — the overflow label above covers it)
         const txt = s.text ? s.text[ci] : null
         const pos = s.textPosition || (horizontal ? 'outside' : 'inside')
-        if (txt && pos !== 'none' && !dim) {
+        if (txt && pos !== 'none' && !dim && !clipped) {
           if (horizontal && pos === 'outside') {
             textLayer.push(
               <text
@@ -641,6 +730,20 @@ function ChartImpl({
         const c = colorOf(s, ci)
         const label = s.text && s.text[ci] ? s.text[ci] : trim(v) + valueUnit
         const isNear = nearestKey != null && groupOf(s, si) === nearestKey
+        const parts = s.breakdown?.[ci]
+        const breakdownHtml =
+          parts && parts.length
+            ? parts
+                .map(
+                  (p) =>
+                    `<div style="display:flex;justify-content:space-between;gap:10px;` +
+                    `margin:1px 0 0 15px;font-size:0.88em;color:rgba(255,255,255,0.55)">` +
+                    `<span>${esc(p.label)}</span><span>${esc(
+                      typeof p.value === 'number' ? trim(p.value) + valueUnit : p.value
+                    )}</span></div>`
+                )
+                .join('')
+            : ''
         return (
           `<div style="display:flex;align-items:center;gap:6px;margin-top:3px;` +
           `padding:${isNear ? '2px 4px' : '0'};margin-left:${isNear ? '-4px' : '0'};` +
@@ -653,7 +756,8 @@ function ChartImpl({
           `<span style="flex:1 1 auto;font-weight:${isNear ? 700 : 400};` +
           `color:${isNear ? '#fff' : 'rgba(255,255,255,0.75)'}">${esc(s.name || '')}</span>` +
           `<b style="color:#fff;margin-left:10px;font-size:${isNear ? '1.05em' : '1em'}">` +
-          `${esc(label)}</b></div>`
+          `${esc(label)}</b></div>` +
+          breakdownHtml
         )
       })
       .filter(Boolean)
