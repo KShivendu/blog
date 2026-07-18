@@ -206,7 +206,20 @@ function ChartImpl({
 
   const tipRef = useRef(null)
   const [activeCat, setActiveCat] = useState(null)
+  // Which grouped bar (by group key) the cursor is actually closest to, so
+  // that one bar — not the whole hovered category — gets a visible outline.
+  const [nearestKey, setNearestKey] = useState(null)
   const [viewIdx, setViewIdx] = useState(0)
+  // Secondary, independent toggle axis (e.g. dataset) nested under each view —
+  // mirrors LineChart's views[].datasets so selection persists across views.
+  const [datasetIdx, setDatasetIdx] = useState(0)
+  // Third, independent toggle axis (e.g. All/Focus) nested under each dataset —
+  // same idea one level deeper, so it persists across both view and dataset.
+  const [variantIdx, setVariantIdx] = useState(0)
+  // Fourth, independent toggle axis (e.g. Linear/Log) nested under each variant —
+  // same data, different axis scale, so it's resolved into scale props, not
+  // categories/series.
+  const [scaleIdx, setScaleIdx] = useState(0)
 
   // Mobile: the whole viewBox scales down to phone width, so we shrink the
   // coordinate space (fonts render near nominal) and default to a "Focus" view
@@ -227,8 +240,24 @@ function ChartImpl({
   }, [mobile, focusIdx])
 
   // Resolve the active dataset (a view, or the flat props as a single view).
-  const resolved =
+  const activeView =
     views && views.length ? views[Math.min(viewIdx, views.length - 1)] : { categories, series }
+  const activeDatasets = activeView.datasets
+  const activeDataset =
+    activeDatasets && activeDatasets.length
+      ? activeDatasets[Math.min(datasetIdx, activeDatasets.length - 1)]
+      : null
+  const activeVariants = activeDataset?.variants
+  const activeVariant =
+    activeVariants && activeVariants.length
+      ? activeVariants[Math.min(variantIdx, activeVariants.length - 1)]
+      : null
+  const resolved = activeVariant || activeDataset || activeView
+  const activeScales = activeVariant?.scales
+  const activeScale =
+    activeScales && activeScales.length
+      ? activeScales[Math.min(scaleIdx, activeScales.length - 1)]
+      : null
   const cats = resolved.categories || []
   const srs = resolved.series || []
   const horizontal = orientation === 'horizontal'
@@ -283,7 +312,14 @@ function ChartImpl({
       if (sum > dataMax) dataMax = sum
     }
   }
-  const isLog = valueScale === 'log'
+  // Per-scale-toggle overrides fall back to the top-level props, same
+  // resolution order as categories/series above.
+  const rValueScale = activeScale?.valueScale ?? valueScale
+  const rValueMin = activeScale && 'valueMin' in activeScale ? activeScale.valueMin : valueMin
+  const rValueMax = activeScale && 'valueMax' in activeScale ? activeScale.valueMax : valueMax
+  const rValueTicks = activeScale?.valueTicks ?? valueTicks
+  const rValueLabel = activeScale?.valueLabel ?? valueLabel
+  const isLog = rValueScale === 'log'
   // Smallest positive datum — the log floor falls back to this when unspecified.
   let dataMin = Infinity
   for (let ci = 0; ci < N; ci++) {
@@ -295,7 +331,7 @@ function ChartImpl({
   if (!isFinite(dataMin)) dataMin = 1
 
   // Value-axis ticks: numbers or [value, label] pairs → {v, label}.
-  const rawTicks = valueTicks || niceLinearTicks(0, (dataMax || 1) * 1.12, 5)
+  const rawTicks = rValueTicks || niceLinearTicks(0, (dataMax || 1) * 1.12, 5)
   const vt = rawTicks.map((t) =>
     Array.isArray(t) ? { v: t[0], label: t[1] } : { v: t, label: trim(t) }
   )
@@ -304,15 +340,15 @@ function ChartImpl({
   // Linear keeps its original max (unchanged for existing usages); log spans the
   // provided floor→ceiling, defaulting from the ticks/data.
   const vMax = isLog
-    ? valueMax != null
-      ? valueMax
+    ? rValueMax != null
+      ? rValueMax
       : Math.max(dataMax || 1, ...tickVals)
-    : valueMax != null
-    ? valueMax
+    : rValueMax != null
+    ? rValueMax
     : (dataMax || 1) * 1.12
   const vMin = isLog
-    ? valueMin != null
-      ? valueMin
+    ? rValueMin != null
+      ? rValueMin
       : Math.min(dataMin, ...tickVals.filter((v) => v > 0))
     : 0
 
@@ -322,7 +358,15 @@ function ChartImpl({
   const W = mobile ? 404 : VIEW_W
   // On mobile, title/subtitle render as wrapping HTML above the SVG (they can't
   // wrap inside the fixed viewBox), so don't reserve in-SVG space for them.
-  const topPad = (title && !mobile ? 24 : 8) + (subtitle && !mobile ? 16 : 0) + (views ? 30 : 0)
+  const hasToggleRow = (views && views.length > 1) || (activeDatasets && activeDatasets.length > 1)
+  const hasVariantRow = activeVariants && activeVariants.length > 1
+  const hasScaleRow = activeScales && activeScales.length > 1
+  const topPad =
+    (title && !mobile ? 24 : 8) +
+    (subtitle && !mobile ? 16 : 0) +
+    (hasToggleRow ? 30 : 0) +
+    (hasVariantRow ? 26 : 0) +
+    (hasScaleRow ? 26 : 0)
   const catLabelFont = mobile ? 12 : 10.5
   // Font sizes, scaled up a touch on mobile.
   const fTick = mobile ? 13 : 10
@@ -475,6 +519,10 @@ function ChartImpl({
         const op = opacityOf(s, ci)
         // Hover shows the tooltip only — bars keep their exact colour/opacity.
         const dim = false
+        // The one bar the cursor is actually closest to (within the hovered
+        // category only) gets a bright outline — same "highlight, don't
+        // reorder" idea as the tooltip and LineChart's crosshair.
+        const isNear = ci === activeCat && nearestKey != null && gk === nearestKey
         let rect
         if (horizontal) {
           rect = {
@@ -498,7 +546,8 @@ function ChartImpl({
             rx={1.5}
             fill={c}
             opacity={op}
-            stroke="none"
+            stroke={isNear ? C.ink : 'none'}
+            strokeWidth={isNear ? 2 : 0}
             pointerEvents="none"
           />
         )
@@ -579,19 +628,32 @@ function ChartImpl({
   }
 
   // Tooltip readout: all series with a value at the hovered category (LineChart's
-  // multi-series crosshair readout, adapted to bars).
-  const buildTip = (ci) => {
+  // multi-series crosshair readout, adapted to bars). `nearestKey` (which
+  // grouped bar the cursor is actually closest to, for non-stacked charts —
+  // see hoverLayer below) gets bolded and highlighted IN PLACE; row order
+  // never changes, only emphasis, so a chart with many grouped bars doesn't
+  // require guessing which one you're pointing at.
+  const buildTip = (ci, nearestKey) => {
     const rows = srs
       .map((s, si) => {
         const v = s.values?.[ci]
         if (v == null || v <= 0) return ''
         const c = colorOf(s, ci)
         const label = s.text && s.text[ci] ? s.text[ci] : trim(v) + valueUnit
+        const isNear = nearestKey != null && groupOf(s, si) === nearestKey
         return (
-          `<div style="display:flex;align-items:center;gap:6px;margin-top:3px">` +
-          `<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${c};flex:none"></span>` +
-          `<span style="flex:1 1 auto">${esc(s.name || '')}</span>` +
-          `<b style="color:#fff;margin-left:10px">${esc(label)}</b></div>`
+          `<div style="display:flex;align-items:center;gap:6px;margin-top:3px;` +
+          `padding:${isNear ? '2px 4px' : '0'};margin-left:${isNear ? '-4px' : '0'};` +
+          `border-radius:4px;background:${isNear ? 'rgba(255,255,255,0.12)' : 'transparent'}">` +
+          `<span style="display:inline-block;width:${isNear ? 11 : 9}px;height:${
+            isNear ? 11 : 9
+          }px;` +
+          `border-radius:2px;background:${c};flex:none;` +
+          `box-shadow:${isNear ? `0 0 0 2px rgba(255,255,255,0.5)` : 'none'}"></span>` +
+          `<span style="flex:1 1 auto;font-weight:${isNear ? 700 : 400};` +
+          `color:${isNear ? '#fff' : 'rgba(255,255,255,0.75)'}">${esc(s.name || '')}</span>` +
+          `<b style="color:#fff;margin-left:10px;font-size:${isNear ? '1.05em' : '1em'}">` +
+          `${esc(label)}</b></div>`
         )
       })
       .filter(Boolean)
@@ -613,7 +675,30 @@ function ChartImpl({
       : { x: cc - band / 2, y: m.t, width: band, height: ph }
     const onMove = (e) => {
       if (activeCat !== ci) setActiveCat(ci)
-      const html = buildTip(ci)
+      // Which grouped bar the cursor is actually over, by pixel position
+      // along the group axis — only meaningful for grouped (non-stacked)
+      // charts, where each series is its own side-by-side bar.
+      let nearKey = null
+      if (!stacked && G > 1) {
+        const svg = e.currentTarget.ownerSVGElement
+        const rect = svg && svg.getBoundingClientRect()
+        if (rect && rect.width && rect.height) {
+          const localPos = horizontal
+            ? ((e.clientY - rect.top) / rect.height) * H
+            : ((e.clientX - rect.left) / rect.width) * W
+          let bd = Infinity
+          groupKeys.forEach((gk, gi) => {
+            const gc = cc + groupOffset(gi)
+            const d = Math.abs(gc - localPos)
+            if (d < bd) {
+              bd = d
+              nearKey = gk
+            }
+          })
+        }
+      }
+      setNearestKey(nearKey)
+      const html = buildTip(ci, nearKey)
       if (html) showTip(e, html)
     }
     hoverLayer.push(
@@ -626,6 +711,7 @@ function ChartImpl({
         onPointerEnter={onMove}
         onPointerLeave={() => {
           setActiveCat(null)
+          setNearestKey(null)
           hideTip()
         }}
       />
@@ -679,45 +765,177 @@ function ChartImpl({
           </div>
         )}
 
-        {/* On-theme segmented toggle (replaces Plotly updatemenus) */}
-        {views && views.length > 1 && (
+        {/* On-theme segmented toggle(s) (replaces Plotly updatemenus). Two
+            independent rows when a `datasets` axis is present: dataset
+            (secondary, left) and view (primary, right) — selection on one
+            persists when the other changes, same pattern as LineChart. */}
+        {hasToggleRow && (
           <div
             style={{
               display: 'flex',
-              justifyContent: 'flex-end',
-              gap: '0',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '6px',
               padding: '2px 2px 0',
               fontFamily: 'var(--font-mono, ui-monospace, monospace)',
             }}
           >
-            {views.map((v, i) => {
-              const on = i === Math.min(viewIdx, views.length - 1)
+            <div style={{ display: 'flex' }}>
+              {activeDatasets &&
+                activeDatasets.length > 1 &&
+                activeDatasets.map((d, i) => {
+                  const on = i === Math.min(datasetIdx, activeDatasets.length - 1)
+                  return (
+                    <button
+                      key={d.label}
+                      type="button"
+                      onClick={() => {
+                        setDatasetIdx(i)
+                        setActiveCat(null)
+                        hideTip()
+                      }}
+                      style={{
+                        appearance: 'none',
+                        cursor: 'pointer',
+                        fontSize: '10px',
+                        lineHeight: 1,
+                        padding: '4px 9px',
+                        border: `1px solid ${on ? C.muted : 'transparent'}`,
+                        marginLeft: i === 0 ? 0 : '-1px',
+                        background: 'transparent',
+                        color: on ? C.ink : C.muted,
+                        fontFamily: 'inherit',
+                        fontWeight: on ? 600 : 400,
+                        position: 'relative',
+                      }}
+                    >
+                      {d.label}
+                    </button>
+                  )
+                })}
+            </div>
+            <div style={{ display: 'flex' }}>
+              {views &&
+                views.length > 1 &&
+                views.map((v, i) => {
+                  const on = i === Math.min(viewIdx, views.length - 1)
+                  return (
+                    <button
+                      key={v.label}
+                      type="button"
+                      onClick={() => {
+                        setViewIdx(i)
+                        setActiveCat(null)
+                        hideTip()
+                      }}
+                      style={{
+                        appearance: 'none',
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        lineHeight: 1,
+                        padding: '5px 11px',
+                        border: `1px solid ${on ? C.accent : C.border}`,
+                        marginLeft: i === 0 ? 0 : '-1px',
+                        background: on ? C.accent : 'transparent',
+                        color: on ? C.accentInk : C.muted,
+                        fontFamily: 'inherit',
+                        fontWeight: on ? 600 : 400,
+                        zIndex: on ? 1 : 0,
+                        position: 'relative',
+                      }}
+                    >
+                      {v.label}
+                    </button>
+                  )
+                })}
+            </div>
+          </div>
+        )}
+
+        {/* Third toggle row (e.g. All/Focus) — nested under the active dataset,
+            independent of both the dataset and view toggles above. Centered and
+            small, since it's a refinement of the current dataset, not a peer axis. */}
+        {hasVariantRow && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              padding: '4px 2px 0',
+              fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+            }}
+          >
+            {activeVariants.map((vr, i) => {
+              const on = i === Math.min(variantIdx, activeVariants.length - 1)
               return (
                 <button
-                  key={v.label}
+                  key={vr.label}
                   type="button"
                   onClick={() => {
-                    setViewIdx(i)
+                    setVariantIdx(i)
                     setActiveCat(null)
                     hideTip()
                   }}
                   style={{
                     appearance: 'none',
                     cursor: 'pointer',
-                    fontSize: '11px',
+                    fontSize: '10px',
                     lineHeight: 1,
-                    padding: '5px 11px',
-                    border: `1px solid ${on ? C.accent : C.border}`,
+                    padding: '4px 9px',
+                    border: `1px solid ${on ? C.muted : 'transparent'}`,
                     marginLeft: i === 0 ? 0 : '-1px',
-                    background: on ? C.accent : 'transparent',
-                    color: on ? C.accentInk : C.muted,
+                    background: 'transparent',
+                    color: on ? C.ink : C.muted,
                     fontFamily: 'inherit',
                     fontWeight: on ? 600 : 400,
-                    zIndex: on ? 1 : 0,
                     position: 'relative',
                   }}
                 >
-                  {v.label}
+                  {vr.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Fourth toggle row (e.g. Linear/Log) — same data, different axis
+            scale, so it only ever resolves into scale props, never categories. */}
+        {hasScaleRow && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              padding: '4px 2px 0',
+              fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+            }}
+          >
+            {activeScales.map((sc, i) => {
+              const on = i === Math.min(scaleIdx, activeScales.length - 1)
+              return (
+                <button
+                  key={sc.label}
+                  type="button"
+                  onClick={() => {
+                    setScaleIdx(i)
+                    setActiveCat(null)
+                    hideTip()
+                  }}
+                  style={{
+                    appearance: 'none',
+                    cursor: 'pointer',
+                    fontSize: '10px',
+                    lineHeight: 1,
+                    padding: '4px 9px',
+                    border: `1px solid ${on ? C.muted : 'transparent'}`,
+                    marginLeft: i === 0 ? 0 : '-1px',
+                    background: 'transparent',
+                    color: on ? C.ink : C.muted,
+                    fontFamily: 'inherit',
+                    fontWeight: on ? 600 : 400,
+                    position: 'relative',
+                  }}
+                >
+                  {sc.label}
                 </button>
               )
             })}
@@ -764,7 +982,7 @@ function ChartImpl({
           {barLayer}
           {textLayer}
           {hoverLayer}
-          {valueLabel && horizontal && (
+          {rValueLabel && horizontal && (
             <text
               x={m.l + pw / 2}
               y={H - 6}
@@ -773,10 +991,10 @@ function ChartImpl({
               fill={C.ink}
               fontFamily="var(--font-mono, ui-monospace, monospace)"
             >
-              {valueLabel}
+              {rValueLabel}
             </text>
           )}
-          {valueLabel && !horizontal && (
+          {rValueLabel && !horizontal && (
             <text
               transform={`translate(13 ${m.t + ph / 2}) rotate(-90)`}
               textAnchor="middle"
@@ -784,7 +1002,7 @@ function ChartImpl({
               fill={C.ink}
               fontFamily="var(--font-mono, ui-monospace, monospace)"
             >
-              {valueLabel}
+              {rValueLabel}
             </text>
           )}
         </svg>
