@@ -10,11 +10,9 @@ import ScrollTopAndComment from '@/components/ScrollTopAndComment'
 import HeadingLinks from '@/components/HeadingLinks'
 import { fullTitle } from '@/lib/utils/fullTitle'
 
-const editUrl = (fileName) => `${siteMetadata.siteRepo}/blob/master/data/blog/${fileName}`
+const editUrl = (fileName) => `${siteMetadata.siteRepo}/blob/main/data/blog/${fileName}`
 const discussUrl = (slug) =>
-  `https://mobile.twitter.com/search?q=${encodeURIComponent(
-    `${siteMetadata.siteUrl}/blog/${slug}`
-  )}`
+  `https://x.com/search?q=${encodeURIComponent(`${siteMetadata.siteUrl}/blog/${slug}`)}`
 
 const isoDate = (date) => new Date(date).toISOString().slice(0, 10)
 

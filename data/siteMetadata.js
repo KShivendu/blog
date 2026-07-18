@@ -12,7 +12,8 @@ const siteMetadata = {
   socialBanner: '/api/og?type=default',
   email: 'hi@kshivendu.dev',
   github: 'https://github.com/KShivendu',
-  twitter: '@KShivendu_',
+  twitter: '@KShivendu_', // handle, used for the twitter:site SEO meta tag
+  twitterUrl: 'https://x.com/KShivendu_',
   // facebook: 'https://facebook.com',
   // youtube: 'https://youtube.com',
   linkedin: 'https://www.linkedin.com/in/KShivendu',
