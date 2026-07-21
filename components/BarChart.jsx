@@ -744,6 +744,15 @@ function ChartImpl({
                 )
                 .join('')
             : ''
+        // A bar this far past the rest gets capped at the axis limit and
+        // drawn with a torn edge — explain why, right where the reader's
+        // looking, instead of leaving the truncation unexplained.
+        const isOutOfRange = !isLog && v > vMax
+        const capNoteHtml = isOutOfRange
+          ? `<div style="margin:3px 0 0 15px;font-size:0.82em;line-height:1.3;` +
+            `color:rgba(255,255,255,0.5);font-style:italic;max-width:220px">` +
+            `Outlier, bar clipped to keep the rest readable.</div>`
+          : ''
         return (
           `<div style="display:flex;align-items:center;gap:6px;margin-top:3px;` +
           `padding:${isNear ? '2px 4px' : '0'};margin-left:${isNear ? '-4px' : '0'};` +
@@ -757,7 +766,8 @@ function ChartImpl({
           `color:${isNear ? '#fff' : 'rgba(255,255,255,0.75)'}">${esc(s.name || '')}</span>` +
           `<b style="color:#fff;margin-left:10px;font-size:${isNear ? '1.05em' : '1em'}">` +
           `${esc(label)}</b></div>` +
-          breakdownHtml
+          breakdownHtml +
+          capNoteHtml
         )
       })
       .filter(Boolean)
