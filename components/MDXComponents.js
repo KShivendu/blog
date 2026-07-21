@@ -19,6 +19,9 @@ import NSphereGlobe from './NSphereGlobe'
 import ResizingIframe from './ResizingIframe'
 import StaticEmbeddingDemo from './StaticEmbeddingDemo'
 import StaticPipeline from './StaticPipeline'
+import LoadModelAnimated from './LoadModelAnimated'
+import CoordinatedOmission from './CoordinatedOmission'
+import { ClosedLoopChart, OpenLoopChart, BadHarnessChart } from './LoadTestCharts'
 import Term from './Term'
 
 export const MDXComponents = {
@@ -40,12 +43,12 @@ export const MDXComponents = {
   ResizingIframe,
   StaticEmbeddingDemo,
   StaticPipeline,
+  LoadModelAnimated,
+  CoordinatedOmission,
+  ClosedLoopChart,
+  OpenLoopChart,
+  BadHarnessChart,
   Term,
-  // Standard HTML <abbr title="…">term</abbr> renders as our styled tooltip
-  // (dashed underline + hover popup); degrades to a plain abbreviation in any
-  // other markdown renderer. Falls back to a bare <abbr> if no title is given.
-  abbr: ({ title, children, ...rest }) =>
-    title ? <Term def={title}>{children}</Term> : <abbr {...rest}>{children}</abbr>,
   wrapper: ({ components, layout, ...rest }) => {
     const Layout = require(`../layouts/${layout}`).default
     return <Layout {...rest} />
