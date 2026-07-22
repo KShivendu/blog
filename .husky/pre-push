@@ -1,0 +1,36 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Vercel builds from a fresh clone of what's pushed, not your working tree.
+# A file referenced by committed code but never `git add`-ed builds fine
+# locally and breaks in prod. Catch that here by building the actual
+# committed tree (HEAD) in an isolated worktree before allowing the push.
+
+echo "pre-push: building the committed tree (HEAD) in an isolated worktree..."
+
+WORKTREE_DIR=$(mktemp -d)
+cleanup() {
+  git worktree remove --force "$WORKTREE_DIR" >/dev/null 2>&1
+  rm -rf "$WORKTREE_DIR"
+}
+trap cleanup EXIT
+
+if ! git worktree add --detach --quiet "$WORKTREE_DIR" HEAD; then
+  echo "pre-push: could not create worktree, skipping build check."
+  exit 0
+fi
+
+# Reuse installed deps instead of a full reinstall, this check is about
+# missing committed files, not dependency drift.
+ln -s "$(pwd)/node_modules" "$WORKTREE_DIR/node_modules"
+
+if ! (cd "$WORKTREE_DIR" && npm run build) >/tmp/pre-push-build.log 2>&1; then
+  echo ""
+  echo "pre-push BLOCKED: production build failed against the committed tree (HEAD)."
+  echo "This usually means a file is imported by committed code but was never"
+  echo "'git add'-ed, only present in your working tree. Log: /tmp/pre-push-build.log"
+  tail -n 40 /tmp/pre-push-build.log
+  exit 1
+fi
+
+echo "pre-push: build OK."
