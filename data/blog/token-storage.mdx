@@ -596,14 +596,14 @@ Also note that every copy of your data enjoy the same 2.27-3.26x reduction, mult
 <details>
 <summary>Cost Savings at scale, and how the text payload compares to the vector next to it</summary>
 
-English Wikipedia is ~7M articles averaging 708 words: 31.5 GB of raw UTF-8. At r50k's 3.26x ANS ratio that's down to 9.7 GB (r50k raw packing alone, 2.27x, already gets you to 13.9 GB). Most production vector DBs hold way more than 7M docs though, so scale this to **1 billion documents** (same 708-word average): raw storage is 4.5 TB, down to 2.0 TB with r50k raw packing, or 1.4 TB with r50k + ANS. At \$0.08/GB for SSD and \$0.02/GB for S3-class object storage, for that 1B-document corpus:
+English Wikipedia is ~7M articles averaging [708 words](/blog/exa-napkin-math#:~:text=708%20words%20/%20doc%20on%20avg.): 31.5 GB of raw UTF-8. At r50k's 3.26x ANS ratio that's down to 9.7 GB (r50k raw packing alone, 2.27x, already gets you to 13.9 GB). Most production vector DBs hold way more than 7M docs though, so scale this to **1 billion documents** (same 708-word average): raw storage is 4.5 TB, down to 2.0 TB with r50k raw packing, or 1.4 TB with r50k + ANS. At \$0.08/GB for SSD and \$0.02/GB for S3-class object storage, for that 1B-document corpus:
 
 | Storage tier (1B docs) | Raw UTF-8 | r50k raw (uint16) | r50k + ANS | Saved (vs raw) |
 | ---------------------- | --------: | ----------------: | ---------: | -------------: |
 | SSD ($0.08/GB)         |   $360/mo |           $159/mo |    $110/mo |        $250/mo |
 | S3 ($0.02/GB)          |    $90/mo |            $40/mo |     $28/mo |         $62/mo |
 
-Those savings only matter next to whatever else you're storing, so let's put a real vector next to a real text chunk. Take one sized to mxbai-embed-large-v1's own [recommended sequence length](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1) of 512 tokens: at this post's ~4.5 bytes/token, that's 512 × 4.5 ≈ 2,304 bytes of raw UTF-8. mxbai-embed-large-v1 outputs 1024-dim vectors, so float32 (4 bytes per dimension) puts the embedding at 1024 × 4 = 4,096 bytes:
+Those savings only matter next to whatever else you're storing, so let's put a real vector next to a real text chunk. Take one sized to mxbai-embed-large-v1's own [max sequence length](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1/blob/main/sentence_bert_config.json) of 512 tokens: at this post's ~4.5 bytes/token, that's 512 × 4.5 ≈ 2,304 bytes of raw UTF-8. mxbai-embed-large-v1 outputs 1024-dim vectors, so float32 (4 bytes per dimension) puts the embedding at 1024 × 4 = 4,096 bytes:
 
 | Stage                                |    Size |
 | ------------------------------------ | ------: |
