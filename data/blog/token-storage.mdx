@@ -14,7 +14,7 @@ authors: ['default']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Every vector search engine stores two things for each point: the vector and the payload. The AI community has gone all in to compress the vectors with [quantization](https://qdrant.tech/articles/what-is-vector-quantization/) and [MRL](https://huggingface.co/blog/matryoshka). However, the text payload gets raw UTF-8, or LZ4 at best, even though the **systems that actually consume it (embedders, rerankers, LLMs) operate on tokens, not bytes**. I realised that **using OpenAI r50k token IDs over raw text already achieves 2.25× compression**, surpassing every popular byte-level codec, and an entropy-based compressor on top of the token IDs reaches 3.37× (surpassing even a corpus-trained zstd). Effectively, **tokenization gives you free compression!**
+Every vector search engine stores two things for each point: the vector and the payload. The AI community has gone all in to compress the vectors with [quantization](https://qdrant.tech/articles/what-is-vector-quantization/) and [MRL](https://huggingface.co/blog/matryoshka). However, the text payload gets raw UTF-8, or LZ4 at best, even though the **systems that actually consume it (embedders, rerankers, LLMs) operate on tokens, not bytes**. I realised that **using OpenAI r50k token IDs over raw text already achieves 2.27× compression**, surpassing every popular byte-level codec, and an entropy-based compressor on top of the token IDs reaches 3.26× (surpassing even a corpus-trained zstd). Effectively, **tokenization gives you free compression!**
 
 In other words, **if agents are going to be the [biggest users](https://x.com/eastdakota/status/2062212701414187452) of your system, then your system should speak their language (tokens), so you're not paying a translation cost on every read/write**. This post argues for **token-native storage** (read/write text as BPE token IDs, not UTF-8 bytes) anywhere models are the primary readers and writers: search/db engines, LLM agent thinking traces / chat history, and maybe even local files. I'll show my point with experiments, talk about limitations, and how the AI/DB community and the AI labs can help get rid of them.
 
@@ -180,7 +180,7 @@ export const ratioColors = [
 ]
 export const ratioOpacities = [0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 export const ratioValues = {
-  english: [1.0, 1.27, 1.92, 1.94, 2.57, 2.66, 2.25, 1.55, 1.59, 2.62, 2.71, 2.76, 3.3, 3.37, 3.4],
+  english: [1.0, 1.28, 1.95, 1.97, 2.6, 2.69, 2.27, 1.56, 1.6, 2.62, 2.71, 2.76, 3.26, 3.27, 3.18],
   code: [1.0, 1.76, 2.46, 2.45, 2.87, 3.24, 1.07, 1.49, 1.49, 1.42, 2.57, 2.53, 2.58, 3.19, 3.16],
   hindi: [1.0, 1.52, 2.38, 2.42, 2.89, 4.56, 0.84, 0.86, 2.55, 1.33, 2.04, 4.39, 2.97, 3.48, 5.9],
 }
@@ -226,7 +226,7 @@ export const ratioDataset = (domain, idx) => {
 
 Observations:
 
-1. **Raw Token IDs beat the popular byte codecs (LZ4, gzip, zstd) on human languages (English and Hindi)** r50k raw hits 2.25x on English (as predicted by [napkin math](#step-1-generate-token-ids:~:text=ratio%3A%20~2.25x-,This%20napkin%20math,-is%20what%20gave)!), o200k reaches 2.55x on Hindi.
+1. **Raw Token IDs beat the popular byte codecs (LZ4, gzip, zstd) on human languages (English and Hindi)** r50k raw hits 2.27x on English (as predicted by [napkin math](#step-1-generate-token-ids:~:text=ratio%3A%20~2.25x-,This%20napkin%20math,-is%20what%20gave)!), o200k reaches 2.55x on Hindi.
    - r50k & cl100k perform poorly on Hindi because they never learnt the Hindi/Devanagari vocabulary. All of them seem to perform poorly on code (maybe due to lots of `.` in python)
 2. **`tokenizer+ANS` achieves the highest compression ratio and surpass almost every algorithm by a wide margin in all 3 datasets!** It beats almost everything on code dataset where raw token IDs didn't do well.
 3. `tokenizer+freq` bars sits between raw and ANS for all 3 datasets. It satisfies my goal to buy [latency](#latency) for losing some compression and sorting token IDs by frequency turned out to be a clean way to do it.
@@ -277,8 +277,8 @@ Observations:
 **How much of `+freq`'s ratio is the rank-remap, and how much is streamvbyte itself?**
 
 - **streamvbyte alone, no rank-remap** (raw BPE merge-order token IDs): **2.13x**
-- **streamvbyte + rank-remap** (the actual `+freq` method): **2.64x**
-- streamvbyte already benefits from _some_ token IDs being small (common short words, punctuation) even without remapping, since it's a variable-length integer codec. But roughly half of `+freq`'s total gain over raw packing (2.25x → 2.64x) comes specifically from the rank-remap step, not from streamvbyte on its own — this is the [BPE ID-assignment problem](#a-faster-alternative-to-ans-frequency-sorted-token-ids) from earlier in concrete numbers.
+- **streamvbyte + rank-remap** (the actual `+freq` method): **2.62x**
+- streamvbyte already benefits from _some_ token IDs being small (common short words, punctuation) even without remapping, since it's a variable-length integer codec. But roughly half of `+freq`'s total gain over raw packing (2.27x → 2.62x) comes specifically from the rank-remap step, not from streamvbyte on its own — this is the [BPE ID-assignment problem](#a-faster-alternative-to-ans-frequency-sorted-token-ids) from earlier in concrete numbers.
 
 - **What about WordPiece, the tokenizer embedding models actually use?** The mixedbread embedding model ([`mxbai-embed-large-v1`](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1)) uses BERT's WordPiece tokenizer with a 30,522-token vocabulary, in the table above, landing at the high end of the band (3.56x).
 - Raw uint16 packing is basically a wash against r50k BPE at the median: mxbai's smaller vocabulary barely matters before any entropy coding runs. The gap only opens up once ANS is applied, ~5% better compression at the median.
@@ -519,7 +519,7 @@ Observations:
 
 1. **When the writer is an LLM, token native storage is 2-20x faster**. LLMs produce token IDs by default. So you can just store them raw or optionally apply token ID compression algorithms in 2-18μs (depending on additional token ID compression algo) while converting token IDs to bytes and then storing with even the fastest LZ4 algorithm will take 35μs!
 2. When the writer is a human, you can tokenize and store in 300-500μs which is heavy but gives great compression gains. In agentic systems like claude code or even chatgpt, **agents do most of the talking/writing while humans give instructions in relatively fewer sentences**.
-3. brotli, zstd, and zstd --train already have relatively high latency for humans. Now having a detokenize step on top makes even more slower. gzip remains between 100-130μs but it's vocab isn't standardized and reusable for agents.
+3. brotli, zstd, and zstd --train already have relatively high latency for humans. Now having a detokenize step on top makes even more slower. gzip stays cheap by comparison (56-131μs depending on domain) but its vocab isn't standardized and reusable for agents.
 
 Read is where effect is more pronounced, since it recurs on every read instead of happening once:
 
@@ -547,11 +547,11 @@ Observations:
 
 2. **When reader is human, detokenization slower than LZ4 but comparable to gzip**. Detokenization is relatively expensive and takes 25-65μs, but **agents read hundreds of chunks before presenting anything to humans**. So not having token IDs is a loss in each of those reads. And there will be thousands or millions of read queries on the same row/record from the agent over time. So **it's much better to just detokenize once in the end before showing to humans** (maybe the frontend should do it)
 
-3. ANS decode (41μs) is ~3-40x slower than reading raw token IDs (2-byte: 1μs, 3-byte: 13μs) which motivated me to **propose my [design](#how-can-the-ai-community-and-the-ai-labs-help) for fixing token IDs which seems to be even faster (10.7μs) than decoding 3-byte token IDs!** losing only 15-25% compression ratio wrt to ANS!
+3. ANS decode (41μs) is ~3-40x slower than reading raw token IDs (2-byte: 1μs, 3-byte: 13μs) which motivated me to **propose my [design](#how-can-the-ai-community-and-the-ai-labs-help) for fixing token IDs which seems to be even faster (10.7μs) than decoding 3-byte token IDs!** On English text that costs only 13-20% of ANS's compression ratio, though the gap is much wider on Code/Hindi (up to ~55% for r50k), since `+freq`'s static rank table fits those distributions less tightly than ANS's full probability model does.
 
 Let's do some napkin math to estimate the impact: We start with a ~500μs per read cost but each search query returns 10 chunks for the LLM to read so you lose 5ms of serial CPU time on each such query. Just 11 RPS leads to 30M requests / month each reading 10 chunks = 42 hours wasted / month. Overall, agents already read and write more than humans in agentic systems like claude code or chatgpt. This trend is going to go up.
 
-Also note that every copy of your data enjoy the same 2.25-3.37x reduction, multiplying benefits beyond storage: snapshots, backups, write-ahead log, replicas, and network egress. It means less data moves over the network, more fits in RAM, and reads and indexing get faster.
+Also note that every copy of your data enjoy the same 2.27-3.26x reduction, multiplying benefits beyond storage: snapshots, backups, write-ahead log, replicas, and network egress. It means less data moves over the network, more fits in RAM, and reads and indexing get faster.
 
 <a id="glossary"></a>
 
@@ -590,14 +590,14 @@ Also note that every copy of your data enjoy the same 2.25-3.37x reduction, mult
 | o200k raw    |    282.8µs |   377.6µs |     15.9µs |  18.0µs |
 | o200k +ANS   |     12.0µs |    13.9µs |     42.7µs |  49.2µs |
 
-(These `raw`/`+ANS` latencies are the tokenize-included write cost and the ANS-decode-only read cost — see the [interactive charts](#latency) above for the full Agent/Human/write/read breakdown across all three domains, since a single static table can't show that split.)
+(`raw` enc/dec here are tokenize-included: pack/unpack plus the tokenize/detokenize cost. `+ANS` enc/dec are the ANS coder alone, tokenize/detokenize not included — see the [interactive charts](#latency) above for the full Agent/Human/write/read breakdown across all three domains, since a single static table can't show that split.)
 
 **What the names mean:**
 
 - **LZ4**: the fast, low-ratio default (used in Qdrant, Elasticsearch, and friends).
 - **gzip-9**: max compression level, classic deflate. The `-9` is the level (1-9).
 - **zstd-19**: [Zstandard](https://github.com/facebook/zstd) at level 19, high compression without the "ultra" tier's compile-time-only levels.
-- **brotli-q11**: Google's codec at max quality. Best ratio of the generic byte codecs, but slow, see the write chart.
+- **brotli-q11**: Google's codec at max quality. Best ratio among the untrained/off-the-shelf byte codecs (`zstd --train` can still edge it out since it gets to see your corpus), but slow, see the write chart.
 - **zstd --train**: zstd with a 112KB dictionary trained on that domain's own train split (a global dictionary shared across all documents in that domain, same design as the static ANS table), not a generic one.
 - **r50k/cl100k/o200k raw**: token IDs packed with no entropy coder at all. r50k fits in uint16 (2 bytes); cl100k and o200k need 3 bytes (they exceed uint16's 65,535 range but both fit in 24 bits, so 3-byte packing beats naive uint32 padding).
 - **+freq**: token IDs re-ranked by real-world frequency, then packed with [`streamvbyte`](https://github.com/lemire/streamvbyte), a variable-length integer codec. No entropy coder either, just a smarter container.
@@ -608,27 +608,27 @@ Also note that every copy of your data enjoy the same 2.25-3.37x reduction, mult
 <details>
 <summary>Cost Savings at scale, and how the text payload compares to the vector next to it</summary>
 
-English Wikipedia is ~7M articles averaging 708 words. At the 3.37x median ratio, that's 31.5 GB of raw UTF-8 down to 9.3 GB, a real but modest saving at that scale (r50k raw packing alone, 2.33x with no entropy coder, already gets to 13.5 GB). Vector databases in production commonly hold far more documents than that, so scaling the same ratios up to **1 billion documents** (same 708-word average) puts raw storage at 4.5 TB, down to 1.93 TB with r50k raw packing alone, or 1.3 TB with r50k + ANS. At \$0.08/GB for SSD and \$0.02/GB for S3-class object storage, for that 1B-document corpus:
+English Wikipedia is ~7M articles averaging 708 words. At r50k's 3.26x median ANS ratio, that's 31.5 GB of raw UTF-8 down to 9.7 GB, a real but modest saving at that scale (r50k raw packing alone, 2.27x with no entropy coder, already gets to 13.9 GB). Vector databases in production commonly hold far more documents than that, so scaling the same ratios up to **1 billion documents** (same 708-word average) puts raw storage at 4.5 TB, down to 2.0 TB with r50k raw packing alone, or 1.4 TB with r50k + ANS. At \$0.08/GB for SSD and \$0.02/GB for S3-class object storage, for that 1B-document corpus:
 
 | Storage tier (1B docs) | Raw UTF-8 | r50k raw (uint16) | r50k + ANS | Saved (vs raw) |
 | ---------------------- | --------: | ----------------: | ---------: | -------------: |
-| SSD ($0.08/GB)         |   $360/mo |           $155/mo |    $107/mo |        $253/mo |
-| S3 ($0.02/GB)          |    $90/mo |            $39/mo |     $27/mo |         $63/mo |
+| SSD ($0.08/GB)         |   $360/mo |           $159/mo |    $110/mo |        $250/mo |
+| S3 ($0.02/GB)          |    $90/mo |            $40/mo |     $28/mo |         $62/mo |
 
 Those savings only matter in proportion to what else is stored alongside the text, so it's worth putting a real vector next to a real text chunk. Take one sized to mxbai-embed-large-v1's own [recommended sequence length](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1) of 512 tokens: at this post's ~4.5 bytes/token, that's 512 × 4.5 ≈ 2,304 bytes of raw UTF-8. mxbai-embed-large-v1 outputs 1024-dim vectors, so float32 (4 bytes per dimension) puts the embedding at 1024 × 4 = 4,096 bytes:
 
 | Stage                                |    Size |
 | ------------------------------------ | ------: |
 | Text chunk, raw UTF-8                | 2,304 B |
-| Text chunk, r50k uint16 (raw)        |   989 B |
-| Text chunk, r50k + ANS               |   688 B |
+| Text chunk, r50k uint16 (raw)        | 1,015 B |
+| Text chunk, r50k + ANS               |   707 B |
 | Embedding, 1024-dim float32          | 4,096 B |
 | Embedding, 512-dim (MRL) float32     | 2,048 B |
 | Embedding, 256-dim (MRL) float32     | 1,024 B |
 | Embedding, 1024-dim int8 quantized   | 1,024 B |
 | Embedding, 1024-dim binary quantized |   128 B |
 
-Unquantized, the embedding (4,096 B) dominates either form of the text, the common case for collections with large, uncompressed embeddings. MRL alone is a modest lever: truncating to 512 or 256 dims still keeps quality closer to the full vector, and lands at 2,048 B or 1,024 B, in the same ballpark as the text rather than dwarfing it. int8 scalar quantization lands in the same place, 1,024 B, a safer quality tradeoff than binary. Binary quantization is the outlier: even without touching MRL, it drops the 1024-dim vector to 128 B, ~5.4x smaller than the compressed text chunk (688 B), though it's also the most aggressive quality tradeoff of the group and worth validating against your own recall numbers before leaning on it. Payload compression matters most exactly in that regime: large payloads, quantized vectors, or collections where text is the point.
+Unquantized, the embedding (4,096 B) dominates either form of the text, the common case for collections with large, uncompressed embeddings. MRL alone is a modest lever: truncating to 512 or 256 dims still keeps quality closer to the full vector, and lands at 2,048 B or 1,024 B, in the same ballpark as the text rather than dwarfing it. int8 scalar quantization lands in the same place, 1,024 B, a safer quality tradeoff than binary. Binary quantization is the outlier: even without touching MRL, it drops the 1024-dim vector to 128 B, ~5.5x smaller than the compressed text chunk (707 B), though it's also the most aggressive quality tradeoff of the group and worth validating against your own recall numbers before leaning on it. Payload compression matters most exactly in that regime: large payloads, quantized vectors, or collections where text is the point.
 
 </details>
 
@@ -680,7 +680,7 @@ POST /collections/my_collection/points/search
 // {"results": [{"id": 1, "text": [1858, 6427, 20272, 318, 257, 6997, ...]}]}
 ```
 
-Default stays `"text"`, so existing clients see no change. An LLM-facing pipeline asks for `"tokens"` and skips detokenization; anything human-facing asks for `"text"`. This only closes the loop end to end if you own the inference stack, since hosted LLM APIs take text prompts, not token arrays ([yet](/blog/token-llm-interface)).
+Default stays `"text"`, so existing clients see no change. An LLM-facing pipeline asks for `"tokens"` and skips detokenization; anything human-facing asks for `"text"`. This only closes the loop end to end if you own the inference stack, since hosted LLM APIs take text prompts, not token arrays ([yet](/blog/token-llm-api)).
 
 ## Limitations
 
@@ -691,7 +691,7 @@ Default stays `"text"`, so existing clients see no change. An LLM-facing pipelin
 
 ## Key Takeaways
 
-- Compression: Token IDs surpass every popular byte compression algorithm before you even compress them: raw r50k/o200k hit 1.5-2.5x, entropy-coding on top (ANS) gets to 3.37x! And they generalize and perform well across every tokenizer and dataset I tested.
+- Compression: Token IDs surpass every popular byte compression algorithm before you even compress them: raw r50k/o200k hit 1.5-2.5x, entropy-coding on top (ANS) gets to 3.26x! And they generalize and perform well across every tokenizer and dataset I tested.
 - Latency: When the writer or reader is an LLM, tokenization/detokenization is a mandatory steps. Storing token IDs instead of UTF-8 bytes turns a mandatory ~300-500μs cost into a 2-230x faster read/write, since agents produce and consume tokens natively.
 - Token-native storage is production-ready to be adopted in DB/Search engines. But the ecosystem needs to evolve and accept it across the stack for amplifying the impact: models don't share a vocabulary yet, and hosted LLM APIs still only take text input/output for now.
 
