@@ -628,7 +628,7 @@ I have two request from the AI community/labs:
 
    - Token native storage has great advantages and is production ready today. Most LLMs families except Anthropic Claude and Google Gemini (However Gemma did it) have open-sourced their tokenizers. I request these two major players to do the same.
    - Overall **we need a UTF-8 / ASCII like standard for tokenizers**. This also avoids any kind of vendor or model version lock in. Agents will soon be the biggest users of web, apis, and all infra. We need to prepare new standards that are optimized for them.
-   - **Closed source LLM APIs don't accept or return token IDs today**. There's also need a need for standardizing token first input/output LLM APIs (I'm writing another blog about it)
+   - **Closed source LLM APIs don't accept or return token IDs today**. There's also need for standardizing token first input/output LLM APIs, even when your storage tokenizer matches the model's exactly, this only works end to end if you own the inference stack, since hosted chat APIs take text prompts and return text, not raw token arrays. See [this follow-up proposing a token-ID-native LLM API](/blog/token-llm-api).
    - For the organizations training #[embedding/reranker models](Cohere, BGE, Mixedbread, Jina AI, ZeroEntropy, etc), I request you to please re-use the same tokenizers as LLM BPEs so we can unify search and generation systems to work more efficiently together. (Yes, I know it's not easy to get rid of the WordPiece legacy from base models). This has already started: OpenAI's [text-embedding-3](https://platform.openai.com/docs/guides/embeddings) family already uses cl100k directly. [Jina's embeddings-v4](https://huggingface.co/jinaai/jina-embeddings-v4) moved to a BPE tokenizer too, inheriting from its Qwen2.5-VL backbone.
 
 2. **Improving the BPE tokenization algorithm**:
@@ -668,12 +668,10 @@ POST /collections/my_collection/points/search
 // {"results": [{"id": 1, "text": [1858, 6427, 20272, 318, 257, 6997, ...]}]}
 ```
 
-Default stays `"text"`, so existing clients see no change. An LLM-facing pipeline asks for `"tokens"` and skips detokenization; anything human-facing asks for `"text"`. This only closes the loop end to end if you own the inference stack, since hosted LLM APIs take text prompts, not token arrays ([yet](/blog/token-llm-api)).
+Default stays `"text"`, so existing clients see no change. An LLM-facing pipeline asks for `"tokens"` and skips detokenization; anything human-facing asks for `"text"`. This only works end to end if you own the inference stack, since hosted LLM APIs take text prompts, not token arrays ([yet](/blog/token-llm-api)).
 
 ## Limitations
 
-- **No shared vocabulary across models yet.** Embedding/reranker models use WordPiece or SentencePiece, LLMs use BPE variants (r50k, cl100k, o200k), and different LLM families/providers don't share the vocab either. A token-native payload only pays off end to end for a consumer using the same tokenizer it was stored with. See [how the ecosystem could fix this](#how-can-the-ai-community-and-the-ai-labs-help).
-- **Hosted LLM APIs don't directly accept or return token IDs today.** Even when your storage tokenizer matches the model's exactly, the read path only closes the loop end to end if you own the inference stack: hosted chat APIs take text prompts and return text, not raw token arrays. See [this follow-up proposing a token-ID-native LLM API](/blog/token-llm-api).
 - **Raw token ID compression efficiency can suffer on unknown languages.** For a language/script a tokenizer doesn't have a vocab for, token IDs can lose against raw bytes. r50k never learned to merge Devanagari (Hindi) bytes, so the Hindi word `भारत` (`भ`,`ा`,`र`,`त`, each a 3-byte UTF-8, 12 bytes total) falls back to 7 token IDs. Storing them as uint16 makes it slightly worse (14 bytes) so you need token ID compression algorithms to recover the ratio. Raw token IDs are still useful for latency either way, if an LLM is going to read/write them.
 - **Frequency remapping and ANS are corpus-specific, not free.** The remapping itself is cheap but not free to compute, and if there's a big mismatch between the frequency table and your actual corpus, the compression ratio suffers. The core argument, storing raw token IDs instead of UTF-8 bytes, holds regardless of whatever compression you apply on top. See [how labs could fix the remap for free](#how-can-the-ai-community-and-the-ai-labs-help), though you don't have to wait for that either.
 
