@@ -509,6 +509,11 @@ body {
   max-width: var(--tty-read);
   margin-inline: auto;
 }
+/* <details> has no default vertical margin in browsers, so two adjacent
+   collapsibles otherwise sit flush against each other with zero gap. */
+.prose-tty > details + details {
+  margin-top: 1rem;
+}
 /* Wide visual blocks fill the buffer (up to ~960px), centred. */
 .prose-tty > figure,
 .prose-tty > table,
