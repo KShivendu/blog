@@ -466,6 +466,13 @@ body {
   /* Article reading text is Inter; code stays mono (rule below). */
   font-family: var(--font-body);
 }
+/* Give #section anchor targets (heading permalinks, manual <a id> markers)
+   a little breathing room above them instead of landing flush at the very
+   top of the viewport when jumped to. */
+.prose-tty :where(h1, h2, h3, h4, h5, h6)[id],
+.prose-tty a[id] {
+  scroll-margin-top: 1.5rem;
+}
 /* Code — inline + blocks — keeps the mono (Fira Code) face inside prose. */
 .prose-tty :where(code, pre, kbd, samp) {
   font-family: var(--font-mono);
