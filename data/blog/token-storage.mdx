@@ -14,9 +14,9 @@ authors: ['default']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Every vector search engine stores two things for each point: the vector and the payload. The AI community has gone all in to compress the vectors with [quantization](https://qdrant.tech/articles/what-is-vector-quantization/) and [MRL](https://huggingface.co/blog/matryoshka). However, the text payload gets raw UTF-8, or LZ4 at best, even though the **systems that actually consume it (embedders, rerankers, LLMs) operate on tokens, not bytes**. I realised that **using OpenAI r50k token IDs over raw text already achieves 2.33× compression**, beating every byte-level codec, and an entropy-based compressor on top of the token IDs reaches 3.37× (beating even a corpus-trained zstd). Effectively, **tokenization gives you free compression!**
+Every vector search engine stores two things for each point: the vector and the payload. The AI community has gone all in to compress the vectors with [quantization](https://qdrant.tech/articles/what-is-vector-quantization/) and [MRL](https://huggingface.co/blog/matryoshka). However, the text payload gets raw UTF-8, or LZ4 at best, even though the **systems that actually consume it (embedders, rerankers, LLMs) operate on tokens, not bytes**. I realised that **using OpenAI r50k token IDs over raw text already achieves 2.25× compression**, surpassing every popular byte-level codec, and an entropy-based compressor on top of the token IDs reaches 3.37× (surpassing even a corpus-trained zstd). Effectively, **tokenization gives you free compression!**
 
-In other words, **if agents are going to be the [biggest users](https://x.com/eastdakota/status/2062212701414187452) of your system, then your system should speak their language (tokens), so you're not paying a translation cost on every read/write**. This post argues for **token-native storage** (read/write text as BPE token IDs, not UTF-8 bytes) anywhere models are the primary readers and writers: search engines, LLM agent traces, and maybe even local files. I'll show my point with experiments, talk about limitations, and how the AI/DB community (and the AI labs) can help get rid of them.
+In other words, **if agents are going to be the [biggest users](https://x.com/eastdakota/status/2062212701414187452) of your system, then your system should speak their language (tokens), so you're not paying a translation cost on every read/write**. This post argues for **token-native storage** (read/write text as BPE token IDs, not UTF-8 bytes) anywhere models are the primary readers and writers: search/db engines, LLM agent thinking traces / chat history, and maybe even local files. I'll show my point with experiments, talk about limitations, and how the AI/DB community and the AI labs can help get rid of them.
 
 ## How Token-Native Storage Works
 
@@ -519,7 +519,7 @@ Observations:
 
 1. **When the writer is an LLM, token native storage is 2-20x faster**. LLMs produce token IDs by default. So you can just store them raw or optionally apply token ID compression algorithms in 2-18μs (depending on additional token ID compression algo) while converting token IDs to bytes and then storing with even the fastest LZ4 algorithm will take 35μs!
 2. When the writer is a human, you can tokenize and store in 300-500μs which is heavy but gives great compression gains. In agentic systems like claude code or even chatgpt, **agents do most of the talking/writing while humans give instructions in relatively fewer sentences**.
-3. brotli, zstd, and zstd --train already have relatively high latency for humans. Now having a detokenize step on top makes even more slower. gzip remains between 100-130μs but it's vocab isn't standardized or reusable for agents.
+3. brotli, zstd, and zstd --train already have relatively high latency for humans. Now having a detokenize step on top makes even more slower. gzip remains between 100-130μs but it's vocab isn't standardized and reusable for agents.
 
 Read is where effect is more pronounced, since it recurs on every read instead of happening once:
 
@@ -639,15 +639,13 @@ I have two request from the AI community/labs:
 1. **Standarization and open sourcing of the tokenizers**:
 
    - Token native storage has great advantages and is production ready today. Most LLMs families except Anthropic Claude and Google Gemini (However Gemma did it) have open-sourced their tokenizers. I request these two major players to do the same.
-   - Overall **we need a UTF-8 / ASCII like standard for tokenizers**. This also avoids any kind of vendor or model version lock in. Agents will soon be the biggest users of web, apis, and all infra. We need to prepare new standards optimized for them.
+   - Overall **we need a UTF-8 / ASCII like standard for tokenizers**. This also avoids any kind of vendor or model version lock in. Agents will soon be the biggest users of web, apis, and all infra. We need to prepare new standards that are optimized for them.
    - **Closed source LLM APIs don't accept or return token IDs today**. There's also need a need for standardizing token first input/output LLM APIs (I'm writing another blog about it)
    - For the organizations training #[embedding/reranker models](Cohere, BGE, Mixedbread, Jina AI, ZeroEntropy, etc), I request you to please re-use the same tokenizers as LLM BPEs so we can unify search and generation systems to work more efficiently together. (Yes, I know it's not easy to get rid of the WordPiece legacy from base models). This has already started: OpenAI's [text-embedding-3](https://platform.openai.com/docs/guides/embeddings) family already uses cl100k directly. [Jina's embeddings-v4](https://huggingface.co/jinaai/jina-embeddings-v4) moved to a BPE tokenizer too, inheriting from its Qwen2.5-VL backbone.
 
 2. **Improving the BPE tokenization algorithm**:
    - **Request to Anthropic, OpenAI, Google, xAI, Alibaba (Qwen), DeepSeek, and anyone else training the next BPE vocabulary: please re-assign token IDs by frequency rank after building the vocabulary**. You can do this on the tokenizer/training corpus or general web. It costs almost nothing but it gives every downstream application some extra compression without any extra effort.
-   - Please note that as a user of token native storage, you don't have to wait for this. If you build the remapping on your own corpus, you'll get better token ID compression than a vendor's assigned token IDs anyway.
-
-Even in the worst case, storing BPE token IDs still avoids re-tokenizing retrieved documents at inference time. It's still a small win :)
+   - Please note that as an user of (or a db/search engine integrating) token native storage, you don't have to wait for this. If you build the remapping on your own corpus, you'll get better token ID compression than a vendor's assigned token IDs anyway :)
 
 ## Interface
 
@@ -688,18 +686,18 @@ Default stays `"text"`, so existing clients see no change. An LLM-facing pipelin
 
 - **No shared vocabulary across models for now.** Most embedding/reranker models use WordPiece or SentencePiece, LLMs use BPE variants (r50k, cl100k, o200k), and different LLM families/providers don't share the vocab either. Token-native storage is already production ready with LLMs but to its impact can be amplified across the stack and become completely llm-family/vendor free if every model re-uses the same tokenizer. That's why the community/labs need to propose a common token vocabulary standard similar to ASCII and UTF-8 standardized bytes.
 - **Hosted LLM APIs don't directly accept or return token IDs today.** Even when your storage tokenizer matches the model's exactly,if you own the LLM/model inference stack: hosted chat APIs take text prompts and return text, not raw token arrays. See [this follow-up proposing a token-ID-native LLM API](/blog/token-llm-api) for my proposal on what could that interface look like.
-- **Raw packing efficiency depends on the tokenizer and the script.** For a script a tokenizer has no merges for, token IDs can lose against raw bytes: r50k never learned to merge Devanagari bytes, so the Hindi word `भारत` (`भ`,`ा`,`र`,`त`, each a 3-byte UTF-8, 12 bytes total) falls back to 7 tokens averaging under 2 bytes each (a mix of 1-, 2-, and 3-byte partial merges), 14 bytes as uint16, worse than doing nothing. Storing tokens is still worth it if an LLM is going to consume them either way, since it skips re-tokenizing at read time regardless of the ratio.
-- **Fixing token IDs frequency and ANS are corpus specific** The corpus specific remapping is relatively cheap but it's not free. It might be a good idea for LLM/tokenizer providers to fix the raw IDs so we get some extra compression without any extra effort. If there's a very high mismatch in distribution, the compression ratios can suffer. **However, the core argument, storing raw token IDs instead of bytes, holds regardless of whatever token ID compression you apply on top.**
+- **Raw token ID compression efficiency can suffer on unknown languages** For a language/script a tokenizer doesn't have a vocab for, token IDs can lose against raw bytes. r50k never learned to merge Devanagari (Hindi) bytes, so the Hindi word `भारत` (`भ`,`ा`,`र`,`त`, each a 3-byte UTF-8, 12 bytes total) falls back to 7 token IDs. Storing them as uint16 makes it slightly worse (14 bytes) so you need token ID compression algorithms to recover the ratio. Also, raw token IDs are anyways useful for latency if an LLM is going to read/write.
+- **Fixing token IDs frequency and ANS are corpus specific** The corpus specific remapping is cheap but it's not free. It might be a good idea for LLM/tokenizer providers to fix the raw IDs so we get some extra compression without any extra effort. **If there's a very big mismatch in distribution, the compression ratios can suffer**. However, the core argument, storing raw token IDs instead of UTF-8 bytes, holds regardless of whatever token ID compression you apply on top.
 
 ## Key Takeaways
 
-- Switching from UTF-8 bytes to token IDs brings you free compression. OpenAI `r50k` tokenizer hits 2.33x, already beating every byte codec. ANS entropy coding on top gets you to 3.37x.
-- The compression gains are generalizable and across all tokenizers from all vendors. But another massive bonus is never having to tokenize again as models read your data thousands or millions of times in the future.
-- Although token-native storage is already usable and beneficial, the ecosystem needs to evolve to make it even better: models don't share a vocabulary yet, and hosted LLM APIs still only take text in and text out.
+- Compression: Token IDs surpass every popular byte compression algorithm before you even compress them: raw r50k/o200k hit 1.5-2.5x, entropy-coding on top (ANS) gets to 3.37x! And they generalize and perform well across every tokenizer and dataset I tested.
+- Latency: When the writer or reader is an LLM, tokenization/detokenization is a mandatory steps. Storing token IDs instead of UTF-8 bytes turns a mandatory ~300-500μs cost into a 2-230x faster read/write, since agents produce and consume tokens natively.
+- Token-native storage is production-ready to be adopted in DB/Search engines. But the ecosystem needs to evolve and accept it across the stack for amplifying the impact: models don't share a vocabulary yet, and hosted LLM APIs still only take text input/output for now.
 
 ## Acknowledgements
 
-The benchmarks use [tiktoken](https://github.com/openai/tiktoken), [zstandard](https://github.com/indygreg/python-zstandard), [lz4](https://github.com/python-lz4/python-lz4), and [constriction](https://github.com/bamler-lab/constriction). Thanks to the concept of [napkin math](https://github.com/sirupsen/napkin-math) for making me realise this gap. Apparently, the "language modeling is compression" is somewhat explored in [DeepMind's 2023 paper](https://arxiv.org/abs/2309.10668) if you want further read.
+The benchmarks use [tiktoken](https://github.com/openai/tiktoken), [zstandard](https://github.com/indygreg/python-zstandard), [lz4](https://github.com/python-lz4/python-lz4), [constriction](https://github.com/bamler-lab/constriction), [streamvbyte](https://github.com/lemire/streamvbyte). Thanks to the concept of [napkin math](https://github.com/sirupsen/napkin-math) for making me realise this gap.
 
 ## Citation
 
