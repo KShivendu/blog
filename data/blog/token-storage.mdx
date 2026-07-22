@@ -266,7 +266,7 @@ Observations:
 
 - **streamvbyte alone, no rank-remap** (raw BPE merge-order token IDs): **2.13x**
 - **streamvbyte + rank-remap** (the actual `+freq` method): **2.62x**
-- streamvbyte already benefits from _some_ token IDs being small (common short words, punctuation) even without remapping, since it's a variable-length integer codec. But roughly half of `+freq`'s total gain over raw packing (2.27x → 2.62x) comes specifically from the rank-remap step, not from streamvbyte on its own — this is the [BPE ID-assignment problem](#a-faster-alternative-to-ans-frequency-sorted-token-ids) from earlier in concrete numbers.
+- streamvbyte already benefits from _some_ token IDs being small (common short words, punctuation) even without remapping, since it's a variable-length integer codec. But roughly half of `+freq`'s total gain over raw packing (2.27x → 2.62x) comes specifically from the rank-remap step, not from streamvbyte on its own — this is the [BPE ID-assignment problem](#step-2-extra-token-id-compression:~:text=BPE%20assigns%20token%20IDs%20in%20merge-discovery%20order%2C%20not%20by%20frequency) from earlier in concrete numbers.
 
 - **What about WordPiece, the tokenizer embedding models actually use?** The mixedbread embedding model ([`mxbai-embed-large-v1`](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1)) uses BERT's WordPiece tokenizer with a 30,522-token vocabulary, in the table above, landing at the high end of the band (3.56x).
 - Raw uint16 packing is basically a wash against r50k BPE at the median: mxbai's smaller vocabulary barely matters before any entropy coding runs. The gap only opens up once ANS is applied, ~5% better compression at the median.
