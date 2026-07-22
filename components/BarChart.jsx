@@ -266,6 +266,17 @@ function ChartImpl({
       ? activeDatasets[Math.min(datasetIdx, activeDatasets.length - 1)]
       : null
   const activeVariants = activeDataset?.variants
+  // Same mobile-Focus-default idea as the view-level one above, but for
+  // charts where All/Focus is a nested variant instead of a top-level view
+  // (e.g. the write/read latency charts, where the top-level views are
+  // Human/Agent).
+  const variantFocusIdx = activeVariants
+    ? activeVariants.findIndex((v) => /focus/i.test(v.label))
+    : -1
+  useEffect(() => {
+    if (userPicked.current) return
+    setVariantIdx(mobile && variantFocusIdx >= 0 ? variantFocusIdx : 0)
+  }, [mobile, variantFocusIdx])
   const activeVariant =
     activeVariants && activeVariants.length
       ? activeVariants[Math.min(variantIdx, activeVariants.length - 1)]
@@ -625,26 +636,32 @@ function ChartImpl({
           // Same plain style/position as a normal in-bar label (centered,
           // regular weight) — the torn edge already signals "this is capped,"
           // no need for the label itself to shout too.
+          // Skipped on mobile: dense bars mean these labels collide with each
+          // other, tapping a bar already reveals the value via the tooltip.
           const trueLabel = (s.text && s.text[ci]) || trim(v) + valueUnit
-          textLayer.push(
-            <text
-              key={`ov${ci}-${si}`}
-              x={horizontal ? (rect.x + rect.x + rect.width) / 2 : barC}
-              y={horizontal ? barC + 3.4 : (p0 + p1) / 2 + 3.2}
-              textAnchor="middle"
-              fontSize={fBarTxtSm}
-              fill={readableInk(blend(c, op, C.card))}
-              fontFamily="var(--font-mono, ui-monospace, monospace)"
-            >
-              {trueLabel}
-            </text>
-          )
+          if (!mobile) {
+            textLayer.push(
+              <text
+                key={`ov${ci}-${si}`}
+                x={horizontal ? (rect.x + rect.x + rect.width) / 2 : barC}
+                y={horizontal ? barC + 3.4 : (p0 + p1) / 2 + 3.2}
+                textAnchor="middle"
+                fontSize={fBarTxtSm}
+                fill={readableInk(blend(c, op, C.card))}
+                fontFamily="var(--font-mono, ui-monospace, monospace)"
+              >
+                {trueLabel}
+              </text>
+            )
+          }
         }
 
-        // per-bar text label (skipped when clipped — the overflow label above covers it)
+        // per-bar text label (skipped when clipped — the overflow label above
+        // covers it; skipped on mobile — collides at that width, tap reveals
+        // the value via the tooltip instead).
         const txt = s.text ? s.text[ci] : null
         const pos = s.textPosition || (horizontal ? 'outside' : 'inside')
-        if (txt && pos !== 'none' && !dim && !clipped) {
+        if (txt && pos !== 'none' && !dim && !clipped && !mobile) {
           if (horizontal && pos === 'outside') {
             textLayer.push(
               <text
