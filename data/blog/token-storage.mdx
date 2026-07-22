@@ -588,7 +588,7 @@ Also note that every copy of your data enjoy the same 2.27-3.26x reduction, mult
 - **brotli-q11**: Google's codec at max quality. Best ratio among the untrained/off-the-shelf byte codecs (`zstd --train` can still edge it out since it gets to see your corpus), but slow, see the write chart.
 - **zstd --train**: zstd with a 112KB dictionary trained on that domain's own train split (a global dictionary shared across all documents in that domain, same design as the static ANS table), not a generic one.
 - **r50k/cl100k/o200k raw**: token IDs packed with no entropy coder at all. r50k fits in uint16 (2 bytes); cl100k and o200k need 3 bytes (they exceed uint16's 65,535 range but both fit in 24 bits, so 3-byte packing beats naive uint32 padding).
-- **+freq**: token IDs re-ranked by real-world frequency, then packed with [`streamvbyte`](https://github.com/lemire/streamvbyte), a variable-length integer codec. No entropy coder either, just a smarter container.
+- **+freq**: token IDs re-ranked by real-world frequency, then packed with [`streamvbyte`](https://github.com/lemire/streamvbyte), a variable-length integer codec. No entropy coder either, just a smarter container (see [how it works](#step-2-extra-token-id-compression) above).
 - **+ANS**: token IDs entropy-coded with a static, corpus-trained ANS table (see [how it works](#step-2-extra-token-id-compression) above).
 
 </details>
@@ -616,7 +616,7 @@ Those savings only matter next to whatever else you're storing, so let's put a r
 | Embedding, 1024-dim int8 quantized   | 1,024 B |
 | Embedding, 1024-dim binary quantized |   128 B |
 
-Unquantized, the embedding (4,096 B) dominates the text either way, most collections with big uncompressed embeddings look like this. MRL brings it closer: 512 or 256 dims lands at 2,048 B or 1,024 B, same ballpark as the text instead of dwarfing it. int8 quantization lands in the same place, 1,024 B. Binary quantization is the real outlier: 128 B, ~5.5x smaller than the compressed text chunk (707 B), though check your recall numbers before leaning on it that hard.
+Unquantized, the embedding (4,096 B) dominates the text either way, most collections with big uncompressed embeddings look like this. MRL brings it closer: 512 or 256 dims lands at 2,048 B or 1,024 B, same ballpark as the text instead of dwarfing it. [int8 quantization](https://qdrant.tech/articles/scalar-quantization/) lands in the same place, 1,024 B. [Binary quantization](https://qdrant.tech/articles/binary-quantization/) is the real outlier: 128 B, ~5.5x smaller than the compressed text chunk (707 B), though check your recall numbers before leaning on it that hard.
 
 </details>
 
