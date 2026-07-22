@@ -257,22 +257,10 @@ Observations:
 
 **How much does each step contribute: entropy coder vs. tokenizer?** Same English (C4) corpus, 512-token chunks:
 
-- **ANS on raw UTF-8 bytes (no tokenization):**
-
-  - Compression ratio: **1.76x**
-  - Only slightly better than gzip/zstd and actually worse than brotli, despite ANS being a theoretically optimal entropy coder. The reason: gzip/zstd/brotli also exploit repeated substrings using LZ77 matching, which a plain (order-0) byte-level model cannot.
-
-- **Token-level ANS (r50k):**
-
-  - Compression ratio: **3.26x**
-  - The jump from 1.76x comes from the _tokenizer_, not the coder. Converting bytes to subwords presents much more predictable, information-dense symbols to ANS.
-
-- **zstd (LZ77 + entropy) on packed r50k token-ID bytes (no ANS):**
-
-  - Compression ratio: **2.73x**
-  - Running full zstd directly on packed token IDs still beats byte-level zstd, but falls short of token-level ANS, since zstd's substring matching has little left to find once BPE has already folded repeated words into single tokens.
-
-- **Summary:** most of the compression gain comes from the _tokenizer_, not the entropy coder. ANS (1.76x → 3.26x) and zstd (on raw text vs on token IDs) both jump once tokens replace bytes as the input symbol; the coder itself is a smaller, secondary lever on top.
+- ANS on raw UTF-8 bytes (no tokenization) gets **1.76x**, barely better than gzip/zstd and worse than brotli, even though ANS is theoretically the tighter coder, gzip/zstd/brotli exploit repeated substrings via LZ77 too, a plain (order-0) byte-level model can't.
+- Token-level ANS (r50k) jumps to **3.26x**. That jump's from the _tokenizer_, not the coder, subwords are just far more predictable symbols than bytes.
+- Full zstd (LZ77 + entropy) on packed r50k token-ID bytes alone gets **2.73x**: beats byte-level zstd but falls short of token-level ANS, since BPE's already folded repeated words into single tokens, there's less left for zstd's substring matching to find.
+- Bottom line: most of the gain is the _tokenizer_, not the coder. Both ANS (1.76x → 3.26x) and zstd (raw text vs on token IDs) jump once tokens replace bytes as the input symbol, the coder's a smaller, secondary lever on top.
 
 **How much of `+freq`'s ratio is the rank-remap, and how much is streamvbyte itself?**
 
@@ -608,14 +596,14 @@ Also note that every copy of your data enjoy the same 2.27-3.26x reduction, mult
 <details>
 <summary>Cost Savings at scale, and how the text payload compares to the vector next to it</summary>
 
-English Wikipedia is ~7M articles averaging 708 words. At r50k's 3.26x median ANS ratio, that's 31.5 GB of raw UTF-8 down to 9.7 GB, a real but modest saving at that scale (r50k raw packing alone, 2.27x with no entropy coder, already gets to 13.9 GB). Vector databases in production commonly hold far more documents than that, so scaling the same ratios up to **1 billion documents** (same 708-word average) puts raw storage at 4.5 TB, down to 2.0 TB with r50k raw packing alone, or 1.4 TB with r50k + ANS. At \$0.08/GB for SSD and \$0.02/GB for S3-class object storage, for that 1B-document corpus:
+English Wikipedia is ~7M articles averaging 708 words: 31.5 GB of raw UTF-8. At r50k's 3.26x ANS ratio that's down to 9.7 GB (r50k raw packing alone, 2.27x, already gets you to 13.9 GB). Most production vector DBs hold way more than 7M docs though, so scale this to **1 billion documents** (same 708-word average): raw storage is 4.5 TB, down to 2.0 TB with r50k raw packing, or 1.4 TB with r50k + ANS. At \$0.08/GB for SSD and \$0.02/GB for S3-class object storage, for that 1B-document corpus:
 
 | Storage tier (1B docs) | Raw UTF-8 | r50k raw (uint16) | r50k + ANS | Saved (vs raw) |
 | ---------------------- | --------: | ----------------: | ---------: | -------------: |
 | SSD ($0.08/GB)         |   $360/mo |           $159/mo |    $110/mo |        $250/mo |
 | S3 ($0.02/GB)          |    $90/mo |            $40/mo |     $28/mo |         $62/mo |
 
-Those savings only matter in proportion to what else is stored alongside the text, so it's worth putting a real vector next to a real text chunk. Take one sized to mxbai-embed-large-v1's own [recommended sequence length](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1) of 512 tokens: at this post's ~4.5 bytes/token, that's 512 × 4.5 ≈ 2,304 bytes of raw UTF-8. mxbai-embed-large-v1 outputs 1024-dim vectors, so float32 (4 bytes per dimension) puts the embedding at 1024 × 4 = 4,096 bytes:
+Those savings only matter next to whatever else you're storing, so let's put a real vector next to a real text chunk. Take one sized to mxbai-embed-large-v1's own [recommended sequence length](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1) of 512 tokens: at this post's ~4.5 bytes/token, that's 512 × 4.5 ≈ 2,304 bytes of raw UTF-8. mxbai-embed-large-v1 outputs 1024-dim vectors, so float32 (4 bytes per dimension) puts the embedding at 1024 × 4 = 4,096 bytes:
 
 | Stage                                |    Size |
 | ------------------------------------ | ------: |
@@ -628,7 +616,7 @@ Those savings only matter in proportion to what else is stored alongside the tex
 | Embedding, 1024-dim int8 quantized   | 1,024 B |
 | Embedding, 1024-dim binary quantized |   128 B |
 
-Unquantized, the embedding (4,096 B) dominates either form of the text, the common case for collections with large, uncompressed embeddings. MRL alone is a modest lever: truncating to 512 or 256 dims still keeps quality closer to the full vector, and lands at 2,048 B or 1,024 B, in the same ballpark as the text rather than dwarfing it. int8 scalar quantization lands in the same place, 1,024 B, a safer quality tradeoff than binary. Binary quantization is the outlier: even without touching MRL, it drops the 1024-dim vector to 128 B, ~5.5x smaller than the compressed text chunk (707 B), though it's also the most aggressive quality tradeoff of the group and worth validating against your own recall numbers before leaning on it. Payload compression matters most exactly in that regime: large payloads, quantized vectors, or collections where text is the point.
+Unquantized, the embedding (4,096 B) dominates the text either way, most collections with big uncompressed embeddings look like this. MRL brings it closer: 512 or 256 dims lands at 2,048 B or 1,024 B, same ballpark as the text instead of dwarfing it. int8 quantization lands in the same place, 1,024 B. Binary quantization is the real outlier: 128 B, ~5.5x smaller than the compressed text chunk (707 B), though check your recall numbers before leaning on it that hard.
 
 </details>
 
