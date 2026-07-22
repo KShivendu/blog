@@ -672,6 +672,7 @@ Default stays `"text"`, so existing clients see no change. An LLM-facing pipelin
 
 ## Limitations
 
+- **No shared vocabulary across models yet.** Embedding/reranker models use WordPiece or SentencePiece, LLMs use BPE variants (r50k, cl100k, o200k), and different LLM families/providers don't share the vocab either. A token-native payload only pays off end to end for a consumer using the same tokenizer it was stored with, see [how the ecosystem could fix this](#how-can-the-ai-community-and-the-ai-labs-help).
 - **Raw token ID compression efficiency can suffer on unknown languages.** For a language/script a tokenizer doesn't have a vocab for, token IDs can lose against raw bytes. r50k never learned to merge Devanagari (Hindi) bytes, so the Hindi word `भारत` (`भ`,`ा`,`र`,`त`, each a 3-byte UTF-8, 12 bytes total) falls back to 7 token IDs. Storing them as uint16 makes it slightly worse (14 bytes) so you need token ID compression algorithms to recover the ratio. Raw token IDs are still useful for latency either way, if an LLM is going to read/write them.
 - **Frequency remapping and ANS are corpus-specific, not free.** The remapping itself is cheap but not free to compute, and if there's a big mismatch between the frequency table and your actual corpus, the compression ratio suffers. The core argument, storing raw token IDs instead of UTF-8 bytes, holds regardless of whatever compression you apply on top. See [how labs could fix the remap for free](#how-can-the-ai-community-and-the-ai-labs-help), though you don't have to wait for that either.
 
