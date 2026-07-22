@@ -27,7 +27,7 @@ Every hosted chat API is text in, text out, even though the model samples token 
 - **The one hosted precedent is stranded.** OpenAI's legacy Completions `prompt` field has always typed as "string, array of string, array of number, or array of array of number", and "array of number" is literally a list of token IDs from the model's own tokenizer. Documented, shipped behavior, not a proposal. But it only works with legacy completion models (`gpt-3.5-turbo-instruct` and older), and OpenAI froze the endpoint in mid-2023. The precedent exists in the same company's API surface, just parked on a model family nobody points new traffic at.
 - **The pattern already runs server-side.** vLLM's `LLM` class takes `prompt_token_ids` directly, and `skip_tokenizer_init` goes further: with it set, the engine expects token IDs in and returns token IDs out, no text touches the request or response path. TGI's `details` mode returns a per-token integer `id` on output (its input routes still take text). So the proposal below is a hosted wrapper around something already in production, not new serving tech.
 
-Output is text on every hosted chat endpoint, with token _counts_ in `usage` but never the token _ID sequence_ the model sampled. The closest thing is `logprobs`/`top_logprobs`, and it looks token-adjacent but isn't:
+The nearest thing to token-level output is `logprobs`/`top_logprobs`. It looks token-adjacent but isn't:
 
 ```json
 {
@@ -115,7 +115,7 @@ Returning both `content` and `token_ids` costs nothing extra, the server has the
 { "choices": [{ "delta": { "content": " model", "token_ids": [2746] } }] }
 ```
 
-The one thing storage didn't need is `tokenizer_version`. A collection's tokenizer is a durable, collection-level choice; a hosted API's tokenizer changes across model versions, so the request has to pin the exact tokenizer it tokenized against, not just the model family.
+The one field storage didn't need is `tokenizer_version`, and it's load-bearing, not decorative.
 
 ## Why It Has To Be Opt-In and Versioned
 
@@ -131,18 +131,15 @@ The storage post measured tokenization at **~450µs per read** of a 512-token ch
 
 ## Limitations
 
-- **This is a proposal, not a shipped feature.** No major hosted chat API accepts token-ID input or returns token-ID output. Everything under the interface proposal is my design.
-- **The precedent is narrower than it reads.** OpenAI's legacy Completions `prompt` field really does accept "array of number" today, but it's frozen to legacy models since 2023. vLLM's `prompt_token_ids`/`skip_tokenizer_init` and TGI's per-token `id` are real and in production, but at the serving-stack layer, not behind any hosted API.
+- **This is a proposal, and the precedent is narrower than it reads.** No major hosted chat API accepts or returns token IDs, so the interface above is my design. The real precedents (OpenAI's legacy Completions `prompt`, vLLM's `prompt_token_ids`/`skip_tokenizer_init`, TGI's per-token `id`) are all either frozen to legacy models or live at the serving-stack layer, never behind a hosted API.
 - **Anthropic's `logprobs` situation is unclear** from public sources beyond a community request; if they ship it, the "what APIs do today" comparison may already be stale.
-- **Versioning is a real adoption blocker.** A provider shipping this has to keep old tokenizer versions addressable indefinitely, or every token-ID request breaks the moment they retrain a tokenizer, a burden text never imposes.
-- **Providers may have good reasons not to.** Text is where content-safety filtering, prompt-injection detection, and moderation run; a raw token-ID path is a second entry point that bypasses whatever of that is string-pattern-based. Token IDs are also an obfuscation channel, a sequence decoding to something a filter would catch can be built directly in ID space. And I don't know how token-ID input interacts with prefix-based prompt caching. I don't have rebuttals for these, worth testing.
+- **Providers may have good reasons not to.** Text is where content-safety filtering, prompt-injection detection, and moderation run; a raw token-ID path is a second entry point that bypasses whatever of that is string-pattern-based. Token IDs are also an obfuscation channel, a sequence decoding to something a filter would catch can be built directly in ID space. They'd also have to keep old tokenizer versions addressable forever, or every token-ID request breaks the moment they retrain. And I don't know how token-ID input interacts with prefix-based prompt caching. I don't have rebuttals for these, worth testing.
 
 ## Key Takeaways
 
-- Hosted chat APIs are text in, text out today, OpenAI Chat/Responses and Anthropic Messages both.
-- OpenAI's legacy Completions API is real precedent for token-ID input, its `prompt` field accepts arrays of token IDs, but only on legacy models frozen since 2023.
-- vLLM proves token-ID input and output works in production, just below the hosted-API line, not on it.
-- The interface reuses the storage post's design: a type-detected block for input, a format flag for output, plus a `tokenizer_version` pin, and it can't be portable across model families the way text is.
+- Hosted chat APIs are text in, text out today, both OpenAI (Chat/Responses) and Anthropic (Messages), even though the model samples token IDs at every step.
+- The precedent already exists, just not behind a hosted chat API: OpenAI's legacy Completions `prompt` accepts token-ID arrays (frozen to legacy models since 2023), and vLLM does token IDs in and out in production.
+- My proposed interface reuses the storage post's shapes: a bare array for token-ID input, a format flag for token-ID output, plus a `tokenizer_version` pin, and it can't be portable across model families the way text is.
 - The payoff is for systems already storing tokens: retrieve, prompt, receive, and store as token IDs, with text materializing only at the human-facing edges.
 
 ## Citation
@@ -150,11 +147,11 @@ The storage post measured tokenization at **~450µs per read** of a 512-token ch
 If you find this useful, please cite:
 
 ```bibtex
-@misc{kumar2026tokenllminterface,
+@misc{kumar2026tokenllmapi,
   author       = {Kumar Shivendu},
   title        = {Token-Native LLM APIs: Input and Output as Token IDs},
   year         = {2026},
-  url          = {https://www.kshivendu.dev/blog/token-llm-interface},
+  url          = {https://www.kshivendu.dev/blog/token-api},
   note         = {Blog post}
 }
 ```

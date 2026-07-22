@@ -628,7 +628,7 @@ I have two request from the AI community/labs:
 
    - Token native storage has great advantages and is production ready today. Most LLMs families except Anthropic Claude and Google Gemini (However Gemma did it) have open-sourced their tokenizers. I request these two major players to do the same.
    - Overall **we need a UTF-8 / ASCII like standard for tokenizers**. This also avoids any kind of vendor or model version lock in. Agents will soon be the biggest users of web, apis, and all infra. We need to prepare new standards that are optimized for them.
-   - **Closed source LLM APIs don't accept or return token IDs today**. There's also need for standardizing token first input/output LLM APIs, even when your storage tokenizer matches the model's exactly, this only works end to end if you own the inference stack, since hosted chat APIs take text prompts and return text, not raw token arrays. See [this follow-up proposing a token-ID-native LLM API](/blog/token-llm-api).
+   - **Closed source LLM APIs don't accept or return token IDs today**. There's also need for standardizing token first input/output LLM APIs, even when your storage tokenizer matches the model's exactly, this only works end to end if you own the inference stack, since hosted chat APIs take text prompts and return text, not raw token arrays. See [this follow-up proposing a token-ID-native LLM API](/blog/token-api).
    - For the organizations training #[embedding/reranker models](Cohere, BGE, Mixedbread, Jina AI, ZeroEntropy, etc), I request you to please re-use the same tokenizers as LLM BPEs so we can unify search and generation systems to work more efficiently together. (Yes, I know it's not easy to get rid of the WordPiece legacy from base models). This has already started: OpenAI's [text-embedding-3](https://platform.openai.com/docs/guides/embeddings) family already uses cl100k directly. [Jina's embeddings-v4](https://huggingface.co/jinaai/jina-embeddings-v4) moved to a BPE tokenizer too, inheriting from its Qwen2.5-VL backbone.
 
 2. **Improving the BPE tokenization algorithm**:
@@ -668,7 +668,7 @@ POST /collections/my_collection/points/search
 // {"results": [{"id": 1, "text": [1858, 6427, 20272, 318, 257, 6997, ...]}]}
 ```
 
-Default stays `"text"`, so existing clients see no change. An LLM-facing pipeline asks for `"tokens"` and skips detokenization; anything human-facing asks for `"text"`. This only works end to end if you own the inference stack, since hosted LLM APIs take text prompts, not token arrays ([yet](/blog/token-llm-api)).
+Default stays `"text"`, so existing clients see no change. An LLM-facing pipeline asks for `"tokens"` and skips detokenization; anything human-facing asks for `"text"`. This only works end to end if you own the inference stack, since hosted LLM APIs take text prompts, not token arrays ([yet](/blog/token-api)).
 
 ## Limitations
 
