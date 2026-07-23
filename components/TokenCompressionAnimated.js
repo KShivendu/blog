@@ -131,12 +131,12 @@ const PRESETS = [
 // Phase boundaries, as fractions of the full 0-1 cycle. Phase 0 is shared
 // (both paths read the same raw bytes); phases 1-3 run in the two lanes at
 // the *same* time boundaries, so the two paths visibly stay in lockstep.
-const P0 = 0.2 // shared: chars -> raw UTF-8 bytes
+const P0 = 0.1 // shared: chars -> raw UTF-8 bytes (kept short, typing is the least interesting part)
 const P1 = 0.46 // lane 1: LZ4 sliding-window match search | BPE merge into tokens
 const P2 = 0.72 // lane 2: feed the LZ4 engine | pack token IDs into fixed-width bytes
 const P3 = 1.0 // lane 3: LZ4 output bytes | ANS entropy coding
 
-const CYCLE_MS = 16000 // one full pass (2x slower than before)
+const CYCLE_MS = 13333 // one full pass (1.2x faster)
 const HOLD_MS = 6000 // extra-long pause on the finished frame before looping
 const TOTAL_MS = CYCLE_MS + HOLD_MS
 
@@ -215,6 +215,17 @@ export default function TokenCompressionAnimated() {
   const clockRef = useRef(0) // ms into the extended cycle (animation + hold)
   const preset = PRESETS[presetIdx]
 
+  // ── Social-video layout overrides (opt-in via query params; defaults are 1,
+  // so normal blog rendering is completely unchanged) ──────────────────────────
+  const vparams =
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search)
+      : new URLSearchParams()
+  const VS = Number(vparams.get('vs')) || 1 // vertical spread: lane positions + viewBox height
+  const FSC = Number(vparams.get('fsc')) || 1 // font scale
+  const CSC = Number(vparams.get('csc')) || 1 // byte/token cell size scale
+  const WSC = Number(vparams.get('wsc')) || 1 // viewBox width scale
+
   // Start the animation only once it scrolls into the viewport (and pause it
   // again when it leaves), so it never runs off-screen.
   useEffect(() => {
@@ -277,13 +288,13 @@ export default function TokenCompressionAnimated() {
   const lz4Ratio = preset.raw / preset.lz4
   const ansRatio = preset.raw / preset.ans
 
-  const W = compact ? 430 : 640
-  const H = heightAt(progress)
-  const CELL_H = 26
+  const W = (compact ? 430 : 640) * WSC
+  const H = (VS !== 1 ? 340 * VS : heightAt(progress)) * 1
+  const CELL_H = 26 * CSC
   // In compact mode, every text/geometry unit below is deliberately a LARGER
   // fraction of W than its desktop counterpart (not just a smaller W) — that
   // is what actually makes the rendered text bigger on a phone screen.
-  const fs = (v) => (compact ? v + 4 : v)
+  const fs = (v) => (compact ? v + 4 : v) * FSC
 
   // The UNIT is one BYTE. Each character occupies as many byte-cells as its
   // UTF-8 length (ASCII = 1, Devanagari = 3), so the byte lane's width honestly
@@ -297,7 +308,7 @@ export default function TokenCompressionAnimated() {
     if (cp <= 0xffff) return 3
     return 4
   }
-  const CELL_W = compact ? 17 : 24 // one byte cell (desktop widened to fill the frame)
+  const CELL_W = (compact ? 17 : 24) * CSC // one byte cell (desktop widened to fill the frame)
   const CELL_G = 2
   const CELL_STEP = CELL_W + CELL_G
   const GROUP_PAD = 3
@@ -355,11 +366,17 @@ export default function TokenCompressionAnimated() {
   const leftoverTokenCount = preset.tokens - idGroupCount
 
   // Two stacked rows: byte codec lane (top) and token lane (bottom).
-  const TOP_LABEL_Y = 40
-  const TOP_CY = 96 // byte-codec (LZ4) lane row
-  const DIVIDER_Y = 176
-  const BOT_LABEL_Y = 208
-  const BOT_CY = 264 // token-path lane row
+  const TOP_LABEL_Y = 40 * VS
+  const TOP_CY = 96 * VS // byte-codec (LZ4) lane row
+  const DIVIDER_Y = 176 * VS
+  const BOT_LABEL_Y = 208 * VS
+  const BOT_CY = 264 * VS // token-path lane row
+  // Vertical gap from a lane's center down to its summary text ("571B · 1.00×"
+  // and the caption under it), sized so the numbers clear the taller
+  // entropy-phase box with real breathing room — and scale with the font so it
+  // stays roomy when fonts are enlarged for social-video layouts.
+  const sumBigDY = CELL_H / 2 + 6 + fs(15) + 12
+  const sumDescDY = sumBigDY + fs(8) + 10
 
   const inPhase = (start, end) => Math.max(0, Math.min(1, (progress - start) / (end - start)))
   const bytesT = inPhase(0, P0)
@@ -533,6 +550,7 @@ export default function TokenCompressionAnimated() {
                 type="button"
                 onClick={() => {
                   setPresetIdx(i)
+                  clockRef.current = 0
                   setProgress(0)
                 }}
                 style={{
@@ -650,7 +668,7 @@ export default function TokenCompressionAnimated() {
               fill={lz4Accent}
               letterSpacing="0.06em"
             >
-              BYTE CODEC PATH (LZ4)
+              UTF-8 BYTE COMPRESSION (LZ4)
             </text>
           </g>
 
@@ -779,7 +797,7 @@ export default function TokenCompressionAnimated() {
             <>
               <text
                 x={rowStartX}
-                y={TOP_CY + CELL_H / 2 + 20}
+                y={TOP_CY + sumBigDY}
                 textAnchor="start"
                 fontSize={fs(15)}
                 fontWeight="700"
@@ -789,7 +807,7 @@ export default function TokenCompressionAnimated() {
               </text>
               <text
                 x={rowStartX}
-                y={TOP_CY + CELL_H / 2 + 34}
+                y={TOP_CY + sumDescDY}
                 textAnchor="start"
                 fontSize={fs(8)}
                 fill={textMuted}
@@ -815,7 +833,7 @@ export default function TokenCompressionAnimated() {
               fill={tokStroke}
               letterSpacing="0.06em"
             >
-              TOKEN PATH ({preset.tokenizer})
+              TOKEN ID COMPRESSION ({preset.tokenizer})
             </text>
           </g>
 
@@ -884,9 +902,9 @@ export default function TokenCompressionAnimated() {
           {progress >= P1 && (
             <>
               <text
-                x={rowMidX}
+                x={rowStartX}
                 y={BOT_CY - CELL_H / 2 - 14}
-                textAnchor="middle"
+                textAnchor="start"
                 fontSize={fs(10)}
                 fill={textMuted}
               >
@@ -974,7 +992,7 @@ export default function TokenCompressionAnimated() {
             <>
               <text
                 x={rowStartX}
-                y={BOT_CY + CELL_H / 2 + 20}
+                y={BOT_CY + sumBigDY}
                 textAnchor="start"
                 fontSize={fs(15)}
                 fontWeight="700"
@@ -984,7 +1002,7 @@ export default function TokenCompressionAnimated() {
               </text>
               <text
                 x={rowStartX}
-                y={BOT_CY + CELL_H / 2 + 34}
+                y={BOT_CY + sumDescDY}
                 textAnchor="start"
                 fontSize={fs(8)}
                 fill={textMuted}
