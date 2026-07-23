@@ -212,6 +212,7 @@ export default function PerpendicularCircle() {
         {/* angle ticks + labels along the rim */}
         {[
           [45, '45°'],
+          [60, '60°'],
           [135, '135°'],
         ].map(([deg, lbl]) => {
           const t = rimTick(deg)
