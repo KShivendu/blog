@@ -1,0 +1,296 @@
+---
+title: 'Token Search'
+subtitle: 'Can BM25 run on the BPE token IDs instead of English keywords?'
+date: '2026-07-20'
+lastmod: '2026-07-20'
+tags: ['vector-databases', 'search', 'internals', 'rag', 'nlp']
+draft: false
+summary: 'Lucene/Elasticsearch analyze text into English words, then run BM25. I tried running BM25 over BPE token IDs instead. Naive tokenization breaks it (−0.11 NDCG@10), but a normalized variant lands within noise of a standard word analyzer across 12 NanoBEIR datasets. It’s the same trick as char n-gram IR, so the quality isn’t the story. The payoff is multilingual: on Chinese, word tokenization collapses to 0.01 NDCG@10 while GPT-4o’s tokenizer beats a dedicated segmenter on MIRACL dev pools — with zero per-language config.'
+images: ['/static/images/blogs/tokenization-compression.jpg']
+authors: ['default']
+---
+
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
+
+In [Token-Native Storage](/blog/token-storage) I argued that if agents are the biggest readers and writers of your database, you should store text the way they read it: as BPE token IDs, not UTF-8 bytes. But then while looking at the [interface](/blog/token-storage#interface) I proposed, I had a realization that it looks very similar to text search engines and they also tokenize the data based on the langauge for keeping it searchable: Instead of Lucene's English analyzer turning `"running"` into the stemmed word `run` which gets an ID, what if the index terms were the model's own token IDs representing it as `run` + `##n` + `##ing`? How does it perform on BM25? And is it possible that it can surpass existing solutions in some way?
+
+I built it and benchmarked it against plain [BM25](https://en.wikipedia.org/wiki/Okapi_BM25). The short version: the naive way to do this is badly broken, a normalized version lands **within noise of a standard word analyzer**, turns out the same idea was explored in this paper [character n-gram retrieval](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7) from 2004. **The actual payoff shows up in other languages**, where a BPE tokenizer replaces a per-language word segmenter and sometimes beats it.
+
+## Why this might work at all
+
+A BM25 inverted index maps a _term_ to a postings list. In Lucene the term is an English word after an analyzer runs: lowercase, split on non-word characters, drop stopwords, [Porter-stem](https://tartarus.org/martin/PorterStemmer/). BM25 then scores documents by how many rare query terms they contain, saturated by term frequency and length.
+
+Nothing in BM25 requires the term to be a _word_. It just needs to be a hashable symbol whose document frequency means something. So the swap is: run the [BPE tokenizer](https://github.com/openai/tiktoken) over the text, and use each token ID as a term. `"storage"` is one token; `"tokenization"` is two (`token` + `ization`); the whole index vocabulary is now the model's fixed 50k–200k tokens instead of an unbounded pile of English words.
+
+If this reaches parity with word-BM25, lexical search inherits the token-native benefits: a bounded fixed vocabulary, no language-specific analyzer to configure, and the same representation the model already reads and writes.
+
+## The naive version is broken
+
+Here's the first thing I tried. It fails in an instructive way — the fix falls right out of it.
+
+BPE is **space- and case-sensitive**. The document `"The cat sat"` tokenizes to `[The][ cat][ sat]` — note the leading-space tokens. The query `"cat"` tokenizes to `[cat]`, a _different_ token ID than `[ cat]`. So a query for cat never matches the cat in the document. Same problem with `Cat` vs `cat`. The term that should connect query and document tokenizes to two different integers depending on where the word sat in the sentence.
+
+Across 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries), naive token-BM25 loses **−0.10 to −0.11 NDCG@10** versus a plain word analyzer — it loses on every one of the 12 datasets, well outside the confidence interval. Tokenizing your text and indexing the raw IDs is strictly worse than doing nothing clever.
+
+## The fix: normalize before you tokenize
+
+The mismatch is entirely about _inconsistent_ tokenization between query and document. So make it consistent: lowercase the text, split it into words on word boundaries, and encode each word in isolation with a fixed leading space — `enc.encode(" " + word)`. Now `"cat"` produces the exact same token IDs whether it's a one-word query or buried mid-sentence in a document. I bag all the resulting subword tokens and run ordinary BM25 over them.
+
+That one change moves naive's −0.11 gap to essentially zero. Here's the full ladder, macro-averaged over the 12 datasets. Toggle the tokenizer on the right:
+
+export const engCats = [
+  'word (plain)',
+  'word + Porter stem',
+  'char 4-gram',
+  'naive BPE',
+  'normalized BPE',
+  'word-tuple BPE',
+]
+export const engColors = ['#94a3b8', '#64748b', '#38bdf8', '#f87171', '#10b981', '#a78bfa']
+export const engText = (v) => v.map((x) => x.toFixed(3))
+export const engView = (naive, norm) => ({
+  categories: engCats,
+  series: [
+    {
+      name: 'NDCG@10',
+      values: [0.5259, 0.5446, 0.5241, naive, norm, 0.5259],
+      colors: engColors,
+      text: engText([0.5259, 0.5446, 0.5241, naive, norm, 0.5259]),
+      textPosition: 'outside',
+    },
+  ],
+})
+
+<BarChart
+  orientation="horizontal"
+  title="BM25 quality: words vs BPE token IDs (12 NanoBEIR datasets, 599 queries)"
+  subtitle="macro-avg NDCG@10 — toggle tokenizer (right). red = naive break, green = normalized fix, purple = isomorphic control"
+  valueLabel="NDCG@10 (higher is better)"
+  valueMax={0.62}
+  valueTicks={[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]}
+  views={[
+    { label: 'r50k', ...engView(0.4242, 0.5201) },
+    { label: 'cl100k', ...engView(0.4219, 0.523) },
+    { label: 'o200k', ...engView(0.418, 0.5219) },
+  ]}
+/>
+
+Three things in that chart matter:
+
+1. **Normalized BPE (green) sits right on top of plain word-BM25 (gray)**, for all three tokenizers.
+2. **Naive BPE (red) is far below everything** — the space/case break.
+3. **The purple "word-tuple" bar is exactly equal to plain word-BM25.** That's a control: instead of bagging subwords, I keep each word as a _single_ term equal to the tuple of its token IDs. Keying BM25 by token-ID-tuple instead of by string changes nothing — proof that the token-ID _representation_ is irrelevant, and the only thing that moves quality is whether you decompose words into subwords or not.
+
+(The cyan char-4-gram bar sits right next to normalized BPE too — hold that thought, it matters later.)
+
+### Is "within noise" actually parity?
+
+I want to be careful here, because "the bars look the same" is not a statistical claim. Parity is an _equivalence_ claim, and absence of a significant difference is not evidence of equivalence. So I ran a **cluster bootstrap** (resample datasets, then queries within each — respecting the fact that queries aren't independent, they clump into datasets) on the per-query NDCG@10 delta, with a pre-registered equivalence margin of ±0.01.
+
+<div style={{overflowX: 'auto'}}>
+
+| method (o200k)     | Δ NDCG@10 vs plain word |        95% CI        | verdict                      |
+| ------------------ | ----------------------: | :------------------: | ---------------------------- |
+| **normalized BPE** |              **−0.004** | **[−0.014, +0.006]** | **within noise**             |
+| char 4-gram        |                  −0.002 |   [−0.027, +0.024]   | within noise                 |
+| naive BPE          |                  −0.108 |   [−0.156, −0.065]   | significant loss             |
+| word + Porter stem |                  +0.019 |   [−0.006, +0.045]   | slightly better (wins 11/12) |
+
+</div>
+
+Normalized BPE is statistically indistinguishable from plain word-BM25: the confidence interval is tight and straddles zero. It's _not_ tight enough to pass a strict ±0.01 equivalence test, so I'll call it "on par / within noise," not "proven equal." Against the stronger **Porter-stemmed** analyzer it's about **−0.02 behind** — not significant, but it loses on 10 of 12 datasets, so I won't pretend that's parity either. It's a hair behind a real stemmer. Note that `word_en` here uses NLTK's English stopword list and Porter stemmer — a genuinely strong Lucene-`EnglishAnalyzer`-style baseline, not the handicapped lowercase-only one.
+
+## Why does normalized BPE match a word analyzer?
+
+Because bagging subwords gives you **stemming-like matching for free**. `tokenization` and `tokenize` share the `token` subword; `running` and `runner` share `run`-ish pieces. Two words that a Porter stemmer would collapse to the same stem tend to share a subword token, so BM25 sees partial overlap where a plain word index would see none.
+
+I wanted to confirm that's real and not a just-so story, so I measured it directly. Group the corpus vocabulary into Porter-stem classes (`run`/`running`/`runner` → one class). Then ask: how often do two words in the _same_ stem class share at least one subword token, versus two random words?
+
+<div style={{overflowX: 'auto'}}>
+
+| tokenizer | same-stem pairs share a subword | random pairs |     lift |
+| --------- | ------------------------------: | -----------: | -------: |
+| r50k      |                            4.7% |        0.06% |  **79×** |
+| cl100k    |                            4.5% |        0.04% | **112×** |
+| o200k     |                            3.9% |        0.06% |  **68×** |
+
+</div>
+
+Same-stem words share subwords **68–112× more than chance**. So the mechanism is real. But notice the absolute number is only ~4–5% — most morphological variants _don't_ share a subword — so it's a **partial** stemmer, which fits the data: normalized BPE is indistinguishable from plain word and a hair behind Porter, exactly what a weak partial stemmer should look like.
+
+A second check: if the gains really come from stemming-like matching, the queries where normalized BPE beats plain word should be the same queries where a real stemmer beats plain word. They correlate at **Pearson r = 0.35** (win-set overlap Jaccard 0.30) — a real but moderate relationship. Free stemming is a _contributing_ cause, not the whole story.
+
+### This is char n-gram retrieval, and I should say so
+
+Here's the uncomfortable part. Look back at the ladder chart: the **char 4-gram** bar (cyan) behaves exactly like normalized BPE — within noise of plain word, a hair behind the stemmer, on every comparison. Character n-gram indexing does the same subword decomposition, and [McNamee & Mayfield showed in 2004](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7) that character n-grams recover morphological matching without a stemmer, especially across languages. **So "BPE subwords give free stemming" is a 20-year-old result about subword IR**, not something new about BPE.
+
+Which means the retrieval quality is _not_ the reason to do this. On English, token-BM25 is a slightly-worse-than-stemming, exactly-like-char-n-grams lexical index. If that were the whole post, the honest conclusion would be "use a stemmer."
+
+The reason to care is different, and it's two things:
+
+- **A BPE vocabulary is a language-agnostic analyzer you already have.** No stopword list, no stemmer, no per-language segmenter to configure — the tokenizer is the analyzer, and it's the same one for every language.
+- **It's the same vocabulary the model reads and writes.** If you already store payloads as token IDs ([token-native storage](/blog/token-storage)), the lexical index and the stored text share one representation.
+
+The first of those is testable, and it's where this stops being a tie. But before that, one more question about the tie itself.
+
+## The recall ceiling: a wider net, ranked worse
+
+Everything above is measured at rank 10. A colleague pushed back: maybe subwords cast a _wider net_ — retrieve more of the relevant documents, just rank them worse — so `@10` washes out even if deep recall differs. It's a fair hypothesis, because subword matching can connect a query to a document that share no whole word but do share a fragment. So I measured recall at increasing depth, and **reachability**: the fraction of relevant documents that get _any_ nonzero score, independent of rank.
+
+export const rd = {
+  word: [0.549, 0.613, 0.672, 0.721, 0.756, 0.797, 0.845, 0.876],
+  word_en: [0.576, 0.648, 0.697, 0.754, 0.786, 0.821, 0.857, 0.881],
+  char4: [0.523, 0.595, 0.656, 0.732, 0.756, 0.791, 0.848, 0.888],
+  norm: [0.528, 0.615, 0.677, 0.729, 0.756, 0.792, 0.851, 0.882],
+}
+export const depths = [5, 10, 20, 50, 100, 200, 500, 1000]
+export const rdSeries = (name, color, key, dashed) => ({
+  name,
+  color,
+  dashed: dashed || false,
+  points: depths.map((k, i) => [k, rd[key][i]]),
+})
+
+<LineChart
+  title="Recall vs retrieval depth (8 NanoBEIR datasets, 400 queries)"
+  xLabel="depth k (log scale) →"
+  yLabel="Recall@k ↑"
+  xScale="log"
+  xTicks={[
+    [5, '5'],
+    [10, '10'],
+    [20, '20'],
+    [50, '50'],
+    [100, '100'],
+    [200, '200'],
+    [500, '500'],
+    [1000, '1k'],
+  ]}
+  yMin={0.45}
+  yMax={0.92}
+  yTipDecimals={3}
+  height={420}
+  series={[
+    rdSeries('word', '#94a3b8', 'word'),
+    rdSeries('word + Porter', '#64748b', 'word_en', true),
+    rdSeries('char 4-gram', '#38bdf8', 'char4'),
+    rdSeries('normalized BPE (o200k)', '#10b981', 'norm'),
+  ]}
+/>
+
+Two clean results. **Normalized BPE tracks plain word at every depth** — the curves sit on top of each other, so it has no wider net; a word-aligned subword index reaches the same documents a word index does. **Char 4-grams are the exception, and they behave exactly as the hypothesis predicts:**
+
+<div style={{overflowX: 'auto'}}>
+
+| method          | Recall@10 | Recall@1000 | reachability | reaches, word scores 0 | word reaches, it misses |
+| --------------- | --------: | ----------: | -----------: | ---------------------: | ----------------------: |
+| word (plain)    |     0.613 |       0.876 |        0.922 |                      — |                       — |
+| word + Porter   | **0.648** |       0.881 |        0.889 |                 +0.008 |                   0.040 |
+| **char 4-gram** |     0.595 |   **0.888** |    **0.970** |             **+0.048** |               **0.000** |
+| normalized BPE  |     0.615 |       0.882 |        0.927 |                 +0.005 |                   0.000 |
+
+</div>
+
+Char 4-grams reach **4.8% of relevant documents that word-BM25 scores a hard zero, and miss none that word finds** — a strictly wider net (reachability 0.97 vs 0.92). But their **Recall@10 is _lower_** (0.595 vs 0.613): the extra documents they reach land deep in the ranking, lifting Recall@1000, not the top 10. Wider net, worse ranking — exactly the predicted trade. The spurious fragment-matches that widen the net also add noise near the top.
+
+Note the contrast with the stemmer: `word + Porter` has the best Recall@10 but the _lowest_ reachability (0.889). It's a **precise** net — it collapses genuine morphological variants and nothing else. Char n-grams are a **noisy** net — they reach the most documents, but many of the extra ones are junk. Two opposite ways to widen recall.
+
+The implication is the useful part: if you want the wider net, go finer-grained than BPE (char n-grams), accept that ranking degrades, and treat it as a **candidate generator feeding a reranker**, or **fuse it with word-BM25** — not as a drop-in BM25 replacement. Word-BM25 structurally caps at 0.922 reachable here; it _cannot_ retrieve the ~8% it scores zero, no matter how good the reranker. (Caveat: NanoBEIR pools are 2–5k documents, so Recall@1000 is close to reachability; treat these as directional.)
+
+## The real payoff: when a word analyzer needs a language pack
+
+Everything above splits text on `\w+` before tokenizing. That regex _is_ a word segmenter — and it only works for languages that put spaces between words. Chinese doesn't. Thai barely does. And even for a spaced language, a `\w+` split with no stemmer leans on morphology the analyzer doesn't know. This is exactly where a word analyzer reaches for a language-specific tool and a BPE tokenizer doesn't.
+
+I ran the same experiment on [MIRACL](https://github.com/project-miracl/miracl) dev sets (self-contained retrieval pools built from the inline positive/negative passages). For Chinese I added [jieba](https://github.com/fxsjy/jieba), the standard Chinese segmenter, as the "proper analyzer" baseline. These are single dev sets scored on judged-passage-only pools, so treat the numbers as directional — I didn't bootstrap them the way I did the English results. Toggle the language:
+
+export const mlCats = [
+  'word \\w+',
+  'char 4-gram',
+  'jieba (zh only)',
+  'naive r50k',
+  'naive o200k',
+  'normalized o200k',
+]
+export const mlColors = ['#94a3b8', '#38bdf8', '#f59e0b', '#f87171', '#fb923c', '#10b981']
+export const mlText = (v) => v.map((x) => (x == null ? '' : x.toFixed(3)))
+export const mlView = (vals) => ({
+  categories: mlCats,
+  series: [
+    {
+      name: 'NDCG@10',
+      values: vals.map((x) => x ?? 0),
+      colors: mlColors,
+      text: mlText(vals),
+      textPosition: 'outside',
+    },
+  ],
+})
+
+<BarChart
+  orientation="horizontal"
+  title="Multilingual BM25: word analyzer vs BPE token IDs (MIRACL dev)"
+  subtitle="NDCG@10 — toggle language (right). gray = \w+ word tokenizer, orange = a real segmenter, green = GPT-4o tokenizer"
+  valueLabel="NDCG@10 (higher is better)"
+  valueMax={0.72}
+  valueTicks={[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]}
+  views={[
+    { label: 'Chinese (zh)', ...mlView([0.0117, 0.3267, 0.3975, 0.2686, 0.4879, 0.5268]) },
+    { label: 'Hindi (hi)', ...mlView([0.3919, 0.3674, null, 0.0071, 0.5465, 0.2678]) },
+    { label: 'Thai (th)', ...mlView([0.5695, 0.6159, null, 0.0398, 0.5629, 0.4434]) },
+  ]}
+/>
+
+The Chinese result is the whole argument in one bar chart:
+
+- **`\w+` word tokenization collapses to 0.0117 NDCG@10.** With no spaces, the regex swallows entire runs of characters into single terms, so queries and documents almost never share a term. Word-BM25 simply does not work on Chinese without a segmenter.
+- **jieba fixes it to 0.40** — that's the cost of a language-specific dependency.
+- **GPT-4o's o200k tokenizer beats jieba** with zero language configuration. Normalized o200k hits **0.53** (13 points over jieba); even the fully config-free **naive** o200k, the version that comes straight off the model with no `\w+` split at all, gets **0.49** — still 9 points over jieba. BPE segments Chinese into shared subwords the same way it does English, and a good multilingual vocabulary does it better than the dedicated segmenter here.
+
+Three honest caveats the other languages surface:
+
+**On Thai, BPE does _not_ win — char 4-grams do.** Thai has enough embedded spaces that the plain `\w+` word baseline already reaches 0.57; char 4-grams top the table at 0.62, and naive o200k (0.56) merely _ties_ the word baseline. So the "BPE beats the analyzer" headline is a Chinese result, not a universal one — on a language where word tokenization half-works, BPE is a wash and classic char n-grams are better.
+
+**Which token variant wins flips by language.** On English the `\w+` pre-split (normalized) is essential; on Hindi and Thai it _hurts_ — `naive:o200k` gets **0.55 on Hindi vs normalized's 0.27**. The normalization I added to fix English is a word-segmenter in disguise, and forcing word boundaries on a script that lays them out differently is worse than letting BPE segment the raw stream. Why does naive win so hard on Hindi, a _spaced_ language, even over the word baseline (0.55 vs 0.39)? Devanagari packs heavy inflection onto each word; BPE breaks those inflected forms into shared subwords the way it does English morphology, so it matches variants the word index treats as unrelated. The config-free method is naive BPE with a multilingual tokenizer — which is also, conveniently, exactly what the model emits.
+
+**Tokenizer coverage is decisive.** r50k has no Devanagari or Thai merges, so it falls back to bytes and collapses — **0.007 NDCG@10 on Hindi**, 0.04 on Thai. This is the exact failure I hit with r50k on Hindi in the [storage post](/blog/token-storage). o200k, trained on a multilingual corpus, handles both fine. If you're going to search on token IDs across languages, the tokenizer choice is not cosmetic.
+
+Note that none of this needs a new engine. A sparse-vector index — [Qdrant's BM25 / sparse API](https://qdrant.tech/articles/sparse-vectors/), or Lucene's terms-as-bytes — already keys postings by arbitrary integer dimensions. The token ID _is_ the sparse dimension, so token-BM25 drops in with no changes: it's the same vocabulary [SPLADE](/blog/if-splade) puts learned weights on, just with BM25 weights instead.
+
+## What about latency?
+
+Latency isn't a selling point, and I want to be upfront about what I did and didn't measure. The **analyze** cost is a wash: analyzing one short query is 2µs for words and ~20µs for BPE, and indexing analyze is one-time and fast for everything (word 27k docs/s, normalized BPE ~4k docs/s, Porter-stemmed 840 docs/s on a single core). Nobody's ingest is bottlenecked there.
+
+But analyze cost is not the same as _query_ latency, and I didn't measure the part that would actually differ at scale. Token documents run 1.2–1.4× longer than word documents, and subword terms have higher document frequency, so their postings lists are longer — a production engine would pay more in postings traversal per query. My exact-float Python BM25 on ~1.5k-doc pools can't see that, so treat "search is a wash" as unproven above small scale. What I _can_ say: I'm not claiming "the model gives you the tokens for free" — that only holds for naive tokenization, which retrieves badly. The honest win is config, not milliseconds: no per-language stemmer, stopword list, or segmenter to maintain.
+
+## Limitations
+
+- **This does not beat BM25 on quality; it matches it (English) or replaces a segmenter (multilingual).** If you want to actually _beat_ BM25, you need learned weights — that's [SPLADE / inference-free SPLADE](/blog/if-splade), which puts learned weights on essentially this same token vocabulary. Token-BM25 is the unweighted floor of that idea.
+- **It's char n-gram IR.** The subword-decomposition benefit is [known since 2004](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7). BPE's only novelty is being the model's own analyzer, reused.
+- **Small evaluation.** NanoBEIR is 50 queries/dataset; the MIRACL pools are built from judged passages only. Numbers are directional. I used an exact-float Python BM25, not a production engine (Lucene/Qdrant integer-quantize impacts and would shift absolute numbers a little).
+- **k1/b were fixed at (1.5, 0.75) for both representations.** Token documents run ~1.2–1.4× longer than word documents, so per-representation tuning could move either side by ±0.01–0.02, which is the size of the whole English effect. I did not tune, on purpose, to keep the comparison honest — but that also means "on par" carries that caveat.
+- **The English normalization is a hidden analyzer.** The moment you pre-split on `\w+`, you've re-introduced the language-specific step the pitch claims to remove. For the config-free story to hold, you want naive tokenization plus a multilingual vocabulary — and eat the small English quality cost.
+
+## Key Takeaways
+
+- **Naive token-BM25 is broken:** BPE's space/case sensitivity makes a query word tokenize differently than the same word in a document, costing **−0.10 to −0.12 NDCG@10** on every one of 12 BEIR datasets.
+- **Normalized token-BM25 (encode each lowercased word with a fixed leading space) lands within noise of a standard word analyzer**, and about −0.02 behind a Porter-stemmed one. A word-tuple control equals word-BM25 exactly, so the token-ID representation is irrelevant — only subword decomposition matters.
+- **The mechanism is free but partial stemming:** same-stem words share a BPE subword **68–112× more than chance**, and gains correlate with a real stemmer at r = 0.35. This is character n-gram retrieval, [known since 2004](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7) — so the quality is not the story.
+- **The payoff is multilingual and config-free:** on Chinese (MIRACL dev pools), `\w+` word tokenization collapses to **0.01 NDCG@10** while GPT-4o's tokenizer **beats the jieba segmenter** — normalized o200k 0.53, config-free naive o200k 0.49, vs jieba 0.40 — with no per-language setup. Caveats: on Thai, BPE only ties the word baseline (char 4-grams win); the winning token variant flips by language (naive beats normalized on Hindi/Thai); and tokenizer coverage is decisive — r50k dies on Hindi/Thai (0.007), o200k doesn't.
+- **Finer subwords buy recall, not ranking:** char 4-grams reach **4.8% more relevant documents than word-BM25 scores nonzero, missing none** (reachability 0.97 vs 0.92) — but rank them deep, so Recall@10 drops. A wider but noisier net, best used as a candidate generator + reranker or fused with word-BM25, not a drop-in.
+- **To actually beat BM25, add learned weights** ([SPLADE](/blog/if-splade)) on this same token vocabulary. Token-BM25 is the unweighted floor; its real value is being one representation shared with [token-native storage](/blog/token-storage) and the model itself.
+
+## Acknowledgements
+
+Benchmarks use [tiktoken](https://github.com/openai/tiktoken), [ranx](https://github.com/AmenRa/ranx), [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir), [MIRACL](https://github.com/project-miracl/miracl), and [jieba](https://github.com/fxsjy/jieba). The char-n-gram framing is due to [McNamee & Mayfield (2004)](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7).
+
+## Citation
+
+```bibtex
+@misc{kumar2026tokensearch,
+  author       = {Kumar Shivendu},
+  title        = {Keyword Search on Token IDs: BM25 over BPE tokens},
+  year         = {2026},
+  url          = {https://www.kshivendu.dev/blog/token-search},
+  note         = {Blog post}
+}
+```
