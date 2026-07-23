@@ -12,9 +12,9 @@ authors: ['default']
 
 [The token-native storage post](/blog/token-storage) argued for storing text as BPE token IDs instead of UTF-8 bytes: embedders, rerankers, and LLMs all consume tokens, not bytes. But I flagged one limit there, reading a payload back as token IDs only pays off end to end "if you own the inference stack, since hosted LLM APIs take text prompts, not raw token arrays (yet)." This post is about that "yet": what would it take for a hosted LLM API to accept token IDs as input and return them as output, instead of forcing a detokenize-then-retokenize round trip on every call?
 
-## What Hosted APIs Do Today
+## What hosted APIs do today
 
-Every hosted chat API is text in, text out, even though the model samples token IDs at every step. The token-ID plumbing already exists one layer down, in the serving stacks, it just isn't exposed:
+Every hosted chat API is text in, text out, even though the model samples token IDs at every step. The token-ID plumbing already exists one layer down in the serving stacks, it just isn't exposed:
 
 | Surface                             | Input                       | Output          | Token IDs?            |
 | ----------------------------------- | --------------------------- | --------------- | --------------------- |
@@ -24,10 +24,11 @@ Every hosted chat API is text in, text out, even though the model samples token 
 | vLLM (`skip_tokenizer_init`)        | `prompt_token_ids`          | token IDs       | ✅ both (server-side) |
 | TGI (`details`)                     | text                        | per-token `id`  | ✅ output             |
 
-- **The one hosted precedent is stranded.** OpenAI's legacy Completions `prompt` field has always typed as "string, array of string, array of number, or array of array of number", and "array of number" is literally a list of token IDs from the model's own tokenizer. Documented, shipped behavior, not a proposal. But it only works with legacy completion models (`gpt-3.5-turbo-instruct` and older), and OpenAI froze the endpoint in mid-2023. The precedent exists in the same company's API surface, just parked on a model family nobody points new traffic at.
-- **The pattern already runs server-side.** vLLM's `LLM` class takes `prompt_token_ids` directly, and `skip_tokenizer_init` goes further: with it set, the engine expects token IDs in and returns token IDs out, no text touches the request or response path. TGI's `details` mode returns a per-token integer `id` on output (its input routes still take text). So the proposal below is a hosted wrapper around something already in production, not new serving tech.
+There's one real precedent, and it's easy to miss. OpenAI's legacy Completions `prompt` field has always accepted "string, array of string, array of number, or array of array of number", and that "array of number" is literally a list of token IDs from the model's own tokenizer. That's documented, shipped behavior, not something I'm proposing. The catch is that it only works with legacy completion models (`gpt-3.5-turbo-instruct` and older), and OpenAI froze the endpoint back in mid-2023. So the precedent is sitting right there in OpenAI's own API, just stuck on models nobody sends new traffic to.
 
-The nearest thing to token-level output is `logprobs`/`top_logprobs`. It looks token-adjacent but isn't:
+The pattern also already runs in production, just below the hosted layer. vLLM's `LLM` class takes `prompt_token_ids` directly, and with `skip_tokenizer_init` set it expects token IDs in and hands token IDs back, no text touches the request or response at all. TGI's `details` mode returns a per-token integer `id` on output (its input routes still take text). So what I'm proposing below is really a hosted wrapper around something the serving stacks already do.
+
+The closest thing to token-level output is `logprobs`/`top_logprobs`. It's easy to read it as token IDs, so here's what it actually contains:
 
 ```json
 {
@@ -41,11 +42,11 @@ The nearest thing to token-level output is `logprobs`/`top_logprobs`. It looks t
 }
 ```
 
-That carries the decoded token _string_, its raw UTF-8 _bytes_, and a _log probability_, but never the integer vocabulary ID. I can reconstruct the text (the API already does that) and rank candidates by probability, but I can't recover which row of the embedding table `" model"` was without re-tokenizing the string myself and hoping my tokenizer matches the server's exactly. Anthropic's Messages API doesn't expose `logprobs` at all; there's a community feature request, not a shipped feature.
+That gives me the decoded token _string_, its raw UTF-8 _bytes_, and a _log probability_, but never the integer vocabulary ID. I can rebuild the text (the API already does that) and rank candidates by probability, but I can't recover which row of the embedding table `" model"` actually was without re-tokenizing the string myself and hoping my tokenizer matches the server's exactly. Anthropic's Messages API doesn't expose `logprobs` at all, there's only a community feature request for it so far.
 
-## A Concrete Interface Proposal
+## A concrete interface proposal
 
-The [storage post](/blog/token-storage) solved almost this exact interface problem once, for the read and write paths of a vector DB payload. The same shape carries over with a swap of nouns: prompt for payload, model tokenizer for collection tokenizer.
+I solved almost this exact interface problem once already in the [storage post](/blog/token-storage), for the read and write paths of a vector DB payload. The same shape carries over with a swap of nouns: prompt for payload, model tokenizer for collection tokenizer.
 
 **Input.** A chat message's `content` already accepts a string (text) or an array of content parts (for multimodal messages). The simplest token-ID form reuses the storage post's exact string-or-array trick, dispatched on shape: a string is text, a bare array of integers is token IDs. No new block type needed, and it mirrors OpenAI's legacy Completions `prompt`, which already unions string with array-of-number.
 
@@ -115,25 +116,27 @@ Returning both `content` and `token_ids` costs nothing extra, the server has the
 { "choices": [{ "delta": { "content": " model", "token_ids": [2746] } }] }
 ```
 
-The one field storage didn't need is `tokenizer_version`, and it's load-bearing, not decorative.
+The one field storage never needed is `tokenizer_version`, because a model's tokenizer changes across versions in a way a database collection's never does. That's not a small detail, and it's most of why this has to be opt-in.
 
-## Why It Has To Be Opt-In and Versioned
+## Why it has to be opt-in and versioned
 
-- **Token IDs are only meaningful against the exact vocabulary that produced them.** Pin the wrong tokenizer version and the integers decode to garbage, a worse failure than today's text interface, where a prompt string is portable across every model forever because text has no version.
-- **Non-portable across model families.** r50k and cl100k IDs mean nothing to a Claude or Llama tokenizer, so sending token IDs commits you to one provider's one tokenizer version for that request, not a provider-agnostic prompt.
-- **So you always need a text fallback.** [The tokenizer-translation post](/blog/tokenizer-translation) showed decode-then-re-encode across tokenizers is lossless and cheap (**121.6µs** median) precisely because it routes through text as the portable intermediate. A token-ID API can't take that shortcut for a cross-provider fallback, a degraded route, or a migration, it still has to go through text on both sides.
+Token IDs only mean something against the exact vocabulary that produced them. Pin the wrong tokenizer version and they decode to garbage. Text doesn't have this problem: a prompt string is portable across every model forever, because text has no version to get wrong.
 
-## The Payoff
+They're also stuck to one model family. r50k and cl100k IDs mean nothing to a Claude or Llama tokenizer, so the moment you send token IDs you've committed to one provider's one tokenizer version for that request.
 
-For a system already storing tokens natively, this removes the last detokenize/retokenize pair in the pipeline. Today, even with token-native storage, every LLM call forces two conversions that change nothing about the data: the retrieved payload gets detokenized to text to build the prompt, and the model's output gets detokenized to text before it reaches you, only for you to retokenize it to store it token-natively again.
+So you end up needing a text fallback anyway. In [the tokenizer-translation post](/blog/tokenizer-translation) I found that decoding then re-encoding across tokenizers is lossless and cheap (**121.6µs** median), but only because it goes through text as the common form. A token-ID API can't take that shortcut when it has to fall back to another provider or model, it still has to decode to text on one side and re-encode on the other.
 
-The storage post measured tokenization at **~450µs per read** of a 512-token chunk. A token-ID request skips it on prompt-build and skips it again on output-store: retrieve token IDs, send them as the prompt, receive token IDs back, store them. Text materializes only at the edges, where a human actually needs to read something.
+## The payoff
+
+If you're already storing tokens natively, this drops the last detokenize/retokenize pair in the pipeline. Even with token-native storage, every LLM call today forces two conversions that don't change the data at all: the retrieved payload gets turned back into text to build the prompt, and the model's output gets turned back into text before it reaches you, and then you retokenize it to store it natively again.
+
+In the storage post I measured tokenization at **~450µs per read** of a 512-token chunk. A token-ID request skips it when you build the prompt and skips it again when you store the output: pull token IDs from storage, send them as the prompt, get token IDs back, store them. Text only shows up at the edges, where a human actually has to read something.
 
 ## Limitations
 
-- **This is a proposal, and the precedent is narrower than it reads.** No major hosted chat API accepts or returns token IDs, so the interface above is my design. The real precedents (OpenAI's legacy Completions `prompt`, vLLM's `prompt_token_ids`/`skip_tokenizer_init`, TGI's per-token `id`) are all either frozen to legacy models or live at the serving-stack layer, never behind a hosted API.
-- **Anthropic's `logprobs` situation is unclear** from public sources beyond a community request; if they ship it, the "what APIs do today" comparison may already be stale.
-- **Providers may have good reasons not to.** Text is where content-safety filtering, prompt-injection detection, and moderation run; a raw token-ID path is a second entry point that bypasses whatever of that is string-pattern-based. Token IDs are also an obfuscation channel, a sequence decoding to something a filter would catch can be built directly in ID space. They'd also have to keep old tokenizer versions addressable forever, or every token-ID request breaks the moment they retrain. And I don't know how token-ID input interacts with prefix-based prompt caching. I don't have rebuttals for these, worth testing.
+- This is a proposal, nothing here ships today. No major hosted chat API accepts or returns token IDs, so the whole interface above is my design. The real precedents I found (OpenAI's legacy Completions `prompt`, vLLM's `prompt_token_ids`/`skip_tokenizer_init`, TGI's per-token `id`) are either frozen to legacy models or live in the serving stack, never behind a hosted API.
+- I couldn't pin down Anthropic's `logprobs` situation from public sources beyond a community request. If they ship it, the table up top might already be stale by the time you read this.
+- Providers might have good reasons not to do this at all. Text is where content-safety filtering, prompt-injection detection, and moderation run today, so a raw token-ID path is a second door into the model that skips whatever of that is string-matching. Token IDs are also an easy way to smuggle things past a filter: you can build a sequence that decodes to something the filter would catch without ever writing that string out. Providers would also have to keep old tokenizer versions around forever, or every token-ID request breaks the day they retrain. And I don't know how token-ID input plays with prefix-based prompt caching. I don't have answers to these, they just seem worth testing.
 
 ## Key Takeaways
 
