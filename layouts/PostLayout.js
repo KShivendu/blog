@@ -11,7 +11,7 @@ import HeadingLinks from '@/components/HeadingLinks'
 import { fullTitle } from '@/lib/utils/fullTitle'
 
 const editUrl = (fileName) => `${siteMetadata.siteRepo}/blob/main/data/blog/${fileName}`
-const discussUrl = (slug) =>
+const mentionsUrl = (slug) =>
   `https://x.com/search?q=${encodeURIComponent(`${siteMetadata.siteUrl}/blog/${slug}`)}`
 
 const isoDate = (date) => new Date(date).toISOString().slice(0, 10)
@@ -49,8 +49,8 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
                   <span className="sep" aria-hidden="true">
                     ·
                   </span>
-                  <Link href={discussUrl(slug)} rel="nofollow">
-                    discuss
+                  <Link href={mentionsUrl(slug)} rel="nofollow">
+                    mentions
                   </Link>
                 </dd>
               </dl>
@@ -64,8 +64,8 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
           </div>
           <div className="tty-article divide-y divide-gray-200 pb-8 dark:divide-gray-700">
             <div className="pt-6 pb-6 text-sm text-gray-700 dark:text-gray-300">
-              <Link href={discussUrl(slug)} rel="nofollow">
-                {'Discuss on Twitter'}
+              <Link href={mentionsUrl(slug)} rel="nofollow">
+                {'Mentions on X'}
               </Link>
               {` • `}
               <Link href={editUrl(fileName)}>{'View on GitHub'}</Link>
