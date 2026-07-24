@@ -22,7 +22,7 @@ I'm **actively researching on ways to unify search and generation and dissecting
 
 🔧 Some of my cool blogs:
 
-- **[Token-Native Storage: Read and Write in the Language Models Already Speak](/blog/token-storage)**
+- **[Token-Native Storage: Read and Write in your Agent's Language](/blog/token-storage)**
 - **[Monitoring my life with Grafana, Prometheus, and InfluxDB](/blog/quantified-self)**
 - **[I Reverse-Engineered Exa.ai Infrastructure Cost with Napkin Math](/blog/exa-napkin-math)**
 
