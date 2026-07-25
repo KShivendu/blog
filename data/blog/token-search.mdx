@@ -265,6 +265,95 @@ Note that none of this needs a new engine. A sparse-vector index — [Qdrant's B
 
 Not a selling point, and I'll be precise about what I did and didn't measure. **Analyze cost is a wash** — one short query is 2µs for words, ~20µs for BPE, and indexing runs >4k docs/s/core either way. But analyze cost isn't _query_ latency, and I didn't measure the part that differs at scale: token documents run 1.2–1.4× longer with higher-DF subword terms, so postings traversal costs more per query, and my ~1.5k-doc Python BM25 can't see it. Treat "search is a wash" as unproven above small scale. And "the model gives you the tokens for free" only holds for naive tokenization, which retrieves badly. The honest win is config, not milliseconds: no per-language stemmer, stopword list, or segmenter to maintain.
 
+## Can we beat BM25 here? No — and the distribution says why
+
+The intro asked whether token search could _surpass_ existing solutions, not just match them. So I tried, hard: **67 scoring variants** — retuning BM25's k1/b, swapping in language-model (Dirichlet) and DFR (PL2) scorers, plain TF·IDF, and two scorers built specifically for the token defects (a per-word _coverage_ score, and a _fusion_ of two BM25 channels: one over exact word-tuples of token IDs, one over the loose subwords).
+
+One fusion variant looked like a real win — **+0.018 NDCG@10** over token-BM25 on the six datasets I tuned it on. Then I ran it on six _held-out_ datasets and the gain shrank to **+0.0026, statistically indistinguishable from BM25** (cluster-bootstrap CI straddles zero). Textbook overfitting. Nothing beat plain word-BM25 or the Porter-stemmed baseline either. So: no.
+
+Why is BM25 so hard to beat here? Because **tokenizing barely touches the statistics BM25 was built to exploit.** The rank-frequency curve stays Zipfian — the tokenizer just chops off the rare tail (word vocab is **46% singletons**; o200k **15%**, r50k **3%**) while keeping the head identical: the top 100 terms carry ~**42%** of all tokens either way.
+
+export const zipf = {
+  word: [
+    [74, 9968],
+    [147, 4965],
+    [293, 2973],
+    [512, 1895],
+    [877, 1208],
+    [1607, 661],
+    [2775, 359],
+    [4965, 168],
+    [8688, 73],
+    [15331, 28],
+    [26938, 11],
+    [47305, 4],
+    [83075, 1],
+    [145928, 1],
+  ],
+  o200k: [
+    [38, 22061],
+    [75, 12788],
+    [149, 6278],
+    [260, 3676],
+    [445, 2388],
+    [815, 1452],
+    [1407, 862],
+    [2517, 488],
+    [4404, 264],
+    [7771, 135],
+    [13654, 64],
+    [24014, 26],
+    [42218, 8],
+    [74149, 1],
+  ],
+  r50k: [
+    [24, 46135],
+    [70, 12788],
+    [116, 7882],
+    [208, 4529],
+    [369, 2886],
+    [668, 1780],
+    [1197, 1087],
+    [2117, 608],
+    [3727, 338],
+    [6579, 176],
+    [11616, 84],
+    [20448, 34],
+    [36042, 9],
+    [47841, 1],
+  ],
+}
+
+<LineChart
+  title="Rank–frequency of terms: words vs BPE tokens (pooled NanoBEIR, log–log)"
+  xLabel="term rank (log) →"
+  yLabel="frequency (log)"
+  xScale="log"
+  yScale="log"
+  xTicks={[
+    [100, '100'],
+    [1000, '1k'],
+    [10000, '10k'],
+    [100000, '100k'],
+  ]}
+  yTicks={[
+    [1, '1'],
+    [10, '10'],
+    [100, '100'],
+    [1000, '1k'],
+    [10000, '10k'],
+  ]}
+  yTipDecimals={0}
+  height={420}
+  series={[
+    { name: 'word', color: '#94a3b8', showMarkers: false, points: zipf.word },
+    { name: 'o200k tokens', color: '#10b981', showMarkers: false, points: zipf.o200k },
+    { name: 'r50k tokens', color: '#38bdf8', showMarkers: false, points: zipf.r50k },
+  ]}
+/>
+
+And the two statistics BM25 leans on hardest both survive: repetition still signals topic (Church–Gale burstiness 0.13–0.17 for tokens vs 0.19 for words — diluted, not gone), and document lengths scale by a flat 1.14× (correlation 0.996), so tf-saturation and length-normalization still fit. BM25's genuine weak spots on token vocab are narrow: **fragment** tokens (~21% of token mass, but noisy — they collide across unrelated words) and **multi-token words**, which draw **1.3–2.3× the IDF weight they deserve** because each subword's IDF is added independently. Fixing exactly those is what the fusion scorer did — and it helps, just not enough to clear the noise, because it only touches ~11–15% of the terms. The distribution puts BM25 near the ceiling for _unweighted_ lexical scoring on tokens; to actually beat it you have to learn the weights, which is [SPLADE](/blog/if-splade) — on this same vocabulary.
+
 ## Limitations
 
 - **This doesn't beat BM25 on quality — it matches it (English) or replaces a segmenter (multilingual).** To actually beat BM25 you need learned weights: [SPLADE](/blog/if-splade), on essentially this same token vocabulary. Token-BM25 is its unweighted floor.
@@ -280,7 +369,7 @@ Not a selling point, and I'll be precise about what I did and didn't measure. **
 - **The mechanism is free but partial stemming:** same-stem words share a BPE subword **68–112× more than chance**, and gains correlate with a real stemmer at r = 0.35. This is character n-gram retrieval, [known since 2004](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7) — so the quality is not the story.
 - **The payoff is multilingual and config-free:** on Chinese, `\w+` word tokenization collapses to **0.01 NDCG@10** while GPT-4o's tokenizer **beats the jieba segmenter (0.53 vs 0.40)** with zero language setup. Caveats: on Thai it only ties word-BM25 (char n-grams win), the best token variant flips by language, and r50k dies on Devanagari/Thai where o200k holds.
 - **Finer subwords buy recall, not ranking:** char 4-grams reach **4.8% more relevant documents than word-BM25 scores nonzero, missing none** (reachability 0.97 vs 0.92) — but rank them deep, so Recall@10 drops. A wider but noisier net, best used as a candidate generator + reranker or fused with word-BM25, not a drop-in.
-- **To actually beat BM25, add learned weights** ([SPLADE](/blog/if-splade)) on this same token vocabulary. Token-BM25 is the unweighted floor; its real value is being one representation shared with [token-native storage](/blog/token-storage) and the model itself.
+- **You can't easily beat BM25 in this regime:** 67 scoring variants (k1/b retunes, language-model and DFR scorers, custom word-coverage and tuple+subword fusion) gave **no held-out win** — because tokenizing preserves the burstiness and length statistics BM25 exploits, and its genuine defects touch only ~11–15% of terms. To actually beat it you need learned weights ([SPLADE](/blog/if-splade)) on this same vocabulary. Token-BM25's real value is being one representation shared with [token-native storage](/blog/token-storage) and the model itself.
 
 ## Acknowledgements
 
