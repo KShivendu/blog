@@ -4,7 +4,7 @@ subtitle: 'Can BM25 run on the BPE token IDs instead of English keywords?'
 date: '2026-07-20'
 lastmod: '2026-07-20'
 tags: ['vector-databases', 'search', 'internals', 'rag', 'nlp']
-draft: false
+draft: true
 summary: 'Lucene/Elasticsearch analyze text into English words, then run BM25. I tried running BM25 over BPE token IDs instead. Naive tokenization breaks it (−0.11 NDCG@10), but a normalized variant lands within noise of a standard word analyzer across 12 NanoBEIR datasets. It’s the same trick as char n-gram IR, so the quality isn’t the story. The payoff is multilingual: on Chinese, word tokenization collapses to 0.01 NDCG@10 while GPT-4o’s tokenizer beats a dedicated segmenter on MIRACL dev pools — with zero per-language config.'
 images: ['/static/images/blogs/tokenization-compression.jpg']
 authors: ['default']
