@@ -18,7 +18,7 @@ I ❤️ search, distributed databases and scraping/visualizing data. I'm partic
 - Reverse-engineered the [architecture and cost of Exa](/blog/exa-napkin-math) using napkin math
 - I'm one of the early engineers of **[Qdrant](https://qdrant.tech/)** and I built distributed systems that power search at billion+ scale for companies like Canva, Meesho, Hubspot, etc, and run on almost a million machines worldwide.
 
-I'm **actively researching on ways to unify search and generation and dissecting models to make them more efficient**
+I'm **actively researching on unification of search and generation systems and dissecting models to make them more efficient**
 
 🔧 Some of my cool blogs:
 
