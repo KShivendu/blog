@@ -13,11 +13,7 @@ export default function AuthorLayout({ children, frontMatter }) {
     github && { key: 'github', href: github, label: handle(github) },
     twitter && { key: 'twitter', href: twitter, label: `@${handle(twitter).split('/').pop()}` },
     linkedin && { key: 'linkedin', href: linkedin, label: handle(linkedin) },
-    googlescholar && {
-      key: 'scholar',
-      href: googlescholar,
-      label: googlescholar.match(/user=([^&]+)/)?.[1] || handle(googlescholar),
-    },
+    googlescholar && { key: 'scholar', href: googlescholar, label: 'Google Scholar' },
     email && { key: 'email', href: `mailto:${email}`, label: email },
     { key: 'resume', href: '/resume-pdf', label: 'resume-pdf' },
   ].filter(Boolean)
