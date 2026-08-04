@@ -6,6 +6,7 @@ company: Qdrant
 email: mail@kshivendu.dev
 twitter: https://twitter.com/KShivendu_
 linkedin: https://www.linkedin.com/in/KShivendu
+googlescholar: https://scholar.google.com/citations?user=pjYF5qMAAAAJ
 github: https://github.com/KShivendu
 images: ['/static/images/shivendu.jpg']
 ---
