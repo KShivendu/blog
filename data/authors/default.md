@@ -20,6 +20,8 @@ I ❤️ search, distributed databases and scraping/visualizing data. I'm partic
 
 I'm **actively researching on unification of search and generation systems and dissecting models to make them more efficient**
 
+📄 My first paper: **[Token-Native Storage: Read and Write in Your Agent's Language](https://arxiv.org/abs/2608.02376)** (arXiv, 2026)
+
 🔧 Some of my cool blogs:
 
 - **[Token-Native Storage: Read and Write in your Agent's Language](/blog/token-storage)**

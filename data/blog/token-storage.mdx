@@ -2,7 +2,7 @@
 title: 'Token-Native Storage'
 subtitle: "Read and Write in Your Agent's Language"
 date: '2026-05-12'
-lastmod: '2026-07-08'
+lastmod: '2026-08-04'
 tags: ['vector-databases', 'compression', 'internals', 'rag', 'nlp']
 draft: false
 summary: 'Agents read and write in tokens (BPE). But our DB engines are still designed for humans (UTF-8). Persist payloads as BPE token IDs with a static entropy coder and you get ~3.3× lossless compression, zero-cost persistence of LLM output, and a representation agents already speak.'
@@ -13,6 +13,8 @@ authors: ['default']
 <!-- ![Token-Native Storage Image](/static/images/blogs/tokenization-compression.jpg) -->
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
+
+**Update:** I turned this into my first paper, now on [arXiv](https://arxiv.org/abs/2608.02376).
 
 Every vector search engine stores two things for each point: the vector and the payload. The AI community has gone all in to compress the vectors with [quantization](https://qdrant.tech/articles/what-is-vector-quantization/) and [MRL](https://huggingface.co/blog/matryoshka). However, the text payload gets raw UTF-8, or LZ4 at best, even though the **systems that actually consume it (embedders, rerankers, LLMs) operate on tokens, not UTF-8 text**. I [realised](#step-1-generate-token-ids:~:text=ratio%3A%20~2.25x-,This%20napkin%20math,-is%20what%20gave) that **using OpenAI r50k token IDs over raw text already achieves 2.27× compression**, surpassing every popular byte-level compression algorithm, and an entropy-based compressor on top of the token IDs reaches 3.26× (surpassing even a corpus-trained zstd). Effectively, **tokenization gives you free compression!**
 
@@ -697,7 +699,8 @@ If you find this useful, please cite:
   author       = {Kumar Shivendu},
   title        = {Token-Native Storage: Read and Write in Your Agent's Language},
   year         = {2026},
-  url          = {https://www.kshivendu.dev/blog/token-storage},
-  note         = {Blog post}
+  eprint       = {2608.02376},
+  archivePrefix= {arXiv},
+  url          = {https://arxiv.org/abs/2608.02376}
 }
 ```
