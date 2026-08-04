@@ -6,12 +6,18 @@ import { PageSEO } from '@/components/SEO'
 const handle = (url) => (url ? url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '') : '')
 
 export default function AuthorLayout({ children, frontMatter }) {
-  const { name, avatar, occupation, company, email, twitter, linkedin, github } = frontMatter
+  const { name, avatar, occupation, company, email, twitter, linkedin, github, googlescholar } =
+    frontMatter
 
   const contact = [
     github && { key: 'github', href: github, label: handle(github) },
     twitter && { key: 'twitter', href: twitter, label: `@${handle(twitter).split('/').pop()}` },
     linkedin && { key: 'linkedin', href: linkedin, label: handle(linkedin) },
+    googlescholar && {
+      key: 'scholar',
+      href: googlescholar,
+      label: googlescholar.match(/user=([^&]+)/)?.[1] || handle(googlescholar),
+    },
     email && { key: 'email', href: `mailto:${email}`, label: email },
     { key: 'resume', href: '/resume-pdf', label: 'resume-pdf' },
   ].filter(Boolean)
