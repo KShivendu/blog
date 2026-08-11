@@ -5,7 +5,7 @@ date: '2026-07-20'
 lastmod: '2026-07-20'
 tags: ['vector-databases', 'search', 'internals', 'rag', 'nlp']
 draft: true
-summary: 'Lucene/Elasticsearch analyze text into English words, then run BM25. I ran BM25 over BPE token IDs instead. Naive tokenization breaks it (−0.11 NDCG@10); a normalized variant lands within noise of a plain word analyzer; and two token-native fixes — un-fragmenting words and soft-stemming by weighted expansion — pull it up to a statistical tie with a Porter-stemmed analyzer across 12 NanoBEIR datasets (soft expansion in place of a hard stem-merge). The config-free payoff is multilingual: on Chinese, word tokenization collapses to 0.01 NDCG@10 while GPT-4o’s tokenizer beats a dedicated segmenter on a MIRACL dev set, with zero per-language config.'
+summary: 'I ran BM25 over BPE token IDs instead of English words. Naive tokenization breaks it (−0.11 NDCG@10), but a normalized variant ties a plain word analyzer within noise, and two token-native fixes — un-fragmenting words and soft-stemming by weighted expansion — reach a statistical tie with a Porter-stemmed one across 12 NanoBEIR datasets. The config-free payoff is multilingual: on Chinese, word tokenization collapses to 0.01 NDCG@10 while GPT-4o’s tokenizer beats a dedicated segmenter, zero per-language config.'
 images: ['/static/images/blogs/tokenization-compression.jpg']
 authors: ['default']
 ---
@@ -239,7 +239,7 @@ export const gapColors = ['#94a3b8', '#10b981', '#10b981', '#64748b']
 Observations:
 
 1. **Both recipes reach `word_en` (0.5446)** — word-tuple + expansion **0.5454**, GroupCov + expansion **0.5471**, Recall@100 on par too (GroupCov 0.794 vs word_en 0.794). Every per-query cluster-bootstrap CI against the stemmer straddles zero: a **statistical tie**. Per-dataset the two split it about evenly (word-tuple loses 9/12 by a hair, GroupCov wins 7/12) — but that split is the argmax of a sweep over ~7 fragmentation variants on these same 12 sets, so read it as a tie, not an edge.
-2. **The firm result is vs the token baseline, not vs Porter.** Both fixes clear zero against plain normalized token-BM25 — word-tuple **+0.023 NDCG@10**, CI clear of zero, GroupCov higher still. Reaching Porter _reads_ as a tie only because Porter-vs-plain is itself within noise on this suite; the fixes-vs-baseline gain is the part that's actually significant.
+2. **The firm result is vs the token baseline, not vs Porter.** Both fixes clear zero against plain normalized token-BM25 — word-tuple **+0.023 NDCG@10** (bootstrap CI [+0.001, +0.045], clear of zero), GroupCov higher still. Reaching Porter _reads_ as a tie only because Porter-vs-plain is itself within noise on this suite; the fixes-vs-baseline gain is the part that's actually significant.
 3. **It's a tie, not a knockout.** A full-size BEIR run would be needed to claim an actual win over Porter. And this precision recipe borrows Porter (to group candidates) and a stopword list, so it isn't config-free — the point is that _soft expansion matches a hard stem-merge on equal footing_, token-natively, with no learned weights.
 
 GroupCov is the one I'd ship: unlike the word-tuple collapse, it keeps the subword partial-matching the multilingual result below depends on, while still un-fragmenting the rare words that hurt precision. (I ran GroupCov + expansion only on English — the expansion candidates are Porter-grouped, so that half is English-only for now.)
