@@ -12,9 +12,9 @@ authors: ['default']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-In [Token-Native Storage](/blog/token-storage) I argued that if agents are the biggest readers and writers of your database, you should store text the way they read it: as BPE token IDs, not UTF-8 bytes. But then while looking at the [interface](/blog/token-storage#interface) I proposed, I had a realization that it looks very similar to text search engines and they also tokenize the data per-language to keep it searchable. Instead of Lucene's English analyzer turning `"running"` into the stemmed word `run` and giving that an ID, what if the index terms were the model's own token IDs, representing it as `run` + `##n` + `##ing`? How does that do on BM25 — and could it beat existing solutions in some way?
+In [Token-Native Storage](/blog/token-storage) I argued that if agents are the biggest readers and writers of your database, you should store text as BPE token IDs, not UTF-8 bytes. Looking at the [interface](/blog/token-storage#interface) I proposed, I realized it looks a lot like a search engine — which also tokenizes text per-language to index it. So instead of Lucene's English analyzer stemming `"running"` to `run` and indexing that, what if the index terms were the model's own subword token IDs? How does that do on BM25, and can it beat existing analyzers?
 
-I built it and benchmarked it against plain [BM25](https://en.wikipedia.org/wiki/Okapi_BM25). The short version: the naive way is badly broken, a normalized version lands **within noise of a standard word analyzer** — which turns out to be the same idea as [character n-gram retrieval](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7) from 2004, so the quality isn't the story. **The real payoff shows up in other languages**, where a BPE tokenizer replaces a per-language word segmenter and sometimes beats it.
+Short version: the naive way is badly broken, and a normalized version lands **within noise of a standard word analyzer** — which turns out to be [character n-gram retrieval](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7) from 2004, so quality isn't the story. **The real payoff is multilingual:** on Chinese, `\w+` word tokenization collapses to **0.01 NDCG@10** while GPT-4o's tokenizer **beats a dedicated segmenter** — with zero per-language config.
 
 ## Why this might work at all
 
@@ -85,7 +85,7 @@ Three things in that chart matter:
 
 ### Is "within noise" actually parity?
 
-I want to be careful here, because "the bars look the same" is not a statistical claim. Parity is an _equivalence_ claim, and absence of a significant difference is not evidence of equivalence. So I ran a **cluster bootstrap** (resample datasets, then queries within each — respecting the fact that queries aren't independent, they clump into datasets) on the per-query NDCG@10 delta, with a pre-registered equivalence margin of ±0.01.
+"The bars look the same" isn't a statistical claim — parity is an _equivalence_ claim, and absence of a significant difference isn't evidence of equivalence. So I ran a **cluster bootstrap** (resample datasets, then queries within each, since queries clump into datasets and aren't independent) on the per-query NDCG@10 delta, with a pre-registered ±0.01 equivalence margin.
 
 <div style={{overflowX: 'auto'}}>
 
@@ -98,7 +98,7 @@ I want to be careful here, because "the bars look the same" is not a statistical
 
 </div>
 
-Normalized BPE is statistically indistinguishable from plain word-BM25: the confidence interval is tight and straddles zero. It's _not_ tight enough to pass a strict ±0.01 equivalence test, so I'll call it "on par / within noise," not "proven equal." Against the stronger **Porter-stemmed** analyzer it's about **−0.02 behind** — not significant, but it loses on 10 of 12 datasets, so I won't pretend that's parity either. It's a hair behind a real stemmer. Note that `word_en` here uses NLTK's English stopword list and Porter stemmer — a genuinely strong Lucene-`EnglishAnalyzer`-style baseline, not the handicapped lowercase-only one.
+Normalized BPE is statistically indistinguishable from plain word-BM25 — a tight CI straddling zero — though not tight enough to pass the strict ±0.01 equivalence test, so I'll call it "within noise," not "proven equal." Against the stronger **Porter-stemmed** analyzer (`word_en`: NLTK stopwords + Porter, a real Lucene-`EnglishAnalyzer`-style baseline) it's **−0.02 behind** — not significant, but it loses 10 of 12 datasets, so that's not parity either. A hair behind a real stemmer.
 
 ## Why does normalized BPE match a word analyzer?
 
@@ -140,7 +140,7 @@ The first of those is testable, and it's where this stops being a tie. But befor
 
 ## The recall ceiling: a wider net, ranked worse
 
-Everything above is measured at rank 10. A colleague pushed back: maybe subwords cast a _wider net_ — retrieve more of the relevant documents, just rank them worse — so `@10` washes out even if deep recall differs. It's a fair hypothesis, because subword matching can connect a query to a document that share no whole word but do share a fragment. So I measured recall at increasing depth, and **reachability**: the fraction of relevant documents that get _any_ nonzero score, independent of rank.
+Everything above is measured at rank 10. But subword matching can connect a query and a document that share no whole word, only a fragment — so maybe subwords cast a _wider net_, retrieving more relevant documents but ranking them worse, which `@10` would hide. I measured recall at increasing depth, plus **reachability**: the fraction of relevant documents that get _any_ nonzero score, independent of rank.
 
 export const rd = {
   word: [0.549, 0.613, 0.672, 0.721, 0.756, 0.797, 0.845, 0.876],
@@ -183,7 +183,7 @@ export const rdSeries = (name, color, key, dashed) => ({
   ]}
 />
 
-Two clean results. **Normalized BPE tracks plain word at every depth** — the curves sit on top of each other, so it has no wider net; a word-aligned subword index reaches the same documents a word index does. **Char 4-grams are the exception, and they behave exactly as the hypothesis predicts:**
+**Normalized BPE tracks plain word at every depth** — the curves sit on top of each other, so it has no wider net. **Char 4-grams are the exception, exactly as the hypothesis predicts:**
 
 <div style={{overflowX: 'auto'}}>
 
@@ -196,11 +196,9 @@ Two clean results. **Normalized BPE tracks plain word at every depth** — the c
 
 </div>
 
-Char 4-grams reach **4.8% of relevant documents that word-BM25 scores a hard zero, and miss none that word finds** — a strictly wider net (reachability 0.97 vs 0.92). But their **Recall@10 is _lower_** (0.595 vs 0.613): the extra documents they reach land deep in the ranking, lifting Recall@1000, not the top 10. Wider net, worse ranking — exactly the predicted trade. The spurious fragment-matches that widen the net also add noise near the top.
-
-Note the contrast with the stemmer: `word + Porter` has the best Recall@10 but the _lowest_ reachability (0.889). It's a **precise** net — it collapses genuine morphological variants and nothing else. Char n-grams are a **noisy** net — they reach the most documents, but many of the extra ones are junk. Two opposite ways to widen recall.
-
-The implication is the useful part: if you want the wider net, go finer-grained than BPE (char n-grams), accept that ranking degrades, and treat it as a **candidate generator feeding a reranker**, or **fuse it with word-BM25** — not as a drop-in BM25 replacement. Word-BM25 structurally caps at 0.922 reachable here; it _cannot_ retrieve the ~8% it scores zero, no matter how good the reranker. (Caveat: NanoBEIR pools are 2–5k documents, so Recall@1000 is close to reachability; treat these as directional.)
+- **Char 4-grams are a strictly wider, noisier net.** They reach **4.8% of relevant documents word-BM25 scores a hard zero, and miss none word finds** (reachability 0.97 vs 0.92) — but their **Recall@10 is _lower_** (0.595 vs 0.613): the extra documents land deep, lifting Recall@1000, not the top 10. Wider net, worse ranking.
+- **The stemmer is the opposite — a precise net.** `word + Porter` has the best Recall@10 but the _lowest_ reachability (0.889): it collapses real morphological variants and nothing else. Char n-grams reach the most documents, but many are junk.
+- **So use the wider net as a candidate generator + reranker, or fuse it with word-BM25** — not a drop-in BM25 replacement. Word-BM25 structurally caps at 0.922 reachable here; no reranker recovers the ~8% it scores zero. (NanoBEIR pools are 2–5k docs, so Recall@1000 ≈ reachability; directional.)
 
 ## The real payoff: when a word analyzer needs a language pack
 
@@ -263,7 +261,7 @@ Note that none of this needs a new engine. A sparse-vector index — [Qdrant's B
 
 ## What about latency?
 
-Not a selling point, and I'll be precise about what I did and didn't measure. **Analyze cost is a wash** — one short query is 2µs for words, ~20µs for BPE, and indexing runs >4k docs/s/core either way. But analyze cost isn't _query_ latency, and I didn't measure the part that differs at scale: token documents run 1.2–1.4× longer with higher-DF subword terms, so postings traversal costs more per query, and my ~1.5k-doc Python BM25 can't see it. Treat "search is a wash" as unproven above small scale. And "the model gives you the tokens for free" only holds for naive tokenization, which retrieves badly. The honest win is config, not milliseconds: no per-language stemmer, stopword list, or segmenter to maintain.
+Not a selling point. **Analyze cost is a wash** — one short query is 2µs for words, ~20µs for BPE, and indexing runs >4k docs/s/core either way. But that isn't _query_ latency, and I didn't measure the part that differs at scale: token documents run 1.2–1.4× longer with higher-DF subword terms, so postings traversal costs more per query, and my ~1.5k-doc Python BM25 can't see it. Treat "search is a wash" as unproven above small scale. And "the model gives you the tokens for free" only holds for naive tokenization, which retrieves badly. The honest win is config, not milliseconds: no per-language stemmer, stopword list, or segmenter to maintain.
 
 ## Can we beat BM25 here? No — and the distribution says why
 
@@ -331,11 +329,8 @@ Zoom into the actual terms behind those buckets — the top 500 by frequency, on
 
 <VocabHistogram src="/static/data/token-search-vocab.json" />
 
-{/* PROTOTYPES — evaluating alternatives to the log axis (see plan/fixing-token-search.md) */}
-
-<ZipfSpiral src="/static/data/token-search-vocab.json" />
-
-<DecadeFacets src="/static/data/token-search-vocab.json" />
+<details>
+<summary>The formal Zipf fit (rank–frequency, log–log)</summary>
 
 The rank view says the same thing — the rank-frequency curve stays Zipfian, the tokenizer just chops off the rare tail (word vocab is **46% singletons**; o200k **15%**, r50k **3%**) while keeping the head identical: the top 100 terms carry ~**42%** of all tokens either way. Dotted lines are least-squares Zipf fits (`f ∝ 1/r^α`) on the `f > 1` body — α ≈ 1.18 for words, ≈ 1.07 for both BPE vocabs:
 
@@ -497,6 +492,8 @@ r50k: [
     },
   ]}
 />
+
+</details>
 
 And the two statistics BM25 leans on hardest both survive: repetition still signals topic (Church–Gale burstiness 0.13–0.17 for tokens vs 0.19 for words — diluted, not gone), and document lengths scale by a flat 1.14× (correlation 0.996), so tf-saturation and length-normalization still fit. BM25's genuine weak spots on token vocab are narrow: **fragment** tokens (~21% of token mass, but noisy — they collide across unrelated words) and **multi-token words**, which draw **1.3–2.3× the IDF weight they deserve** because each subword's IDF is added independently. Fixing exactly those is what the fusion scorer did — and it helps, just not enough to clear the noise, because it only touches ~11–15% of the terms. The distribution puts BM25 near the ceiling for _unweighted_ lexical scoring on tokens; to actually beat it you have to learn the weights, which is [SPLADE](/blog/if-splade) — on this same vocabulary.
 
