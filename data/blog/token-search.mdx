@@ -224,19 +224,14 @@ export const gapColors = ['#94a3b8', '#10b981', '#10b981', '#64748b']
   valueLabel="NDCG@10 (higher is better)"
   valueMax={0.58}
   valueTicks={[0, 0.1, 0.2, 0.3, 0.4, 0.5]}
-  views={[
+  categories={gapCats}
+  series={[
     {
-      label: 'NDCG@10',
-      categories: gapCats,
-      series: [
-        {
-          name: 'NDCG@10',
-          values: [0.5219, 0.5454, 0.5471, 0.5446],
-          colors: gapColors,
-          text: ['0.5219', '0.5454', '0.5471', '0.5446'],
-          textPosition: 'outside',
-        },
-      ],
+      name: 'NDCG@10',
+      values: [0.5219, 0.5454, 0.5471, 0.5446],
+      colors: gapColors,
+      text: ['0.5219', '0.5454', '0.5471', '0.5446'],
+      textPosition: 'outside',
     },
   ]}
 />
