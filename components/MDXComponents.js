@@ -9,6 +9,9 @@ import { BlogNewsletterForm } from './NewsletterForm'
 import PlotlyChart from './PlotlyChart'
 import LineChart from './LineChart'
 import BarChart from './BarChart'
+import VocabHistogram from './VocabHistogram'
+import ZipfSpiral from './ZipfSpiral'
+import DecadeFacets from './DecadeFacets'
 import SpladeVsIF from './SpladeVsIF'
 import TokenCompressionPipeline from './TokenCompressionPipeline'
 import TokenCompressionAnimated from './TokenCompressionAnimated'
@@ -33,6 +36,9 @@ export const MDXComponents = {
   PlotlyChart,
   LineChart,
   BarChart,
+  VocabHistogram,
+  ZipfSpiral,
+  DecadeFacets,
   SpladeVsIF,
   TokenCompressionPipeline,
   TokenCompressionAnimated,

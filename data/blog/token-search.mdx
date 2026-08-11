@@ -271,7 +271,73 @@ The intro asked whether token search could _surpass_ existing solutions, not jus
 
 One fusion variant looked like a real win — **+0.018 NDCG@10** over token-BM25 on the six datasets I tuned it on. Then I ran it on six _held-out_ datasets and the gain shrank to **+0.0026, statistically indistinguishable from BM25** (cluster-bootstrap CI straddles zero). Textbook overfitting. Nothing beat plain word-BM25 or the Porter-stemmed baseline either. So: no.
 
-Why is BM25 so hard to beat here? Because **tokenizing barely touches the statistics BM25 was built to exploit.** The rank-frequency curve stays Zipfian — the tokenizer just chops off the rare tail (word vocab is **46% singletons**; o200k **15%**, r50k **3%**) while keeping the head identical: the top 100 terms carry ~**42%** of all tokens either way.
+Why is BM25 so hard to beat here? Because **tokenizing barely touches the statistics BM25 was built to exploit.** Start with the one it leans on most — the term-frequency distribution, which IDF is literally the logarithm of. Here it is as a histogram: each bar is the share of terms (or of running text) whose total corpus frequency lands in that bucket. Toggle the tokenizer, and vocabulary vs text below it:
+
+export const fhBuckets = [
+  '1',
+  '2',
+  '3–5',
+  '6–10',
+  '11–30',
+  '31–100',
+  '101–300',
+  '301–1k',
+  '1k–3k',
+  '3k–10k',
+  '10k+',
+]
+export const fhVocab = {
+  word: [46.04, 13.19, 14.12, 8.1, 8.58, 5.18, 2.62, 1.46, 0.53, 0.15, 0.05],
+  r50k: [3.3, 3.2, 8.72, 12.54, 26.92, 23.91, 12.73, 5.98, 1.96, 0.55, 0.19],
+  o200k: [15.37, 7.93, 13.67, 12.79, 20.89, 16.13, 7.94, 3.62, 1.21, 0.32, 0.13],
+}
+export const fhMass = {
+  word: [0.8, 0.46, 0.92, 1.08, 2.67, 5.02, 7.96, 13.65, 15.27, 12.44, 39.72],
+  r50k: [0.01, 0.03, 0.15, 0.44, 2.28, 5.99, 9.69, 13.91, 14.44, 12.08, 40.96],
+  o200k: [0.11, 0.11, 0.37, 0.69, 2.69, 6.26, 9.41, 13.16, 13.76, 10.84, 42.61],
+}
+export const fhColor = { word: '#94a3b8', r50k: '#38bdf8', o200k: '#10b981' }
+export const fhDS = (tok, data, unit) => ({
+  label: unit,
+  categories: fhBuckets,
+  series: [
+    {
+      name: unit,
+      values: data[tok],
+      color: fhColor[tok],
+      text: data[tok].map((v) => v + '%'),
+      textPosition: 'outside',
+    },
+  ],
+})
+export const fhView = (tok, name) => ({
+  label: name,
+  datasets: [fhDS(tok, fhVocab, 'Share of vocabulary'), fhDS(tok, fhMass, 'Share of text')],
+})
+
+<BarChart
+  orientation="vertical"
+  title="The term-frequency distribution BM25 exploits (pooled NanoBEIR)"
+  subtitle="x = a term's total corpus frequency (log buckets). toggle tokenizer (top) and vocabulary vs text mass (below)"
+  valueUnit="%"
+  valueMax={48}
+  valueTicks={[0, 10, 20, 30, 40]}
+  views={[fhView('word', 'word'), fhView('r50k', 'r50k tokens'), fhView('o200k', 'o200k tokens')]}
+/>
+
+Two things to read off it. **Share of vocabulary:** most terms are rare — for words, **46% occur exactly once** (a giant high-IDF tail); BPE chops that tail off (r50k 3% singletons, o200k 15%) and piles terms into the mid-frequency buckets instead. **Share of text:** flip it and the three are nearly identical — the `10k+` bucket, barely **0.1% of the vocabulary**, is **~40% of every token you read**. That ultra-frequent sliver is exactly what IDF discounts toward zero and tf-saturation stops rewarding; the rare tail is what IDF boosts. The skew is steep, and in the mass view near-identical across word/r50k/o200k — so tokenizing reshapes the _vocabulary_ but not the _distribution BM25 scores against_.
+
+Zoom into the actual terms behind those buckets — the top 500 by frequency, one bar per term with its surface written below it (scroll right → for the tail). Toggle the tokenizer, and you can literally read what dominates each vocabulary — and why word and BPE differ: BPE's units carry a leading space (`␣the`, `␣of`), so the same word tokenizes differently at a sentence start:
+
+<VocabHistogram src="/static/data/token-search-vocab.json" />
+
+{/* PROTOTYPES — evaluating alternatives to the log axis (see plan/fixing-token-search.md) */}
+
+<ZipfSpiral src="/static/data/token-search-vocab.json" />
+
+<DecadeFacets src="/static/data/token-search-vocab.json" />
+
+The rank view says the same thing — the rank-frequency curve stays Zipfian, the tokenizer just chops off the rare tail (word vocab is **46% singletons**; o200k **15%**, r50k **3%**) while keeping the head identical: the top 100 terms carry ~**42%** of all tokens either way. Dotted lines are least-squares Zipf fits (`f ∝ 1/r^α`) on the `f > 1` body — α ≈ 1.18 for words, ≈ 1.07 for both BPE vocabs:
 
 export const zipf = {
   word: [
@@ -324,6 +390,64 @@ export const zipf = {
   ],
 }
 
+// Least-squares Zipf f(r)=C/r^α on f>1 body (stops before the singleton floor).
+export const zipfFit = {
+word: [
+[74, 16332.9],
+[114, 9793.7],
+[175, 5897.3],
+[269, 3545.5],
+[414, 2128.4],
+[637, 1278.1],
+[981, 766.7],
+[1509, 460.6],
+[2321, 276.7],
+[3570, 166.2],
+[5491, 99.9],
+[8447, 60.0],
+[12995, 36.0],
+[19990, 21.6],
+[30751, 13.0],
+[47305, 7.8],
+],
+o200k: [
+[38, 30732.2],
+[61, 18531.8],
+[97, 11288.2],
+[154, 6887.7],
+[247, 4157.1],
+[394, 2523.8],
+[628, 1533.4],
+[1003, 929.7],
+[1600, 564.4],
+[2554, 342.4],
+[4076, 207.8],
+[6506, 126.0],
+[10384, 76.5],
+[16573, 46.4],
+[26451, 28.2],
+[42218, 17.1],
+],
+r50k: [
+[24, 51831.0],
+[39, 30869.1],
+[64, 18193.2],
+[104, 10835.4],
+[169, 6453.3],
+[275, 3837.8],
+[448, 2279.6],
+[729, 1355.7],
+[1187, 805.7],
+[1933, 478.7],
+[3147, 284.6],
+[5125, 169.1],
+[8346, 100.5],
+[13591, 59.7],
+[22133, 35.5],
+[36042, 21.1],
+],
+}
+
 <LineChart
   title="Rank–frequency of terms: words vs BPE tokens (pooled NanoBEIR, log–log)"
   xLabel="term rank (log) →"
@@ -342,13 +466,35 @@ export const zipf = {
     [100, '100'],
     [1000, '1k'],
     [10000, '10k'],
+    [100000, '100k'],
   ]}
   yTipDecimals={0}
   height={420}
   series={[
-    { name: 'word', color: '#94a3b8', showMarkers: false, points: zipf.word },
-    { name: 'o200k tokens', color: '#10b981', showMarkers: false, points: zipf.o200k },
-    { name: 'r50k tokens', color: '#38bdf8', showMarkers: false, points: zipf.r50k },
+    { name: 'word', color: '#94a3b8', marker: 'circle', points: zipf.word },
+    { name: 'o200k tokens', color: '#10b981', marker: 'square', points: zipf.o200k },
+    { name: 'r50k tokens', color: '#38bdf8', marker: 'diamond', points: zipf.r50k },
+    {
+      name: 'Zipf α≈1.18 (word)',
+      color: '#94a3b8',
+      dashed: true,
+      showMarkers: false,
+      points: zipfFit.word,
+    },
+    {
+      name: 'Zipf α≈1.07 (o200k)',
+      color: '#10b981',
+      dashed: true,
+      showMarkers: false,
+      points: zipfFit.o200k,
+    },
+    {
+      name: 'Zipf α≈1.07 (r50k)',
+      color: '#38bdf8',
+      dashed: true,
+      showMarkers: false,
+      points: zipfFit.r50k,
+    },
   ]}
 />
 
