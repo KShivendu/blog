@@ -16,6 +16,10 @@ In [Token-Native Storage](/blog/token-storage) I argued that if agents are the b
 
 Short version: naive tokenization breaks BM25 (**−0.11 NDCG@10**) for a fixable reason. Fix it and token-native BM25 **matches a Porter-stemmed English analyzer** using none of its machinery — no stopword list, no stemmer, no per-language config; two small token-native tricks (un-fragmenting words and stemming-by-expansion) close the last sliver of the gap. And because the tokenizer is the only moving part, the **same method beats a dedicated Chinese segmenter** with zero setup — one analyzer for every language, on the vocabulary the model already reads, writes, and [stores](/blog/token-storage). A specialized tool, matched by a more general one.
 
+<TokenSearchAnalyzer />
+
+The top lane is what a search engine does today: a hand-built analyzer, swapped out per language. The bottom lane is token-native search — one BPE tokenizer for every language, the same one the model already runs. It matches the specialized analyzer on English and beats a dedicated segmenter on Chinese. Here's how.
+
 ## Token IDs as index terms
 
 A BM25 inverted index maps a _term_ to a postings list. In Lucene the term is an English word after an analyzer runs: lowercase, split on non-word characters, drop stopwords, [Porter-stem](https://tartarus.org/martin/PorterStemmer/). BM25 then scores documents by how many rare query terms they contain, saturated by term frequency and length.
