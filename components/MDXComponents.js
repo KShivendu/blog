@@ -15,6 +15,7 @@ import DecadeFacets from './DecadeFacets'
 import SpladeVsIF from './SpladeVsIF'
 import TokenCompressionPipeline from './TokenCompressionPipeline'
 import TokenCompressionAnimated from './TokenCompressionAnimated'
+import TokenSearchAnalyzer from './TokenSearchAnalyzer'
 import CompressionWidget from './CompressionWidget'
 import PerpendicularCircle from './PerpendicularCircle'
 import CosineWalk from './CosineWalk'
@@ -42,6 +43,7 @@ export const MDXComponents = {
   SpladeVsIF,
   TokenCompressionPipeline,
   TokenCompressionAnimated,
+  TokenSearchAnalyzer,
   CompressionWidget,
   PerpendicularCircle,
   CosineWalk,
