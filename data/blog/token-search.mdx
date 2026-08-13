@@ -303,6 +303,8 @@ Three honest caveats the other languages surface:
 - **The best token variant flips by language.** On English the `\w+` pre-split (normalized) is essential; on Hindi and Thai it _hurts_ — `naive:o200k` gets **0.55 on Hindi vs normalized's 0.27**. My English normalization is a word-segmenter in disguise, and forcing word boundaries on a script that lays them out differently loses to letting BPE segment the raw stream. Naive even beats the Hindi _word_ baseline (0.55 vs 0.39); my guess is that Devanagari's heavy inflection breaks into shared subwords the way English morphology does — but I haven't verified that against whatever is depressing the word baseline itself, so treat it as conjecture. The config-free method is naive BPE with a multilingual tokenizer, which is exactly what the model emits.
 - **Tokenizer coverage is decisive.** r50k has no Devanagari or Thai merges, so it falls back to bytes and collapses — **0.007 on Hindi**, 0.04 on Thai, the same r50k-on-Hindi failure from the [storage post](/blog/token-storage). o200k, trained multilingually, handles both. Tokenizer choice isn't cosmetic here.
 
+And it's not only human languages — **code is the same story, sharper.** On [CodeSearchNet](https://github.com/github/CodeSearchNet) (Python, docstring → function), a Porter stemmer _hurts_: **0.944 NDCG@10 vs plain word's 0.963**, because English stemming rules mangle identifiers instead of matching them. Token-native wins — **GroupCov 0.972** — subwording `getUserById` into `get·User·By·Id` the way it does morphology. On English the stemmer is a tie; on code it's a liability.
+
 <details>
 <summary>A note on latency — not a selling point, and I only half-measured it</summary>
 
