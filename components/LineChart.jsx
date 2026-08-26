@@ -552,6 +552,12 @@ function ChartImpl({
   const unionXs = [...xSet].sort((a, b) => a - b)
   const unionPx = unionXs.map((x) => xS(x))
 
+  // A chart where no visible series draws a line is a scatter plot: points
+  // don't share an x-column, so snapping to the nearest x first and only then
+  // comparing y picks the wrong dot whenever a far-in-y point happens to own
+  // the closest x. Scatter charts select on true 2D pixel distance instead.
+  const isScatter = visSeries.length > 0 && visSeries.every(({ s }) => s.showLine === false)
+
   const buildTipHtml = (ux, nearest) => {
     // Rows are ordered by value at this x (largest on top) so the readout
     // matches the vertical stacking of the lines at the crosshair, instead of
@@ -597,40 +603,69 @@ function ChartImpl({
     if (!unionXs.length) return
     const rect = e.currentTarget.getBoundingClientRect()
     if (!rect.width || !rect.height) return
-    const px = ((e.clientX - rect.left) / rect.width) * W
-    let bi = 0
-    let bd = Infinity
-    for (let i = 0; i < unionPx.length; i++) {
-      const d = Math.abs(unionPx[i] - px)
-      if (d < bd) {
-        bd = d
-        bi = i
+    // The overlay covers the PLOT area only, so map the cursor into plot-local
+    // viewBox coords (offset by the margins), the same space xS()/yS() emit.
+    const px = m.l + ((e.clientX - rect.left) / rect.width) * pw
+    const rawY = m.t + ((e.clientY - rect.top) / rect.height) * ph
+
+    // The point the cursor is actually on: which x-column the crosshair snaps
+    // to (ux), which series owns the highlighted point (nearest), and that
+    // point's pixel y (nearestPy, where the horizontal follow-line lands).
+    let ux = null
+    let nearest = null
+    let nearestPy = null
+
+    if (isScatter) {
+      // Scatter: nearest point by euclidean pixel distance, both axes at once.
+      let bd = Infinity
+      visSeries.forEach(({ s }) => {
+        ;(s.points || []).forEach(([x, y]) => {
+          if (x == null || y == null) return
+          const dx = xS(x) - px
+          const dy = yS(y) - rawY
+          const d = dx * dx + dy * dy
+          if (d < bd) {
+            bd = d
+            ux = x
+            nearest = s.name
+            nearestPy = yS(y)
+          }
+        })
+      })
+      if (ux == null) return
+    } else {
+      // Line chart: snap to the nearest x-column so every series' value at that
+      // x reads out together, then pick the closest series by pixel y distance
+      // -- this is what makes one point pop out of a dozen lookalikes instead
+      // of all lighting up identically.
+      let bi = 0
+      let bd = Infinity
+      for (let i = 0; i < unionPx.length; i++) {
+        const d = Math.abs(unionPx[i] - px)
+        if (d < bd) {
+          bd = d
+          bi = i
+        }
       }
+      ux = unionXs[bi]
+      let nearestDy = Infinity
+      visSeries.forEach(({ s }) => {
+        const pt = (s.points || []).find(([x]) => x === ux)
+        if (!pt || pt[1] == null) return
+        const py = yS(pt[1])
+        const dy = Math.abs(py - rawY)
+        if (dy < nearestDy) {
+          nearestDy = dy
+          nearest = s.name
+          nearestPy = py
+        }
+      })
     }
-    const ux = unionXs[bi]
+
     if (ux !== activeXRef.current) {
       activeXRef.current = ux
       setActiveX(ux)
     }
-    // Which series is the cursor actually closest to at this x (pixel Y
-    // distance, in the raw un-clamped cursor position) -- this is what makes
-    // one point pop out of a dozen lookalikes instead of all lighting up
-    // identically.
-    const rawY = ((e.clientY - rect.top) / rect.height) * H
-    let nearest = null
-    let nearestDy = Infinity
-    let nearestPy = null
-    visSeries.forEach(({ s }) => {
-      const pt = (s.points || []).find(([x]) => x === ux)
-      if (!pt || pt[1] == null) return
-      const py = yS(pt[1])
-      const dy = Math.abs(py - rawY)
-      if (dy < nearestDy) {
-        nearestDy = dy
-        nearest = s.name
-        nearestPy = py
-      }
-    })
     if (nearest !== nearestName) setNearestName(nearest)
     // Horizontal follow-line snaps to the NEAREST point's actual y (not the
     // raw cursor y) so the dashed line visibly passes through the point
