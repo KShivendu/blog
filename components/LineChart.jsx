@@ -254,6 +254,12 @@ function ChartImpl({
   const hLineRef = useRef(null)
   const activeXRef = useRef(null)
   const lockedRef = useRef(false) // click-to-lock: keep a point focused after leave
+  const lockedPtRef = useRef(null) // the locked point itself: {x, y, name, label, el}
+  // While a point is locked, the point under the cursor becomes the COMPARE
+  // point: a dimmer dashed crosshair plus a delta readout in the locked
+  // tooltip. Exactly two points at a time — the locked one stays primary.
+  const [cmp, setCmp] = useState(null)
+  const cmpRef = useRef(null)
   const wrapRef = useRef(null) // outer wrapper — anchor for a locked tooltip
   const [activeX, setActiveX] = useState(null)
   const [hidden, setHidden] = useState(() => new Set())
@@ -500,10 +506,10 @@ function ChartImpl({
             r={9}
             fill="transparent"
             style={{ cursor: 'pointer' }}
-            onPointerEnter={(e) => onMarkerHover(e, x, py, s.name)}
-            onPointerMove={(e) => onMarkerHover(e, x, py, s.name)}
+            onPointerEnter={(e) => onMarkerHover(e, [x, y], py, s.name, (s.text || [])[pi])}
+            onPointerMove={(e) => onMarkerHover(e, [x, y], py, s.name, (s.text || [])[pi])}
             onPointerLeave={onCrosshairLeave}
-            onClick={(e) => onMarkerClick(e, x, py, s.name)}
+            onClick={(e) => onMarkerClick(e, [x, y], py, s.name, (s.text || [])[pi])}
           />
         )
       })
@@ -598,8 +604,114 @@ function ChartImpl({
     )
   }
 
+  // Hit-test: the point the cursor is on, as {x, y, name, label}. Scatter picks
+  // by 2D pixel distance; a line chart snaps to the nearest x-column first (so
+  // every series reads out together) and then picks the closest series by y.
+  const focusAt = (px, rawY) => {
+    let best = null
+    if (isScatter) {
+      let bd = Infinity
+      visSeries.forEach(({ s }) => {
+        ;(s.points || []).forEach(([x, y], pi) => {
+          if (x == null || y == null) return
+          const dx = xS(x) - px
+          const dy = yS(y) - rawY
+          const d = dx * dx + dy * dy
+          if (d < bd) {
+            bd = d
+            best = { x, y, name: s.name, label: (s.text || [])[pi] }
+          }
+        })
+      })
+      return best
+    }
+    let bi = 0
+    let bd = Infinity
+    for (let i = 0; i < unionPx.length; i++) {
+      const d = Math.abs(unionPx[i] - px)
+      if (d < bd) {
+        bd = d
+        bi = i
+      }
+    }
+    const ux = unionXs[bi]
+    let bdy = Infinity
+    visSeries.forEach(({ s }) => {
+      const pi = (s.points || []).findIndex(([x]) => x === ux)
+      if (pi < 0 || s.points[pi][1] == null) return
+      const dy = Math.abs(yS(s.points[pi][1]) - rawY)
+      if (dy < bdy) {
+        bdy = dy
+        best = { x: ux, y: s.points[pi][1], name: s.name, label: (s.text || [])[pi] }
+      }
+    })
+    return best || { x: ux, y: null, name: null }
+  }
+
+  const samePt = (a, b) => a && b && a.x === b.x && a.name === b.name
+
+  // Delta block appended to the LOCKED tooltip while a second point is hovered:
+  // the gap between the two on both axes (plus the x ratio on a log axis, where
+  // "3x slower" is the reading that matters).
+  const buildDeltaHtml = (from, to) => {
+    if (!from || !to || to.y == null || from.y == null) return ''
+    const dx = to.x - from.x
+    const dy = to.y - from.y
+    const sign = (v) => (v > 0 ? '+' : '')
+    const ratio = xScale === 'log' && from.x > 0 && to.x > 0 ? to.x / from.x : null
+    const row = (k, v) =>
+      `<div style="display:flex;gap:10px;margin-top:2px">` +
+      `<span style="color:rgba(255,255,255,0.55);width:16px;flex:none">${k}</span>` +
+      `<span style="color:rgba(255,255,255,0.9)">${v}</span></div>`
+    return (
+      `<div style="margin-top:6px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.14);` +
+      `font-size:0.92em">` +
+      `<div style="color:rgba(255,255,255,0.55);margin-bottom:2px">vs ${esc(to.name)}` +
+      `${to.label ? ` \u00b7 ${esc(to.label)}` : ''}</div>` +
+      row(
+        '\u0394x',
+        `${sign(dx)}${esc(fmtNum(dx))}${esc(xUnit)}` +
+          (ratio
+            ? ` <span style="color:rgba(255,255,255,0.55)">(${ratio.toFixed(1)}\u00d7)</span>`
+            : '')
+      ) +
+      row(
+        '\u0394y',
+        `${sign(dy)}${esc(yTipDecimals != null ? dy.toFixed(yTipDecimals) : fmtNum(dy))}${esc(
+          yUnit
+        )}`
+      ) +
+      `</div>`
+    )
+  }
+
+  // Repaint the locked tooltip, with the delta block when a compare point is up.
+  const refreshLockedTip = (other) => {
+    const lk = lockedPtRef.current
+    if (!lk || !lk.el) return
+    const html = buildTipHtml(lk.x, lk.name)
+    if (html) lockTip(lk.el, html + buildDeltaHtml(lk, other))
+  }
+
+  // While locked: the hovered point becomes the compare point (or nothing, when
+  // the cursor is back on the locked point itself).
+  const setCompare = (f) => {
+    const lk = lockedPtRef.current
+    const next = f && !samePt(f, lk) && f.y != null ? f : null
+    if (samePt(next, cmpRef.current) || (!next && !cmpRef.current)) return
+    cmpRef.current = next
+    setCmp(next)
+    refreshLockedTip(next)
+  }
+
+  const clearCompare = () => {
+    if (!cmpRef.current) return
+    cmpRef.current = null
+    setCmp(null)
+    refreshLockedTip(null)
+  }
+
   const onCrosshairMove = (e) => {
-    if (lockedRef.current) return
     if (!unionXs.length) return
     const rect = e.currentTarget.getBoundingClientRect()
     if (!rect.width || !rect.height) return
@@ -607,77 +719,29 @@ function ChartImpl({
     // viewBox coords (offset by the margins), the same space xS()/yS() emit.
     const px = m.l + ((e.clientX - rect.left) / rect.width) * pw
     const rawY = m.t + ((e.clientY - rect.top) / rect.height) * ph
-
-    // The point the cursor is actually on: which x-column the crosshair snaps
-    // to (ux), which series owns the highlighted point (nearest), and that
-    // point's pixel y (nearestPy, where the horizontal follow-line lands).
-    let ux = null
-    let nearest = null
-    let nearestPy = null
-
-    if (isScatter) {
-      // Scatter: nearest point by euclidean pixel distance, both axes at once.
-      let bd = Infinity
-      visSeries.forEach(({ s }) => {
-        ;(s.points || []).forEach(([x, y]) => {
-          if (x == null || y == null) return
-          const dx = xS(x) - px
-          const dy = yS(y) - rawY
-          const d = dx * dx + dy * dy
-          if (d < bd) {
-            bd = d
-            ux = x
-            nearest = s.name
-            nearestPy = yS(y)
-          }
-        })
-      })
-      if (ux == null) return
-    } else {
-      // Line chart: snap to the nearest x-column so every series' value at that
-      // x reads out together, then pick the closest series by pixel y distance
-      // -- this is what makes one point pop out of a dozen lookalikes instead
-      // of all lighting up identically.
-      let bi = 0
-      let bd = Infinity
-      for (let i = 0; i < unionPx.length; i++) {
-        const d = Math.abs(unionPx[i] - px)
-        if (d < bd) {
-          bd = d
-          bi = i
-        }
-      }
-      ux = unionXs[bi]
-      let nearestDy = Infinity
-      visSeries.forEach(({ s }) => {
-        const pt = (s.points || []).find(([x]) => x === ux)
-        if (!pt || pt[1] == null) return
-        const py = yS(pt[1])
-        const dy = Math.abs(py - rawY)
-        if (dy < nearestDy) {
-          nearestDy = dy
-          nearest = s.name
-          nearestPy = py
-        }
-      })
+    const f = focusAt(px, rawY)
+    if (!f) return
+    if (lockedRef.current) {
+      setCompare(f)
+      return
     }
 
-    if (ux !== activeXRef.current) {
-      activeXRef.current = ux
-      setActiveX(ux)
+    if (f.x !== activeXRef.current) {
+      activeXRef.current = f.x
+      setActiveX(f.x)
     }
-    if (nearest !== nearestName) setNearestName(nearest)
+    if (f.name !== nearestName) setNearestName(f.name)
     // Horizontal follow-line snaps to the NEAREST point's actual y (not the
     // raw cursor y) so the dashed line visibly passes through the point
     // being highlighted, instead of just tracking the mouse.
-    const hy = nearestPy != null ? nearestPy : Math.max(m.t, Math.min(m.t + ph, rawY))
+    const hy = f.y != null ? yS(f.y) : Math.max(m.t, Math.min(m.t + ph, rawY))
     const hl = hLineRef.current
     if (hl) {
       hl.setAttribute('y1', hy)
       hl.setAttribute('y2', hy)
       hl.style.opacity = '0.45'
     }
-    const html = buildTipHtml(ux, nearest)
+    const html = buildTipHtml(f.x, f.name)
     if (html) showTip(e, html)
     else hideTip()
   }
@@ -686,12 +750,21 @@ function ChartImpl({
     activeXRef.current = null
     setActiveX(null)
     setNearestName(null)
+    lockedPtRef.current = null
+    cmpRef.current = null
+    setCmp(null)
     if (hLineRef.current) hLineRef.current.style.opacity = '0'
     hideTip()
   }
   const onCrosshairLeave = () => {
     if (lockedRef.current) return // stay put while a point is locked
     clearActive()
+  }
+  // Pointer left the whole chart: drop the compare point (the locked one stays).
+  // Bound to the <svg>, not the overlay, so sliding from empty plot onto a
+  // marker hit-target doesn't blink the compare crosshair off and on.
+  const onChartLeave = () => {
+    if (lockedRef.current) clearCompare()
   }
 
   // Hovering a marker's hit-target: snap the crosshair straight to that point's
@@ -700,8 +773,13 @@ function ChartImpl({
   // series with a point at that x, so line series keep their column readout.
   // The hovered marker's OWN series is unambiguously "nearest" here — no
   // distance calculation needed like the general crosshair-move case.
-  const onMarkerHover = (e, ux, py, name) => {
-    if (lockedRef.current) return
+  const onMarkerHover = (e, pt, py, name, label) => {
+    const [ux, uy] = pt
+    // A point is locked: this one becomes the compare point instead.
+    if (lockedRef.current) {
+      setCompare({ x: ux, y: uy, name, label })
+      return
+    }
     if (ux !== activeXRef.current) {
       activeXRef.current = ux
       setActiveX(ux)
@@ -720,13 +798,17 @@ function ChartImpl({
 
   // Click a marker to LOCK focus on it (tooltip + highlight persist after the
   // pointer leaves). Click the same point again — or click empty plot — to unlock.
-  const onMarkerClick = (e, ux, py, name) => {
+  const onMarkerClick = (e, pt, py, name, label) => {
+    const [ux, uy] = pt
     if (lockedRef.current && activeXRef.current === ux) {
       lockedRef.current = false
       clearActive()
       return
     }
     lockedRef.current = true
+    lockedPtRef.current = { x: ux, y: uy, name, label, el: e.currentTarget }
+    cmpRef.current = null
+    setCmp(null)
     activeXRef.current = ux
     setActiveX(ux)
     setNearestName(name)
@@ -797,6 +879,9 @@ function ChartImpl({
                         setDatasetIdx(i)
                         setActiveX(null)
                         lockedRef.current = false
+                        lockedPtRef.current = null
+                        cmpRef.current = null
+                        setCmp(null)
                         hideTip()
                       }}
                       style={{
@@ -833,6 +918,9 @@ function ChartImpl({
                         setViewIdx(i)
                         setActiveX(null)
                         lockedRef.current = false
+                        lockedPtRef.current = null
+                        cmpRef.current = null
+                        setCmp(null)
                         hideTip()
                       }}
                       style={{
@@ -862,6 +950,7 @@ function ChartImpl({
           viewBox={`0 0 ${W} ${H}`}
           role="img"
           aria-label={title || 'chart'}
+          onPointerLeave={onChartLeave}
           style={{ display: 'block', width: '100%', height: 'auto' }}
         >
           {title && (
@@ -967,6 +1056,56 @@ function ChartImpl({
               nodes.push(...rest)
               if (nearestNode) nodes.push(nearestNode)
               return <g>{nodes}</g>
+            })()}
+          {/* Compare point: the one hovered while another is locked. Same
+              crosshair geometry, but dashed and dimmer, with a hollow dashed
+              ring instead of the locked point's solid double ring -- reads as
+              "second" at a glance without competing with the locked point. */}
+          {cmp != null &&
+            (() => {
+              const vs = visSeries.find(({ s }) => s.name === cmp.name)
+              if (!vs) return null
+              const px = xS(cmp.x)
+              const py = yS(cmp.y)
+              return (
+                <g pointerEvents="none">
+                  <line
+                    x1={px}
+                    y1={m.t}
+                    x2={px}
+                    y2={m.t + ph}
+                    stroke={C.axis}
+                    strokeWidth={1}
+                    strokeOpacity={0.5}
+                    strokeDasharray="4 4"
+                  />
+                  <line
+                    x1={m.l}
+                    y1={py}
+                    x2={m.l + pw}
+                    y2={py}
+                    stroke={C.axis}
+                    strokeWidth={1}
+                    strokeOpacity={0.5}
+                    strokeDasharray="4 4"
+                  />
+                  <circle cx={px} cy={py} r={8} fill="none" stroke={C.card} strokeWidth={2.5} />
+                  <circle
+                    cx={px}
+                    cy={py}
+                    r={8}
+                    fill="none"
+                    stroke={vs.c}
+                    strokeWidth={1.5}
+                    strokeOpacity={0.85}
+                    strokeDasharray="3 3"
+                  />
+                  {markerNode(vs.s.marker || 'circle', px, py, 4.5, vs.c, 'cmp-sym', {
+                    pointerEvents: 'none',
+                    opacity: 0.9,
+                  })}
+                </g>
+              )
             })()}
           {/* Faint horizontal follow-line (imperative y, no re-render) */}
           <line
