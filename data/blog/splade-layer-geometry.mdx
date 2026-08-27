@@ -16,7 +16,7 @@ tags:
 draft: true
 summary: 'We ran SPLADE layer by layer — feeding intermediate hidden states through its MLM head at each depth — and found a completely different geometry from dense models. While dense embeddings collapse to maximal similarity at L12, SPLADE compresses from 25,000 active terms to 67 by L12, improving discrimination monotonically. But the backbone attractor is still there — just in a different form.'
 images: []
-authors: ['default']
+authors: ['kshivendu']
 ---
 
 > This post is part of the embedding geometry series. [Part 1](/blog/embedding-layers) covers token collapse. [Part 2](/blog/similarity-attractor) covers the attractor. [Part 3](/blog/transformer-geometry-at-scale) validates findings at scale. Earlier posts established that all BERT-large dense embeddings collapse to a similarity attractor at L12 — contradictions and paraphrases become nearly indistinguishable. SPLADE uses the same backbone. Does it inherit the same problem?
