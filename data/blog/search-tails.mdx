@@ -117,7 +117,7 @@ Two spikes, a hollow middle: 43% of queries score exactly 1.0 and 20% exactly 0 
 
 ## It hides your improvements, too
 
-The mean also hides your gains. Take a real improvement: plain word BM25, then add a Porter stemmer and a stopword list (`word_en`). It moves mean NDCG@10 by **+0.019**, a bump you'd squint at. But look where the gain lands:
+The mean also hides your gains. Take a real improvement: plain word BM25, then apply a Porter stemmer and a stopword list (`word_en`). It moves mean NDCG@10 by **+0.019**, a bump you'd squint at. But look where the gain lands:
 
 export const deltaCats = ['mean', 'p10', 'p25', 'p50', 'p75', 'p90']
 export const deltaColors = [
