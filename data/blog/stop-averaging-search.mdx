@@ -12,13 +12,13 @@ authors: ['default']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Any serious team tracks latency as p50, p95, p99 — reporting just "our average latency is 40ms" is naive, because the average hides the tail that's actually hurting users. Yet we report search quality as a single average NDCG all the time, and somehow that's normal. Same mistake, uncorrected for quality.
+Any serious team tracks latency as p50, p95, p99 — reporting just "our average latency is 40ms" is naive, because the average hides the tail that's actually hurting users. Yet we report search quality as a single average NDCG all the time. Same mistake, uncorrected for quality.
 
-Here's how bad it gets. I ran a plain lowercase-word BM25 baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries), and instead of collapsing each metric to a mean, I pooled the per-query scores and read off the percentiles. The mean NDCG@10 is **0.526** — a respectable-looking number. The **p10 is 0.000**. More than one in ten queries retrieves nothing relevant at all in the top 10 — total failures — and the average buries every one of them. You would never know one in ten searches returns garbage from looking at "0.53."
+I ran a plain word-BM25 baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries) and, instead of averaging each metric, pooled the per-query scores and read the percentiles. Mean NDCG@10: **0.526**, respectable. p10: **0.000**. More than one in ten queries retrieves nothing relevant in the top 10, and the average buries every one.
 
 ## One in ten searches returns nothing
 
-The mean of a per-query metric is dominated by the easy queries and hides the tail of queries that fail — which, for search, is the part that matters. Pool the per-query scores and the distribution says something the mean never does:
+Pool the per-query scores and the distribution shows what the mean can't:
 
 export const pctCats = ['NDCG@10', 'recall@10', 'recall@100']
 export const pctColors = { mean: '#94a3b8', p50: '#64748b', p25: '#f59e0b', p10: '#f87171' }
@@ -63,21 +63,12 @@ export const pctColors = { mean: '#94a3b8', p50: '#64748b', p25: '#f59e0b', p10:
   ]}
 />
 
-Three things in that chart matter:
+p10 = 0.000 for both NDCG@10 and recall@10: over 10% of queries score a hard zero while the mean sits near 0.53. Two subtler things the average also hides:
 
-1. **NDCG@10 and recall@10 both floor at p10 = 0.000.** More than 10% of queries score a hard zero — nothing relevant in the top 10 — while the mean sits near 0.53 for both. The average doesn't hint at the failures; it's computed _from_ them and then smooths them out of sight.
-2. **recall@100: the median query is perfect, the mean says 0.765.** The typical query recalls _every_ relevant doc (p50 = 1.000), yet a hard tail flooring at p10 = 0.126 drags the average down to 0.765 — a number that describes neither the typical query (1.0) nor the failing tail (0.13).
-3. **The mean's error doesn't even keep a stable sign.** On recall@10 it _overstates_ the median (0.563 vs 0.500 — easy, high-recall queries pull it up); on NDCG@10 it _understates_ it (0.526 vs 0.554 — the zero tail pulls it down). It biases in different directions on the same run, so you can't correct for it in your head.
+1. **recall@100: the typical query is perfect, the mean says 0.765.** The median query recalls _every_ relevant doc (p50 = 1.000), but a tail flooring at p10 = 0.126 drags the mean to a number no real query got.
+2. **The mean's error flips sign between metrics.** It overstates recall@10's median (0.563 vs 0.500) and understates NDCG@10's (0.526 vs 0.554), so you can't correct for it in your head.
 
-The full percentile spread:
-
-| metric     |  mean |       p10 |   p25 |       p50 |   p75 |   p90 |
-| ---------- | ----: | --------: | ----: | --------: | ----: | ----: |
-| NDCG@10    | 0.526 | **0.000** | 0.219 |     0.554 | 0.877 | 1.000 |
-| recall@10  | 0.563 | **0.000** | 0.137 |     0.500 | 1.000 | 1.000 |
-| recall@100 | 0.765 |     0.126 | 0.500 | **1.000** | 1.000 | 1.000 |
-
-Those five numbers summarise a distribution — and the distribution is _why_ the mean is useless. Here's the actual per-query recall@10, bucketed:
+The distribution is the whole story. Here's per-query recall@10, bucketed:
 
 export const histCats = [
   '=0',
@@ -115,13 +106,11 @@ export const histColors = histCats.map((c) =>
   ]}
 />
 
-Two spikes, a hollow middle: **43% of queries score exactly 1.0** and **20% exactly 0** — 63% at the extremes — while the mean, 0.563, sits in the `(.5,.6]` valley where about 8% of queries live. It represents almost no real query, which is the whole reason p50 and p10 tell you more than the average ever can.
+Two spikes, a hollow middle: **43% of queries score exactly 1.0** and **20% exactly 0** — 63% at the extremes — while the mean, 0.563, sits in the `(.5,.6]` valley where about 8% of queries live. It describes almost no real query, which is why p50 and p10 tell you more than the average can.
 
 ## It hides your improvements, too
 
-The mean doesn't just hide the distribution — it hides your _gains_. When a method genuinely gets better, the mean barely twitches, and the twitch is unintelligible: "+0.019 NDCG" is nothing you can feel or reason about.
-
-Take a real improvement — plain word BM25, then add a Porter stemmer and a stopword list (`word_en`). It moves mean NDCG@10 by **+0.019**, a bump you'd squint at. But look where that improvement actually lands in the distribution:
+The mean also hides your _gains_. Take a real improvement: plain word BM25, then add a Porter stemmer and stopwords (`word_en`). It moves mean NDCG@10 by **+0.019** — a bump you'd squint at. But look where the gain actually lands:
 
 export const deltaCats = ['mean', 'p25', 'p50']
 export const deltaColors = [pctColors.mean, pctColors.p25, pctColors.p50]
@@ -145,35 +134,31 @@ export const deltaColors = [pctColors.mean, pctColors.p25, pctColors.p50]
   ]}
 />
 
-Same gain, read three ways: the mean smears it across every query and reports **+0.022**; the median reads it where the queries can actually move and reports **+0.100**. The p75 bar is missing because it's pinned at 1.0 — a saturated percentile can't show a gain at all. The same story across all three metrics:
+Same gain, three ways: the mean smears it across every query (**+0.022**); the median reads it where queries can actually move (**+0.100**, 4.6×). The p75 bar is missing because it's pinned at 1.0 — a saturated percentile can't show a gain. The pattern holds across metrics:
 
-| metric     | mean Δ | where it shows up                                                                                                     |
-| ---------- | -----: | --------------------------------------------------------------------------------------------------------------------- |
-| NDCG@10    | +0.019 | p25 / p50 / p75 all move ~2× the mean (+0.037 to +0.045)                                                              |
-| recall@10  | +0.022 | the median query's recall@10 jumps **0.50 → 0.60** — a **+0.100 move, 4.6× the mean**                                 |
-| recall@100 | +0.028 | median is already 1.0 (stuck), so the gain lands in **p25: 0.50 → 0.63 (+0.126, 4.5×)** — the hard queries got better |
+| metric     | mean Δ | where it shows up                                                            |
+| ---------- | -----: | ---------------------------------------------------------------------------- |
+| NDCG@10    | +0.019 | p25 / p50 / p75 all move ~2× the mean (+0.037 to +0.045)                     |
+| recall@10  | +0.022 | median jumps **0.50 → 0.60** — a **+0.100 move, 4.6× the mean**              |
+| recall@100 | +0.028 | median already 1.0, so the gain lands in **p25: 0.50 → 0.63 (+0.126, 4.5×)** |
 
-Observations:
-
-1. **The improvement is 2–5× bigger in the percentile where the mass can move.** "Half the queries' recall@10 went from 0.50 to 0.60" is a real, legible win; the mean's +0.022 is that same win smeared into noise. The mean is tiny _because_ it averages the gain across all the saturated queries that can't move — the stuck-at-zero failures and the already-perfect ones.
-2. **Which percentile carries the gain shifts by metric.** On recall@100 the median is already perfect, so the improvement lands in the lower quartiles; on recall@10 it lands at the median. Read the percentile where the live mass is, not a fixed one.
-3. **The honest catch: a saturated percentile is dead.** p10 for NDCG@10 is pinned at 0.000 (a tenth of queries fail no matter what), p50 for recall@100 pinned at 1.0. There a percentile moves nothing while the mean at least creeps — so percentiles aren't _uniformly_ more sensitive, the one in the live region is, by a lot.
+The gain shows up wherever the live mass sits — the median for recall@10, the lower quartiles for recall@100 whose median is already maxed. A saturated percentile moves nothing; the informative one moves 2–5× the mean.
 
 ## Why p10, not p90
 
 Latency and quality are the same problem pointed at opposite tails. For latency, higher is worse, so you watch the _high_ end — p90, p99. For quality, higher is better, so the tail that hurts is the _low_ end: **p10, the worst-query floor**. Same instinct, mirrored.
 
-And it _is_ instinct for latency. I timed this BM25 baseline at **3.9ms p50, 8.6ms p90** — nobody would let me publish just the 5ms mean, because the p90 is the request a real user is waiting on. p10 quality is that same user, on the tail that actually hurts. We just forget to report it.
+And it _is_ instinct for latency. I timed this BM25 baseline at **3.9ms p50, 8.6ms p90** — I'd never publish just the 5ms mean, because the p90 is the request a real user is waiting on. p10 quality is that same user, on the tail that actually hurts. We just forget to report it.
 
 ## The ask
 
-Report the median and the p10, not the mean. If you must keep the mean for backward comparison, put it in a fourth column — don't let it be the only one. Better still, show the full per-query distribution: a histogram, or the five-number summary. It costs nothing. You already computed every per-query score in order to average them; you're just throwing the distribution away at the last step.
+Report the median and the p10, not the mean. Keep the mean only as a comparison column if a baseline reports it. Better still, show the whole distribution — a histogram or the five-number summary. It costs nothing: you already computed every per-query score to average them, then threw the shape away.
 
 Concretely, for any retrieval eval:
 
 - **p50** — the typical query. This is your headline, not the mean.
-- **p10** — the worst-query floor. This is the number that decides whether users trust the system.
-- **mean** — only if a baseline you're comparing against reports it, and even then, next to p50, never instead of it.
+- **p10** — the worst-query floor. The number that decides whether users trust the system.
+- **mean** — only next to p50, and only if a baseline you're comparing against reports it.
 
 One number for search quality is malpractice. We figured this out for latency a decade ago and never looked back. Quality deserves the same.
 
@@ -181,9 +166,6 @@ One number for search quality is malpractice. We figured this out for latency a 
 
 ## Key Takeaways
 
-- On 12 NanoBEIR datasets, a plain BM25 baseline scores mean NDCG@10 **0.526** and recall@10 **0.563**, but the **p10 of both is exactly 0.000** — more than one in ten queries retrieves nothing relevant, and the mean hides every one.
-- recall@100 makes it sharper: the median query is **perfect (1.000)** while the mean is dragged to **0.765** by a tail flooring at p10 = 0.126. The average describes neither the typical query nor the failing tail — it's a number no real query got.
-- The mean hides your _improvements_, not just the distribution: a real gain (adding a stemmer + stopwords) moves mean NDCG@10 by a forgettable **+0.019**, but the median recall@10 jumps **0.50 → 0.60 (+0.100, ~5× the mean's move)** — legible in the percentile where the mass can move, invisible in the average.
-- The mean is dominated by easy queries and its error doesn't even keep a stable sign across metrics, so you can't mentally correct for it — the same reason nobody reports average latency.
-- For quality, higher is better, so the tail that hurts is the _low_ end: watch **p10**, the worst-query floor, the mirror of p90/p99 latency. We already report the same BM25 run's latency as p50/p90 (3.9ms / 8.6ms) by instinct.
-- Report median + p10 (keep the mean only for comparison), or the full distribution. You already computed every per-query score — don't throw the shape away.
+- **p10 of NDCG@10 and recall@10 is 0.000.** On 12 NanoBEIR datasets the mean looks like ~0.53, but more than one in ten queries retrieves nothing relevant — the average hides every failure.
+- **The mean hides gains, too.** Adding a stemmer + stopwords moves mean NDCG@10 by a forgettable +0.019, while the median recall@10 jumps 0.50 → 0.60 (+0.100, ~5×) — visible only in the percentile where the mass can move.
+- **Report p50 + p10, or the full distribution.** For quality, higher is better, so the tail that hurts is the low end — p10 is the mirror of p90/p99 latency.
