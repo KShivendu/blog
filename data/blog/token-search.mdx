@@ -174,6 +174,24 @@ Three things in that chart matter:
 
 The macro-avg even undersells that break. Naive BPE returns nothing at all for **31%** of queries (vs **20%** for plain word), half again as many total failures — a gap the mean smooths into ten points. (Reading the [distribution instead of the mean](/blog/relevance-tail) is a separate rabbit hole; here it just confirms the naive break is a tail catastrophe, not a uniform dip.)
 
+<details>
+<summary>Is this custom BM25 legit? (validated against Lucene + Tantivy)</summary>
+
+The BM25 here is a custom exact-float scorer, not a library — so to be sure the numbers aren't an implementation artifact, I ran the same `word` and `word_en` baselines through real **Lucene** (pyserini) and **Tantivy** (a separate Rust engine) on all 12 datasets. Three independent BM25 implementations agree within **0.006 NDCG@10**, and not just on the mean — across the whole per-query distribution:
+
+| NDCG@10           |  mean |   p25 |   p10 | zero-rate |
+| ----------------- | ----: | ----: | ----: | --------: |
+| custom `word`     | 0.526 | 0.219 | 0.000 |     19.9% |
+| Lucene `word`     | 0.530 | 0.235 | 0.000 |     19.7% |
+| Tantivy `word`    | 0.525 | 0.218 | 0.000 |     20.9% |
+| custom `word_en`  | 0.545 | 0.264 | 0.000 |     17.2% |
+| Lucene `word_en`  | 0.549 | 0.256 | 0.000 |     16.9% |
+| Tantivy `word_en` | 0.547 | 0.264 | 0.000 |     16.9% |
+
+Same mean, same tail, same failure rate across three engines (Tantivy on its default k1≈1.2, the others at 1.5, so it's a same-terms cross-check, not a param-matched replica). The custom scorer reproduces production engines, so the token-vs-word comparisons are measuring representations, not a scoring bug. Porter's win even shows up the same way in all three — a lower zero-rate (17% vs 20%): the stemmer rescues failing queries, not easy ones.
+
+</details>
+
 ### Is "within noise" actually parity?
 
 "The bars look the same" isn't a statistical claim, so I ran a cluster bootstrap on the per-query delta. It puts normalized BPE **within noise of plain word** (−0.004, 95% CI [−0.014, +0.006]) — a statistical tie, not proven equal. Against the stronger **Porter-stemmed** analyzer (`word_en`) it's **−0.02 behind** — not significant, but it loses 10 of 12 datasets, so a hair behind a real stemmer, not parity.
