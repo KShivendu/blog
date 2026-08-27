@@ -100,7 +100,7 @@ Observations:
 2. **Normalization consolidates.** Merging `The`/`the`/` the` shifts mass out of the short buckets into the 101–1k range (normalized **8.8%** at 101–300 vs naive's 6.6%) — the same content in fewer, longer posting lists, which is exactly why a query term now lands on its document.
 3. **Even the analyzer Elasticsearch ships stays singleton-heavy.** `word + stem` (`word_en`: Porter + English stopwords) has fewer distinct terms (114k — stemming merges variants) but _more_ singletons than plain word (**57%** vs 53%): stemming only merges already-rare forms, and dropping stopwords strips the long lists, tilting the tail further. Subword tokenization is the only thing here that fundamentally consolidates the posting lists.
 
-That normalization moves naive's −0.11 gap to essentially zero. Here's the full ladder for both tokenizers. Toggle from the mean to p25 or the zero-rate — the naive break goes from a ten-point dip to a quarter of queries returning nothing:
+That normalization moves naive's −0.11 gap to essentially zero. Here's the full ladder for both tokenizers. Toggle the metric — the naive break widens from a ten-point dip at the mean to p25 = 0.000 and a 31% zero-rate:
 
 export const engCats = [
   'word (plain)',
@@ -150,6 +150,7 @@ export const engZero = [19.9, 17.2, 20.7, 31.7, 31.1, 20.5, 19.9, 19.9]
     },
     {
       label: 'p50',
+      default: true,
       valueLabel: 'NDCG@10 p50, the median query (higher is better)',
       valueMax: 0.62,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
@@ -183,20 +184,22 @@ Three things in that chart matter:
 The macro-avg even undersells that break. Naive BPE returns nothing at all for **31%** of queries (vs **20%** for plain word), half again as many total failures — a gap the mean smooths into ten points. (Reading the [distribution instead of the mean](/blog/relevance-tail) is a separate rabbit hole; here it just confirms the naive break is a tail catastrophe, not a uniform dip.)
 
 <details>
-<summary>Is this custom BM25 legit? (validated against Lucene + Tantivy)</summary>
+<summary>Is this custom BM25 legit? (validated against Lucene, Tantivy + Elasticsearch)</summary>
 
-The BM25 here is a custom exact-float scorer, not a library — so to be sure the numbers aren't an implementation artifact, I ran the same `word` and `word_en` baselines through real **Lucene** (pyserini) and **Tantivy** (a separate Rust engine) on all 12 datasets. Three independent BM25 implementations agree within **0.006 NDCG@10**, and not just on the mean — across the whole per-query distribution:
+The BM25 here is a custom exact-float scorer, not a library — so to be sure the numbers aren't an implementation artifact, I ran the same `word` and `word_en` baselines through real **Lucene** (pyserini), **Tantivy** (a separate Rust engine), and **Elasticsearch** (Dockerized, on another host) on all 12 datasets. Four runs across three codebases (custom, Lucene, Tantivy — Elasticsearch is Lucene under the hood) agree within **0.007 NDCG@10**, and not just on the mean — across the whole per-query distribution:
 
-| NDCG@10           |  mean |   p25 |   p10 | zero-rate |
-| ----------------- | ----: | ----: | ----: | --------: |
-| custom `word`     | 0.526 | 0.219 | 0.000 |     19.9% |
-| Lucene `word`     | 0.530 | 0.235 | 0.000 |     19.7% |
-| Tantivy `word`    | 0.525 | 0.218 | 0.000 |     20.9% |
-| custom `word_en`  | 0.545 | 0.264 | 0.000 |     17.2% |
-| Lucene `word_en`  | 0.549 | 0.256 | 0.000 |     16.9% |
-| Tantivy `word_en` | 0.547 | 0.264 | 0.000 |     16.9% |
+| NDCG@10                 |  mean |   p50 |   p25 | zero-rate |
+| ----------------------- | ----: | ----: | ----: | --------: |
+| custom `word`           | 0.526 | 0.554 | 0.219 |     19.9% |
+| Lucene `word`           | 0.530 | 0.559 | 0.235 |     19.7% |
+| Tantivy `word`          | 0.525 | 0.540 | 0.218 |     20.9% |
+| Elasticsearch `word`    | 0.530 | 0.559 | 0.235 |     19.7% |
+| custom `word_en`        | 0.545 | 0.592 | 0.264 |     17.2% |
+| Lucene `word_en`        | 0.549 | 0.607 | 0.256 |     16.9% |
+| Tantivy `word_en`       | 0.547 | 0.581 | 0.264 |     16.9% |
+| Elasticsearch `word_en` | 0.552 | 0.613 | 0.291 |     16.2% |
 
-Same mean, same tail, same failure rate across three engines (Tantivy on its default k1≈1.2, the others at 1.5, so it's a same-terms cross-check, not a param-matched replica). The custom scorer reproduces production engines, so the token-vs-word comparisons are measuring representations, not a scoring bug. Porter's win even shows up the same way in all three — a lower zero-rate (17% vs 20%): the stemmer rescues failing queries, not easy ones.
+Same mean, same median, same tail, same failure rate (p10 is a flat 0.000 for every engine — the shared hard floor). Tantivy runs its default k1≈1.2, the others at 1.5, so it's a same-terms cross-check, not a param-matched replica. The custom scorer reproduces three production engines, so the token-vs-word comparisons are measuring representations, not a scoring bug. Porter's win even shows up the same way in all four — a lower zero-rate (16–17% vs 20%): the stemmer rescues failing queries, not easy ones.
 
 </details>
 
@@ -357,6 +360,7 @@ export const gapView = (values, text) => ({
     },
     {
       label: 'p50',
+      default: true,
       valueLabel: 'NDCG@10 p50, the median query (higher is better)',
       valueMax: 0.65,
       valueTicks: [0, 0.2, 0.4, 0.6],
@@ -404,22 +408,46 @@ export const stopCats = [
   'word + Porter',
 ]
 export const stopColors = ['#94a3b8', '#10b981', '#64748b', '#64748b']
+export const stopFmt = (v, d) => v.map((x) => x.toFixed(d))
+export const stopView = (values, text) => ({
+  categories: stopCats,
+  series: [{ name: 'v', values, colors: stopColors, text, textPosition: 'outside' }],
+})
 
 <BarChart
   orientation="horizontal"
   title="A rarity prior matches the hand-built stopword list"
-  subtitle="macro-avg NDCG@10, 12 NanoBEIR (599 queries) — green = list-free prior, gray = the list it replaces + Porter target"
-  valueLabel="NDCG@10 (higher is better)"
-  valueMax={0.58}
-  valueTicks={[0, 0.1, 0.2, 0.3, 0.4, 0.5]}
+  subtitle="12 NanoBEIR (599 queries) · green = list-free prior, gray = the list it replaces + Porter target · toggle the metric →"
   categories={stopCats}
-  series={[
+  views={[
     {
-      name: 'NDCG@10',
-      values: [0.5391, 0.5456, 0.5454, 0.5446],
-      colors: stopColors,
-      text: ['0.5391', '0.5456', '0.5454', '0.5446'],
-      textPosition: 'outside',
+      label: 'mean',
+      valueLabel: 'NDCG@10 mean (higher is better)',
+      valueMax: 0.58,
+      valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
+      ...stopView([0.5391, 0.5456, 0.5454, 0.5446], stopFmt([0.5391, 0.5456, 0.5454, 0.5446], 4)),
+    },
+    {
+      label: 'p50',
+      default: true,
+      valueLabel: 'NDCG@10 p50, the median query (higher is better)',
+      valueMax: 0.65,
+      valueTicks: [0, 0.2, 0.4, 0.6],
+      ...stopView([0.5876, 0.6131, 0.6083, 0.5915], stopFmt([0.5876, 0.6131, 0.6083, 0.5915], 4)),
+    },
+    {
+      label: 'p25',
+      valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
+      valueMax: 0.35,
+      valueTicks: [0, 0.1, 0.2, 0.3],
+      ...stopView([0.2418, 0.273, 0.2805, 0.2641], stopFmt([0.2418, 0.273, 0.2805, 0.2641], 3)),
+    },
+    {
+      label: 'zero-rate',
+      valueLabel: 'zero-rate %, queries returning nothing (lower is better)',
+      valueMax: 20,
+      valueTicks: [0, 5, 10, 15, 20],
+      ...stopView([17.4, 17.5, 16.9, 17.2], stopFmt([17.4, 17.5, 16.9, 17.2], 1)),
     },
   ]}
 />
