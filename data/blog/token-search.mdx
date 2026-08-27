@@ -100,48 +100,54 @@ Observations:
 2. **Normalization consolidates.** Merging `The`/`the`/` the` shifts mass out of the short buckets into the 101–1k range (normalized **8.8%** at 101–300 vs naive's 6.6%) — the same content in fewer, longer posting lists, which is exactly why a query term now lands on its document.
 3. **Even the analyzer Elasticsearch ships stays singleton-heavy.** `word + stem` (`word_en`: Porter + English stopwords) has fewer distinct terms (114k — stemming merges variants) but _more_ singletons than plain word (**57%** vs 53%): stemming only merges already-rare forms, and dropping stopwords strips the long lists, tilting the tail further. Subword tokenization is the only thing here that fundamentally consolidates the posting lists.
 
-That normalization moves naive's −0.11 gap to essentially zero. Here's the full ladder, macro-averaged over the 12 datasets. Toggle the tokenizer on the right:
+That normalization moves naive's −0.11 gap to essentially zero. Here's the full ladder, macro-averaged over the 12 datasets, for both the r50k and o200k tokenizers:
 
 export const engCats = [
   'word (plain)',
   'word + Porter stem',
   'char 4-gram',
-  'naive BPE',
-  'normalized BPE',
+  'naive BPE · r50k',
+  'naive BPE · o200k',
+  'normalized BPE · r50k',
+  'normalized BPE · o200k',
   'word-tuple BPE',
 ]
-export const engColors = ['#94a3b8', '#64748b', '#38bdf8', '#f87171', '#10b981', '#a78bfa']
-export const engText = (v) => v.map((x) => x.toFixed(3))
-export const engView = (naive, norm) => ({
-  categories: engCats,
-  series: [
-    {
-      name: 'NDCG@10',
-      values: [0.5259, 0.5446, 0.5241, naive, norm, 0.5259],
-      colors: engColors,
-      text: engText([0.5259, 0.5446, 0.5241, naive, norm, 0.5259]),
-      textPosition: 'outside',
-    },
-  ],
-})
+export const engColors = [
+  '#94a3b8',
+  '#64748b',
+  '#38bdf8',
+  '#f87171',
+  '#f87171',
+  '#10b981',
+  '#10b981',
+  '#a78bfa',
+]
+export const engOpac = [1, 1, 1, 0.5, 1, 0.5, 1, 1]
+export const engVals = [0.5259, 0.5446, 0.5241, 0.4242, 0.418, 0.5201, 0.5219, 0.5259]
 
 <BarChart
   orientation="horizontal"
   title="BM25 quality: words vs BPE token IDs (12 NanoBEIR datasets, 599 queries)"
-  subtitle="macro-avg NDCG@10 — toggle tokenizer (right). red = naive break, green = normalized fix, purple = isomorphic control"
+  subtitle="macro-avg NDCG@10 · BPE rows split r50k / o200k · red = naive break, green = normalized fix, purple = control"
   valueLabel="NDCG@10 (higher is better)"
   valueMax={0.62}
   valueTicks={[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]}
-  views={[
-    { label: 'r50k', ...engView(0.4242, 0.5201) },
-    { label: 'cl100k', ...engView(0.4219, 0.523) },
-    { label: 'o200k', ...engView(0.418, 0.5219) },
+  categories={engCats}
+  series={[
+    {
+      name: 'NDCG@10',
+      values: engVals,
+      colors: engColors,
+      opacities: engOpac,
+      text: engVals.map((x) => x.toFixed(3)),
+      textPosition: 'outside',
+    },
   ]}
 />
 
 Three things in that chart matter:
 
-1. **Normalized BPE (green) sits right on top of plain word-BM25 (gray)**, for all three tokenizers.
+1. **Normalized BPE (green) sits right on top of plain word-BM25 (gray)**, for both tokenizers.
 2. **Naive BPE (red) is far below everything** — the space/case break.
 3. **The purple "word-tuple" bar is exactly equal to plain word-BM25.** That's a control: keep each word as a _single_ term equal to the tuple of its token IDs instead of bagging subwords, and nothing moves — proof the token-ID _representation_ is irrelevant, and the only thing that moves quality is whether you decompose words into subwords.
 
