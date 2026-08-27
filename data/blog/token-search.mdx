@@ -71,24 +71,24 @@ export const plView = (data, color) => ({
 <BarChart
   orientation="vertical"
   title="Posting-list sizes: how many documents each term spans"
-  subtitle="share of index terms by document-frequency bucket, 12 NanoBEIR (52k docs) — toggle representation"
+  subtitle="share of index terms by document-frequency bucket, 12 NanoBEIR (52k docs)"
   valueLabel="% of terms"
   valueMax={62}
   views={[
     {
-      label: 'word',
+      label: 'word · 146k lists',
       ...plView([53.5, 11.9, 12.0, 6.8, 7.3, 4.4, 2.3, 1.2, 0.4, 0.1, 0.0], '#94a3b8'),
     },
     {
-      label: 'word + stem',
+      label: 'word+stem · 114k',
       ...plView([57.1, 11.8, 11.3, 6.1, 6.3, 3.7, 1.9, 1.2, 0.6, 0.1, 0.0], '#64748b'),
     },
     {
-      label: 'naive BPE',
+      label: 'naive · 74k',
       ...plView([17.2, 8.5, 14.7, 13.5, 20.6, 14.8, 6.6, 2.9, 0.9, 0.2, 0.1], '#f87171'),
     },
     {
-      label: 'normalized',
+      label: 'normalized · 48k',
       ...plView([17.5, 8.0, 12.2, 11.4, 19.4, 16.5, 8.8, 4.4, 1.4, 0.3, 0.1], '#10b981'),
     },
   ]}
