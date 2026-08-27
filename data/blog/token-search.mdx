@@ -131,6 +131,7 @@ export const engView = (values, text) => ({
   ],
 })
 export const engMean = [0.5259, 0.5446, 0.5241, 0.4242, 0.418, 0.5201, 0.5219, 0.5259]
+export const engP50 = [0.5543, 0.5915, 0.5856, 0.3869, 0.3869, 0.5543, 0.5503, 0.5543]
 export const engP25 = [0.2192, 0.2641, 0.1772, 0.0, 0.0, 0.2021, 0.2178, 0.2192]
 export const engZero = [19.9, 17.2, 20.7, 31.7, 31.1, 20.5, 19.9, 19.9]
 
@@ -146,6 +147,13 @@ export const engZero = [19.9, 17.2, 20.7, 31.7, 31.1, 20.5, 19.9, 19.9]
       valueMax: 0.62,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
       ...engView(engMean, engFmt(engMean, 3)),
+    },
+    {
+      label: 'p50',
+      valueLabel: 'NDCG@10 p50, the median query (higher is better)',
+      valueMax: 0.62,
+      valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+      ...engView(engP50, engFmt(engP50, 3)),
     },
     {
       label: 'p25',
@@ -346,6 +354,13 @@ export const gapView = (values, text) => ({
       valueMax: 0.58,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
       ...gapView([0.5219, 0.5454, 0.5471, 0.5446], gapFmt([0.5219, 0.5454, 0.5471, 0.5446], 4)),
+    },
+    {
+      label: 'p50',
+      valueLabel: 'NDCG@10 p50, the median query (higher is better)',
+      valueMax: 0.65,
+      valueTicks: [0, 0.2, 0.4, 0.6],
+      ...gapView([0.5503, 0.6083, 0.6051, 0.5915], gapFmt([0.5503, 0.6083, 0.6051, 0.5915], 4)),
     },
     {
       label: 'p25',
