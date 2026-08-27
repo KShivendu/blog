@@ -244,9 +244,50 @@ Observations:
 
 1. **Both recipes reach `word_en` (0.5446)** — word-tuple + expansion **0.5454**, GroupCov + expansion **0.5471**, Recall@100 on par too (GroupCov 0.794 vs word_en 0.794). Every per-query cluster-bootstrap CI against the stemmer straddles zero: a **statistical tie**. Per-dataset the two split it about evenly (word-tuple loses 9/12 by a hair, GroupCov wins 7/12) — but that split is the argmax of a sweep over ~7 fragmentation variants on these same 12 sets, so read it as a tie, not an edge.
 2. **The firm result is vs the token baseline, not vs Porter.** Both fixes clear zero against plain normalized token-BM25 — word-tuple **+0.023 NDCG@10** (bootstrap CI [+0.001, +0.045], clear of zero), GroupCov higher still. Reaching Porter _reads_ as a tie only because Porter-vs-plain is itself within noise on this suite; the fixes-vs-baseline gain is the part that's actually significant.
-3. **The headline: a general recipe matched a hand-tuned English analyzer.** Soft expansion did what Porter's hard stem-merge does — on the model's own vocabulary, no linguistic rules. Honest asterisks: it's a statistical _tie_ (a clean win over Porter would need full-size BEIR), and this precision recipe still leans on Porter to group candidates plus a stopword list — so the fully config-free story is the multilingual one, next.
+3. **The headline: a general recipe matched a hand-tuned English analyzer.** Soft expansion did what Porter's hard stem-merge does — on the model's own vocabulary, no linguistic rules. Honest asterisks: it's a statistical _tie_ (a clean win over Porter would need full-size BEIR), and this precision recipe still leans on two hand-built pieces — a stopword list and Porter to group candidates. The stopword list I can automate (next); Porter is the real holdout, and the fully config-free story is the multilingual one below.
 
 GroupCov is the one I'd ship: unlike the word-tuple collapse, it keeps the subword partial-matching the multilingual result below depends on, while still un-fragmenting the rare words that hurt precision. (I ran GroupCov + expansion only on English — the expansion candidates are Porter-grouped, so that half is English-only for now.)
+
+### Dropping the stopword list, too
+
+The recipe still leans on two hand-built pieces: Porter to group the stem candidates, and that stopword list — which, as the chart above shows, is load-bearing here, not decoration. The list I can drop.
+
+A stopword isn't really a linguistic category, it's just a word that's common everywhere — `the`, `of`, `is` turn up in every document no matter the topic. That's a frequency fact, so I can measure it instead of maintaining a list. I down-weight each term by its **global rarity**: a normalized `log(T/cf)` (T = total tokens in a big background collection, cf = how often the term occurs in it), raised to a power γ that sets how hard the common words get squashed. Note this is _collection_ frequency — total occurrences — not IDF, which counts _documents_. "Shows up everywhere" is a collection-frequency fact, and using it directly is what makes this a stopword prior and not just IDF again.
+
+You can read the weights straight off. At γ=1: `the` gets **0.00**, `of` 0.045, `is` 0.10, `will` 0.25 — squashed toward zero — while `running` 0.50, `vitamin` 0.48, `quantum` 0.61, and our friend `belvidere` 0.79 pass through nearly intact. No list, and because the background is just token counts, it works in any language.
+
+export const stopCats = [
+  'no stopwords',
+  'rarity prior (list-free)',
+  'NLTK stoplist',
+  'word + Porter',
+]
+export const stopColors = ['#94a3b8', '#10b981', '#64748b', '#64748b']
+
+<BarChart
+  orientation="horizontal"
+  title="A rarity prior matches the hand-built stopword list"
+  subtitle="macro-avg NDCG@10, 12 NanoBEIR (599 queries) — green = list-free prior, gray = the list it replaces + Porter target"
+  valueLabel="NDCG@10 (higher is better)"
+  valueMax={0.58}
+  valueTicks={[0, 0.1, 0.2, 0.3, 0.4, 0.5]}
+  categories={stopCats}
+  series={[
+    {
+      name: 'NDCG@10',
+      values: [0.5391, 0.5456, 0.5454, 0.5446],
+      colors: stopColors,
+      text: ['0.5391', '0.5456', '0.5454', '0.5446'],
+      textPosition: 'outside',
+    },
+  ]}
+/>
+
+Observations:
+
+1. **The prior matches the list** — **0.5456** vs the NLTK list's 0.5454, a tie (+0.0002), and it takes the best Recall@100 of the bunch at 0.8009. One frequency parameter does the same work as a curated list, with nothing to maintain.
+2. **Don't suppress too hard.** Crank γ to 2 and it overshoots to 0.5271 (−0.018, loses 9 of 12) — a harder exponent starts shaving mid-common _content_ words a list leaves alone (`Vitamin C` → both `vitamin` and `c` get damped). γ=0.5 is the sweet spot: kill the true stopwords, spare the borderline content.
+3. **This half is language-agnostic.** The NLTK list is English; token frequencies exist in every language, so the stopword step folds straight into the multilingual result below. That leaves Porter — grouping the stem candidates — as the last hand-built piece.
 
 ## The real payoff: one analyzer, every language
 
@@ -557,7 +598,7 @@ None of this needs a new engine, either: a sparse-vector index — [Qdrant's BM2
 ## Limitations
 
 - **Reaching Porter is a statistical tie, not a proven win.** On 12 tiny NanoBEIR sets the CI can't resolve GroupCov's nominal edge over the stemmer — a full-BEIR run is needed to claim more. And going _past_ Porter needs learned weights ([SPLADE](/blog/if-splade)) on this same vocabulary.
-- **The precision recipe isn't config-free.** Un-fragmentation is, but the stem-group expansion uses Porter to group candidates and a stopword list — the same tools `word_en` uses. The config-free story is the multilingual result, not the English-precision one.
+- **The precision recipe still leans on Porter.** Un-fragmentation is config-free, and the stopword list I [replaced with a language-agnostic rarity prior](#dropping-the-stopword-list-too) — but the stem-group expansion still uses Porter to group candidates, so the fully config-free story is the multilingual result, not the English-precision one.
 - **The base is char n-gram IR** ([known since 2004](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7)); the novelty is reusing the model's own analyzer, and going beyond it via weighted expansion.
 - **Small, directional evaluation.** NanoBEIR is 50 queries/dataset and the MIRACL pools use judged passages only; I used an exact-float Python BM25, not a production engine, so absolute numbers would shift.
 - **k1/b were fixed at (1.5, 0.75) for both sides.** I didn't tune per-representation, on purpose — but token docs are longer, so tuning could move either side ±0.01–0.02, the size of the whole English effect.
