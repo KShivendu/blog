@@ -14,7 +14,7 @@ authors: ['default']
 
 In [Token-Native Storage](/blog/token-storage) I argued that if agents are the biggest readers and writers of your database, you should store text as BPE token IDs, not UTF-8 bytes. The [interface](/blog/token-storage#interface) I proposed looks a lot like a search engine — which also tokenizes text per-language to index it. So instead of Lucene's English analyzer stemming `"running"` to `run` and indexing that, what if the index terms were the model's own subword token IDs? How does that do on BM25, and can it beat existing analyzers?
 
-Short version: naive tokenization breaks BM25 (**−0.11 NDCG@10**) for a fixable reason. Fix it and token-native BM25 **matches a Porter-stemmed English analyzer** using none of its machinery — no stopword list, no stemmer, no per-language config; two small token-native tricks (un-fragmenting words and stemming-by-expansion) close the last sliver of the gap. And because the tokenizer is the only moving part, the **same method beats a dedicated Chinese segmenter** with zero setup — one analyzer for every language, on the vocabulary the model already reads, writes, and [stores](/blog/token-storage). A specialized tool, matched by a more general one.
+Short version: BM25 on the model's own BPE token IDs **matches a Porter-stemmed English analyzer** using none of its machinery — no stopword list, no stemmer, no per-language config — and because the tokenizer is the only moving part, the **same method beats a dedicated Chinese segmenter** with zero setup. One analyzer for every language, on the vocabulary the model already reads, writes, and [stores](/blog/token-storage). The one catch is that raw tokenization needs a one-line fix (**−0.11 NDCG@10** without it), and two small token-native tricks — un-fragmenting words and stemming-by-expansion — close the last sliver to Porter. A specialized tool, matched by a more general one.
 
 <TokenSearchAnalyzer />
 
@@ -26,7 +26,7 @@ A BM25 inverted index maps a _term_ to a postings list. In Lucene the term is an
 
 Nothing in BM25 requires the term to be a _word_. It just needs to be a hashable symbol whose document frequency means something. So the swap is: run the [BPE tokenizer](https://github.com/openai/tiktoken) over the text, and use each token ID as a term. `"storage"` is one token; `"tokenization"` is two (`token` + `ization`); the whole index vocabulary is now the model's fixed 50k–200k tokens instead of an unbounded pile of English words.
 
-## The naive version is broken
+## First try: raw token IDs
 
 Here's the first thing I tried. It fails in an instructive way — the fix falls right out of it.
 
@@ -356,9 +356,9 @@ And it's not only human languages — **code is the same story, sharper.** On [C
 
 </details>
 
-## Can it beat Porter? Not without learning the weights
+## Beyond Porter: learned weights
 
-Reaching a stemmed analyzer is the practical ceiling for _unweighted_ scoring on tokens — I couldn't push NDCG past it. Blindly swapping scorers doesn't help: I tried 67 variants (k1/b retunes, Dirichlet and PL2, TF·IDF, BM25-channel fusions) and the best apparent win was **+0.018 NDCG@10 on the datasets I tuned it on, +0.0026 held out** — textbook overfitting. The floor is hard because **tokenizing barely touches the statistics BM25 was built to exploit**: burstiness and document length both survive it (details below), and the only real weak spots are the two token defects the un-fragmentation and expansion above already target — which is why they reach Porter. To push _past_ Porter you have to learn the term weights BM25 fixes at IDF × saturation, and that's [SPLADE](/blog/if-splade) — on this same token vocabulary.
+Matching a stemmed analyzer is the ceiling for _unweighted_ scoring on tokens, and swapping scorers doesn't push past it: I tried 67 variants (k1/b retunes, Dirichlet and PL2, TF·IDF, BM25-channel fusions) and the best apparent win was **+0.018 NDCG@10 on the datasets I tuned it on, +0.0026 held out** — textbook overfitting. The floor is hard because **tokenizing barely touches the statistics BM25 was built to exploit**: burstiness and document length both survive it (details below), and the only real weak spots are the two token defects the un-fragmentation and expansion above already target — which is why they reach Porter. To push _past_ Porter you have to learn the term weights BM25 fixes at IDF × saturation, and that's [SPLADE](/blog/if-splade) — on this same token vocabulary.
 
 <details>
 <summary>The frequency distribution BM25 scores against — histograms and the Zipf fit</summary>
@@ -611,7 +611,7 @@ None of this needs a new engine, either: a sparse-vector index — [Qdrant's BM2
 
 ## Key Takeaways
 
-- Naive token-BM25 is broken — BPE's space/case sensitivity tokenizes a query word differently than the same word mid-document, costing **−0.10 to −0.11 NDCG@10** on every one of 12 NanoBEIR datasets. Normalizing (encode each lowercased word with a fixed leading space) closes that to within noise of a plain word analyzer.
+- Normalizing before you tokenize makes token-BM25 match a plain word analyzer — encode each lowercased word with a fixed leading space, so a query word tokenizes the same as the same word mid-document. Skip it and BPE's space/case sensitivity costs **−0.10 to −0.11 NDCG@10** on every one of 12 NanoBEIR datasets.
 - That normalized base is really char n-gram IR: bagging subwords gives partial free stemming — same-stem words share a subword **68–112× more than chance** — so it matches a plain word index but leans **−0.02 below a Porter-stemmed one** ([known since 2004](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7)).
 - Two token-native fixes **match a Porter-stemmed analyzer** with none of the English machinery: un-fragment rare words (score each word once, not per subword) and soft-stem by weighted expansion query-side (weight stem-group variants by attestation instead of hard-merging both sides). They tie `word_en` (GroupCov 0.5471 vs 0.5446) and **significantly beat plain token-BM25** (+0.023) — a tie with Porter, not a win, and the document index stays pure tokens with Porter only a query-side hint. Pushing _past_ Porter needs learned weights ([SPLADE](/blog/if-splade)).
 - The config-free payoff is multilingual: on Chinese, `\w+` word tokenization collapses to **0.01 NDCG@10** while the config-free naive o200k tokenizer **beats the jieba segmenter, 0.49 vs 0.40** (a `\w+` presplit lifts it to 0.53 but wrecks Hindi). Directional — one MIRACL dev set; on Thai char n-grams win, and r50k dies on Devanagari/Thai where o200k holds.
