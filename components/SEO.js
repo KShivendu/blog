@@ -95,7 +95,6 @@ export const BlogSEO = ({
   date,
   lastmod,
   url,
-  images = [],
   canonicalUrl,
 }) => {
   const router = useRouter()
@@ -103,19 +102,10 @@ export const BlogSEO = ({
   const completeTitle = fullTitle({ title, subtitle })
   const publishedAt = new Date(date).toISOString()
   const modifiedAt = new Date(lastmod || date).toISOString()
-  let imagesArr =
-    images.length === 0
-      ? [siteMetadata.socialBanner]
-      : typeof images === 'string'
-      ? [images]
-      : images
-
-  const featuredImages = imagesArr.map((img) => {
-    return {
-      '@type': 'ImageObject',
-      url: `${siteMetadata.siteUrl}${img}`,
-    }
-  })
+  // The branded, on-the-fly OG card (title + subtitle) is the canonical image
+  // everywhere: og:image, twitter:image, and JSON-LD. There's no per-post image
+  // file, so a post's `images` frontmatter is no longer needed.
+  const socialImageUrl = postOgImage(title, subtitle)
 
   let authorList
   if (authorDetails) {
@@ -140,7 +130,7 @@ export const BlogSEO = ({
       '@id': url,
     },
     headline: completeTitle,
-    image: featuredImages,
+    image: socialImageUrl,
     datePublished: publishedAt,
     dateModified: modifiedAt,
     author: authorList,
@@ -154,11 +144,6 @@ export const BlogSEO = ({
     },
     description: summary,
   }
-
-  // Branded, dynamically rendered social card is the canonical og/twitter image
-  // for every post (overrides the in-article hero). `featuredImages` is still
-  // used for JSON-LD structured data below.
-  const socialImageUrl = postOgImage(title, subtitle)
 
   return (
     <>
