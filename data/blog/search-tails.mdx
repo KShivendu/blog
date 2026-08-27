@@ -5,13 +5,13 @@ date: '2026-08-27'
 lastmod: '2026-08-27'
 tags: ['search', 'evaluation', 'metrics']
 draft: false
-summary: 'Serious teams track latency as p50/p95/p99, not one average — so why report search quality as one average NDCG? On 12 benchmarks the mean looks healthy while more than one in ten queries returns nothing relevant. The average is hiding your worst searches.'
+summary: 'Serious teams track latency as p50/p90/p99, not one average — so why report search quality as one average NDCG? On 12 benchmarks the mean looks healthy while more than one in ten queries returns nothing relevant. The average is hiding your worst searches.'
 authors: ['kshivendu']
 ---
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Any serious team tracks latency as p50, p95, p99. Reporting just "our average latency is 40ms" is naive, because it hides the p99 150ms tail that's hurting users. Yet we report search relevance as a single average NDCG all the time, and somehow that's normal. It's the same mistake, never corrected for relevance.
+Any serious team tracks latency as p50, p90, p99. Reporting just "our average latency is 40ms" is naive, because it hides the p99 150ms tail that's hurting users. Yet we report search relevance as a single average NDCG all the time, and somehow that's normal. It's the same mistake, never corrected for relevance.
 
 I ran a plain word-BM25 baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries). Instead of averaging each metric, I pooled the per-query scores and read the percentiles. The mean NDCG@10 is **0.526**, which _feels_ respectable, as if every query comes back roughly half-right. In reality, they range from perfect to nothing: the p10 is **0.000**, so more than one in ten queries retrieves nothing relevant in the top 10, and the average buries every one.
 
@@ -22,7 +22,7 @@ Pool the per-query scores and the distribution shows what the mean can't:
 export const pctCats = ['NDCG@10', 'recall@10', 'recall@100']
 export const pctColors = {
   mean: '#94a3b8',
-  p50: '#64748b',
+  p50: '#0d9488',
   p25: '#f59e0b',
   p10: '#f87171',
   p75: '#34d399',
@@ -32,7 +32,7 @@ export const pctColors = {
 <BarChart
   orientation="horizontal"
   title="Per-query score: mean vs median vs p10 floor (BM25, 12 NanoBEIR datasets)"
-  subtitle="gray = mean, dark = median (p50), amber = p25, red = p10 floor — 599 queries, pooled"
+  subtitle="gray = mean, teal = median (p50), amber = p25, red = p10 floor — 599 queries, pooled"
   valueLabel="score (higher is better)"
   valueMax={1.0}
   valueTicks={[0, 0.2, 0.4, 0.6, 0.8, 1.0]}
