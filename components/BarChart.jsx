@@ -909,6 +909,7 @@ function ChartImpl({
               flexWrap: 'wrap',
               gap: '6px',
               padding: '2px 2px 0',
+              marginTop: mobile ? '10px' : 0,
               fontFamily: 'var(--font-mono, ui-monospace, monospace)',
             }}
           >
