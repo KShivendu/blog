@@ -87,7 +87,12 @@ Three things in that chart matter:
 
 ### Is "within noise" actually parity?
 
-"The bars look the same" isn't a statistical claim — parity is an _equivalence_ claim, and absence of a significant difference isn't evidence of equivalence. So I ran a **cluster bootstrap** (resample datasets, then queries within each, since queries clump into datasets and aren't independent) on the per-query NDCG@10 delta, with a pre-registered ±0.01 equivalence margin.
+"The bars look the same" isn't a statistical claim, so I ran a cluster bootstrap on the per-query delta. It puts normalized BPE **within noise of plain word** (−0.004, 95% CI [−0.014, +0.006]) — a statistical tie, not proven equal. Against the stronger **Porter-stemmed** analyzer (`word_en`) it's **−0.02 behind** — not significant, but it loses 10 of 12 datasets, so a hair behind a real stemmer, not parity.
+
+<details>
+<summary>The equivalence test, and the full CI table</summary>
+
+Parity is an _equivalence_ claim, and absence of a significant difference isn't evidence of equivalence. So the bootstrap resamples datasets, then queries within each (queries clump into datasets and aren't independent), against a pre-registered ±0.01 equivalence margin. Normalized BPE's CI straddles zero but isn't tight enough to pass that strict test — "within noise," not "proven equal." (`word_en` = NLTK stopwords + Porter, a real Lucene-`EnglishAnalyzer`-style baseline.)
 
 <div style={{overflowX: 'auto'}}>
 
@@ -100,7 +105,7 @@ Three things in that chart matter:
 
 </div>
 
-Normalized BPE is statistically indistinguishable from plain word-BM25 — a tight CI straddling zero — though not tight enough to pass the strict ±0.01 equivalence test, so I'll call it "within noise," not "proven equal." Against the stronger **Porter-stemmed** analyzer (`word_en`: NLTK stopwords + Porter, a real Lucene-`EnglishAnalyzer`-style baseline) it's **−0.02 behind** — not significant, but it loses 10 of 12 datasets, so that's not parity either. A hair behind a real stemmer.
+</details>
 
 ## Why does normalized BPE match a word analyzer?
 
@@ -141,7 +146,7 @@ But first, one more question about the base tie: does it hold at every depth, or
 
 ## The recall ceiling: a wider net, ranked worse
 
-Everything above is measured at rank 10. But subword matching can connect a query and a document that share no whole word, only a fragment — so maybe subwords cast a _wider net_, retrieving more relevant documents but ranking them worse, which `@10` would hide. I measured recall at increasing depth, plus **reachability**: the fraction of relevant documents that get _any_ nonzero score, independent of rank.
+Everything above is at rank 10. But subword matching can link a query and document that share no whole word, only a fragment — so maybe subwords cast a _wider net_ that `@10` would hide. I measured recall at increasing depth, plus **reachability**: the fraction of relevant docs that get _any_ nonzero score, independent of rank.
 
 export const rd = {
   word: [0.549, 0.613, 0.672, 0.721, 0.756, 0.797, 0.845, 0.876],
@@ -198,7 +203,6 @@ export const rdSeries = (name, color, key, dashed) => ({
 </div>
 
 - **Char 4-grams are a strictly wider, noisier net.** They reach **4.8% of relevant documents word-BM25 scores a hard zero, and miss none word finds** (reachability 0.97 vs 0.92) — but their **Recall@10 is _lower_** (0.595 vs 0.613): the extra documents land deep, lifting Recall@1000, not the top 10. Wider net, worse ranking.
-- **The stemmer is the opposite — a precise net.** `word + Porter` has the best Recall@10 but the _lowest_ reachability (0.889): it collapses real morphological variants and nothing else.
 - **So use the wider net as a candidate generator + reranker, or fuse it with word-BM25** — not a drop-in BM25 replacement. Word-BM25 structurally caps at 0.922 reachable here; no reranker recovers the ~8% it scores zero. (NanoBEIR pools are 2–5k docs, so Recall@1000 ≈ reachability; directional.)
 
 ## Closing the stemming gap, token-natively
