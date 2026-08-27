@@ -26,6 +26,7 @@ export const pctColors = {
   p50: '#64748b',
   p25: '#f59e0b',
   p10: '#f87171',
+  p75: '#34d399',
   p90: '#10b981',
 }
 
@@ -118,19 +119,20 @@ Two spikes, a hollow middle: 43% of queries score exactly 1.0 and 20% exactly 0 
 
 The mean also hides your gains. Take a real improvement: plain word BM25, then add a Porter stemmer and stopwords (`word_en`). It moves mean NDCG@10 by **+0.019**, a bump you'd squint at. But look where the gain lands:
 
-export const deltaCats = ['mean', 'p10', 'p25', 'p50', 'p90']
+export const deltaCats = ['mean', 'p10', 'p25', 'p50', 'p75', 'p90']
 export const deltaColors = [
   pctColors.mean,
   pctColors.p10,
   pctColors.p25,
   pctColors.p50,
+  pctColors.p75,
   pctColors.p90,
 ]
 
 <BarChart
   orientation="horizontal"
-  title="One improvement, five ways to measure it: recall@10, word → word_en"
-  subtitle="how far each statistic moved. the gain lives in p25/p50; p10 and p90 are saturated"
+  title="One improvement, six ways to measure it: recall@10, word → word_en"
+  subtitle="how far each statistic moved. the gain lives in p25/p50; p10, p75 and p90 are saturated"
   valueLabel="move in recall@10 (Δ)"
   valueMax={0.12}
   valueTicks={[0, 0.03, 0.06, 0.09, 0.12]}
@@ -138,15 +140,15 @@ export const deltaColors = [
   series={[
     {
       name: 'Δ recall@10',
-      values: [0.0216, 0.0, 0.036, 0.1, 0.0],
+      values: [0.0216, 0.0, 0.036, 0.1, 0.0, 0.0],
       colors: deltaColors,
-      text: ['+0.022', '+0.000', '+0.036', '+0.100', '+0.000'],
+      text: ['+0.022', '+0.000', '+0.036', '+0.100', '+0.000', '+0.000'],
       textPosition: 'outside',
     },
   ]}
 />
 
-Same gain, five ways: the mean smears it across every query (**+0.022**); the median reads it where the queries can actually move (**+0.100**, 4.6×). The p10 and p90 bars sit at +0.000 because both tails are saturated, stuck at 0 and at 1.0, and a saturated percentile can't show a gain. The pattern holds across metrics:
+Same gain, six ways: the mean smears it across every query (**+0.022**); the median reads it where the queries can actually move (**+0.100**, 4.6×). The p10, p75, and p90 bars sit at +0.000 because those percentiles are saturated (p10 at 0, p75 and p90 at 1.0), and a saturated percentile can't show a gain. The pattern holds across metrics:
 
 | metric     | mean Δ | where it shows up                                                            |
 | ---------- | -----: | ---------------------------------------------------------------------------- |
