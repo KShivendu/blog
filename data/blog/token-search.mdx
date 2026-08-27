@@ -132,21 +132,18 @@ Second check: if the gains come from stemming-like matching, the queries where n
 
 </details>
 
-### This is char n-gram retrieval, and I should say so
+This is really **char n-gram retrieval** — subword n-gram indexing does the same decomposition, and [McNamee & Mayfield showed in 2004](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7) it recovers morphology without a stemmer, especially across languages. The free stemming is a 20-year-old subword-IR result, not new to BPE. Three reasons to run it on the model's own tokens anyway:
 
-Here's the uncomfortable part. Look back at the ladder chart: the **char 4-gram** bar (cyan) behaves exactly like normalized BPE — within noise of plain word, a hair behind the stemmer, on every comparison. Character n-gram indexing does the same subword decomposition, and [McNamee & Mayfield showed in 2004](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7) that character n-grams recover morphological matching without a stemmer, especially across languages. **So "BPE subwords give free stemming" is a 20-year-old result about subword IR**, not something new about BPE.
-
-So the base normalized token-BM25 is char n-gram IR, and its free stemming is only _partial_. Two reasons to do it anyway, and a third that closes the gap:
-
-- **A BPE vocabulary is a language-agnostic analyzer you already have** — no stopword list, stemmer, or per-language segmenter to configure, and the same one for every language.
+- **A BPE vocabulary is a language-agnostic analyzer you already have** — no stopword list, stemmer, or per-language segmenter, and the same one for every language.
 - **It's the same vocabulary the model reads and writes** ([token-native storage](/blog/token-storage)): the lexical index and the stored text share one representation.
-- **Subword tokens are a knob a stemmer doesn't have.** A stemmer hard-merges variants; subword tokens let you _weight_ them instead — and that, plus un-fragmenting rare words, closes the −0.02 gap (below).
+- **Subword tokens are a knob a stemmer doesn't have.** A stemmer hard-merges variants; subword tokens let you _weight_ them instead — that, plus un-fragmenting rare words, closes the −0.02 gap below.
 
-But first, one more question about the base tie: does it hold at every depth, or just at rank 10?
+The tie holds at every depth, not just rank 10 — normalized BPE tracks plain word from 5 to 1000, so there's no hidden wider net. The lone exception is char 4-grams, which reach more documents but rank them deep:
 
-## The recall ceiling: a wider net, ranked worse
+<details>
+<summary>The lone exception: char n-grams cast a wider, deeper net</summary>
 
-Everything above is at rank 10. But subword matching can link a query and document that share no whole word, only a fragment — so maybe subwords cast a _wider net_ that `@10` would hide. I measured recall at increasing depth, plus **reachability**: the fraction of relevant docs that get _any_ nonzero score, independent of rank.
+Subword matching can link a query and document that share no whole word, only a fragment — a _wider net_ that `@10` hides. I measured recall at increasing depth, plus **reachability** (the fraction of relevant docs that get _any_ nonzero score):
 
 export const rd = {
   word: [0.549, 0.613, 0.672, 0.721, 0.756, 0.797, 0.845, 0.876],
@@ -203,7 +200,9 @@ export const rdSeries = (name, color, key, dashed) => ({
 </div>
 
 - **Char 4-grams are a strictly wider, noisier net.** They reach **4.8% of relevant documents word-BM25 scores a hard zero, and miss none word finds** (reachability 0.97 vs 0.92) — but their **Recall@10 is _lower_** (0.595 vs 0.613): the extra documents land deep, lifting Recall@1000, not the top 10. Wider net, worse ranking.
-- **So use the wider net as a candidate generator + reranker, or fuse it with word-BM25** — not a drop-in BM25 replacement. Word-BM25 structurally caps at 0.922 reachable here; no reranker recovers the ~8% it scores zero. (NanoBEIR pools are 2–5k docs, so Recall@1000 ≈ reachability; directional.)
+- **Use it as a candidate generator + reranker, or fuse it with word-BM25** — not a drop-in replacement. Word-BM25 structurally caps at 0.922 reachable here. (NanoBEIR pools are 2–5k docs, so Recall@1000 ≈ reachability; directional.)
+
+</details>
 
 ## Closing the stemming gap, token-natively
 
