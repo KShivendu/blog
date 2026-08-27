@@ -1,11 +1,11 @@
 ---
-title: 'Stop Averaging Search Quality'
+title: 'Stop Averaging Search Relevance'
 subtitle: 'Report percentiles, not just mean.'
 date: '2026-08-27'
 lastmod: '2026-08-27'
 tags: ['search', 'evaluation', 'metrics']
 draft: false
-summary: 'Serious teams track latency as p50/p90/p99, not one average — so why report search quality as one average NDCG? On 12 benchmarks the mean looks healthy while more than one in ten queries returns nothing relevant. The average is hiding your worst searches.'
+summary: 'Serious teams track latency as p50/p90/p99, not one average — so why report search relevance as one average NDCG? On 12 benchmarks the mean looks healthy while more than one in ten queries returns nothing relevant. The average is hiding your worst searches.'
 authors: ['kshivendu']
 ---
 
@@ -159,9 +159,9 @@ The gain shows up wherever the live mass sits: the median for recall@10, the low
 
 ## Why p10, not p90
 
-Latency and quality are the same problem pointed at opposite tails. For latency, higher is worse, so you watch the high end: p90, p99. For quality, higher is better, so the tail that hurts is the low end: **p10, the worst-query floor**. It's the same instinct, just mirrored.
+Latency and relevance are the same problem pointed at opposite tails. For latency, higher is worse, so you watch the high end: p90, p99. For relevance, higher is better, so the tail that hurts is the low end: **p10, the worst-query floor**. It's the same instinct, just mirrored.
 
-And it is instinct for latency. I timed this BM25 baseline at **3.9ms p50, 8.6ms p90**. Reporting only the 5ms mean would be a mistake, because the p90 is the request a real user is waiting on. p10 quality is that same user, on the tail that actually hurts. We just forget to report it.
+And it is instinct for latency. I timed this BM25 baseline at **3.9ms p50, 8.6ms p90**. Reporting only the 5ms mean would be a mistake, because the p90 is the request a real user is waiting on. p10 relevance is that same user, on the tail that actually hurts. We just forget to report it.
 
 ## The ask
 
@@ -175,7 +175,7 @@ Concretely, for any retrieval eval:
 
 Reporting the distribution also keeps you honest. You stay aware of the queries that fail instead of averaging them out of sight, and a genuine improvement stays visible where it lands instead of shrinking into a +0.019 you can't feel. Percentiles keep you closer to the reality your users actually experience.
 
-One number can't capture search quality. We worked this out for latency a decade ago. Quality deserves the same.
+One number can't capture search relevance. We worked this out for latency a decade ago. Relevance deserves the same.
 
 (This fell out of benchmarking [token search](/blog/token-search), where I was macro-averaging NDCG across datasets and realised the average was quietly deciding my conclusions for me.)
 
@@ -183,4 +183,4 @@ One number can't capture search quality. We worked this out for latency a decade
 
 - **p10 of NDCG@10 and recall@10 is 0.000.** On 12 NanoBEIR datasets the mean looks like ~0.53, but more than one in ten queries retrieves nothing relevant, and the average hides every failure.
 - **The mean hides gains, too.** Adding a stemmer + stopwords moves mean NDCG@10 by a forgettable +0.019, while the median recall@10 jumps 0.50 → 0.60 (+0.100, ~5×), visible only in the percentile where the mass can move.
-- **Report p50 + p10, or the full distribution.** For quality, higher is better, so the tail that hurts is the low end: p10 is the mirror of p90/p99 latency.
+- **Report p50 + p10, or the full distribution.** For relevance, higher is better, so the tail that hurts is the low end: p10 is the mirror of p90/p99 latency.
