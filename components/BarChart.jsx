@@ -393,7 +393,7 @@ function ChartImpl({
   const topPad =
     (title && !mobile ? 24 : 8) +
     (subtitle && !mobile ? 16 : 0) +
-    (hasToggleRow ? 30 : 0) +
+    (hasToggleRow ? 8 : 0) +
     (hasVariantRow ? 26 : 0) +
     (hasScaleRow ? 26 : 0)
   const catLabelFont = mobile ? 12 : 10.5
@@ -909,7 +909,7 @@ function ChartImpl({
               flexWrap: 'wrap',
               gap: '6px',
               padding: '2px 2px 0',
-              marginTop: mobile ? '10px' : 0,
+              margin: '8px 0',
               fontFamily: 'var(--font-mono, ui-monospace, monospace)',
             }}
           >
