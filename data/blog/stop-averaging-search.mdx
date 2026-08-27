@@ -12,7 +12,7 @@ authors: ['default']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Any serious team tracks latency as p50, p95, p99. Reporting just "our average latency is 40ms" is naive, because the average hides the tail that's hurting users. Yet we report search quality as a single average NDCG all the time, and somehow that's normal. It's the same mistake, never corrected for quality.
+Any serious team tracks latency as p50, p95, p99. Reporting just "our average latency is 40ms" is naive, because the average hides the tail that's hurting users. Yet we report search quality as a single average NDCG all the time, and somehow that's normal. It's the same mistake, rarely corrected for quality.
 
 I ran a plain word-BM25 baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries). Instead of averaging each metric, I pooled the per-query scores and read the percentiles. The mean NDCG@10 is **0.526**, which looks respectable. The p10 is **0.000**: more than one in ten queries retrieves nothing relevant in the top 10, and the average buries every one.
 
@@ -21,7 +21,13 @@ I ran a plain word-BM25 baseline over 12 [NanoBEIR](https://huggingface.co/colle
 Pool the per-query scores and the distribution shows what the mean can't:
 
 export const pctCats = ['NDCG@10', 'recall@10', 'recall@100']
-export const pctColors = { mean: '#94a3b8', p50: '#64748b', p25: '#f59e0b', p10: '#f87171' }
+export const pctColors = {
+  mean: '#94a3b8',
+  p50: '#64748b',
+  p25: '#f59e0b',
+  p10: '#f87171',
+  p90: '#10b981',
+}
 
 <BarChart
   orientation="horizontal"
@@ -65,7 +71,7 @@ export const pctColors = { mean: '#94a3b8', p50: '#64748b', p25: '#f59e0b', p10:
 
 p10 is 0.000 for both NDCG@10 and recall@10: over 10% of queries score a hard zero while the mean sits near 0.53. Two subtler things the average also hides:
 
-1. **recall@100: the typical query is perfect, the mean says 0.765.** The median query recalls _every_ relevant doc (p50 = 1.000), but a tail flooring at p10 = 0.126 drags the mean down to a number no real query got.
+1. **recall@100: the typical query is perfect, the mean says 0.765.** The median query recalls every relevant doc (p50 = 1.000), but a tail flooring at p10 = 0.126 drags the mean down to a number no real query got.
 2. **The mean's error flips sign between metrics.** It overstates recall@10's median (0.563 vs 0.500) and understates NDCG@10's (0.526 vs 0.554), so you can't correct for it in your head.
 
 The distribution is the whole story. Here's per-query recall@10, bucketed:
@@ -106,19 +112,25 @@ export const histColors = histCats.map((c) =>
   ]}
 />
 
-Two spikes, a hollow middle: **43% of queries score exactly 1.0** and **20% exactly 0** (63% at the extremes), while the mean, 0.563, sits in the `(.5,.6]` valley where about 8% of queries live. It describes almost no real query, which is why p50 and p10 tell you more than the average can.
+Two spikes, a hollow middle: 43% of queries score exactly 1.0 and 20% exactly 0 (63% at the extremes), while the mean, 0.563, sits in the `(.5,.6]` valley where about 8% of queries live. It describes almost no real query, which is why p50 and p10 tell you more than the average can.
 
 ## It hides your improvements, too
 
-The mean also hides your _gains_. Take a real improvement: plain word BM25, then add a Porter stemmer and stopwords (`word_en`). It moves mean NDCG@10 by **+0.019**, a bump you'd squint at. But look where the gain lands:
+The mean also hides your gains. Take a real improvement: plain word BM25, then add a Porter stemmer and stopwords (`word_en`). It moves mean NDCG@10 by **+0.019**, a bump you'd squint at. But look where the gain lands:
 
-export const deltaCats = ['mean', 'p25', 'p50']
-export const deltaColors = [pctColors.mean, pctColors.p25, pctColors.p50]
+export const deltaCats = ['mean', 'p10', 'p25', 'p50', 'p90']
+export const deltaColors = [
+  pctColors.mean,
+  pctColors.p10,
+  pctColors.p25,
+  pctColors.p50,
+  pctColors.p90,
+]
 
 <BarChart
   orientation="horizontal"
-  title="One improvement, three ways to measure it: recall@10, word → word_en"
-  subtitle="each bar = how far that statistic moved. the mean twitches +0.022; the median jumps +0.100 — 4.6× as far"
+  title="One improvement, five ways to measure it: recall@10, word → word_en"
+  subtitle="how far each statistic moved. the gain lives in p25/p50; p10 and p90 are saturated"
   valueLabel="move in recall@10 (Δ)"
   valueMax={0.12}
   valueTicks={[0, 0.03, 0.06, 0.09, 0.12]}
@@ -126,15 +138,15 @@ export const deltaColors = [pctColors.mean, pctColors.p25, pctColors.p50]
   series={[
     {
       name: 'Δ recall@10',
-      values: [0.0216, 0.036, 0.1],
+      values: [0.0216, 0.0, 0.036, 0.1, 0.0],
       colors: deltaColors,
-      text: ['+0.022', '+0.036', '+0.100'],
+      text: ['+0.022', '+0.000', '+0.036', '+0.100', '+0.000'],
       textPosition: 'outside',
     },
   ]}
 />
 
-Same gain, three ways: the mean smears it across every query (**+0.022**); the median reads it where queries can actually move (**+0.100**, 4.6×). The p75 bar is missing because it's pinned at 1.0, and a saturated percentile can't show a gain. The pattern holds across metrics:
+Same gain, five ways: the mean smears it across every query (**+0.022**); the median reads it where the queries can actually move (**+0.100**, 4.6×). The p10 and p90 bars sit at +0.000 because both tails are saturated, stuck at 0 and at 1.0, and a saturated percentile can't show a gain. The pattern holds across metrics:
 
 | metric     | mean Δ | where it shows up                                                            |
 | ---------- | -----: | ---------------------------------------------------------------------------- |
@@ -148,7 +160,7 @@ The gain shows up wherever the live mass sits: the median for recall@10, the low
 
 Latency and quality are the same problem pointed at opposite tails. For latency, higher is worse, so you watch the high end: p90, p99. For quality, higher is better, so the tail that hurts is the low end: **p10, the worst-query floor**. It's the same instinct, just mirrored.
 
-And it _is_ instinct for latency. I timed this BM25 baseline at **3.9ms p50, 8.6ms p90**. I'd never publish just the 5ms mean, because the p90 is the request a real user is waiting on. p10 quality is that same user, on the tail that actually hurts. We just forget to report it.
+And it is instinct for latency. I timed this BM25 baseline at **3.9ms p50, 8.6ms p90**. Reporting only the 5ms mean would be a mistake, because the p90 is the request a real user is waiting on. p10 quality is that same user, on the tail that actually hurts. We just forget to report it.
 
 ## The ask
 
