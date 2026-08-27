@@ -100,7 +100,7 @@ Observations:
 2. **Normalization consolidates.** Merging `The`/`the`/` the` shifts mass out of the short buckets into the 101–1k range (normalized **8.8%** at 101–300 vs naive's 6.6%) — the same content in fewer, longer posting lists, which is exactly why a query term now lands on its document.
 3. **Even the analyzer Elasticsearch ships stays singleton-heavy.** `word + stem` (`word_en`: Porter + English stopwords) has fewer distinct terms (114k — stemming merges variants) but _more_ singletons than plain word (**57%** vs 53%): stemming only merges already-rare forms, and dropping stopwords strips the long lists, tilting the tail further. Subword tokenization is the only thing here that fundamentally consolidates the posting lists.
 
-That normalization moves naive's −0.11 gap to essentially zero. Here's the full ladder, macro-averaged over the 12 datasets, for both the r50k and o200k tokenizers:
+That normalization moves naive's −0.11 gap to essentially zero. Here's the full ladder for both tokenizers. Toggle from the mean to p25 or the zero-rate — the naive break goes from a ten-point dip to a quarter of queries returning nothing:
 
 export const engCats = [
   'word (plain)',
@@ -123,24 +123,43 @@ export const engColors = [
   '#a78bfa',
 ]
 export const engOpac = [1, 1, 1, 0.5, 1, 0.5, 1, 1]
-export const engVals = [0.5259, 0.5446, 0.5241, 0.4242, 0.418, 0.5201, 0.5219, 0.5259]
+export const engFmt = (v, d) => v.map((x) => x.toFixed(d))
+export const engView = (values, text) => ({
+  categories: engCats,
+  series: [
+    { name: 'value', values, colors: engColors, opacities: engOpac, text, textPosition: 'outside' },
+  ],
+})
+export const engMean = [0.5259, 0.5446, 0.5241, 0.4242, 0.418, 0.5201, 0.5219, 0.5259]
+export const engP25 = [0.2192, 0.2641, 0.1772, 0.0, 0.0, 0.2021, 0.2178, 0.2192]
+export const engZero = [19.9, 17.2, 20.7, 31.7, 31.1, 20.5, 19.9, 19.9]
 
 <BarChart
   orientation="horizontal"
   title="BM25 quality: words vs BPE token IDs (12 NanoBEIR datasets, 599 queries)"
-  subtitle="macro-avg NDCG@10 · BPE rows split r50k / o200k · red = naive break, green = normalized fix, purple = control"
-  valueLabel="NDCG@10 (higher is better)"
-  valueMax={0.62}
-  valueTicks={[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]}
+  subtitle="BPE rows split r50k / o200k · red = naive break, green = normalized fix, purple = control · toggle the metric →"
   categories={engCats}
-  series={[
+  views={[
     {
-      name: 'NDCG@10',
-      values: engVals,
-      colors: engColors,
-      opacities: engOpac,
-      text: engVals.map((x) => x.toFixed(3)),
-      textPosition: 'outside',
+      label: 'mean',
+      valueLabel: 'NDCG@10 mean (higher is better)',
+      valueMax: 0.62,
+      valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+      ...engView(engMean, engFmt(engMean, 3)),
+    },
+    {
+      label: 'p25',
+      valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
+      valueMax: 0.3,
+      valueTicks: [0, 0.1, 0.2, 0.3],
+      ...engView(engP25, engFmt(engP25, 3)),
+    },
+    {
+      label: 'zero-rate',
+      valueLabel: 'zero-rate %, queries returning nothing (lower is better)',
+      valueMax: 35,
+      valueTicks: [0, 10, 20, 30],
+      ...engView(engZero, engFmt(engZero, 1)),
     },
   ]}
 />
