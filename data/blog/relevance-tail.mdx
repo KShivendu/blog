@@ -167,7 +167,7 @@ And it is instinct for latency. I timed this BM25 baseline at **3.9ms p50, 8.6ms
 
 Report the median and the p10, not the mean. Keep the mean only as a comparison column if a baseline reports it. Better still, show the whole distribution, whether a histogram or the five-number summary. It costs nothing: you already computed every per-query score to average them, then threw the shape away.
 
-None of this is new machinery. IR has had geometric-mean AP and per-topic zero-rates since the TREC Robust track; the gap is that leaderboards and model cards still report the plain mean.
+None of this is new machinery. IR has had geometric-mean AP and per-topic zero-rates since the TREC Robust track; they never caught on because leaderboards need one number to rank on and every eval tool prints the mean by default.
 
 Concretely, for any retrieval eval:
 
