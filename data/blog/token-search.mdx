@@ -468,11 +468,20 @@ export const mlCats = [
   'word \\w+',
   'char 4-gram',
   'jieba (zh only)',
+  'ES lang analyzer',
   'naive r50k',
   'naive o200k',
   'normalized o200k',
 ]
-export const mlColors = ['#94a3b8', '#38bdf8', '#f59e0b', '#f87171', '#fb923c', '#10b981']
+export const mlColors = [
+  '#94a3b8',
+  '#38bdf8',
+  '#f59e0b',
+  '#a78bfa',
+  '#f87171',
+  '#fb923c',
+  '#10b981',
+]
 export const mlSeries = (vals, dec, suffix) => ({
   categories: mlCats,
   series: [
@@ -485,7 +494,7 @@ export const mlSeries = (vals, dec, suffix) => ({
     },
   ],
 })
-export const mlLang = (mean, p50, zero) => [
+export const mlLang = (mean, p50, p25, zero) => [
   {
     label: 'mean',
     valueLabel: 'NDCG@10 mean (higher is better)',
@@ -502,6 +511,13 @@ export const mlLang = (mean, p50, zero) => [
     ...mlSeries(p50, 3),
   },
   {
+    label: 'p25',
+    valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
+    valueMax: 0.5,
+    valueTicks: [0, 0.1, 0.2, 0.3, 0.4],
+    ...mlSeries(p25, 3),
+  },
+  {
     label: 'zero-rate',
     valueLabel: 'zero-rate %, queries returning nothing (lower is better)',
     valueMax: 100,
@@ -513,30 +529,33 @@ export const mlLang = (mean, p50, zero) => [
 <BarChart
   orientation="horizontal"
   title="Multilingual BM25: word analyzer vs BPE token IDs (MIRACL dev)"
-  subtitle="gray = \w+ word, orange = a real segmenter, green = GPT-4o tokenizer · toggle metric (top) + language (bottom)"
+  subtitle="amber = jieba, violet = ES's built-in language analyzer, green = GPT-4o tokenizer · toggle metric (top) + language (bottom)"
   views={[
     {
       label: 'Chinese (zh)',
       datasets: mlLang(
-        [0.0117, 0.3267, 0.3975, 0.2686, 0.4879, 0.5268],
-        [0.0, 0.296, 0.387, 0.177, 0.485, 0.5],
-        [97.96, 41.73, 23.66, 43.26, 14.0, 12.21]
+        [0.0117, 0.3267, 0.3975, 0.492, 0.2686, 0.4879, 0.5268],
+        [0.0, 0.296, 0.387, 0.5, 0.177, 0.485, 0.5],
+        [0.0, 0.0, 0.136, 0.301, 0.0, 0.301, 0.318],
+        [97.96, 41.73, 23.66, 14.0, 43.26, 14.0, 12.21]
       ),
     },
     {
       label: 'Hindi (hi)',
       datasets: mlLang(
-        [0.3919, 0.3674, null, 0.0071, 0.5465, 0.2678],
-        [0.357, 0.304, null, 0.0, 0.554, 0.0],
-        [34.0, 39.14, null, 97.14, 15.43, 50.86]
+        [0.3919, 0.3674, null, 0.625, 0.0071, 0.5465, 0.2678],
+        [0.357, 0.304, null, 0.631, 0.0, 0.554, 0.0],
+        [0.0, 0.0, null, 0.4, 0.0, 0.333, 0.0],
+        [34.0, 39.14, null, 6.29, 97.14, 15.43, 50.86]
       ),
     },
     {
       label: 'Thai (th)',
       datasets: mlLang(
-        [0.5695, 0.6159, null, 0.0398, 0.5629, 0.4434],
-        [0.613, 0.631, null, 0.0, 0.605, 0.413],
-        [16.92, 10.1, null, 91.13, 15.55, 28.79]
+        [0.5695, 0.6159, null, 0.614, 0.0398, 0.5629, 0.4434],
+        [0.613, 0.631, null, 0.631, 0.0, 0.605, 0.413],
+        [0.315, 0.387, null, 0.387, 0.0, 0.315, 0.0],
+        [16.92, 10.1, null, 9.82, 91.13, 15.55, 28.79]
       ),
     },
   ]}
@@ -546,13 +565,15 @@ The Chinese result is the whole argument in one bar chart:
 
 - **`\w+` word tokenization collapses to 0.0117 NDCG@10.** With no spaces, the regex swallows entire runs of characters into single terms, so queries and documents almost never share a term. Word-BM25 simply does not work on Chinese without a segmenter.
 - **jieba fixes it to 0.40** — that's the cost of a language-specific dependency.
-- **GPT-4o's o200k tokenizer beats jieba** with zero language configuration. Normalized o200k hits **0.53** (13 points over jieba); even the fully config-free **naive** o200k, the version that comes straight off the model with no `\w+` split at all, gets **0.49** — still 9 points over jieba. BPE segments Chinese into shared subwords the same way it does English, and a good multilingual vocabulary does it better than the dedicated segmenter here.
+- **GPT-4o's o200k tokenizer beats jieba** with zero language configuration. Normalized o200k hits **0.53** (13 points over jieba); even the fully config-free **naive** o200k, the version that comes straight off the model with no `\w+` split at all, gets **0.49** — still 9 points over jieba. BPE segments Chinese into shared subwords the same way it does English, and a good multilingual vocabulary does it better than the dedicated segmenter — or than a production engine's own Chinese analyzers (Elasticsearch's `cjk` **0.49**, its default character segmentation **0.52**), both still under o200k's **0.53**.
 
-Three caveats the other languages surface:
+But Chinese is the exception, and the honest picture — once you add Elasticsearch's built-in per-language analyzers (`cjk`/`hindi`/`thai`, the production version of "reach for the language-specific tool") — is more interesting than "BPE wins":
 
-- **On Thai, BPE does _not_ win — char 4-grams do.** Thai has enough embedded spaces that the plain `\w+` word baseline already reaches 0.57; char 4-grams top the table at 0.62, and naive o200k (0.56) merely _ties_ it. The "BPE beats the analyzer" line is a Chinese result, not a universal one — where word tokenization half-works, BPE is a wash and classic char n-grams win.
-- **The best token variant flips by language.** On English the `\w+` pre-split is essential; on Hindi and Thai it _hurts_ — `naive:o200k` gets **0.55 on Hindi vs normalized's 0.27**, and even beats the Hindi _word_ baseline (0.39). My English normalization is a word-segmenter in disguise, and forcing word boundaries on a script that lays them out differently loses to letting BPE segment the raw stream. So the config-free method is naive BPE on a multilingual tokenizer — exactly what the model emits.
-- **Tokenizer coverage is decisive.** r50k has no Devanagari or Thai merges, so it falls back to bytes and collapses — **0.007 on Hindi**, 0.04 on Thai, the same r50k-on-Hindi failure from the [storage post](/blog/token-storage). o200k, trained multilingually, handles both. Tokenizer choice isn't cosmetic here.
+- **Where a language has a mature analyzer, configuring it still beats token-native.** ES's `hindi` analyzer (a real Hindi stemmer + stopwords) hits **0.63** vs naive o200k's **0.55**; ES's `thai` word-breaker hits **0.61**, beating naive BPE (0.56) and tying char 4-grams. On Chinese there's no such tool that helps (jieba _loses_ to characters), so token-native wins; on Hindi and Thai there is, and it wins.
+- **The best variant flips by language, and normalization is an English trick.** normalized o200k wins Chinese; naive o200k wins Hindi (normalization _hurts_ — `\w+` forces boundaries Devanagari lays out differently, collapsing it to 0.27); char 4-grams win Thai. Naive BPE is the robust config-free choice — best-or-near-best everywhere — but not always the ceiling.
+- **Tokenizer coverage is decisive.** r50k has no Devanagari or Thai merges, so it collapses — **0.007 on Hindi**, 0.04 on Thai (the [storage-post](/blog/token-storage) failure again). o200k, trained multilingually, handles both.
+
+So the real payoff isn't "one tokenizer beats every analyzer." It's **zero-config universality that never collapses**: one BPE tokenizer gives you a strong, never-catastrophic baseline in every language with no per-language setup — and where a language has real tooling (Hindi, Thai), you can still do better by configuring it. The failure lens makes the point cleanest: word `\w+` returns nothing for **98%** of Chinese queries, the wrong tokenizer (r50k) for **~95%** of Hindi and Thai; token-native's win is that it's never that catastrophe, in any language, for free.
 
 And it's not only human languages — **code is the same story, sharper.** On [CodeSearchNet](https://github.com/github/CodeSearchNet) (Python, docstring → function), a Porter stemmer _hurts_: **0.944 NDCG@10 vs plain word's 0.963**, because English stemming rules mangle identifiers instead of matching them. Token-native wins — **GroupCov 0.972** — subwording `getUserById` into `get·User·By·Id` the way it does morphology. On English the stemmer is a tie; on code it's a liability.
 
