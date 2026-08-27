@@ -12,7 +12,7 @@ authors: ['default']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Any serious team tracks latency as p50, p95, p99. Reporting just "our average latency is 40ms" is naive, because the average hides the p99 150ms tail that's hurting users. Yet we report search quality as a single average NDCG all the time, and somehow that's normal. It's the same mistake, never corrected for quality.
+Any serious team tracks latency as p50, p95, p99. Reporting just "our average latency is 40ms" is naive, because it hides the p99 150ms tail that's hurting users. Yet we report search quality as a single average NDCG all the time, and somehow that's normal. It's the same mistake, never corrected for quality.
 
 I ran a plain word-BM25 baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries). Instead of averaging each metric, I pooled the per-query scores and read the percentiles. The mean NDCG@10 is **0.526**, which looks respectable. The p10 is **0.000**: more than one in ten queries retrieves nothing relevant in the top 10, and the average buries every one.
 
