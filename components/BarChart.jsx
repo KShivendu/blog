@@ -343,11 +343,24 @@ function ChartImpl({
   }
   // Per-scale-toggle overrides fall back to the top-level props, same
   // resolution order as categories/series above.
-  const rValueScale = activeScale?.valueScale ?? valueScale
-  const rValueMin = activeScale && 'valueMin' in activeScale ? activeScale.valueMin : valueMin
-  const rValueMax = activeScale && 'valueMax' in activeScale ? activeScale.valueMax : valueMax
-  const rValueTicks = activeScale?.valueTicks ?? valueTicks
-  const rValueLabel = activeScale?.valueLabel ?? valueLabel
+  // A view/dataset (`resolved`) may carry its own axis so a toggle can switch
+  // between metrics on different scales (e.g. mean/p25 on 0–0.6 vs a 0–35% rate).
+  // Precedence: explicit variant scale → active view/dataset → chart-level prop.
+  const rValueScale = activeScale?.valueScale ?? resolved?.valueScale ?? valueScale
+  const rValueMin =
+    activeScale && 'valueMin' in activeScale
+      ? activeScale.valueMin
+      : resolved && 'valueMin' in resolved
+      ? resolved.valueMin
+      : valueMin
+  const rValueMax =
+    activeScale && 'valueMax' in activeScale
+      ? activeScale.valueMax
+      : resolved && 'valueMax' in resolved
+      ? resolved.valueMax
+      : valueMax
+  const rValueTicks = activeScale?.valueTicks ?? resolved?.valueTicks ?? valueTicks
+  const rValueLabel = activeScale?.valueLabel ?? resolved?.valueLabel ?? valueLabel
   const isLog = rValueScale === 'log'
   // Smallest positive datum — the log floor falls back to this when unspecified.
   let dataMin = Infinity
