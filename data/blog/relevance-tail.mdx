@@ -172,7 +172,7 @@ Concretely, for any retrieval eval:
 - **p50**: the typical query. Your headline, instead of the mean.
 - **p25**: the lower quartile, where the weaker queries sit and where a real improvement usually shows first.
 - **p10**: the worst-query floor, the number that decides whether users trust the system.
-- **mean**: only next to p50, and only if a baseline you're comparing against reports it.
+- **mean**: a fine quick summary for comparing runs, as long as it sits next to p50 and p10 rather than standing alone.
 
 Reporting the distribution also keeps you honest. You stay aware of the queries that fail instead of averaging them out of sight, and a genuine improvement stays visible where it lands instead of shrinking into a +0.019 you can't feel. Percentiles keep you closer to the reality your users actually experience.
 
