@@ -367,6 +367,9 @@ function ChartImpl({
       : valueMax
   const rValueTicks = activeScale?.valueTicks ?? resolved?.valueTicks ?? valueTicks
   const rValueLabel = activeScale?.valueLabel ?? resolved?.valueLabel ?? valueLabel
+  // Title/subtitle can also be per-dataset so a metric toggle can relabel the chart.
+  const rTitle = activeScale?.title ?? resolved?.title ?? title
+  const rSubtitle = activeScale?.subtitle ?? resolved?.subtitle ?? subtitle
   const isLog = rValueScale === 'log'
   // Smallest positive datum — the log floor falls back to this when unspecified.
   let dataMin = Infinity
@@ -410,8 +413,8 @@ function ChartImpl({
   const hasVariantRow = activeVariants && activeVariants.length > 1
   const hasScaleRow = activeScales && activeScales.length > 1
   const topPad =
-    (title && !mobile ? 24 : 8) +
-    (subtitle && !mobile ? 16 : 0) +
+    (rTitle && !mobile ? 24 : 8) +
+    (rSubtitle && !mobile ? 16 : 0) +
     (hasToggleRow ? 8 : 0) +
     (hasVariantRow ? 26 : 0) +
     (hasScaleRow ? 26 : 0)
@@ -904,21 +907,21 @@ function ChartImpl({
         }}
       >
         {/* Mobile: wrapping HTML title/subtitle (SVG text can't wrap in-viewBox) */}
-        {mobile && (title || subtitle) && (
+        {mobile && (rTitle || rSubtitle) && (
           <div
             style={{
               fontFamily: 'var(--font-mono, ui-monospace, monospace)',
               padding: '2px 2px 4px',
             }}
           >
-            {title && (
+            {rTitle && (
               <div style={{ fontSize: '13px', fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>
-                {title}
+                {rTitle}
               </div>
             )}
-            {subtitle && (
+            {rSubtitle && (
               <div style={{ fontSize: '11px', color: C.muted, lineHeight: 1.35, marginTop: '2px' }}>
-                {subtitle}
+                {rSubtitle}
               </div>
             )}
           </div>
@@ -1105,7 +1108,7 @@ function ChartImpl({
         <svg
           viewBox={`0 0 ${W} ${H}`}
           role="img"
-          aria-label={title || 'bar chart'}
+          aria-label={rTitle || 'bar chart'}
           style={{
             display: 'block',
             width: '100%',
@@ -1118,20 +1121,20 @@ function ChartImpl({
             touchAction: 'manipulation',
           }}
         >
-          {title && !mobile && (
+          {rTitle && !mobile && (
             <text
               x={W / 2}
-              y={subtitle ? 15 : 18}
+              y={rSubtitle ? 15 : 18}
               textAnchor="middle"
               fontSize={fTitle}
               fontWeight="600"
               fill={C.ink}
               fontFamily="var(--font-mono, ui-monospace, monospace)"
             >
-              {title}
+              {rTitle}
             </text>
           )}
-          {subtitle && !mobile && (
+          {rSubtitle && !mobile && (
             <text
               x={W / 2}
               y={30}
@@ -1140,7 +1143,7 @@ function ChartImpl({
               fill={C.muted}
               fontFamily="var(--font-mono, ui-monospace, monospace)"
             >
-              {subtitle}
+              {rSubtitle}
             </text>
           )}
           {gridLayer}
