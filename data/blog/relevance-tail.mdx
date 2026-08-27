@@ -165,7 +165,7 @@ And it is instinct for latency. I timed this BM25 baseline at **3.9ms p50, 8.6ms
 
 ## The ask
 
-Report the median and the p10, not the mean. Keep the mean only as a comparison column if a baseline reports it. Better still, show the whole distribution, whether a histogram or the five-number summary. It costs nothing: you already computed every per-query score to average them, then threw the shape away.
+Report the median, the failure rate, and the p10, not the mean. Keep the mean only as a comparison column if a baseline reports it. Better still, show the whole distribution, whether a histogram or the five-number summary. It costs nothing: you already computed every per-query score to average them, then threw the shape away.
 
 None of this is new machinery. IR has had geometric-mean AP and per-topic zero-rates since the TREC Robust track; they never caught on because leaderboards need one number to rank on and every eval tool prints the mean by default.
 
@@ -173,7 +173,8 @@ Concretely, for any retrieval eval:
 
 - **p50**: the typical query. Your headline, instead of the mean.
 - **p25**: the lower quartile, where the weaker queries sit and where a real improvement usually shows first.
-- **p10**: the worst-query floor, the failures users remember.
+- **zero-rate**: the share of queries that return nothing. This is your failure number when the tail is fat.
+- **p10**: the worst-query floor, useful when failures are rarer than 10%; past that it pins at 0 and the zero-rate takes over.
 - **mean**: fine for comparing runs, just not on its own.
 
 Reporting the distribution also keeps you honest. You stay aware of the queries that fail instead of averaging them out of sight, and a genuine improvement stays visible where it lands instead of shrinking into a +0.022 you can't feel. Percentiles keep you closer to the reality your users actually experience.
