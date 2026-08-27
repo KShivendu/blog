@@ -38,9 +38,64 @@ Across 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) 
 
 The mismatch is entirely about _inconsistent_ tokenization between query and document. So make it consistent: lowercase the text, split it into words on word boundaries, and encode each word in isolation with a fixed leading space — `enc.encode(" " + word)`. Now `"cat"` produces the exact same token IDs whether it's a one-word query or buried mid-sentence in a document. I bag all the resulting subword tokens and run ordinary BM25 over them.
 
-The index this builds is also bounded. Across the 12 corpora (52k docs) a word analyzer needs **146k distinct terms** and keeps growing with every new document; the token index has **48k** — capped forever at the tokenizer's fixed **200k**, so no query ever hits an out-of-vocabulary term.
+The index it builds is also bounded, and it consolidates. Across the 12 corpora (52k docs) a word analyzer needs **146k distinct terms** and keeps growing with every new document; naive tokenization uses **74k** token terms, and normalizing merges the case/space variants (`The`/` the`/`the`) down to **48k** — capped forever at the tokenizer's fixed **200k**, so no query ever hits an out-of-vocabulary term. Fewer terms means longer posting lists: average document-frequency climbs **32 → 79 → 109** across word, naive, and normalized.
 
-That one change moves naive's −0.11 gap to essentially zero. Here's the full ladder, macro-averaged over the 12 datasets. Toggle the tokenizer on the right:
+Where those posting lists sit tells the same story — the share of index terms whose list spans each many documents (toggle the representation):
+
+export const plBuckets = [
+  '1',
+  '2',
+  '3–5',
+  '6–10',
+  '11–30',
+  '31–100',
+  '101–300',
+  '301–1k',
+  '1k–3k',
+  '3k–10k',
+  '10k+',
+]
+export const plView = (data, color) => ({
+  categories: plBuckets,
+  series: [
+    {
+      name: '% of terms',
+      values: data,
+      colors: plBuckets.map(() => color),
+      text: data.map((x) => x.toFixed(1)),
+      textPosition: 'outside',
+    },
+  ],
+})
+
+<BarChart
+  orientation="vertical"
+  title="Posting-list sizes: how many documents each term spans"
+  subtitle="share of index terms by document-frequency bucket, 12 NanoBEIR (52k docs) — toggle representation"
+  valueLabel="% of terms"
+  valueMax={58}
+  views={[
+    {
+      label: 'word',
+      ...plView([53.5, 11.9, 12.0, 6.8, 7.3, 4.4, 2.3, 1.2, 0.4, 0.1, 0.0], '#94a3b8'),
+    },
+    {
+      label: 'naive BPE',
+      ...plView([17.2, 8.5, 14.7, 13.5, 20.6, 14.8, 6.6, 2.9, 0.9, 0.2, 0.1], '#f87171'),
+    },
+    {
+      label: 'normalized',
+      ...plView([17.5, 8.0, 12.2, 11.4, 19.4, 16.5, 8.8, 4.4, 1.4, 0.3, 0.1], '#10b981'),
+    },
+  ]}
+/>
+
+Observations:
+
+1. **Word indexing is a pile of singletons** — **53%** of word terms appear in exactly one document (English hapax), short lists that barely help ranking. Subwords are shared, so only **17%** are singletons.
+2. **Normalization consolidates.** Merging `The`/`the`/` the` shifts mass out of the short buckets into the 101–1k range (normalized **8.8%** at 101–300 vs naive's 6.6%) — the same content in fewer, longer posting lists, which is exactly why a query term now lands on its document.
+
+That normalization moves naive's −0.11 gap to essentially zero. Here's the full ladder, macro-averaged over the 12 datasets. Toggle the tokenizer on the right:
 
 export const engCats = [
   'word (plain)',
