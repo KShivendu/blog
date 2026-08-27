@@ -38,6 +38,8 @@ Across 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) 
 
 The mismatch is entirely about _inconsistent_ tokenization between query and document. So make it consistent: lowercase the text, split it into words on word boundaries, and encode each word in isolation with a fixed leading space — `enc.encode(" " + word)`. Now `"cat"` produces the exact same token IDs whether it's a one-word query or buried mid-sentence in a document. I bag all the resulting subword tokens and run ordinary BM25 over them.
 
+The index this builds is also bounded. Across the 12 corpora (52k docs) a word analyzer needs **146k distinct terms** and keeps growing with every new document; the token index has **48k** — capped forever at the tokenizer's fixed **200k**, so no query ever hits an out-of-vocabulary term.
+
 That one change moves naive's −0.11 gap to essentially zero. Here's the full ladder, macro-averaged over the 12 datasets. Toggle the tokenizer on the right:
 
 export const engCats = [
