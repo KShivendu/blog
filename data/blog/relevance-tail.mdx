@@ -13,7 +13,7 @@ authors: ['kshivendu']
 
 Any serious team tracks latency as p50, p90, p99. Reporting just "our average latency is 40ms" is naive, because it hides the p99 150ms tail that's hurting users. Yet we report search relevance as a single average NDCG all the time, and somehow that's normal. It's the same mistake, and for relevance the average is still the default.
 
-I ran a plain word-BM25 baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries). Instead of averaging each metric, I pooled the per-query scores and read the percentiles. The mean NDCG@10 is **0.526**, which _feels_ respectable, as if every query comes back roughly half-right. In reality, they range from perfect to nothing: the p10 is **0.000**. One in five queries retrieves nothing relevant in the top 10, and the average buries every one.
+I ran a plain word-BM25 baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries). Instead of averaging each metric, I pooled the per-query scores and read the percentiles. The mean NDCG@10 is **0.526**, which _feels_ respectable, as if every query comes back roughly half-right. In reality, they range from perfect to nothing: one in five queries retrieves nothing relevant in the top 10, which is why the p10 is a hard **0.000**. The average buries every one.
 
 ## The mean hides the floor
 
@@ -186,6 +186,6 @@ One number can't capture search relevance. We worked this out for latency a deca
 
 ## Key Takeaways
 
-- **p10 of NDCG@10 and recall@10 is 0.000.** On 12 NanoBEIR datasets the mean looks like ~0.53, but one in five queries retrieves nothing relevant, and the average hides every failure.
+- **One in five queries retrieves nothing relevant.** On 12 NanoBEIR datasets the mean looks like ~0.53, but 20% of queries return nothing in the top 10 (so p10 = 0.000), and the average hides every failure.
 - **The mean hides gains, too.** Adding a stemmer + stopwords moves mean recall@10 by a forgettable +0.022, while its median jumps 0.50 → 0.60 (+0.100, 4.6×), visible only in the percentile where the mass can move.
 - **Report p50 + p10, or the full distribution.** For relevance, higher is better, so the tail that hurts is the low end: p10 is the mirror of p90/p99 latency.
