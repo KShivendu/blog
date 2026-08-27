@@ -5,14 +5,14 @@ date: '2026-08-27'
 lastmod: '2026-08-27'
 tags: ['search', 'evaluation', 'metrics']
 draft: true
-summary: 'You would never ship on average latency — so why report search quality as one average NDCG? On 12 benchmarks the mean looks healthy while more than one in ten queries returns nothing relevant. The average is hiding your worst searches.'
+summary: 'Serious teams track latency as p50/p95/p99, not one average — so why report search quality as one average NDCG? On 12 benchmarks the mean looks healthy while more than one in ten queries returns nothing relevant. The average is hiding your worst searches.'
 images: ['/static/images/blogs/tokenization-compression.jpg']
 authors: ['default']
 ---
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Nobody ships a service on _average_ latency. You report p50, p95, p99 — and "our average latency is 40ms" would get laughed out of the room, because everyone knows the average hides the tail that's actually hurting users. Yet we report search quality as a single average NDCG all the time, and somehow that's normal. Same mistake, and we've normalized it for quality.
+Any serious team tracks latency as p50, p95, p99 — reporting just "our average latency is 40ms" is naive, because the average hides the tail that's actually hurting users. Yet we report search quality as a single average NDCG all the time, and somehow that's normal. Same mistake, uncorrected for quality.
 
 Here's how bad it gets. I ran a plain lowercase-word BM25 baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries), and instead of collapsing each metric to a mean, I pooled the per-query scores and read off the percentiles. The mean NDCG@10 is **0.526** — a respectable-looking number. The **p10 is 0.000**. More than one in ten queries retrieves nothing relevant at all in the top 10 — total failures — and the average buries every one of them. You would never know one in ten searches returns garbage from looking at "0.53."
 
