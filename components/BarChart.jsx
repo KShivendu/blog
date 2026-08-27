@@ -407,7 +407,9 @@ function ChartImpl({
 
   let m, H
   if (horizontal) {
-    const rowH = mobile ? 34 : 30
+    // Scale row height with the number of grouped series so each bar stays thick
+    // (G bars share a band; a flat rowH makes them hair-thin at G=3). G=1 unchanged.
+    const rowH = (mobile ? 34 : 30) * Math.min(2.6, Math.max(1, G * 0.7))
     H = height || topPad + N * rowH + 44
     // Size the label gutter to the LONGEST category label (monospace) instead of
     // a fixed width — short labels ("heart") no longer leave a big empty column.
@@ -540,7 +542,11 @@ function ChartImpl({
       srs.forEach((s, si) => {
         if (groupOf(s, si) !== gk) return
         const v = Math.max(0, s.values?.[ci] || 0)
-        if (v <= 0) return
+        // Single-series charts hide zeros; grouped charts show them as a small
+        // labeled nub at the origin so a real floor (e.g. p10 = 0.000) stays
+        // visible instead of collapsing to an invisible zero-width bar.
+        if (v <= 0 && G === 1) return
+        const zeroStub = v <= 0
         const rawEnd = cum + v
         // A value that overshoots the configured axis max gets its bar
         // clamped to the ceiling instead of drawn (or overflowing) past it —
@@ -565,15 +571,15 @@ function ChartImpl({
           rect = {
             x: Math.min(p0, p1),
             y: barC - groupThick / 2,
-            width: Math.abs(p1 - p0),
+            width: zeroStub ? 2.5 : Math.abs(p1 - p0),
             height: groupThick * 0.92,
           }
         } else {
           rect = {
             x: barC - groupThick / 2,
-            y: Math.min(p0, p1),
+            y: zeroStub ? Math.min(p0, p1) - 2.5 : Math.min(p0, p1),
             width: groupThick * 0.92,
-            height: Math.abs(p1 - p0),
+            height: zeroStub ? 2.5 : Math.abs(p1 - p0),
           }
         }
         if (!clipped) {
