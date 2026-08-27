@@ -230,7 +230,13 @@ function ChartImpl({
   const [viewIdx, setViewIdx] = useState(defaultViewIdx)
   // Secondary, independent toggle axis (e.g. dataset) nested under each view —
   // mirrors LineChart's views[].datasets so selection persists across views.
-  const [datasetIdx, setDatasetIdx] = useState(0)
+  // A dataset may set `default: true` to be selected first (same as views).
+  const defaultDatasetIdx = (() => {
+    const ds = views && views.length ? views[defaultViewIdx]?.datasets : null
+    const i = ds ? ds.findIndex((d) => d.default) : -1
+    return i >= 0 ? i : 0
+  })()
+  const [datasetIdx, setDatasetIdx] = useState(defaultDatasetIdx)
   // Third, independent toggle axis (e.g. All/Focus) nested under each dataset —
   // same idea one level deeper, so it persists across both view and dataset.
   const [variantIdx, setVariantIdx] = useState(0)
