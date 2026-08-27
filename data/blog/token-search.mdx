@@ -73,11 +73,15 @@ export const plView = (data, color) => ({
   title="Posting-list sizes: how many documents each term spans"
   subtitle="share of index terms by document-frequency bucket, 12 NanoBEIR (52k docs) — toggle representation"
   valueLabel="% of terms"
-  valueMax={58}
+  valueMax={62}
   views={[
     {
       label: 'word',
       ...plView([53.5, 11.9, 12.0, 6.8, 7.3, 4.4, 2.3, 1.2, 0.4, 0.1, 0.0], '#94a3b8'),
+    },
+    {
+      label: 'word + stem',
+      ...plView([57.1, 11.8, 11.3, 6.1, 6.3, 3.7, 1.9, 1.2, 0.6, 0.1, 0.0], '#64748b'),
     },
     {
       label: 'naive BPE',
@@ -94,6 +98,7 @@ Observations:
 
 1. **Word indexing is a pile of singletons** — **53%** of word terms appear in exactly one document (English hapax), short lists that barely help ranking. Subwords are shared, so only **17%** are singletons.
 2. **Normalization consolidates.** Merging `The`/`the`/` the` shifts mass out of the short buckets into the 101–1k range (normalized **8.8%** at 101–300 vs naive's 6.6%) — the same content in fewer, longer posting lists, which is exactly why a query term now lands on its document.
+3. **Even the analyzer Elasticsearch ships stays singleton-heavy.** `word + stem` (`word_en`: Porter + English stopwords) has fewer distinct terms (114k — stemming merges variants) but _more_ singletons than plain word (**57%** vs 53%): stemming only merges already-rare forms, and dropping stopwords strips the long lists, tilting the tail further. Subword tokenization is the only thing here that fundamentally consolidates the posting lists.
 
 That normalization moves naive's −0.11 gap to essentially zero. Here's the full ladder, macro-averaged over the 12 datasets. Toggle the tokenizer on the right:
 
@@ -405,9 +410,23 @@ Three caveats the other languages surface:
 And it's not only human languages — **code is the same story, sharper.** On [CodeSearchNet](https://github.com/github/CodeSearchNet) (Python, docstring → function), a Porter stemmer _hurts_: **0.944 NDCG@10 vs plain word's 0.963**, because English stemming rules mangle identifiers instead of matching them. Token-native wins — **GroupCov 0.972** — subwording `getUserById` into `get·User·By·Id` the way it does morphology. On English the stemmer is a tie; on code it's a liability.
 
 <details>
-<summary>A note on latency — not a selling point, and I only half-measured it</summary>
+<summary>A note on latency — measured, a wash at this scale</summary>
 
-**Analyze cost is a wash** — one short query is 2µs for words, ~20µs for BPE, and indexing runs ~4k docs/s/core for both (`word_en`'s Porter stemmer is slower, ~840 docs/s). But that isn't _query_ latency, and I didn't measure the part that differs at scale: token documents run ~1.14× longer with higher-DF subword terms, so postings traversal costs more per query, and my ~1.5k-doc Python BM25 can't see it. Treat "search is a wash" as unproven above small scale. And "the model gives you the tokens for free" only holds for naive tokenization, which retrieves badly. The honest win here is config, not milliseconds.
+I timed the full query path (analyze + score + top-k) on SciFact and NFCorpus (~3k docs each). p50 / p90, in ms:
+
+<div style={{overflowX: 'auto'}}>
+
+| method                                | SciFact (long q) | NFCorpus (short q) |
+| ------------------------------------- | ---------------: | -----------------: |
+| word                                  |        3.5 / 6.1 |          0.2 / 2.4 |
+| word + Porter + stopwords (`word_en`) |        1.2 / 1.9 |          0.1 / 0.7 |
+| normalized token (o200k)              |        3.5 / 5.2 |          0.4 / 2.5 |
+| word-tuple (o200k)                    |        3.6 / 5.3 |          0.3 / 2.6 |
+| char 4-gram                           |      14.0 / 21.2 |          2.7 / 6.7 |
+
+</div>
+
+**Word and token BM25 come out a wash** — within ~3% on long queries, same order of magnitude on short ones. The two real gaps aren't words-vs-tokens: char n-grams cost 4–12× more (many terms per query), and dropping the high-DF terms — `word_en`'s stopwords, or the [rarity prior](#dropping-the-stopword-list-too) — roughly halves query time by shortening posting traversal. Analyze cost is a wash too (~2µs/query for words, ~20µs for BPE; indexing ~4k docs/s/core, Porter slower at ~840). Caveat: this is an exact-float Python BM25 at ~3k docs, so treat it as directional — token documents run ~1.14× longer with higher-DF subwords, so traversal could diverge at web scale (a real engine would erase both). The honest operational win is config, not milliseconds.
 
 </details>
 
