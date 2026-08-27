@@ -5,7 +5,7 @@ date: '2026-07-21'
 tags: ['vector-databases', 'compression', 'internals', 'llm', 'nlp']
 draft: true
 summary: "OpenAI's and Anthropic's chat APIs take text in and give text out, even though the model underneath samples token IDs at every step. There's precedent for token-ID input (OpenAI's legacy Completions prompt field, vLLM's prompt_token_ids), but no major hosted chat API exposes it end to end. I analyze what the APIs accept and return today, and propose a concrete, opt-in token-ID mode reusing the string-or-array interface from the token-native storage post."
-authors: ['default']
+authors: ['kshivendu']
 ---
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)

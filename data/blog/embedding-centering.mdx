@@ -7,7 +7,7 @@ tags: ['embeddings', 'transformers', 'retrieval', 'anisotropy', 'information-ret
 draft: true
 summary: 'Subtracting a single precomputed mean vector from mxbai/bge/gte embeddings improves discrimination by 65% with no model changes, no retraining, and negligible compute. But it leaves retrieval rankings unchanged. This post explains what centering actually fixes, why full whitening backfires, and where the improvement lives.'
 images: []
-authors: ['default']
+authors: ['kshivendu']
 ---
 
 > This post builds on the embedding geometry series. [Part 1](/blog/embedding-layers) covers token collapse. [Part 3](/blog/transformer-geometry-at-scale) validates findings at scale. The core finding from that series: all mxbai/bge/gte embeddings live in a narrow cone, and the cone poisons cosine similarity. This post is about the cheapest possible fix.

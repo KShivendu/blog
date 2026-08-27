@@ -6,7 +6,7 @@ lastmod: '2026-06-11'
 tags: ['vector-databases', 'llm-inference', 'rag', 'internals']
 draft: true
 summary: 'Does KV caching for hot RAG documents actually pay? Corrected coverage math says the hot tier is tiny (571 docs for 42% of Wikipedia-scale queries) — but only if your query distribution is concentrated, and real pageview data is far flatter than the Zipf everyone assumes. Plus: multi-chunk prompts silently destroy prefix-cache reuse, canonical chunk ordering wins it back, and the TTFT speedup grows from 2× to 8.5× with context length.'
-authors: ['default']
+authors: ['kshivendu']
 ---
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)

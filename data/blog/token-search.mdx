@@ -7,7 +7,7 @@ tags: ['vector-databases', 'search', 'internals', 'rag', 'nlp']
 draft: true
 summary: 'A search analyzer is a hand-built, per-language pipeline — lowercase, stopwords, a stemmer, a segmenter for languages without spaces. I threw all of it out and ran BM25 on the model’s own BPE token IDs. It matches a Porter-stemmed English analyzer across 12 NanoBEIR datasets and beats a dedicated Chinese segmenter — one tokenizer, zero per-language config, the same representation the model reads, writes, and stores. A specialized tool, matched by a general one.'
 images: ['/static/images/blogs/tokenization-compression.jpg']
-authors: ['default']
+authors: ['kshivendu']
 ---
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)

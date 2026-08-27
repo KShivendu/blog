@@ -7,7 +7,7 @@ tags: ['embeddings', 'transformers', 'matryoshka', 'retrieval', 'geometry', 'nlp
 draft: true
 summary: 'mxbai-embed-2d-large-v1 is trained to produce useful embeddings at every layer exit, not just the final one. We ran it layer by layer and found something striking: 2D training completely redistributes where the model does its work — shifting peak contributions from 77% at L24 to spread across L9–L20. Intermediate exits go from useless to genuinely competitive.'
 images: []
-authors: ['default']
+authors: ['kshivendu']
 ---
 
 > This post is part of the embedding geometry series. [Part 1](/blog/embedding-layers) covers token collapse. [Part 2](/blog/similarity-attractor) covers the attractor. Earlier posts established that standard BERT-large embedding models do nearly all their useful work in the last two layers — intermediate exits produce degenerate representations. This post asks whether 2D Matryoshka training changes that.
