@@ -1087,7 +1087,17 @@ function ChartImpl({
           viewBox={`0 0 ${W} ${H}`}
           role="img"
           aria-label={title || 'bar chart'}
-          style={{ display: 'block', width: '100%', height: 'auto' }}
+          style={{
+            display: 'block',
+            width: '100%',
+            height: 'auto',
+            // Tapping a bar on mobile otherwise flashes the browser's blue
+            // text-selection / tap-highlight over the SVG value labels.
+            WebkitTapHighlightColor: 'transparent',
+            WebkitUserSelect: 'none',
+            userSelect: 'none',
+            touchAction: 'manipulation',
+          }}
         >
           {title && !mobile && (
             <text
