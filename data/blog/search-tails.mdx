@@ -150,11 +150,11 @@ export const deltaColors = [
 
 Same gain, six ways: the mean smears it across every query (**+0.022**); the median reads it where the queries can actually move (**+0.100**, 4.6×). The p10, p75, and p90 bars sit at +0.000 because those percentiles are saturated (p10 at 0, p75 and p90 at 1.0), and a saturated percentile can't show a gain. The pattern holds across metrics:
 
-| metric     | mean Δ | where it shows up                                                            |
-| ---------- | -----: | ---------------------------------------------------------------------------- |
-| NDCG@10    | +0.019 | p25 / p50 / p75 all move ~2× the mean (+0.037 to +0.045)                     |
-| recall@10  | +0.022 | median jumps **0.50 → 0.60**, a **+0.100 move (4.6× the mean)**              |
-| recall@100 | +0.028 | median already 1.0, so the gain lands in **p25: 0.50 → 0.63 (+0.126, 4.5×)** |
+| metric     | mean Δ | where it shows up                                                              |
+| ---------- | -----: | ------------------------------------------------------------------------------ |
+| recall@10  | +0.022 | median jumps **0.50 → 0.60**, a **+0.100 move (4.6×)**; p75, p90 pinned at 1.0 |
+| NDCG@10    | +0.019 | p25 / p50 / p75 all move ~2× the mean (+0.037 to +0.045)                       |
+| recall@100 | +0.028 | median already 1.0, so the gain lands in **p25: 0.50 → 0.63 (+0.126, 4.5×)**   |
 
 The gain shows up wherever the live mass sits: the median for recall@10, the lower quartiles for recall@100 whose median is already maxed. A saturated percentile moves nothing; the informative one moves 2–5× the mean.
 
