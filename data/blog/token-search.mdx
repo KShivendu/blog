@@ -40,7 +40,7 @@ The mismatch is entirely about _inconsistent_ tokenization between query and doc
 
 The index it builds is also bounded, and it consolidates. Across the 12 corpora (52k docs) a word analyzer needs **146k distinct terms** and keeps growing with every new document; naive tokenization uses **74k** token terms, and normalizing merges the case/space variants (`The`/` the`/`the`) down to **48k** — capped forever at the tokenizer's fixed **200k**, so no query ever hits an out-of-vocabulary term. Fewer terms means longer posting lists: average document-frequency climbs **32 → 79 → 109** across word, naive, and normalized.
 
-Where those posting lists sit tells the same story — the share of index terms whose list spans each many documents (toggle the representation):
+Where those posting lists sit is the cost a query actually pays — it only traverses the lists its own terms point to. The chart defaults to **share of postings** (what fraction of all index entries fall in each doc-frequency bucket); toggle to _share of terms_ for the vocabulary shape, and switch representation at the bottom:
 
 export const plBuckets = [
   '1',
@@ -55,50 +55,111 @@ export const plBuckets = [
   '3k–10k',
   '10k+',
 ]
-export const plView = (data, color) => ({
+export const plBar = (data, color, suffix) => ({
   categories: plBuckets,
   series: [
     {
-      name: '% of terms',
+      name: 'v',
       values: data,
       colors: plBuckets.map(() => color),
-      text: data.map((x) => x.toFixed(1)),
+      text: data.map((x) => x.toFixed(1) + (suffix || '')),
       textPosition: 'outside',
     },
   ],
 })
+export const plMethod = (count, terms, post, color) => {
+  const sub = `${count} distinct terms · document-frequency buckets, 12 NanoBEIR (52k docs)`
+  return [
+    {
+      label: 'share of postings',
+      default: true,
+      title: 'Posting-list sizes: share of postings by list length',
+      subtitle: sub,
+      valueLabel:
+        '% of all posting entries in this doc-frequency bucket — the traversal cost (higher-right = longer lists)',
+      valueMax: 94,
+      valueTicks: [0, 20, 40, 60, 80],
+      ...plBar(post, color),
+    },
+    {
+      label: 'share of terms',
+      title: 'Posting-list sizes: share of terms by list length',
+      subtitle: sub,
+      valueLabel: '% of distinct terms in this doc-frequency bucket — the vocabulary shape',
+      valueMax: 62,
+      valueTicks: [0, 20, 40, 60],
+      ...plBar(terms, color),
+    },
+  ]
+}
 
 <BarChart
   orientation="vertical"
-  title="Posting-list sizes: how many documents each term spans"
-  subtitle="share of index terms by document-frequency bucket, 12 NanoBEIR (52k docs)"
-  valueLabel="% of terms"
-  valueMax={62}
+  title="Posting-list sizes"
   views={[
     {
-      label: 'word · 146k lists',
-      ...plView([53.5, 11.9, 12.0, 6.8, 7.3, 4.4, 2.3, 1.2, 0.4, 0.1, 0.0], '#94a3b8'),
+      label: 'word',
+      datasets: plMethod(
+        '146k',
+        [53.5, 11.9, 12.0, 6.8, 7.3, 4.4, 2.3, 1.2, 0.4, 0.1, 0.0],
+        [1.7, 0.7, 1.4, 1.6, 4.0, 7.7, 12.2, 19.7, 20.0, 14.5, 16.6],
+        '#94a3b8'
+      ),
     },
     {
-      label: 'word+stem · 114k',
-      ...plView([57.1, 11.8, 11.3, 6.1, 6.3, 3.7, 1.9, 1.2, 0.6, 0.1, 0.0], '#64748b'),
+      label: 'word+stem',
+      datasets: plMethod(
+        '114k',
+        [57.1, 11.8, 11.3, 6.1, 6.3, 3.7, 1.9, 1.2, 0.6, 0.1, 0.0],
+        [2.0, 0.8, 1.4, 1.6, 3.8, 6.9, 11.2, 22.6, 31.7, 16.7, 1.4],
+        '#64748b'
+      ),
     },
     {
-      label: 'naive · 74k',
-      ...plView([17.2, 8.5, 14.7, 13.5, 20.6, 14.8, 6.6, 2.9, 0.9, 0.2, 0.1], '#f87171'),
+      label: 'naive',
+      datasets: plMethod(
+        '74k',
+        [17.2, 8.5, 14.7, 13.5, 20.6, 14.8, 6.6, 2.9, 0.9, 0.2, 0.1],
+        [0.2, 0.2, 0.7, 1.3, 4.8, 10.4, 14.1, 19.0, 18.4, 14.1, 16.7],
+        '#f87171'
+      ),
     },
     {
-      label: 'normalized · 48k',
-      ...plView([17.5, 8.0, 12.2, 11.4, 19.4, 16.5, 8.8, 4.4, 1.4, 0.3, 0.1], '#10b981'),
+      label: 'normalized',
+      datasets: plMethod(
+        '48k',
+        [17.5, 8.0, 12.2, 11.4, 19.4, 16.5, 8.8, 4.4, 1.4, 0.3, 0.1],
+        [0.2, 0.2, 0.4, 0.8, 3.3, 8.5, 13.8, 21.1, 20.3, 14.9, 16.6],
+        '#10b981'
+      ),
+    },
+    {
+      label: 'char bigram',
+      datasets: plMethod(
+        '9k',
+        [49.4, 11.6, 11.6, 7.3, 7.9, 3.8, 1.4, 1.2, 1.4, 1.1, 3.2],
+        [0.1, 0.0, 0.0, 0.1, 0.1, 0.2, 0.2, 0.8, 2.4, 6.4, 89.8],
+        '#7dd3fc'
+      ),
+    },
+    {
+      label: 'char trigram',
+      datasets: plMethod(
+        '40k',
+        [45.3, 11.6, 12.0, 6.1, 7.6, 5.1, 3.2, 2.9, 2.5, 2.4, 1.3],
+        [0.1, 0.1, 0.1, 0.1, 0.3, 0.6, 1.3, 3.7, 10.0, 30.4, 53.4],
+        '#38bdf8'
+      ),
     },
   ]}
 />
 
 Observations:
 
-1. **Word indexing is a pile of singletons** — **53%** of word terms appear in exactly one document (English hapax), short lists that barely help ranking. Subwords are shared, so only **17%** are singletons.
-2. **Normalization consolidates.** Merging `The`/`the`/` the` shifts mass out of the short buckets into the 101–1k range (normalized **8.8%** at 101–300 vs naive's 6.6%) — the same content in fewer, longer posting lists, which is exactly why a query term now lands on its document.
-3. **Even the analyzer Elasticsearch ships stays singleton-heavy.** `word + stem` (`word_en`: Porter + English stopwords) has fewer distinct terms (114k — stemming merges variants) but _more_ singletons than plain word (**57%** vs 53%): stemming only merges already-rare forms, and dropping stopwords strips the long lists, tilting the tail further. Subword tokenization is the only thing here that fundamentally consolidates the posting lists.
+1. **Char n-grams dump their whole cost into one bucket.** On the default postings view, char bigram is a single **90% bar at 10k+**: it has only 9k distinct terms, but the few that carry weight each span nearly the whole corpus, so every query bigram traverses a near-full-length list. char trigram is milder (**53%** at 10k+, 30% at 3k–10k). Word spreads its postings across the 300–10k range (**~17%** at 10k+). That fat right tail is the latency you'll see later — and toggling to _share of terms_ hides it completely: by term count char bigram (49% singletons) looks just like word (53%). Counting terms is the wrong lens; where the postings live is the cost.
+2. **Word indexing is a pile of singletons** (share of terms) — **53%** of word terms appear in exactly one document (English hapax), short lists that barely help ranking. Subwords are shared, so only **17%** are singletons.
+3. **Normalization consolidates.** Merging `The`/`the`/` the` shifts mass out of the short buckets into the 101–1k range (normalized **8.8%** at 101–300 vs naive's 6.6%) — the same content in fewer, longer posting lists, which is exactly why a query term now lands on its document.
+4. **Even the analyzer Elasticsearch ships stays singleton-heavy.** `word + stem` (`word_en`: Porter + English stopwords) has fewer distinct terms (114k — stemming merges variants) but _more_ singletons than plain word (**57%** vs 53%): stemming only merges already-rare forms, and dropping stopwords strips the long lists, tilting the tail further. Subword tokenization is the only thing here that fundamentally consolidates the posting lists.
 
 That normalization moves naive's −0.11 gap to essentially zero. Here's the full ladder for both tokenizers. Toggle the metric — the naive break widens from a ten-point dip at the mean to p25 = 0.000 and a 31% zero-rate:
 
@@ -462,11 +523,12 @@ Observations:
 
 Everything above splits text on `\w+` before tokenizing. That regex _is_ a word segmenter — and it only works for languages that put spaces between words. Chinese doesn't. Thai barely does. This is exactly where a word analyzer reaches for a language-specific tool and a BPE tokenizer doesn't.
 
-I ran the same experiment on [MIRACL](https://github.com/project-miracl/miracl) dev sets (self-contained retrieval pools built from the inline positive/negative passages). For Chinese I added [jieba](https://github.com/fxsjy/jieba), the standard Chinese segmenter, as the "proper analyzer" baseline. These are single dev sets scored on judged-passage-only pools, so treat the numbers as directional — I didn't bootstrap them the way I did the English results. Toggle the metric (top row) and the language (bottom) — the zero-rate view is the one that lands:
+I ran the same experiment on [MIRACL](https://github.com/project-miracl/miracl) dev sets (self-contained retrieval pools built from the inline positive/negative passages). For Chinese I added [jieba](https://github.com/fxsjy/jieba), the standard Chinese segmenter, as the "proper analyzer" baseline. A fourth tab runs the same idea on code ([CodeSearchNet](https://github.com/github/CodeSearchNet) Python, docstring → function), where the dedicated-tool comparison is a Porter stemmer against token-native GroupCov. These are single dev sets scored on judged-passage-only pools, so treat the numbers as directional — I didn't bootstrap them the way I did the English results. Toggle the metric (top) and the dataset (bottom) — for the languages the zero-rate view is the one that lands; for code the mean is (the median query is a perfect hit either way):
 
 export const mlCats = [
   'word \\w+',
-  'char 4-gram',
+  'char bigram',
+  'char trigram',
   'jieba (zh only)',
   'ES lang analyzer',
   'naive r50k',
@@ -475,6 +537,7 @@ export const mlCats = [
 ]
 export const mlColors = [
   '#94a3b8',
+  '#7dd3fc',
   '#38bdf8',
   '#f59e0b',
   '#a78bfa',
@@ -525,57 +588,168 @@ export const mlLang = (mean, p50, p25, zero) => [
     ...mlSeries(zero, 1, '%'),
   },
 ]
+export const codeCats = [
+  'word',
+  'word + Porter',
+  'char 4-gram',
+  'word-tuple',
+  'naive o200k',
+  'normalized o200k',
+  'GroupCov',
+]
+export const codeColors = [
+  '#94a3b8',
+  '#f87171',
+  '#38bdf8',
+  '#a78bfa',
+  '#fb923c',
+  '#22d3ee',
+  '#10b981',
+]
+export const codeSeries = (vals, dec, suffix) => ({
+  categories: codeCats,
+  series: [
+    {
+      name: 'v',
+      values: vals.map((x) => x ?? 0),
+      colors: codeColors,
+      text: vals.map((x) => (x == null ? '' : x.toFixed(dec) + (suffix || ''))),
+      textPosition: 'outside',
+    },
+  ],
+})
+export const codeDatasets = [
+  {
+    label: 'mean',
+    valueLabel: 'NDCG@10 mean (axis zoomed to 0.90–1.00; higher is better)',
+    valueMin: 0.9,
+    valueMax: 1.0,
+    valueTicks: [0.9, 0.95, 1.0],
+    ...codeSeries([0.968, 0.956, 0.964, 0.968, 0.969, 0.965, 0.976], 3),
+  },
+  {
+    label: 'p50',
+    valueLabel: 'NDCG@10 p50 — every method nails the median query; the spread lives in the mean',
+    valueMin: 0.9,
+    valueMax: 1.0,
+    valueTicks: [0.9, 0.95, 1.0],
+    ...codeSeries([1, 1, 1, 1, 1, 1, 1], 3),
+  },
+  {
+    label: 'p25',
+    valueLabel: 'NDCG@10 p25 — still a perfect hit at the lower quartile',
+    valueMin: 0.9,
+    valueMax: 1.0,
+    valueTicks: [0.9, 0.95, 1.0],
+    ...codeSeries([1, 1, 1, 1, 1, 1, 1], 3),
+  },
+  {
+    label: 'zero-rate',
+    valueLabel: 'zero-rate %, queries returning nothing (lower is better)',
+    valueMax: 2,
+    valueTicks: [0, 0.5, 1, 1.5, 2],
+    ...codeSeries([0.25, 0.38, 0.12, 0.25, 0.25, 0.12, 0.12], 2, '%'),
+  },
+]
+export const codeCosqaDatasets = [
+  {
+    label: 'mean',
+    valueLabel: 'NDCG@10 mean — CoSQA real NL queries (hard; higher is better)',
+    valueMax: 0.2,
+    valueTicks: [0, 0.05, 0.1, 0.15, 0.2],
+    ...codeSeries([0.143, 0.168, 0.185, 0.143, 0.132, 0.155, 0.175], 3),
+  },
+  {
+    label: 'p50',
+    valueLabel: 'NDCG@10 p50 — the median query MISSES (60%+ return nothing); read the mean',
+    valueMax: 0.2,
+    valueTicks: [0, 0.05, 0.1, 0.15, 0.2],
+    ...codeSeries([0, 0, 0, 0, 0, 0, 0], 3),
+  },
+  {
+    label: 'p25',
+    valueLabel: 'NDCG@10 p25 — still a miss at the lower quartile',
+    valueMax: 0.2,
+    valueTicks: [0, 0.05, 0.1, 0.15, 0.2],
+    ...codeSeries([0, 0, 0, 0, 0, 0, 0], 3),
+  },
+  {
+    label: 'zero-rate',
+    valueLabel: 'zero-rate %, queries returning nothing (lower is better)',
+    valueMax: 80,
+    valueTicks: [0, 20, 40, 60, 80],
+    ...codeSeries([72.0, 66.2, 63.2, 72.0, 72.4, 68.6, 69.8], 1, '%'),
+  },
+]
 
 <BarChart
   orientation="horizontal"
-  title="Multilingual BM25: word analyzer vs BPE token IDs (MIRACL dev)"
-  subtitle="amber = jieba, violet = ES's built-in language analyzer, green = GPT-4o tokenizer · toggle metric (top) + language (bottom)"
+  title="BM25 across languages and code: word analyzer vs BPE token IDs"
+  subtitle="toggle metric (top) + dataset (bottom) · language tabs (MIRACL): amber = jieba, violet = ES analyzer, green = GPT-4o tokenizer · Code tabs swap in Porter / word-tuple / GroupCov — self-match (CodeSearchNet, easy) vs real queries (CoSQA, hard)"
   views={[
     {
       label: 'Chinese (zh)',
       datasets: mlLang(
-        [0.0117, 0.3267, 0.3975, 0.492, 0.2686, 0.4879, 0.5268],
-        [0.0, 0.296, 0.387, 0.5, 0.177, 0.485, 0.5],
-        [0.0, 0.0, 0.136, 0.301, 0.0, 0.301, 0.318],
-        [97.96, 41.73, 23.66, 14.0, 43.26, 14.0, 12.21]
+        [0.012, 0.538, 0.454, 0.397, 0.492, 0.269, 0.488, 0.527],
+        [0.0, 0.537, 0.431, 0.387, 0.5, 0.177, 0.485, 0.5],
+        [0.0, 0.333, 0.226, 0.136, 0.301, 0.0, 0.301, 0.318],
+        [97.96, 10.94, 18.58, 23.66, 13.99, 43.26, 13.99, 12.21]
       ),
     },
     {
       label: 'Hindi (hi)',
       datasets: mlLang(
-        [0.3919, 0.3674, null, 0.625, 0.0071, 0.5465, 0.2678],
-        [0.357, 0.304, null, 0.631, 0.0, 0.554, 0.0],
-        [0.0, 0.0, null, 0.4, 0.0, 0.333, 0.0],
-        [34.0, 39.14, null, 6.29, 97.14, 15.43, 50.86]
+        [0.563, 0.55, 0.64, null, 0.625, 0.007, 0.547, 0.601],
+        [0.531, 0.604, 0.631, null, 0.631, 0.0, 0.554, 0.631],
+        [0.356, 0.307, 0.431, null, 0.4, 0.0, 0.333, 0.356],
+        [12.0, 16.57, 6.29, null, 6.29, 97.14, 15.43, 11.43]
       ),
     },
     {
       label: 'Thai (th)',
       datasets: mlLang(
-        [0.5695, 0.6159, null, 0.614, 0.0398, 0.5629, 0.4434],
-        [0.613, 0.631, null, 0.631, 0.0, 0.605, 0.413],
-        [0.315, 0.387, null, 0.387, 0.0, 0.315, 0.0],
-        [16.92, 10.1, null, 9.82, 91.13, 15.55, 28.79]
+        [0.351, 0.624, 0.674, null, 0.614, 0.04, 0.563, 0.59],
+        [0.301, 0.631, 0.655, null, 0.631, 0.0, 0.605, 0.631],
+        [0.0, 0.387, 0.431, null, 0.387, 0.0, 0.315, 0.356],
+        [46.25, 10.37, 6.41, null, 9.82, 91.13, 15.55, 13.37]
       ),
+    },
+    {
+      label: 'Code: self-match',
+      datasets: codeDatasets,
+    },
+    {
+      label: 'Code: real queries',
+      datasets: codeCosqaDatasets,
     },
   ]}
 />
 
 The Chinese result is the whole argument in one bar chart:
 
-- **`\w+` word tokenization collapses to 0.0117 NDCG@10.** With no spaces, the regex swallows entire runs of characters into single terms, so queries and documents almost never share a term. Word-BM25 simply does not work on Chinese without a segmenter.
+- **`\w+` word tokenization collapses to 0.012 NDCG@10.** With no spaces, the regex swallows entire runs of characters into single terms, so queries and documents almost never share a term. Word-BM25 simply does not work on Chinese without a segmenter (and it's shaky on Thai too, another barely-spaced script: **0.35**, nothing back for **46%** of queries).
 - **jieba fixes it to 0.40** — that's the cost of a language-specific dependency.
 - **GPT-4o's o200k tokenizer beats jieba** with zero language configuration. Normalized o200k hits **0.53** (13 points over jieba); even the fully config-free **naive** o200k, the version that comes straight off the model with no `\w+` split at all, gets **0.49** — still 9 points over jieba. BPE segments Chinese into shared subwords the same way it does English, and a good multilingual vocabulary does it better than the dedicated segmenter — or than a production engine's own Chinese analyzers (Elasticsearch's `cjk` **0.49**, its default character segmentation **0.52**), both still under o200k's **0.53**.
 
-But Chinese is the exception, and the honest picture — once you add Elasticsearch's built-in per-language analyzers (`cjk`/`hindi`/`thai`, the production version of "reach for the language-specific tool") — is more interesting than "BPE wins":
+Chinese is where token IDs win outright. The sharper test is what happens once you add Elasticsearch's built-in per-language analyzers (`cjk`/`hindi`/`thai`, the production version of "reach for the language-specific tool"):
 
-- **Where a language has a mature analyzer, configuring it still beats token-native.** ES's `hindi` analyzer (a real Hindi stemmer + stopwords) hits **0.63** vs naive o200k's **0.55**; ES's `thai` word-breaker hits **0.61**, beating naive BPE (0.56) and tying char 4-grams. On Chinese there's no such tool that helps (jieba _loses_ to characters), so token-native wins; on Hindi and Thai there is, and it wins.
-- **The best variant flips by language, and normalization is an English trick.** normalized o200k wins Chinese; naive o200k wins Hindi (normalization _hurts_ — `\w+` forces boundaries Devanagari lays out differently, collapsing it to 0.27); char 4-grams win Thai. Naive BPE is the robust config-free choice — best-or-near-best everywhere — but not always the ceiling.
+- **One BPE setting lands within a whisker of the hand-built analyzer everywhere.** Normalized o200k needs zero per-language configuration and scores **0.53 / 0.60 / 0.59** on Chinese / Hindi / Thai. It _beats_ ES's `cjk` (0.49) on Chinese, and lands within **~0.02** of ES's `hindi` stemmer (0.625) and `thai` word-breaker (0.614) — the gap between "off-the-shelf tokenizer, no setup" and a language team's dedicated analyzer is two hundredths of an NDCG point.
+- **Character n-grams can edge the analyzers, but they aren't config-free.** The chart carries both n-gram sizes, and the winner flips: bigrams top Chinese (**0.54**, above even token IDs) but trail on Hindi/Thai (0.55 / 0.62); trigrams top Hindi and Thai (**0.64 / 0.67**, above ES's own analyzers) but drop to **0.45** on Chinese. No single n wins all three, and picking it per script is exactly the per-language tuning this section is trying to avoid — n-grams also cost 4–12× the query latency (toggle the latency metric). A BPE tokenizer sets its own subword boundaries per script: no n to get wrong, and far fewer terms per document.
+- **Normalization is script-agnostic once the split is.** The `\w+` regex silently drops Unicode combining marks (Devanagari matras, Thai tone marks), which shreds those words into consonant skeletons — and tanks normalized BPE to 0.27 on Hindi. Splitting on marks-aware runs instead fixes it, and normalized token IDs then _beat_ naive in every language (Hindi 0.55→0.60, Thai 0.56→0.59). The lesson isn't "don't normalize" — it's "don't pre-segment with a Latin-centric regex."
 - **Tokenizer coverage is decisive.** r50k has no Devanagari or Thai merges, so it collapses — **0.007 on Hindi**, 0.04 on Thai (the [storage-post](/blog/token-storage) failure again). o200k, trained multilingually, handles both.
 
-So the real payoff isn't "one tokenizer beats every analyzer." It's **zero-config universality that never collapses**: one BPE tokenizer gives you a strong, never-catastrophic baseline in every language with no per-language setup — and where a language has real tooling (Hindi, Thai), you can still do better by configuring it. The failure lens makes the point cleanest: word `\w+` returns nothing for **98%** of Chinese queries, the wrong tokenizer (r50k) for **~95%** of Hindi and Thai; token-native's win is that it's never that catastrophe, in any language, for free.
+So the payoff isn't "one tokenizer beats every analyzer." It's that **one multilingual BPE tokenizer, with no per-language setup, gets you within a rounding error of the dedicated per-language tool** — winning outright on Chinese, trailing ES's Hindi and Thai analyzers by ~0.02, and never the 98%-zero catastrophe a word analyzer hits on an unspaced script. The failure lens makes it cleanest — word `\w+` returns nothing for **98%** of Chinese queries and the wrong tokenizer (r50k) for **~95%** of Hindi and Thai; token-native's win is that it's never that catastrophe, in any language, for free.
 
-And it's not only human languages — **code is the same story, sharper.** On [CodeSearchNet](https://github.com/github/CodeSearchNet) (Python, docstring → function), a Porter stemmer _hurts_: **0.944 NDCG@10 vs plain word's 0.963**, because English stemming rules mangle identifiers instead of matching them. Token-native wins — **GroupCov 0.972** — subwording `getUserById` into `get·User·By·Id` the way it does morphology. On English the stemmer is a tie; on code it's a liability.
+Code is the cautionary tale in this whole post (the two Code tabs above). On **[CodeSearchNet](https://github.com/github/CodeSearchNet) self-match** — where the query is the docstring lifted straight out of its own function — token-native looks dominant: a Porter stemmer _hurts_ (0.956 vs plain word's 0.968) because English rules mangle identifiers, and **GroupCov wins at 0.976**, subwording `getUserById` into `get·User·By·Id`. That's the tidy result I'd have shipped. But it's near-duplicate lookup: query and answer share identifiers, every method lands at 0.95–0.98, and the median query is a perfect hit for all of them (p50/p25 pin at 1.000). It doesn't test retrieval so much as string overlap.
+
+Swap in **[CoSQA](https://huggingface.co/datasets/CoIR-Retrieval/cosqa)** — real Bing questions ("python code to write bool value") over 20k functions, one gold each — and the ranking _inverts_:
+
+- **Porter now helps** (+0.025 vs word): the query side is English prose, so stemming matches question words to the comments and docstrings inside the code.
+- **Char n-grams win** (char4 0.185, char3 0.183) — fuzzy matching bridges the NL↔code vocabulary gap.
+- **Naive BPE trails plain word** (0.132 vs 0.143): raw case/space-sensitive tokens don't bridge that gap. GroupCov (0.175) is strong but no longer first.
+- It's genuinely hard — 60–77% of queries return nothing, so p50/p25 are 0.000 and only the mean and zero-rate carry signal.
+
+So the honest code result is the opposite of the neat one: on realistic code search **no single method dominates, and token-native BPE is competitive, not king.** The self-match "win" was the benchmark, not the method — and that lesson isn't about code. A retrieval result that only shows up on a near-duplicate benchmark probably won't survive real queries.
 
 <details>
 <summary>A note on latency — measured, a wash at this scale</summary>
@@ -595,6 +769,24 @@ I timed the full query path (analyze + score + top-k) on SciFact and NFCorpus (~
 </div>
 
 **Word and token BM25 come out a wash** — within ~3% on long queries, same order of magnitude on short ones. The two real gaps aren't words-vs-tokens: char n-grams cost 4–12× more (many terms per query), and dropping the high-DF terms — `word_en`'s stopwords, or the [rarity prior](#dropping-the-stopword-list-too) — roughly halves query time by shortening posting traversal. Analyze cost is a wash too (~2µs/query for words, ~20µs for BPE; indexing ~4k docs/s/core, Porter slower at ~840). Caveat: this is an exact-float Python BM25 at ~3k docs, so treat it as directional — token documents run ~1.14× longer with higher-DF subwords, so traversal could diverge at web scale (a real engine would erase both). The honest operational win is config, not milliseconds.
+
+On the multilingual pools the picture spreads out, and it tracks term counts, not the words-vs-tokens split. p50 / p90 ms, per MIRACL language:
+
+<div style={{overflowX: 'auto'}}>
+
+| method           | zh (p50/p90) |          hi |          th |
+| ---------------- | -----------: | ----------: | ----------: |
+| word `\w+`       |    0.0 / 0.0 |   2.1 / 3.1 |   0.0 / 0.0 |
+| char bigram      |    0.2 / 0.6 | 21.9 / 30.1 | 28.9 / 43.3 |
+| char trigram     |    0.0 / 0.2 |  9.1 / 14.0 |  9.6 / 15.0 |
+| jieba (zh)       |    0.5 / 2.0 |           — |           — |
+| naive r50k       |  14.2 / 18.1 | 16.9 / 21.8 | 43.1 / 52.6 |
+| naive o200k      |    0.7 / 2.1 |   3.3 / 5.0 | 10.9 / 18.0 |
+| normalized o200k |    0.8 / 2.2 |   2.8 / 4.1 | 10.2 / 16.3 |
+
+</div>
+
+Two artifacts to read past, then a real signal. The artifacts: `word \w+` is ~0ms on Chinese and Thai because it collapses a whole run into one term — fast because it retrieves almost nothing, not because it's efficient. And `r50k` is the slowest row on every non-Latin script (14–43ms) because it has no merges there and byte-explodes each query into a long token list — the [storage-post](/blog/token-storage) coverage failure showing up as latency. The real signal: char bigrams are the genuine cost (22–29ms on hi/th, from those fat high-DF posting lists above), and normalized o200k stays single-digit-to-~10ms everywhere with the coverage to back it. Same caveat — exact-float Python at a few thousand docs, directional.
 
 </details>
 
@@ -856,7 +1048,7 @@ None of this needs a new engine, either: a sparse-vector index — [Qdrant's BM2
 - Normalizing before you tokenize makes token-BM25 match a plain word analyzer — encode each lowercased word with a fixed leading space, so a query word tokenizes the same as the same word mid-document. Skip it and BPE's space/case sensitivity costs **−0.10 to −0.11 NDCG@10** on every one of 12 NanoBEIR datasets.
 - That normalized base is really char n-gram IR: bagging subwords gives partial free stemming — same-stem words share a subword **68–112× more than chance** — so it matches a plain word index but leans **−0.02 below a Porter-stemmed one** ([known since 2004](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7)).
 - Two token-native fixes **match a Porter-stemmed analyzer** with none of the English machinery: un-fragment rare words (score each word once, not per subword) and soft-stem by weighted expansion query-side (weight stem-group variants by attestation instead of hard-merging both sides). They tie `word_en` (GroupCov 0.5471 vs 0.5446) and **significantly beat plain token-BM25** (+0.023) — a tie with Porter, not a win, and the document index stays pure tokens with Porter only a query-side hint. Pushing _past_ Porter needs learned weights ([SPLADE](/blog/if-splade)).
-- The config-free payoff is multilingual: on Chinese, `\w+` word tokenization collapses to **0.01 NDCG@10** while the config-free naive o200k tokenizer **beats the jieba segmenter, 0.49 vs 0.40** (a `\w+` presplit lifts it to 0.53 but wrecks Hindi). Directional — one MIRACL dev set; on Thai char n-grams win, and r50k dies on Devanagari/Thai where o200k holds.
+- The config-free payoff is multilingual: on Chinese, `\w+` word tokenization collapses to **0.01 NDCG@10** while the config-free naive o200k tokenizer **beats the jieba segmenter, 0.49 vs 0.40**; a mark-aware presplit lifts it to **0.53**, the best on Chinese. One BPE setting lands within **~0.02** of ES's hand-built Hindi and Thai analyzers with zero config. Directional — one MIRACL dev set; char n-grams edge token IDs on Hindi/Thai but need a per-script n, and r50k dies on Devanagari/Thai where o200k holds.
 - One representation, shared: token-BM25 keys postings by the same token IDs the model reads, writes, and [stores](/blog/token-storage) — lexical search, stored payload, and generation on one vocabulary, no per-language analyzer to maintain.
 
 ## Acknowledgements
