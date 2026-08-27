@@ -5,7 +5,7 @@ date: '2026-08-27'
 lastmod: '2026-08-27'
 tags: ['search', 'evaluation', 'metrics']
 draft: true
-summary: 'Nobody ships a service on average latency — you report p50/p95/p99. Yet we report search quality as one average NDCG, which buries the tail that actually fails users. On 12 NanoBEIR datasets a plain BM25 baseline scores ~0.53 mean NDCG@10 and recall@10, but the p10 floor of both is exactly 0.000 — more than one in ten queries retrieves nothing relevant, and the mean hides it completely. Report the median and the low-tail floor, not the mean.'
+summary: 'You would never ship on average latency — so why report search quality as one average NDCG? On 12 benchmarks the mean looks healthy while more than one in ten queries returns nothing relevant. The average is hiding your worst searches.'
 images: ['/static/images/blogs/tokenization-compression.jpg']
 authors: ['default']
 ---
