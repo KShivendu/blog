@@ -123,6 +123,30 @@ The mean doesn't just hide the distribution — it hides your _gains_. When a me
 
 Take a real improvement — plain word BM25, then add a Porter stemmer and a stopword list (`word_en`). It moves mean NDCG@10 by **+0.019**, a bump you'd squint at. But look where that improvement actually lands in the distribution:
 
+export const deltaCats = ['mean', 'p25', 'p50']
+export const deltaColors = [pctColors.mean, pctColors.p25, pctColors.p50]
+
+<BarChart
+  orientation="horizontal"
+  title="One improvement, three ways to measure it: recall@10, word → word_en"
+  subtitle="each bar = how far that statistic moved. the mean twitches +0.022; the median jumps +0.100 — 4.6× as far"
+  valueLabel="move in recall@10 (Δ)"
+  valueMax={0.12}
+  valueTicks={[0, 0.03, 0.06, 0.09, 0.12]}
+  categories={deltaCats}
+  series={[
+    {
+      name: 'Δ recall@10',
+      values: [0.0216, 0.036, 0.1],
+      colors: deltaColors,
+      text: ['+0.022', '+0.036', '+0.100'],
+      textPosition: 'outside',
+    },
+  ]}
+/>
+
+Same gain, read three ways: the mean smears it across every query and reports **+0.022**; the median reads it where the queries can actually move and reports **+0.100**. The p75 bar is missing because it's pinned at 1.0 — a saturated percentile can't show a gain at all. The same story across all three metrics:
+
 | metric     | mean Δ | where it shows up                                                                                                     |
 | ---------- | -----: | --------------------------------------------------------------------------------------------------------------------- |
 | NDCG@10    | +0.019 | p25 / p50 / p75 all move ~2× the mean (+0.037 to +0.045)                                                              |
@@ -137,13 +161,9 @@ Observations:
 
 ## Why p10, not p90
 
-Latency and quality are the same problem pointed at opposite tails.
+Latency and quality are the same problem pointed at opposite tails. For latency, higher is worse, so you watch the _high_ end — p90, p99. For quality, higher is better, so the tail that hurts is the _low_ end: **p10, the worst-query floor**. Same instinct, mirrored.
 
-For latency, higher is worse, so the tail you fear is the _high_ end — p90, p99, the slow requests. For a quality metric, higher is _better_, so the concerning tail is the _low_ end. The queries where NDCG@10 is zero are the ones where the user typed something reasonable and got nothing useful back. A system that returns garbage for the worst 10% of queries is a bad system even if its mean looks fine — and the mean is exactly where that 10% goes to hide.
-
-So the percentile to watch for quality is **p10: the worst-query floor**. p50 tells you what the typical query gets; p10 tells you how bad it gets before you've hit the true disasters. Two systems can share a mean NDCG of 0.53 — one with a tight distribution floored at p10 = 0.40, one with half its queries near 0.75 and a tenth of them at zero (which is exactly this BM25 baseline). The first is a solid search system. The second returns nothing for one in ten searches. The mean calls them equal.
-
-The tell is that we _already_ report latency this way by instinct. I timed the same BM25 baseline's query path: **~5ms mean, 3.9ms p50, 8.6ms p90**. Nobody would let me publish just the 5ms mean — the p90 is the whole point, it's the request a real user is waiting on. Yet for quality on the same runs, the reflex is to publish one mean and move on. p10 quality is that same user, on the tail that actually hurts.
+And it _is_ instinct for latency. I timed this BM25 baseline at **3.9ms p50, 8.6ms p90** — nobody would let me publish just the 5ms mean, because the p90 is the request a real user is waiting on. p10 quality is that same user, on the tail that actually hurts. We just forget to report it.
 
 ## The ask
 
