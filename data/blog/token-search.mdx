@@ -12,13 +12,13 @@ authors: ['default']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-In [Token-Native Storage](/blog/token-storage) I argued that if agents are the biggest readers and writers of your database, you should store text as BPE token IDs, not UTF-8 bytes. Looking at the [interface](/blog/token-storage#interface) I proposed, I realized it looks a lot like a search engine — which also tokenizes text per-language to index it. So instead of Lucene's English analyzer stemming `"running"` to `run` and indexing that, what if the index terms were the model's own subword token IDs? How does that do on BM25, and can it beat existing analyzers?
+In [Token-Native Storage](/blog/token-storage) I argued that if agents are the biggest readers and writers of your database, you should store text as BPE token IDs, not UTF-8 bytes. The [interface](/blog/token-storage#interface) I proposed looks a lot like a search engine — which also tokenizes text per-language to index it. So instead of Lucene's English analyzer stemming `"running"` to `run` and indexing that, what if the index terms were the model's own subword token IDs? How does that do on BM25, and can it beat existing analyzers?
 
 Short version: naive tokenization breaks BM25 (**−0.11 NDCG@10**) for a fixable reason. Fix it and token-native BM25 **matches a Porter-stemmed English analyzer** using none of its machinery — no stopword list, no stemmer, no per-language config; two small token-native tricks (un-fragmenting words and stemming-by-expansion) close the last sliver of the gap. And because the tokenizer is the only moving part, the **same method beats a dedicated Chinese segmenter** with zero setup — one analyzer for every language, on the vocabulary the model already reads, writes, and [stores](/blog/token-storage). A specialized tool, matched by a more general one.
 
 <TokenSearchAnalyzer />
 
-The top lane is what a search engine does today: a hand-built analyzer, swapped out per language. The bottom lane is token-native search — one BPE tokenizer for every language, the same one the model already runs. It matches the specialized analyzer on English and beats a dedicated segmenter on Chinese. Here's how.
+The top lane is what a search engine does today: a hand-built analyzer, swapped out per language. The bottom lane is token-native search — one BPE tokenizer for every language, the same one the model already runs. Here's how.
 
 ## Token IDs as index terms
 
@@ -26,13 +26,11 @@ A BM25 inverted index maps a _term_ to a postings list. In Lucene the term is an
 
 Nothing in BM25 requires the term to be a _word_. It just needs to be a hashable symbol whose document frequency means something. So the swap is: run the [BPE tokenizer](https://github.com/openai/tiktoken) over the text, and use each token ID as a term. `"storage"` is one token; `"tokenization"` is two (`token` + `ization`); the whole index vocabulary is now the model's fixed 50k–200k tokens instead of an unbounded pile of English words.
 
-If this reaches parity with word-BM25, lexical search inherits the token-native benefits: a bounded fixed vocabulary, no language-specific analyzer to configure, and the same representation the model already reads and writes.
-
 ## The naive version is broken
 
 Here's the first thing I tried. It fails in an instructive way — the fix falls right out of it.
 
-BPE is **space- and case-sensitive**. The document `"The cat sat"` tokenizes to `[The][ cat][ sat]` — note the leading-space tokens. The query `"cat"` tokenizes to `[cat]`, a _different_ token ID than `[ cat]`. So a query for cat never matches the cat in the document. Same problem with `Cat` vs `cat`. The term that should connect query and document tokenizes to two different integers depending on where the word sat in the sentence.
+BPE is **space- and case-sensitive**. The document `"The cat sat"` tokenizes to `[The][ cat][ sat]` — note the leading-space tokens. The query `"cat"` tokenizes to `[cat]`, a _different_ token ID than `[ cat]`. So a query for cat never matches the cat in the document. Same problem with `Cat` vs `cat`.
 
 Across 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries), naive token-BM25 loses **−0.10 to −0.11 NDCG@10** versus a plain word analyzer — it loses on every one of the 12 datasets, well outside the confidence interval. Tokenizing your text and indexing the raw IDs is strictly worse than doing nothing clever.
 
@@ -83,7 +81,7 @@ Three things in that chart matter:
 
 1. **Normalized BPE (green) sits right on top of plain word-BM25 (gray)**, for all three tokenizers.
 2. **Naive BPE (red) is far below everything** — the space/case break.
-3. **The purple "word-tuple" bar is exactly equal to plain word-BM25.** That's a control: instead of bagging subwords, I keep each word as a _single_ term equal to the tuple of its token IDs. Keying BM25 by token-ID-tuple instead of by string changes nothing — proof that the token-ID _representation_ is irrelevant, and the only thing that moves quality is whether you decompose words into subwords or not.
+3. **The purple "word-tuple" bar is exactly equal to plain word-BM25.** That's a control: keep each word as a _single_ term equal to the tuple of its token IDs instead of bagging subwords, and nothing moves — proof the token-ID _representation_ is irrelevant, and the only thing that moves quality is whether you decompose words into subwords.
 
 (The cyan char-4-gram bar sits right next to normalized BPE too — hold that thought, it matters later.)
 
@@ -108,7 +106,7 @@ Normalized BPE is statistically indistinguishable from plain word-BM25 — a tig
 
 Because bagging subwords gives you **stemming-like matching for free**. `tokenization` and `tokenize` share the `token` subword; `running` and `runner` share `run`-ish pieces. Two words a Porter stemmer would collapse to one stem tend to share a subword token, so BM25 sees partial overlap where a plain word index sees none.
 
-I checked this directly instead of assuming it: across the corpus vocabulary, two words in the same Porter-stem class share a subword **68–112× more often than two random words** — but only ~4–5% of the time in absolute terms. So it's a **partial** stemmer, which is exactly what the retrieval numbers show — indistinguishable from plain word, a hair behind Porter.
+I checked this directly instead of assuming it: across the corpus vocabulary, two words in the same Porter-stem class share a subword **68–112× more often than two random words** — but only ~4–5% of the time in absolute terms. So it's a **partial** stemmer, exactly what the retrieval numbers show.
 
 <details>
 <summary>How I measured the free-stemming effect, plus a second check that it really is stemming</summary>
@@ -133,7 +131,7 @@ Second check: if the gains come from stemming-like matching, the queries where n
 
 Here's the uncomfortable part. Look back at the ladder chart: the **char 4-gram** bar (cyan) behaves exactly like normalized BPE — within noise of plain word, a hair behind the stemmer, on every comparison. Character n-gram indexing does the same subword decomposition, and [McNamee & Mayfield showed in 2004](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7) that character n-grams recover morphological matching without a stemmer, especially across languages. **So "BPE subwords give free stemming" is a 20-year-old result about subword IR**, not something new about BPE.
 
-So the base normalized token-BM25 is char n-gram IR: it matches a plain word index, sits a hair behind a stemmer, and its free stemming is only _partial_ — that partial-ness is the whole −0.02 gap to Porter. Two reasons to do it anyway, and a third that closes the gap:
+So the base normalized token-BM25 is char n-gram IR, and its free stemming is only _partial_. Two reasons to do it anyway, and a third that closes the gap:
 
 - **A BPE vocabulary is a language-agnostic analyzer you already have** — no stopword list, stemmer, or per-language segmenter to configure, and the same one for every language.
 - **It's the same vocabulary the model reads and writes** ([token-native storage](/blog/token-storage)): the lexical index and the stored text share one representation.
@@ -200,16 +198,16 @@ export const rdSeries = (name, color, key, dashed) => ({
 </div>
 
 - **Char 4-grams are a strictly wider, noisier net.** They reach **4.8% of relevant documents word-BM25 scores a hard zero, and miss none word finds** (reachability 0.97 vs 0.92) — but their **Recall@10 is _lower_** (0.595 vs 0.613): the extra documents land deep, lifting Recall@1000, not the top 10. Wider net, worse ranking.
-- **The stemmer is the opposite — a precise net.** `word + Porter` has the best Recall@10 but the _lowest_ reachability (0.889): it collapses real morphological variants and nothing else. Char n-grams reach the most documents, but many are junk.
+- **The stemmer is the opposite — a precise net.** `word + Porter` has the best Recall@10 but the _lowest_ reachability (0.889): it collapses real morphological variants and nothing else.
 - **So use the wider net as a candidate generator + reranker, or fuse it with word-BM25** — not a drop-in BM25 replacement. Word-BM25 structurally caps at 0.922 reachable here; no reranker recovers the ~8% it scores zero. (NanoBEIR pools are 2–5k docs, so Recall@1000 ≈ reachability; directional.)
 
 ## Closing the stemming gap, token-natively
 
-The base ties a plain word analyzer but leans **−0.02 below Porter** — small enough that the benchmark can't even call Porter-vs-plain significant on its own (+0.019 [−0.006, +0.045], ns), though the lean is consistent (normalized loses 10 of 12 datasets to Porter). I traced roughly **three-quarters of that gap to stemming** (the rest splits between the plain-word gap and stopwords). Two token-native fixes recover it, neither a hard stem-merge:
+The base ties a plain word analyzer but leans **−0.02 below Porter** — a gap the benchmark can't even call significant (+0.019 [−0.006, +0.045], ns), though consistent (normalized loses 10 of 12 datasets). I traced roughly **three-quarters of it to stemming** (the rest splits between the plain-word gap and stopwords). Two token-native fixes recover it, neither a hard stem-merge:
 
 **Fix 1 — stop fragmenting rare words.** When BPE splits `belvidere` into `bel·vid·ere`, BM25 adds each subword's IDF independently, so a rare word draws **1.3–2.3× the IDF it deserves** and pays full credit for partial matches — noise exactly where ranking is most sensitive. The fix is to score each _word_ once: key the term by the whole word's token-ID tuple, or group its subwords under one word-level IDF plus a coverage term for partial matches (I call the latter GroupCov).
 
-**Fix 2 — stem by expansion, not by merging.** A stemmer hard-merges `race`/`races`/`racing` into one term. Token-natively you can be softer: expand each query word to its stem-group variants and score the set by max (soft-OR), weighting each variant by how well-attested it is — `df_variant / (df_variant + k·df_word)`. A common, well-attested variant is trusted almost fully; a rare, coincidental one is damped. This is the [SPLADE](/blog/if-splade) view of stemming: **stemming is just weighted expansion with clean candidates** — and how hard you can weight is bounded by how clean the candidate list is. Porter's stem groups are clean, so you can weight them hard; a fuzzy surface-similarity list can't (weight it hard and `race`→`rack` floods the results).
+**Fix 2 — stem by expansion, not by merging.** A classic analyzer runs Porter over _both_ sides, hard-merging `race`/`races`/`racing` into one term in the document index. Token-natively the index stays pure token IDs — Porter never touches the documents — and stemming moves query-side: expand each query word to its stem-group variants and score the set by max (soft-OR), weighting each variant by how well-attested it is — `df_variant / (df_variant + k·df_word)`. A common, well-attested variant is trusted almost fully; a rare, coincidental one is damped. This is the [SPLADE](/blog/if-splade) view of stemming: **stemming is just weighted expansion with clean candidates** — and how hard you can weight is bounded by how clean the candidate list is. Porter's stem groups are clean, so you can weight them hard; a fuzzy surface-similarity list can't (weight it hard and `race`→`rack` floods the results).
 
 Stack both — plus a stopword list, which turns load-bearing once words are un-fragmented (word-tuple without it stalls at 0.5391, short of Porter) — and the gap closes:
 
@@ -244,15 +242,15 @@ Observations:
 
 1. **Both recipes reach `word_en` (0.5446)** — word-tuple + expansion **0.5454**, GroupCov + expansion **0.5471**, Recall@100 on par too (GroupCov 0.794 vs word_en 0.794). Every per-query cluster-bootstrap CI against the stemmer straddles zero: a **statistical tie**. Per-dataset the two split it about evenly (word-tuple loses 9/12 by a hair, GroupCov wins 7/12) — but that split is the argmax of a sweep over ~7 fragmentation variants on these same 12 sets, so read it as a tie, not an edge.
 2. **The firm result is vs the token baseline, not vs Porter.** Both fixes clear zero against plain normalized token-BM25 — word-tuple **+0.023 NDCG@10** (bootstrap CI [+0.001, +0.045], clear of zero), GroupCov higher still. Reaching Porter _reads_ as a tie only because Porter-vs-plain is itself within noise on this suite; the fixes-vs-baseline gain is the part that's actually significant.
-3. **The headline: a general recipe matched a hand-tuned English analyzer.** Soft expansion did what Porter's hard stem-merge does — on the model's own vocabulary, no linguistic rules. Honest asterisks: it's a statistical _tie_ (a clean win over Porter would need full-size BEIR), and this precision recipe still leans on two hand-built pieces — a stopword list and Porter to group candidates. The stopword list I can automate (next); Porter is the real holdout, and the fully config-free story is the multilingual one below.
+3. **The headline: a general recipe matched a hand-tuned English analyzer.** Soft expansion did what Porter's hard stem-merge does — on the model's own vocabulary, no linguistic rules. Honest asterisks: it's a statistical _tie_ (a clean win over Porter would need full-size BEIR), and two hand-built pieces stay query-side — a stopword list and Porter to group the expansion candidates. The stopword list I can automate (next); Porter stays only as a query-side hint that never touches the index, and the fully config-free story is the multilingual one below.
 
 GroupCov is the one I'd ship: unlike the word-tuple collapse, it keeps the subword partial-matching the multilingual result below depends on, while still un-fragmenting the rare words that hurt precision. (I ran GroupCov + expansion only on English — the expansion candidates are Porter-grouped, so that half is English-only for now.)
 
 ### Dropping the stopword list, too
 
-The recipe still leans on two hand-built pieces: Porter to group the stem candidates, and that stopword list — which, as the chart above shows, is load-bearing here, not decoration. The list I can drop.
+Of the two hand-built pieces the recipe still leans on — Porter to group the stem candidates, and that stopword list — the list I can drop.
 
-A stopword isn't really a linguistic category, it's just a word that's common everywhere — `the`, `of`, `is` turn up in every document no matter the topic. That's a frequency fact, so I can measure it instead of maintaining a list. I down-weight each term by its **global rarity**: a normalized `log(T/cf)` (T = total tokens in a big background collection, cf = how often the term occurs in it), raised to a power γ that sets how hard the common words get squashed. Note this is _collection_ frequency — total occurrences — not IDF, which counts _documents_. "Shows up everywhere" is a collection-frequency fact, and using it directly is what makes this a stopword prior and not just IDF again.
+A stopword isn't really a linguistic category, it's just a word that's common everywhere — `the`, `of`, `is` turn up in every document no matter the topic. That's a frequency fact, so I can measure it instead of maintaining a list. I down-weight each term by its **global rarity**: a normalized `log(T/cf)` (T = total tokens in a big background collection, cf = how often the term occurs in it), raised to a power γ that sets how hard the common words get squashed. Note this is _collection_ frequency — total occurrences, not IDF's _document_ count — and using it directly is what makes this a stopword prior and not just IDF again.
 
 You can read the weights straight off. At γ=1: `the` gets **0.00**, `of` 0.045, `is` 0.10, `will` 0.25 — squashed toward zero — while `running` 0.50, `vitamin` 0.48, `quantum` 0.61, and our friend `belvidere` 0.79 pass through nearly intact. No list, and because the background is just token counts, it works in any language.
 
@@ -291,7 +289,7 @@ Observations:
 
 ## The real payoff: one analyzer, every language
 
-Everything above splits text on `\w+` before tokenizing. That regex _is_ a word segmenter — and it only works for languages that put spaces between words. Chinese doesn't. Thai barely does. And even for a spaced language, a `\w+` split with no stemmer leans on morphology the analyzer doesn't know. This is exactly where a word analyzer reaches for a language-specific tool and a BPE tokenizer doesn't.
+Everything above splits text on `\w+` before tokenizing. That regex _is_ a word segmenter — and it only works for languages that put spaces between words. Chinese doesn't. Thai barely does. This is exactly where a word analyzer reaches for a language-specific tool and a BPE tokenizer doesn't.
 
 I ran the same experiment on [MIRACL](https://github.com/project-miracl/miracl) dev sets (self-contained retrieval pools built from the inline positive/negative passages). For Chinese I added [jieba](https://github.com/fxsjy/jieba), the standard Chinese segmenter, as the "proper analyzer" baseline. These are single dev sets scored on judged-passage-only pools, so treat the numbers as directional — I didn't bootstrap them the way I did the English results. Toggle the language:
 
@@ -341,7 +339,7 @@ The Chinese result is the whole argument in one bar chart:
 Three honest caveats the other languages surface:
 
 - **On Thai, BPE does _not_ win — char 4-grams do.** Thai has enough embedded spaces that the plain `\w+` word baseline already reaches 0.57; char 4-grams top the table at 0.62, and naive o200k (0.56) merely _ties_ it. The "BPE beats the analyzer" line is a Chinese result, not a universal one — where word tokenization half-works, BPE is a wash and classic char n-grams win.
-- **The best token variant flips by language.** On English the `\w+` pre-split (normalized) is essential; on Hindi and Thai it _hurts_ — `naive:o200k` gets **0.55 on Hindi vs normalized's 0.27**. My English normalization is a word-segmenter in disguise, and forcing word boundaries on a script that lays them out differently loses to letting BPE segment the raw stream. Naive even beats the Hindi _word_ baseline (0.55 vs 0.39); my guess is that Devanagari's heavy inflection breaks into shared subwords the way English morphology does — but I haven't verified that against whatever is depressing the word baseline itself, so treat it as conjecture. The config-free method is naive BPE with a multilingual tokenizer, which is exactly what the model emits.
+- **The best token variant flips by language.** On English the `\w+` pre-split (normalized) is essential; on Hindi and Thai it _hurts_ — `naive:o200k` gets **0.55 on Hindi vs normalized's 0.27**. My English normalization is a word-segmenter in disguise, and forcing word boundaries on a script that lays them out differently loses to letting BPE segment the raw stream. Naive even beats the Hindi _word_ baseline (0.55 vs 0.39); my guess is that Devanagari's heavy inflection breaks into shared subwords the way English morphology does — but I haven't verified that against whatever is depressing the word baseline itself, so treat it as conjecture. The config-free method is naive BPE with a multilingual tokenizer — exactly what the model emits.
 - **Tokenizer coverage is decisive.** r50k has no Devanagari or Thai merges, so it falls back to bytes and collapses — **0.007 on Hindi**, 0.04 on Thai, the same r50k-on-Hindi failure from the [storage post](/blog/token-storage). o200k, trained multilingually, handles both. Tokenizer choice isn't cosmetic here.
 
 And it's not only human languages — **code is the same story, sharper.** On [CodeSearchNet](https://github.com/github/CodeSearchNet) (Python, docstring → function), a Porter stemmer _hurts_: **0.944 NDCG@10 vs plain word's 0.963**, because English stemming rules mangle identifiers instead of matching them. Token-native wins — **GroupCov 0.972** — subwording `getUserById` into `get·User·By·Id` the way it does morphology. On English the stemmer is a tie; on code it's a liability.
@@ -355,7 +353,12 @@ And it's not only human languages — **code is the same story, sharper.** On [C
 
 ## Can it beat Porter? Not without learning the weights
 
-Reaching a stemmed analyzer looks like the practical ceiling for _unweighted_ lexical scoring on tokens — I couldn't push NDCG past it. Blindly swapping scorers doesn't help: I tried 67 variants (k1/b retunes, Dirichlet and PL2, TF·IDF, BM25-channel fusions) and the best apparent win was **+0.018 NDCG@10 on the datasets I tuned it on, +0.0026 held out** — textbook overfitting. What worked, above, was targeting the two _actual_ token defects. Past that, the distribution says the floor is hard: **tokenizing barely touches the statistics BM25 was built to exploit.** Start with the one it leans on most — the term-frequency distribution, which IDF is literally the logarithm of. Here it is as a histogram: each bar is the share of terms (or of running text) whose total corpus frequency lands in that bucket. Toggle the tokenizer, and vocabulary vs text below it:
+Reaching a stemmed analyzer is the practical ceiling for _unweighted_ scoring on tokens — I couldn't push NDCG past it. Blindly swapping scorers doesn't help: I tried 67 variants (k1/b retunes, Dirichlet and PL2, TF·IDF, BM25-channel fusions) and the best apparent win was **+0.018 NDCG@10 on the datasets I tuned it on, +0.0026 held out** — textbook overfitting. The floor is hard because **tokenizing barely touches the statistics BM25 was built to exploit**: burstiness and document length both survive it (details below), and the only real weak spots are the two token defects the un-fragmentation and expansion above already target — which is why they reach Porter. To push _past_ Porter you have to learn the term weights BM25 fixes at IDF × saturation, and that's [SPLADE](/blog/if-splade) — on this same token vocabulary.
+
+<details>
+<summary>The frequency distribution BM25 scores against — histograms and the Zipf fit</summary>
+
+The statistic BM25 leans on most is the term-frequency distribution, which IDF is literally the logarithm of. Each bar is the share of terms (or of running text) whose total corpus frequency lands in that bucket. Toggle the tokenizer, and vocabulary vs text below it:
 
 export const fhBuckets = [
   '1',
@@ -415,12 +418,9 @@ Observations:
 2. Flip to **share of text** and the three are nearly identical — the `10k+` bucket, barely **0.1% of the vocabulary**, is **~40% of every token you read**, exactly what IDF discounts toward zero and tf-saturation stops rewarding.
 3. So tokenizing reshapes the _vocabulary_ but not the _distribution BM25 scores against_ — and the text-mass view is the one BM25 actually lives in.
 
-Zoom into the actual terms behind those buckets — the top 500 by frequency, one bar per term with its surface written below it (scroll right → for the tail). Toggle the tokenizer, and you can literally read what dominates each vocabulary — and why word and BPE differ: BPE's units carry a leading space (`␣the`, `␣of`), so the same word tokenizes differently at a sentence start:
+Zoom into the actual terms behind those buckets — the top 500 by frequency, one bar per term with its surface below it (scroll right → for the tail). Toggle the tokenizer and read what dominates each vocabulary — and why word and BPE differ: BPE's units carry a leading space (`␣the`, `␣of`), so the same word tokenizes differently at a sentence start:
 
 <VocabHistogram src="/static/data/token-search-vocab.json" />
-
-<details>
-<summary>The formal Zipf fit (rank–frequency, log–log)</summary>
 
 The rank view says the same thing — the rank-frequency curve stays Zipfian, the tokenizer just chops off the rare tail (word vocab is **46% singletons**; o200k **15%**, r50k **3%**) while keeping the head identical: the top 100 terms carry ~**42%** of all tokens either way. Dotted lines are least-squares Zipf fits (`f ∝ 1/r^α`) on the `f > 1` body — α ≈ 1.18 for words, ≈ 1.07 for both BPE vocabs:
 
@@ -583,22 +583,22 @@ r50k: [
   ]}
 />
 
-</details>
-
 The two statistics BM25 leans on hardest both survive tokenization:
 
 - **Burstiness survives** — repetition still signals topic (Church–Gale 0.13–0.17 for tokens vs 0.19 for words, diluted but not gone), so tf-saturation still fits.
 - **Document length scales by a flat 1.14×** (correlation 0.996), so length-normalization still fits.
 - **The two real weak spots are narrow:** fragment tokens (~11% of token mass, noisy — they collide across unrelated words) and multi-token words, which draw **1.3–2.3× the IDF they deserve** because each subword's IDF is added independently. Those are exactly the two defects the un-fragmentation and expansion above target — which is why they reach Porter.
 
-Past that I found no further _NDCG_ lever (recall-side ones do exist — PRF-style reweighting and co-occurrence expansion each lift Recall@100 about a point — but it's top-rank _precision_ that's capped). To push precision past Porter you have to learn the term weights, which BM25 fixes at IDF × saturation. Learn them and you get [SPLADE](/blog/if-splade) — on this same token vocabulary.
+I found no further _NDCG_ lever — recall-side ones do exist (PRF-style reweighting and co-occurrence expansion each lift Recall@100 about a point), but it's top-rank _precision_ that's capped.
+
+</details>
 
 None of this needs a new engine, either: a sparse-vector index — [Qdrant's BM25 / sparse API](https://qdrant.tech/articles/sparse-vectors/), or Lucene's terms-as-bytes — already keys postings by arbitrary integer dimensions, and the token ID _is_ the sparse dimension. Token-BM25 drops in with no changes — the same rails a learned SPLADE index runs on, just with BM25 weights instead of learned ones.
 
 ## Limitations
 
 - **Reaching Porter is a statistical tie, not a proven win.** On 12 tiny NanoBEIR sets the CI can't resolve GroupCov's nominal edge over the stemmer — a full-BEIR run is needed to claim more. And going _past_ Porter needs learned weights ([SPLADE](/blog/if-splade)) on this same vocabulary.
-- **The precision recipe still leans on Porter.** Un-fragmentation is config-free, and the stopword list I [replaced with a language-agnostic rarity prior](#dropping-the-stopword-list-too) — but the stem-group expansion still uses Porter to group candidates, so the fully config-free story is the multilingual result, not the English-precision one.
+- **The precision recipe still leans on Porter.** Un-fragmentation is config-free, and the stopword list I [replaced with a language-agnostic rarity prior](#dropping-the-stopword-list-too) — but the stem-group expansion still uses Porter query-side to group candidates (the document index stays pure token IDs), so the fully config-free story is the multilingual result, not the English-precision one.
 - **The base is char n-gram IR** ([known since 2004](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7)); the novelty is reusing the model's own analyzer, and going beyond it via weighted expansion.
 - **Small, directional evaluation.** NanoBEIR is 50 queries/dataset and the MIRACL pools use judged passages only; I used an exact-float Python BM25, not a production engine, so absolute numbers would shift.
 - **k1/b were fixed at (1.5, 0.75) for both sides.** I didn't tune per-representation, on purpose — but token docs are longer, so tuning could move either side ±0.01–0.02, the size of the whole English effect.
@@ -607,10 +607,10 @@ None of this needs a new engine, either: a sparse-vector index — [Qdrant's BM2
 ## Key Takeaways
 
 - Naive token-BM25 is broken — BPE's space/case sensitivity tokenizes a query word differently than the same word mid-document, costing **−0.10 to −0.11 NDCG@10** on every one of 12 NanoBEIR datasets. Normalizing (encode each lowercased word with a fixed leading space) closes that to within noise of a plain word analyzer.
-- That normalized base is really char n-gram IR: bagging subwords gives partial free stemming — same-stem words share a subword **68–112× more than chance** — so it matches a plain word index but leans **−0.02 below a Porter-stemmed one**, a gap the benchmark can't even call significant, [known since 2004](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7).
-- Two token-native fixes make it **match a Porter-stemmed analyzer** with none of the English machinery: un-fragment rare words (score each word once, not per subword) and soft-stem by weighted expansion (expand to stem-group variants, weight by attestation, instead of hard-merging). Stacked, they tie `word_en` (GroupCov 0.5471 vs 0.5446) and **significantly beat plain token-BM25** (+0.023). Honestly a tie, not a win over Porter — and it still uses Porter to group candidates, so the config-free claim is the multilingual one; pushing _past_ Porter needs learned weights ([SPLADE](/blog/if-splade)).
-- The config-free payoff is multilingual: on Chinese, `\w+` word tokenization collapses to **0.01 NDCG@10** while the config-free naive o200k tokenizer **beats the jieba segmenter, 0.49 vs 0.40** (a `\w+` presplit lifts it to 0.53 but wrecks Hindi). One MIRACL dev set, so directional; on Thai char n-grams win, the best variant flips by language, and r50k dies on Devanagari/Thai where o200k holds.
-- One representation, shared: token-BM25 keys postings by the same token IDs the model reads and writes and [token-native storage](/blog/token-storage) persists — lexical search, stored payload, and generation on one vocabulary, no per-language analyzer to maintain.
+- That normalized base is really char n-gram IR: bagging subwords gives partial free stemming — same-stem words share a subword **68–112× more than chance** — so it matches a plain word index but leans **−0.02 below a Porter-stemmed one** ([known since 2004](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7)).
+- Two token-native fixes **match a Porter-stemmed analyzer** with none of the English machinery: un-fragment rare words (score each word once, not per subword) and soft-stem by weighted expansion query-side (weight stem-group variants by attestation instead of hard-merging both sides). They tie `word_en` (GroupCov 0.5471 vs 0.5446) and **significantly beat plain token-BM25** (+0.023) — a tie with Porter, not a win, and the document index stays pure tokens with Porter only a query-side hint. Pushing _past_ Porter needs learned weights ([SPLADE](/blog/if-splade)).
+- The config-free payoff is multilingual: on Chinese, `\w+` word tokenization collapses to **0.01 NDCG@10** while the config-free naive o200k tokenizer **beats the jieba segmenter, 0.49 vs 0.40** (a `\w+` presplit lifts it to 0.53 but wrecks Hindi). Directional — one MIRACL dev set; on Thai char n-grams win, and r50k dies on Devanagari/Thai where o200k holds.
+- One representation, shared: token-BM25 keys postings by the same token IDs the model reads, writes, and [stores](/blog/token-storage) — lexical search, stored payload, and generation on one vocabulary, no per-language analyzer to maintain.
 
 ## Acknowledgements
 
