@@ -153,6 +153,8 @@ Three things in that chart matter:
 
 (The cyan char-4-gram bar sits right next to normalized BPE, too — more on that below.)
 
+The macro-avg even undersells that break. Naive BPE returns nothing at all for **31%** of queries (vs **20%** for plain word), half again as many total failures — a gap the mean smooths into ten points. (Reading the [distribution instead of the mean](/blog/relevance-tail) is a separate rabbit hole; here it just confirms the naive break is a tail catastrophe, not a uniform dip.)
+
 ### Is "within noise" actually parity?
 
 "The bars look the same" isn't a statistical claim, so I ran a cluster bootstrap on the per-query delta. It puts normalized BPE **within noise of plain word** (−0.004, 95% CI [−0.014, +0.006]) — a statistical tie, not proven equal. Against the stronger **Porter-stemmed** analyzer (`word_en`) it's **−0.02 behind** — not significant, but it loses 10 of 12 datasets, so a hair behind a real stemmer, not parity.
