@@ -462,7 +462,7 @@ Observations:
 
 Everything above splits text on `\w+` before tokenizing. That regex _is_ a word segmenter — and it only works for languages that put spaces between words. Chinese doesn't. Thai barely does. This is exactly where a word analyzer reaches for a language-specific tool and a BPE tokenizer doesn't.
 
-I ran the same experiment on [MIRACL](https://github.com/project-miracl/miracl) dev sets (self-contained retrieval pools built from the inline positive/negative passages). For Chinese I added [jieba](https://github.com/fxsjy/jieba), the standard Chinese segmenter, as the "proper analyzer" baseline. These are single dev sets scored on judged-passage-only pools, so treat the numbers as directional — I didn't bootstrap them the way I did the English results. Toggle the language:
+I ran the same experiment on [MIRACL](https://github.com/project-miracl/miracl) dev sets (self-contained retrieval pools built from the inline positive/negative passages). For Chinese I added [jieba](https://github.com/fxsjy/jieba), the standard Chinese segmenter, as the "proper analyzer" baseline. These are single dev sets scored on judged-passage-only pools, so treat the numbers as directional — I didn't bootstrap them the way I did the English results. Toggle the metric (top row) and the language (bottom) — the zero-rate view is the one that lands:
 
 export const mlCats = [
   'word \\w+',
@@ -473,31 +473,71 @@ export const mlCats = [
   'normalized o200k',
 ]
 export const mlColors = ['#94a3b8', '#38bdf8', '#f59e0b', '#f87171', '#fb923c', '#10b981']
-export const mlText = (v) => v.map((x) => (x == null ? '' : x.toFixed(3)))
-export const mlView = (vals) => ({
+export const mlSeries = (vals, dec, suffix) => ({
   categories: mlCats,
   series: [
     {
-      name: 'NDCG@10',
+      name: 'v',
       values: vals.map((x) => x ?? 0),
       colors: mlColors,
-      text: mlText(vals),
+      text: vals.map((x) => (x == null ? '' : x.toFixed(dec) + (suffix || ''))),
       textPosition: 'outside',
     },
   ],
 })
+export const mlLang = (mean, p50, zero) => [
+  {
+    label: 'mean',
+    valueLabel: 'NDCG@10 mean (higher is better)',
+    valueMax: 0.72,
+    valueTicks: [0, 0.2, 0.4, 0.6],
+    ...mlSeries(mean, 3),
+  },
+  {
+    label: 'p50',
+    valueLabel: 'NDCG@10 p50, the median query (higher is better)',
+    valueMax: 0.72,
+    valueTicks: [0, 0.2, 0.4, 0.6],
+    ...mlSeries(p50, 3),
+  },
+  {
+    label: 'zero-rate',
+    valueLabel: 'zero-rate %, queries returning nothing (lower is better)',
+    valueMax: 100,
+    valueTicks: [0, 25, 50, 75, 100],
+    ...mlSeries(zero, 1, '%'),
+  },
+]
 
 <BarChart
   orientation="horizontal"
   title="Multilingual BM25: word analyzer vs BPE token IDs (MIRACL dev)"
-  subtitle="NDCG@10 — toggle language (right). gray = \w+ word tokenizer, orange = a real segmenter, green = GPT-4o tokenizer"
-  valueLabel="NDCG@10 (higher is better)"
-  valueMax={0.72}
-  valueTicks={[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]}
+  subtitle="gray = \w+ word, orange = a real segmenter, green = GPT-4o tokenizer · toggle metric (top) + language (bottom)"
   views={[
-    { label: 'Chinese (zh)', ...mlView([0.0117, 0.3267, 0.3975, 0.2686, 0.4879, 0.5268]) },
-    { label: 'Hindi (hi)', ...mlView([0.3919, 0.3674, null, 0.0071, 0.5465, 0.2678]) },
-    { label: 'Thai (th)', ...mlView([0.5695, 0.6159, null, 0.0398, 0.5629, 0.4434]) },
+    {
+      label: 'Chinese (zh)',
+      datasets: mlLang(
+        [0.0117, 0.3267, 0.3975, 0.2686, 0.4879, 0.5268],
+        [0.0, 0.296, 0.387, 0.177, 0.485, 0.5],
+        [97.96, 41.73, 23.66, 43.26, 14.0, 12.21]
+      ),
+    },
+    {
+      label: 'Hindi (hi)',
+      datasets: mlLang(
+        [0.3919, 0.3674, null, 0.0071, 0.5465, 0.2678],
+        [0.357, 0.304, null, 0.0, 0.554, 0.0],
+        [34.0, 39.14, null, 97.14, 15.43, 50.86]
+      ),
+    },
+    {
+      label: 'Thai (th)',
+      datasets: mlLang(
+        [0.5695, 0.6159, null, 0.0398, 0.5629, 0.4434],
+        [0.613, 0.631, null, 0.0, 0.605, 0.413],
+        [16.92, 10.1, null, 91.13, 15.55, 28.79]
+      ),
+    },
   ]}
 />
 
