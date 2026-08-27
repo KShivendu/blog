@@ -542,10 +542,13 @@ function ChartImpl({
       srs.forEach((s, si) => {
         if (groupOf(s, si) !== gk) return
         const v = Math.max(0, s.values?.[ci] || 0)
-        // Single-series charts hide zeros; grouped charts show them as a small
-        // labeled nub at the origin so a real floor (e.g. p10 = 0.000) stays
-        // visible instead of collapsing to an invisible zero-width bar.
-        if (v <= 0 && G === 1) return
+        // Zeros normally collapse to an invisible zero-width bar. Show a small
+        // labeled nub instead when the zero is meaningful: any grouped chart, or
+        // a single-series bar the author gave an explicit text label (e.g. a
+        // "+0.000" saturated-percentile move). A plain unlabeled single-series
+        // zero still hides.
+        const hasLabel = s.text != null && s.text[ci] != null && s.text[ci] !== ''
+        if (v <= 0 && G === 1 && !hasLabel) return
         const zeroStub = v <= 0
         const rawEnd = cum + v
         // A value that overshoots the configured axis max gets its bar
