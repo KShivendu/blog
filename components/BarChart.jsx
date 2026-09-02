@@ -205,6 +205,8 @@ function ChartImpl({
   height,
   showLegend,
   barGap = 0.22,
+  barWidths,
+  barWidthsTotal,
   categories,
   series,
   views,
@@ -295,6 +297,10 @@ function ChartImpl({
       : null
   const cats = resolved.categories || []
   const srs = resolved.series || []
+  const rBarWidths = resolved.barWidths ?? barWidths
+  // Optional shared reference total so a view can fill less than the full width
+  // (e.g. a smaller dictionary occupies proportionally less horizontal space).
+  const rBarWidthsTotal = resolved.barWidthsTotal ?? barWidthsTotal
   const horizontal = orientation === 'horizontal'
   const N = cats.length
 
@@ -470,11 +476,27 @@ function ChartImpl({
     return valZero + (v / vMax) * (valFull - valZero)
   }
 
-  const band = N ? (catEnd - catStart) / N : 0
-  const inner = band * (1 - barGap)
-  const groupThick = inner / G
-  const catCenter = (ci) => catStart + band * (ci + 0.5)
-  const groupOffset = (gi) => -inner / 2 + groupThick * (gi + 0.5)
+  // Per-category band width: equal by default, or proportional to `barWidths`
+  // (a per-category weight array) — that turns the vertical bar chart into a
+  // variable-width / mosaic chart where each bar's width encodes a second value.
+  const hasVarW = Array.isArray(rBarWidths) && rBarWidths.length === N && N > 0
+  const wOf = (ci) => (hasVarW ? rBarWidths[ci] : 1)
+  const totalW = hasVarW ? rBarWidthsTotal || rBarWidths.reduce((a, b) => a + b, 0) || N : N || 1
+  const span = catEnd - catStart
+  const edges = (() => {
+    const e = []
+    let acc = 0
+    for (let ci = 0; ci < N; ci++) {
+      e.push(catStart + (acc / totalW) * span)
+      acc += wOf(ci)
+    }
+    return e
+  })()
+  const bandAt = (ci) => (wOf(ci) / totalW) * span
+  const catCenter = (ci) => (edges[ci] ?? catStart) + bandAt(ci) / 2
+  const innerAt = (ci) => bandAt(ci) * (1 - barGap)
+  const groupThickAt = (ci) => innerAt(ci) / G
+  const groupOffset = (ci, gi) => -innerAt(ci) / 2 + groupThickAt(ci) * (gi + 0.5)
 
   // ── Build layers ──────────────────────────────────────────────────────────
   const gridLayer = []
@@ -558,7 +580,7 @@ function ChartImpl({
   const textLayer = []
   for (let ci = 0; ci < N; ci++) {
     groupKeys.forEach((gk, gi) => {
-      const off = groupOffset(gi)
+      const off = groupOffset(ci, gi)
       const barC = catCenter(ci) + off
       let cum = 0
       srs.forEach((s, si) => {
@@ -592,18 +614,19 @@ function ChartImpl({
         // reorder" idea as the tooltip and LineChart's crosshair.
         const isNear = ci === activeCat && nearestKey != null && gk === nearestKey
         let rect
+        const gThick = groupThickAt(ci)
         if (horizontal) {
           rect = {
             x: Math.min(p0, p1),
-            y: barC - groupThick / 2,
+            y: barC - gThick / 2,
             width: zeroStub ? 2.5 : Math.abs(p1 - p0),
-            height: groupThick * 0.92,
+            height: gThick * 0.92,
           }
         } else {
           rect = {
-            x: barC - groupThick / 2,
+            x: barC - gThick / 2,
             y: zeroStub ? Math.min(p0, p1) - 2.5 : Math.min(p0, p1),
-            width: groupThick * 0.92,
+            width: gThick * 0.92,
             height: zeroStub ? 2.5 : Math.abs(p1 - p0),
           }
         }
@@ -832,9 +855,10 @@ function ChartImpl({
   const hoverLayer = []
   for (let ci = 0; ci < N; ci++) {
     const cc = catCenter(ci)
+    const bw = bandAt(ci)
     const zone = horizontal
-      ? { x: m.l, y: cc - band / 2, width: pw, height: band }
-      : { x: cc - band / 2, y: m.t, width: band, height: ph }
+      ? { x: m.l, y: cc - bw / 2, width: pw, height: bw }
+      : { x: cc - bw / 2, y: m.t, width: bw, height: ph }
     const onMove = (e) => {
       if (activeCat !== ci) setActiveCat(ci)
       // Which grouped bar the cursor is actually over, by pixel position
@@ -850,7 +874,7 @@ function ChartImpl({
             : ((e.clientX - rect.left) / rect.width) * W
           let bd = Infinity
           groupKeys.forEach((gk, gi) => {
-            const gc = cc + groupOffset(gi)
+            const gc = cc + groupOffset(ci, gi)
             const d = Math.abs(gc - localPos)
             if (d < bd) {
               bd = d

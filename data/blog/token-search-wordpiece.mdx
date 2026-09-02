@@ -1,0 +1,41 @@
+---
+title: 'Token Search on WordPiece'
+subtitle: "Is token-native BM25 a BPE quirk, or does it hold on BERT's tokenizer too?"
+date: '2026-09-01'
+lastmod: '2026-09-01'
+tags: ['search', 'internals', 'nlp', 'rag']
+draft: true
+summary: "In Token Search I ran BM25 on tiktoken's BPE token IDs and matched a Porter-stemmed English analyzer. Here I rerun the identical stack on BERT's WordPiece — a different vocabulary, a different subword scheme — and it ties the analyzer again and comes out statistically equivalent to BPE. The result isn't a tiktoken quirk; it's tokenizer-agnostic. And since WordPiece is SPLADE's own vocabulary, this is the exact BM25 floor SPLADE learns on top of."
+authors: ['kshivendu']
+---
+
+[Token Search](/blog/token-search) made its case on one tokenizer: run BM25 on a model's own BPE token IDs — with two small fixes, un-fragmenting words and stemming-by-expansion — and it matches a Porter-stemmed English analyzer across 12 NanoBEIR datasets, with no stopword list, no stemmer, no per-language config. Fair question: is that a property of _token-native retrieval_, or a lucky property of tiktoken's `o200k` vocabulary?
+
+So I swapped the tokenizer for **BERT's WordPiece** (`bert-base-uncased`) and reran the identical stack. Different vocabulary size (30k vs 200k) and a different scheme — WordPiece marks continuation pieces with `##` instead of BPE's leading spaces — and it even fragments words differently:
+
+```
+wordpiece:  playing | footballers | disqualified | un ##sport ##sman ##like
+o200k:      playing | football ers  | dis qualified | uns ports man like
+```
+
+WordPiece keeps common words whole and only shatters rare ones; `o200k` splits more evenly. So the un-fragmentation fix has _less_ to do on WordPiece — but its single whole-word token for a rare word is too rare to match anything, which is exactly where soft subword coverage earns its keep.
+
+Same recipe, 12 NanoBEIR, NDCG@10:
+
+| system                              |      mean |       p50 |   p25 |
+| ----------------------------------- | --------: | --------: | ----: |
+| `word_en` (Porter-stemmed analyzer) |     0.545 |     0.591 | 0.264 |
+| BPE `o200k` + stack                 |     0.547 |     0.605 | 0.237 |
+| WordPiece, raw BM25                 |     0.532 |     0.574 | 0.242 |
+| **WordPiece + stack**               | **0.549** | **0.612** | 0.237 |
+
+Two verdicts from the cluster bootstrap:
+
+- **WordPiece + stack ties the stemmed analyzer** — +0.004 vs `word_en`, the CI straddles zero (6 wins / 6 losses). The same tie the BPE version gets.
+- **WordPiece is statistically _equivalent_ to BPE** — +0.002 vs `o200k`, and the whole confidence interval `[−0.003, +0.007]` sits inside the equivalence margin. Not merely "no significant difference" — provably the same representation, to within a rounding error.
+
+The base (raw WordPiece BM25, −0.012 under the analyzer) trails, and GroupCov coverage + Porter-expansion close it — doing the same lifting they do on BPE, and landing the best median of any system here (0.612).
+
+So the token-native result isn't a tiktoken artifact. Swap the entire subword scheme and the conclusion is unchanged: **BM25 on a model's own token IDs, with un-fragmentation and stemming-by-expansion, matches a hand-built stemmed analyzer** — whichever tokenizer the model happens to use.
+
+One last reason WordPiece is the right thing to test: it's **[SPLADE](/blog/if-splade)'s vocabulary**. SPLADE learns term weights on exactly `bert-base` WordPiece. So the 0.549 here is the literal BM25 floor SPLADE is built on top of — the "matching a stemmed analyzer is the unweighted ceiling, and learned weights are the only lever past it" argument from Token Search now stands on the exact vocabulary the learned model uses.
