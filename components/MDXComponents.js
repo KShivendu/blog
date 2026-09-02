@@ -9,7 +9,6 @@ import { BlogNewsletterForm } from './NewsletterForm'
 import PlotlyChart from './PlotlyChart'
 import LineChart from './LineChart'
 import BarChart from './BarChart'
-import AreaSquares from './AreaSquares'
 import VocabHistogram from './VocabHistogram'
 import ZipfSpiral from './ZipfSpiral'
 import DecadeFacets from './DecadeFacets'
@@ -38,7 +37,6 @@ export const MDXComponents = {
   PlotlyChart,
   LineChart,
   BarChart,
-  AreaSquares,
   VocabHistogram,
   ZipfSpiral,
   DecadeFacets,
