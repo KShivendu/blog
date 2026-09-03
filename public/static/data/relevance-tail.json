@@ -1,0 +1,5444 @@
+{
+  "note": "plain word-BM25 (lucene idf, k1=1.5, b=0.75) over NanoBEIR; one row per query, relevance + end-to-end query latency",
+  "n": 599,
+  "datasets": [
+    "ArguAna",
+    "ClimateFEVER",
+    "DBPedia",
+    "FEVER",
+    "FiQA2018",
+    "HotpotQA",
+    "MSMARCO",
+    "NFCorpus",
+    "NQ",
+    "SCIDOCS",
+    "SciFact",
+    "Touche2020"
+  ],
+  "stats": {
+    "ndcg@10": {
+      "mean": 0.5255,
+      "p10": 0.0,
+      "p25": 0.2192,
+      "p50": 0.5543,
+      "p75": 0.8772,
+      "p90": 1.0,
+      "zero_rate": 0.1987,
+      "one_rate": 0.2154
+    },
+    "recall@10": {
+      "mean": 0.563,
+      "p10": 0.0,
+      "p25": 0.1371,
+      "p50": 0.5,
+      "p75": 1.0,
+      "p90": 1.0,
+      "zero_rate": 0.1987,
+      "one_rate": 0.4274
+    },
+    "recall@100": {
+      "mean": 0.7654,
+      "p10": 0.1264,
+      "p25": 0.5,
+      "p50": 1.0,
+      "p75": 1.0,
+      "p90": 1.0,
+      "zero_rate": 0.0768,
+      "one_rate": 0.586
+    },
+    "ms": { "mean": 4.418, "p10": 0.219, "p50": 3.502, "p90": 7.15, "p99": 22.377, "max": 29.572 }
+  },
+  "rows": [
+    {
+      "ds": "SciFact",
+      "qid": "1014",
+      "q": "Rapamycin decreases the concentration of triacylglycerols in fruit flies.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.13
+    },
+    {
+      "ds": "SciFact",
+      "qid": "1021",
+      "q": "Rapid up-regulation and higher basal expression of interferon-induced genes reduce survival of granule cell neurons that are infected by Wes...",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 6.026
+    },
+    {
+      "ds": "SciFact",
+      "qid": "1132",
+      "q": "TCR/CD3 microdomains are a required to induce the immunologic synapse to activate T cells.",
+      "ndcg10": 0.2372,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 5.314
+    },
+    {
+      "ds": "SciFact",
+      "qid": "1146",
+      "q": "Teaching hospitals do not provide better care than non-teaching hospitals.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 1.951
+    },
+    {
+      "ds": "SciFact",
+      "qid": "1180",
+      "q": "The PRR MDA5 is a sensor of RNA virus infection.",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.226
+    },
+    {
+      "ds": "SciFact",
+      "qid": "1202",
+      "q": "The center of the granuloma in an immune cell induces a pro-inflammatory immune response.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.07
+    },
+    {
+      "ds": "SciFact",
+      "qid": "1213",
+      "q": "The deregulated and prolonged activation of monocytes has deleterious effects in inflammatory diseases.",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 4.182
+    },
+    {
+      "ds": "SciFact",
+      "qid": "124",
+      "q": "Antiretroviral therapy reduces rates of tuberculosis across a broad range of CD4 strata.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.479
+    },
+    {
+      "ds": "SciFact",
+      "qid": "1266",
+      "q": "The risk of breast cancer among parous women increases with placental weight of pregnancies, and this association is strongest for premenopa...",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.403
+    },
+    {
+      "ds": "SciFact",
+      "qid": "1271",
+      "q": "The severity of cardiac involvement in amyloidosis can be described by the degree of transmurality of late gadolinium enhancement in MRI.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.977
+    },
+    {
+      "ds": "SciFact",
+      "qid": "1278",
+      "q": "The treatment of cancer patients with co-IR blockade does not cause any adverse autoimmune events.",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 4.377
+    },
+    {
+      "ds": "SciFact",
+      "qid": "128",
+      "q": "Arterioles have a larger lumen diameter than venules.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.078
+    },
+    {
+      "ds": "SciFact",
+      "qid": "129",
+      "q": "Articles published in open access format are less likely to be cited than traditional journals.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.25
+    },
+    {
+      "ds": "SciFact",
+      "qid": "1335",
+      "q": "UCB T cells maintain high TCR diversity after transplantation.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 1.171
+    },
+    {
+      "ds": "SciFact",
+      "qid": "1339",
+      "q": "Ultrasound guidance significantly raises the number of traumatic procedures when attempting needle insertion.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.708
+    },
+    {
+      "ds": "SciFact",
+      "qid": "1370",
+      "q": "Vitamin D deficiency is unrelated to birth weight.",
+      "ndcg10": 0.3869,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 1.428
+    },
+    {
+      "ds": "SciFact",
+      "qid": "148",
+      "q": "Autophagy declines in aged organisms.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 1.349
+    },
+    {
+      "ds": "SciFact",
+      "qid": "180",
+      "q": "Blocking the interaction between TDP-43 and respiratory complex I proteins ND3 and ND6 leads to increased TDP-43-induced neuronal loss.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.345
+    },
+    {
+      "ds": "SciFact",
+      "qid": "217",
+      "q": "CX3CR1 on the Th2 cells promotes T cell survival",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.417
+    },
+    {
+      "ds": "SciFact",
+      "qid": "230",
+      "q": "Carriers of the alcohol aldehyde dehydrogenase deficiency mutation drink less that non-carries.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.687
+    },
+    {
+      "ds": "SciFact",
+      "qid": "269",
+      "q": "Cold exposure reduces BAT recruitment.",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.113
+    },
+    {
+      "ds": "SciFact",
+      "qid": "300",
+      "q": "Cytosolic proteins bind to iron-responsive elements on mRNAs coding for DMT1. Cytosolic proteins bind to iron-responsive elements on mRNAs c...",
+      "ndcg10": 0.3869,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.781
+    },
+    {
+      "ds": "SciFact",
+      "qid": "324",
+      "q": "Deleting Raptor reduces G-CSF levels.",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.344
+    },
+    {
+      "ds": "SciFact",
+      "qid": "343",
+      "q": "Diabetic patients with acute coronary syndrome experience increased short-term and long-term risk for bleeding events.",
+      "ndcg10": 0.5706,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.313
+    },
+    {
+      "ds": "SciFact",
+      "qid": "380",
+      "q": "Enhanced early production of inflammatory chemokines improves viral control in the lung.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.067
+    },
+    {
+      "ds": "SciFact",
+      "qid": "410",
+      "q": "Febrile seizures increase the threshold for development of epilepsy.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.662
+    },
+    {
+      "ds": "SciFact",
+      "qid": "421",
+      "q": "Flexible molecules experience greater steric hindrance in the tumor microenviroment than rigid molecules.",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 2.276
+    },
+    {
+      "ds": "SciFact",
+      "qid": "437",
+      "q": "Functional consequences of genomic alterations due to Myelodysplastic syndrome (MDS) are poorly understood due to the lack of an animal mode...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 3.708
+    },
+    {
+      "ds": "SciFact",
+      "qid": "475",
+      "q": "Glycolysis is one of the primary glycometabolic pathways in cells.",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 3.658
+    },
+    {
+      "ds": "SciFact",
+      "qid": "501",
+      "q": "Headaches are not correlated with cognitive impairment.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.086
+    },
+    {
+      "ds": "SciFact",
+      "qid": "514",
+      "q": "High dietary calcium intakes are unnecessary for prevention of secondary hyperparathyroidism in subjects with 25(OH)D levels above 75 nmol/l...",
+      "ndcg10": 0.2891,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.859
+    },
+    {
+      "ds": "SciFact",
+      "qid": "551",
+      "q": "ITAM phosphorylation prevents the transfer of the T cell receptor (TCR) signal from the echo-domain to the cytoplasmic tail of the T cell re...",
+      "ndcg10": 0.3155,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.539
+    },
+    {
+      "ds": "SciFact",
+      "qid": "589",
+      "q": "In young and middle-aged adults, current or remote uses of ADHD medications do not increase the risk of serious cardiovascular events.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.258
+    },
+    {
+      "ds": "SciFact",
+      "qid": "598",
+      "q": "Incidence rates of cervical cancer have increased due to nationwide screening programs based primarily on cytology to detect uterine cervica...",
+      "ndcg10": 0.3562,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.088
+    },
+    {
+      "ds": "SciFact",
+      "qid": "628",
+      "q": "Infection of human T-cell lymphotropic virus type 1 is most frequent in individuals of African origin.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.594
+    },
+    {
+      "ds": "SciFact",
+      "qid": "641",
+      "q": "Insomnia can be effectively treated with cognitive behavioral therapy.",
+      "ndcg10": 0.8066,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 1.618
+    },
+    {
+      "ds": "SciFact",
+      "qid": "659",
+      "q": "Ivermectin is used to treat lymphatic filariasis.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.246
+    },
+    {
+      "ds": "SciFact",
+      "qid": "691",
+      "q": "Leukemia associated Rho guanine nucleotide-exchange factor represses RhoA in response to SRC activation.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.935
+    },
+    {
+      "ds": "SciFact",
+      "qid": "692",
+      "q": "Leuko-increased blood increases infectious complications in red blood cell transfusion.",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.497
+    },
+    {
+      "ds": "SciFact",
+      "qid": "72",
+      "q": "Activator-inhibitor pairs are provided dorsally by Admpchordin.",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.771
+    },
+    {
+      "ds": "SciFact",
+      "qid": "723",
+      "q": "Ly49Q directs the organization of neutrophil migration to inflammation sites by regulating membrane raft functions.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.526
+    },
+    {
+      "ds": "SciFact",
+      "qid": "743",
+      "q": "Macrolides protect against myocardial infarction.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.13
+    },
+    {
+      "ds": "SciFact",
+      "qid": "770",
+      "q": "Metastatic colorectal cancer treated with a single agent fluoropyrimidines resulted in reduced efficacy and lower quality of life when compa...",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.9
+    },
+    {
+      "ds": "SciFact",
+      "qid": "800",
+      "q": "Modifying the epigenome in the brain affects the normal human aging process by affecting certain genes related to neurogenesis.",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 4.155
+    },
+    {
+      "ds": "SciFact",
+      "qid": "823",
+      "q": "N348I mutations cause resistance to zidovudine (AZT).",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 1.58
+    },
+    {
+      "ds": "SciFact",
+      "qid": "907",
+      "q": "PGE 2 promotes intestinal tumor growth by altering the expression of tumor suppressing and DNA repair genes.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.945
+    },
+    {
+      "ds": "SciFact",
+      "qid": "913",
+      "q": "PPAR-RXRs are inhibited by PPAR ligands.",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 1.432
+    },
+    {
+      "ds": "SciFact",
+      "qid": "971",
+      "q": "Primary cervical cancer screening with HPV detection has higher longitudinal sensitivity than conventional cytology to detect cervical intra...",
+      "ndcg10": 0.7487,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.832
+    },
+    {
+      "ds": "SciFact",
+      "qid": "982",
+      "q": "Proteins synthesized at the growth cone are ubiquitinated at a higher rate than proteins from the cell body.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.806
+    },
+    {
+      "ds": "SciFact",
+      "qid": "993",
+      "q": "Pyridostatin destabilizes the G - quadruplex in the telomeric region.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.1
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1109",
+      "q": "endocrine disruptors",
+      "ndcg10": 0.678,
+      "r10": 0.0612,
+      "r100": 0.1224,
+      "ms": 0.02
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1161",
+      "q": "fava beans",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 0.019
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1262",
+      "q": "Global Burden of Disease Study",
+      "ndcg10": 0.2935,
+      "r10": 0.2,
+      "r100": 0.3,
+      "ms": 2.012
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1288",
+      "q": "grapes",
+      "ndcg10": 0.7574,
+      "r10": 0.0357,
+      "r100": 0.051,
+      "ms": 0.009
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1409",
+      "q": "industrial toxins",
+      "ndcg10": 0.0784,
+      "r10": 0.004,
+      "r100": 0.0237,
+      "ms": 0.018
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1473",
+      "q": "kohlrabi",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.002
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-153",
+      "q": "How Should I Take Probiotics?",
+      "ndcg10": 0.5829,
+      "r10": 0.1277,
+      "r100": 0.2553,
+      "ms": 0.245
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1590",
+      "q": "medical ethics",
+      "ndcg10": 0.2935,
+      "r10": 0.1111,
+      "r100": 0.2222,
+      "ms": 0.061
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1601",
+      "q": "memory",
+      "ndcg10": 0.6442,
+      "r10": 0.0946,
+      "r100": 0.2297,
+      "ms": 0.016
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1611",
+      "q": "mesquite",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 0.001
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1621",
+      "q": "Mevacor",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 0.001
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1721",
+      "q": "NIH-AARP study",
+      "ndcg10": 0.662,
+      "r10": 0.1935,
+      "r100": 0.2258,
+      "ms": 0.61
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1794",
+      "q": "Panama",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.003
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1847",
+      "q": "philippines",
+      "ndcg10": 0.1389,
+      "r10": 0.0909,
+      "r100": 0.0909,
+      "ms": 0.003
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1887",
+      "q": "poisonous plants",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 0.026
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1909",
+      "q": "pork",
+      "ndcg10": 0.8701,
+      "r10": 0.0173,
+      "r100": 0.0691,
+      "ms": 0.023
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-1983",
+      "q": "rapamycin",
+      "ndcg10": 1.0,
+      "r10": 0.3125,
+      "r100": 0.5,
+      "ms": 0.013
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-2051",
+      "q": "saturated fat",
+      "ndcg10": 0.8512,
+      "r10": 0.0225,
+      "r100": 0.1268,
+      "ms": 0.179
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-207",
+      "q": "Avoiding Cooked Meat Carcinogens",
+      "ndcg10": 0.2867,
+      "r10": 0.0545,
+      "r100": 0.2727,
+      "ms": 0.16
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-2092",
+      "q": "sirtuins",
+      "ndcg10": 0.6489,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 0.004
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-2124",
+      "q": "spearmint",
+      "ndcg10": 0.359,
+      "r10": 0.1176,
+      "r100": 0.1176,
+      "ms": 0.003
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-2230",
+      "q": "thiamine",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 0.003
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-2301",
+      "q": "uterine health",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 0.315
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-2311",
+      "q": "veal",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 0.003
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-238",
+      "q": "How Chemically Contaminated Are We?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.037,
+      "ms": 1.219
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-2408",
+      "q": "Zoloft",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 0.002
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-2490",
+      "q": "The Actual Benefit of Diet vs. Drugs",
+      "ndcg10": 0.359,
+      "r10": 0.087,
+      "r100": 0.2609,
+      "ms": 2.672
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-2530",
+      "q": "Infectobesity: Adenovirus 36 and Childhood Obesity",
+      "ndcg10": 1.0,
+      "r10": 0.1389,
+      "r100": 0.3056,
+      "ms": 1.881
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-2570",
+      "q": "Diabetics Should Take Their Pulses",
+      "ndcg10": 0.1389,
+      "r10": 0.025,
+      "r100": 0.1,
+      "ms": 0.491
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-2750",
+      "q": "Preventing the Common Cold with Probiotics?",
+      "ndcg10": 0.6422,
+      "r10": 0.0847,
+      "r100": 0.2203,
+      "ms": 2.644
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-2780",
+      "q": "Do Fruit & Nut Bars Cause Weight Gain?",
+      "ndcg10": 0.606,
+      "r10": 0.2273,
+      "r100": 0.4091,
+      "ms": 0.574
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-2800",
+      "q": "Prolonged Liver Function Enhancement From Broccoli",
+      "ndcg10": 0.1682,
+      "r10": 0.0833,
+      "r100": 0.1667,
+      "ms": 1.523
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-2890",
+      "q": "To Snack or Not to Snack?",
+      "ndcg10": 0.0663,
+      "r10": 0.0345,
+      "r100": 0.0345,
+      "ms": 3.046
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-3026",
+      "q": "Vitamin C-Enriched Bacon",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.247
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-3037",
+      "q": "Out of the Lab Onto the Track",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 2.468
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-3141",
+      "q": "Relieving Yourself of Excess Estrogen",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.1765,
+      "ms": 1.624
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-3201",
+      "q": "Acne & Cancer Connection",
+      "ndcg10": 0.1732,
+      "r10": 0.0625,
+      "r100": 0.125,
+      "ms": 0.291
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-3231",
+      "q": "Meat & Multiple Myeloma",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.375,
+      "ms": 0.197
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-3261",
+      "q": "Update on Herbalife\u00ae",
+      "ndcg10": 0.1737,
+      "r10": 0.1538,
+      "r100": 0.1538,
+      "ms": 0.81
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-3271",
+      "q": "Saturated Fat & Cancer Progression",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0816,
+      "ms": 0.5
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-3432",
+      "q": "Healthy Chocolate Milkshakes",
+      "ndcg10": 0.2457,
+      "r10": 0.0714,
+      "r100": 0.2143,
+      "ms": 0.187
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-3472",
+      "q": "How Doctors Responded to Being Named a Leading Killer",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 2.412
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-488",
+      "q": "adenovirus 36",
+      "ndcg10": 0.9266,
+      "r10": 0.6,
+      "r100": 0.7333,
+      "ms": 0.083
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-510",
+      "q": "airport scanners",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 0.002
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-56",
+      "q": "Foods for Glaucoma",
+      "ndcg10": 0.6422,
+      "r10": 0.1,
+      "r100": 0.12,
+      "ms": 1.284
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-583",
+      "q": "antinutrients",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 0.002
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-623",
+      "q": "Atkins diet",
+      "ndcg10": 0.2201,
+      "r10": 0.0244,
+      "r100": 0.122,
+      "ms": 0.353
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-68",
+      "q": "What is Actually in Chicken Nuggets?",
+      "ndcg10": 0.3558,
+      "r10": 0.0545,
+      "r100": 0.2,
+      "ms": 2.074
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-751",
+      "q": "BRCA genes",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 0.034
+    },
+    {
+      "ds": "NFCorpus",
+      "qid": "PLAIN-78",
+      "q": "What Do Meat Purge and Cola Have in Common?",
+      "ndcg10": 0.11,
+      "r10": 0.0161,
+      "r100": 0.0806,
+      "ms": 2.724
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "10246",
+      "q": "Understanding the T + 3 settlement days rule",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 3.002
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "10414",
+      "q": "What is considered high or low when talking about volume?",
+      "ndcg10": 0.8772,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.686
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "10447",
+      "q": "Is there an advantage to a traditional but non-deductable IRA over a taxable account? [duplicate]",
+      "ndcg10": 0.2346,
+      "r10": 0.3333,
+      "r100": 0.3333,
+      "ms": 5.666
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "106",
+      "q": "What approaches are there for pricing a small business?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 4.422
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "11039",
+      "q": "Pay off credit card debt or earn employer 401(k) match?",
+      "ndcg10": 0.1596,
+      "r10": 0.125,
+      "r100": 0.625,
+      "ms": 2.355
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "1310",
+      "q": "Is is possible to take a mortgage using Bitcoin as collateral?",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.836
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "1736",
+      "q": "How can people have such high credit card debts?",
+      "ndcg10": 0.327,
+      "r10": 0.4,
+      "r100": 0.6,
+      "ms": 2.968
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "1783",
+      "q": "Freelancing Tax implication",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 0.462
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "1920",
+      "q": "Clarification on student expenses - To file the tax for the next year",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 5.163
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "1948",
+      "q": "Which colors can one use to fill out a check in the US?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 6.563
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "2296",
+      "q": "How does a bank make money on an interest free secured loan?",
+      "ndcg10": 0.3092,
+      "r10": 0.2222,
+      "r100": 0.5556,
+      "ms": 4.56
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "2348",
+      "q": "Why can't you just have someone invest for you and split the profits (and losses) with him?",
+      "ndcg10": 0.7066,
+      "r10": 0.4,
+      "r100": 0.6,
+      "ms": 7.159
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "2385",
+      "q": "As director, can I invoice my self-owned company?",
+      "ndcg10": 0.6131,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 3.138
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "2587",
+      "q": "Typically how many digits are in a cheque number?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.144
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "26",
+      "q": "Applying for and receiving business credit",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 3.06
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "2676",
+      "q": "Tax question about selling a car",
+      "ndcg10": 0.3869,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.82
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "2724",
+      "q": "How do you determine the dividend payout date for Mutual Funds?",
+      "ndcg10": 0.3869,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 4.68
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "2903",
+      "q": "How should I file my taxes as a contractor?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 4.086
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "3033",
+      "q": "Tax consequences of changing state residency?",
+      "ndcg10": 0.6131,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 2.195
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "3039",
+      "q": "Can increasing my tax withholding from my full-time job cover FICA taxes for my freelance work?",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.855
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "3189",
+      "q": "Diversify my retirement investments with a Roth IRA",
+      "ndcg10": 0.1772,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 3.219
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "3357",
+      "q": "Why big clients want the contractor to be incorporated before giving them work",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 8.131
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "3453",
+      "q": "How does spot-futures arbitrage work in the gold market?",
+      "ndcg10": 0.9197,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 6.502
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "3682",
+      "q": "Short selling - lender's motivation",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 1.657
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "4233",
+      "q": "Are personal finance / money management classes taught in high school, anywhere?",
+      "ndcg10": 0.8248,
+      "r10": 0.8,
+      "r100": 1.0,
+      "ms": 4.208
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "4286",
+      "q": "Given advice \u201cbuy term insurance and invest the rest\u201d, how should one \u201cinvest the rest\u201d?",
+      "ndcg10": 0.3869,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 7.855
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "4312",
+      "q": "Is it true that 90% of investors lose their money?",
+      "ndcg10": 0.7869,
+      "r10": 0.7143,
+      "r100": 0.8571,
+      "ms": 5.935
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "4600",
+      "q": "Why government bonds fluctuate so much, even though interest rates don't change that often?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 4.714
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "4785",
+      "q": "What is the difference between a structured collar and a normal collar in finance?",
+      "ndcg10": 0.3333,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 6.261
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "5064",
+      "q": "How much should a graduate student attempt to save?",
+      "ndcg10": 0.5706,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.854
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "5083",
+      "q": "Co-signer deceased",
+      "ndcg10": 0.2184,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 0.022
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "5331",
+      "q": "Exercises of employee share options",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.064
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "5402",
+      "q": "Is it impossible to get a home loan with a poor credit history after a divorce?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.5,
+      "ms": 6.235
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "5981",
+      "q": "Is it a good investment for a foreigner to purchase a flat/apartment in China?",
+      "ndcg10": 0.8688,
+      "r10": 0.8,
+      "r100": 1.0,
+      "ms": 8.973
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "604",
+      "q": "Is there a dollar amount that, when adding Massachusetts Sales Tax, precisely equals $200?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 5.6
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "6199",
+      "q": "How can all these countries owe so much money? Why & where did they borrow it from?",
+      "ndcg10": 0.2463,
+      "r10": 0.25,
+      "r100": 0.75,
+      "ms": 5.462
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "6410",
+      "q": "Will an ETF immediately reflect a reconstitution of underlying index",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 4.015
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "6787",
+      "q": "Would it make sense to sell a stock, then repurchase it for tax purposes?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 6.72
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "6896",
+      "q": "Selling high, pay capital gains, re-purchase later",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 1.594
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "7071",
+      "q": "ESPP strategy - Sell right away or hold?",
+      "ndcg10": 0.2184,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 1.696
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "7377",
+      "q": "What type of returns Vanguard is quoting?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.226
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "7431",
+      "q": "Pay off mortgage or invest in high value saving account",
+      "ndcg10": 0.3333,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.429
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "8034",
+      "q": "What is the average cost of a portfolio on a trading site?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 5.953
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "8351",
+      "q": "What happens when a calendar spread is assigned in a non-margin account?",
+      "ndcg10": 0.6131,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 4.737
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "8378",
+      "q": "Should I wait a few days to sell ESPP Stock?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.6667,
+      "ms": 4.459
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "8779",
+      "q": "How does a defined contribution plan work",
+      "ndcg10": 0.5706,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.715
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "9385",
+      "q": "Meaning of reinvestment",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 1.93
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "94",
+      "q": "Using credit card points to pay for tax deductible business expenses",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.047
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "9548",
+      "q": "How do I research, analyze, and choose the right mutual fund for a roth ira?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 6.743
+    },
+    {
+      "ds": "FiQA2018",
+      "qid": "988",
+      "q": "Where should I invest my savings?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 2.98
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "1",
+      "q": "Should teachers get tenure?",
+      "ndcg10": 0.7569,
+      "r10": 0.6364,
+      "r100": 0.9091,
+      "ms": 2.147
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "10",
+      "q": "Should any vaccines be required for children?",
+      "ndcg10": 0.6399,
+      "r10": 0.2308,
+      "r100": 0.8462,
+      "ms": 4.829
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "11",
+      "q": "Should performance-enhancing drugs be accepted in sports?",
+      "ndcg10": 0.7156,
+      "r10": 0.2727,
+      "r100": 0.6364,
+      "ms": 6.325
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "12",
+      "q": "Should birth control pills be available over the counter?",
+      "ndcg10": 0.3398,
+      "r10": 0.3077,
+      "r100": 0.8462,
+      "ms": 6.072
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "13",
+      "q": "Can alternative energy effectively replace fossil fuels?",
+      "ndcg10": 0.6848,
+      "r10": 0.3889,
+      "r100": 0.9444,
+      "ms": 1.927
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "14",
+      "q": "Is sexual orientation determined at birth?",
+      "ndcg10": 0.6988,
+      "r10": 0.3158,
+      "r100": 0.7368,
+      "ms": 3.652
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "15",
+      "q": "Should animals be used for scientific or commercial testing?",
+      "ndcg10": 0.3758,
+      "r10": 0.1481,
+      "r100": 0.8519,
+      "ms": 5.581
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "16",
+      "q": "Should prescription drugs be advertised directly to consumers?",
+      "ndcg10": 0.7215,
+      "r10": 0.5,
+      "r100": 0.5714,
+      "ms": 4.462
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "17",
+      "q": "Should recreational marijuana be legal?",
+      "ndcg10": 0.6083,
+      "r10": 0.1923,
+      "r100": 0.6538,
+      "ms": 3.266
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "18",
+      "q": "Should churches remain tax-exempt?",
+      "ndcg10": 0.7917,
+      "r10": 0.4375,
+      "r100": 1.0,
+      "ms": 1.771
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "19",
+      "q": "Should gay marriage be legal?",
+      "ndcg10": 0.6835,
+      "r10": 0.2308,
+      "r100": 0.8462,
+      "ms": 3.17
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "2",
+      "q": "Is vaping with e-cigarettes safe?",
+      "ndcg10": 0.782,
+      "r10": 0.5833,
+      "r100": 1.0,
+      "ms": 3.548
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "20",
+      "q": "Is drinking milk healthy for humans?",
+      "ndcg10": 0.7752,
+      "r10": 0.4118,
+      "r100": 0.8235,
+      "ms": 3.816
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "21",
+      "q": "Is human activity primarily responsible for global climate change?",
+      "ndcg10": 1.0,
+      "r10": 0.4348,
+      "r100": 0.8696,
+      "ms": 4.08
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "22",
+      "q": "Is a two-state solution an acceptable solution to the Israeli-Palestinian conflict?",
+      "ndcg10": 0.6718,
+      "r10": 0.4,
+      "r100": 1.0,
+      "ms": 7.563
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "23",
+      "q": "Should euthanasia or physician-assisted suicide be legal?",
+      "ndcg10": 0.6867,
+      "r10": 0.2222,
+      "r100": 0.7407,
+      "ms": 4.17
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "24",
+      "q": "Does lowering the federal corporate income tax rate create jobs?",
+      "ndcg10": 0.6621,
+      "r10": 0.3529,
+      "r100": 1.0,
+      "ms": 3.685
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "26",
+      "q": "Do standardized tests improve education?",
+      "ndcg10": 0.5337,
+      "r10": 0.2609,
+      "r100": 0.7826,
+      "ms": 1.767
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "27",
+      "q": "Should more gun control laws be enacted?",
+      "ndcg10": 0.7917,
+      "r10": 0.2692,
+      "r100": 0.6538,
+      "ms": 3.982
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "28",
+      "q": "Should prostitution be legal?",
+      "ndcg10": 0.7264,
+      "r10": 0.2917,
+      "r100": 0.875,
+      "ms": 3.187
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "29",
+      "q": "Should the government allow illegal immigrants to become citizens?",
+      "ndcg10": 0.7124,
+      "r10": 0.25,
+      "r100": 0.8214,
+      "ms": 5.389
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "3",
+      "q": "Should insider trading be allowed?",
+      "ndcg10": 0.8829,
+      "r10": 0.8333,
+      "r100": 0.8333,
+      "ms": 3.032
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "30",
+      "q": "Should adults have the right to carry a concealed handgun?",
+      "ndcg10": 0.6422,
+      "r10": 0.2632,
+      "r100": 0.7895,
+      "ms": 6.841
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "31",
+      "q": "Is obesity a disease?",
+      "ndcg10": 0.7859,
+      "r10": 0.4375,
+      "r100": 0.75,
+      "ms": 3.789
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "32",
+      "q": "Do electronic voting machines improve the voting process?",
+      "ndcg10": 0.862,
+      "r10": 0.8571,
+      "r100": 1.0,
+      "ms": 3.531
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "33",
+      "q": "Should people become vegetarian?",
+      "ndcg10": 0.7264,
+      "r10": 0.25,
+      "r100": 0.5357,
+      "ms": 2.661
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "34",
+      "q": "Are social networking sites good for our society?",
+      "ndcg10": 0.7799,
+      "r10": 0.3913,
+      "r100": 0.7826,
+      "ms": 4.306
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "35",
+      "q": "Do violent video games contribute to youth violence?",
+      "ndcg10": 0.7878,
+      "r10": 0.3333,
+      "r100": 0.7917,
+      "ms": 3.753
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "36",
+      "q": "Is golf a sport?",
+      "ndcg10": 0.5737,
+      "r10": 0.2381,
+      "r100": 0.8571,
+      "ms": 3.807
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "37",
+      "q": "Is cell phone radiation safe?",
+      "ndcg10": 0.8105,
+      "r10": 0.7143,
+      "r100": 0.8571,
+      "ms": 2.4
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "38",
+      "q": "Should marijuana be a medical option?",
+      "ndcg10": 0.785,
+      "r10": 0.2692,
+      "r100": 0.6538,
+      "ms": 4.299
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "39",
+      "q": "Should the federal minimum wage be increased?",
+      "ndcg10": 0.6212,
+      "r10": 0.3529,
+      "r100": 0.8235,
+      "ms": 4.39
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "4",
+      "q": "Should corporal punishment be used in schools?",
+      "ndcg10": 0.6851,
+      "r10": 0.4,
+      "r100": 1.0,
+      "ms": 4.341
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "40",
+      "q": "Should the death penalty be allowed?",
+      "ndcg10": 0.4729,
+      "r10": 0.1379,
+      "r100": 0.6552,
+      "ms": 4.378
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "41",
+      "q": "Should student loan debt be easier to discharge in bankruptcy?",
+      "ndcg10": 0.7442,
+      "r10": 0.6667,
+      "r100": 1.0,
+      "ms": 5.312
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "42",
+      "q": "Should fighting be allowed in hockey?",
+      "ndcg10": 0.9651,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.145
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "43",
+      "q": "Should bottled water be banned?",
+      "ndcg10": 0.9306,
+      "r10": 0.5625,
+      "r100": 0.9375,
+      "ms": 2.932
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "44",
+      "q": "Should election day be a national holiday?",
+      "ndcg10": 0.4725,
+      "r10": 0.5,
+      "r100": 0.8333,
+      "ms": 4.406
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "45",
+      "q": "Should the penny stay in circulation?",
+      "ndcg10": 0.9337,
+      "r10": 0.6,
+      "r100": 0.9333,
+      "ms": 4.258
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "46",
+      "q": "Should net neutrality be restored?",
+      "ndcg10": 0.9149,
+      "r10": 0.4737,
+      "r100": 0.8421,
+      "ms": 2.831
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "47",
+      "q": "Is homework beneficial?",
+      "ndcg10": 0.7752,
+      "r10": 0.2692,
+      "r100": 0.6923,
+      "ms": 2.523
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "48",
+      "q": "Should the voting age be lowered?",
+      "ndcg10": 0.6817,
+      "r10": 0.4,
+      "r100": 0.7333,
+      "ms": 4.339
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "49",
+      "q": "Should body cameras be mandatory for police?",
+      "ndcg10": 0.9337,
+      "r10": 0.4737,
+      "r100": 0.8947,
+      "ms": 4.066
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "5",
+      "q": "Should social security be privatized?",
+      "ndcg10": 0.6033,
+      "r10": 0.375,
+      "r100": 0.875,
+      "ms": 2.976
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "50",
+      "q": "Should everyone get a universal basic income?",
+      "ndcg10": 0.9364,
+      "r10": 0.6923,
+      "r100": 0.6923,
+      "ms": 3.675
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "6",
+      "q": "Is a college education worth it?",
+      "ndcg10": 0.8643,
+      "r10": 0.6154,
+      "r100": 1.0,
+      "ms": 4.812
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "7",
+      "q": "Should felons who have completed their sentence be allowed to vote?",
+      "ndcg10": 0.8416,
+      "r10": 0.3478,
+      "r100": 0.7826,
+      "ms": 6.617
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "8",
+      "q": "Should abortion be legal?",
+      "ndcg10": 0.3578,
+      "r10": 0.1613,
+      "r100": 0.6774,
+      "ms": 3.08
+    },
+    {
+      "ds": "Touche2020",
+      "qid": "9",
+      "q": "Should students have to wear school uniforms?",
+      "ndcg10": 0.6911,
+      "r10": 0.1875,
+      "r100": 0.7188,
+      "ms": 4.575
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-culture-ascidfakhba-pro04a",
+      "q": "The costs of monitoring copyright by states, artists, and lawyers far outweigh the benefits, and is often simply ineffective The state incur...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 25.611
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-culture-mthbah-pro02a",
+      "q": "People are given too much choice, which makes them less happy. Advertising leads to many people being overwhelmed by the endless need to dec...",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 21.68
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-culture-mthbah-pro05a",
+      "q": "Advertisements tell children that they should have everything they want. Advertising gives the impression, especially to children, that they...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 13.925
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-culture-thbcsbptwhht-pro04a",
+      "q": "Compensation has the potential to reverse damaged caused by Cultural Appropriation. Compensation is necessary in the case of cultural approp...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 17.945
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-culture-tlhrilsfhwr-pro01a",
+      "q": "Cultural relativism and adapting to conflict The issues underlying all debates on child soldiers go to the very heart of intercultural justi...",
+      "ndcg10": 0.3869,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 24.207
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-digital-freedoms-dfiphbgs-pro01a",
+      "q": "Open source software is more adaptable to government needs. Open source software starts from a completely different viewpoint of how product...",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 22.392
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-economy-beplcpdffe-con04a",
+      "q": "Other forms of online gambling What is the difference between gambling and playing the stock market? In each case people are putting money a...",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 11.973
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-economy-egecegphw-pro02a",
+      "q": "The expansion of Heathrow is vital for the economy Expanding Heathrow would ensure many current jobs as well as creating new ones. Currently...",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 20.856
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-economy-egppphbcb-pro01a",
+      "q": "The market should determine the price of products and services A free market gives the power to the people to choose and decide what product...",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 22.185
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-economy-egppphbcb-pro03a",
+      "q": "The capitalist society enhances personal freedom The Western democratic capitalist system protects individual's rights and liberties through...",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 19.604
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-economy-epegiahsc-pro02a",
+      "q": "Multilateralism is preferable to bilateralism. It is preferable for Latin American countries to band together when negotiating trade deals w...",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 17.026
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-economy-epiasghbf-con01a",
+      "q": "The double burden Despite a feminising labour market there has been no convergence, or equalisation, in unpaid domestic and care work. Women...",
+      "ndcg10": 0.3562,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 14.857
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-economy-eptpghdtre-pro02a",
+      "q": "Historically Democrats have presided over more economic stability whereas the GOP is the party of boom and Bust During the past 60 years Dem...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 11.598
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-education-egscphsrdt-con01a",
+      "q": "Right to privacy Even if a right to privacy (which would prevent random drug testing with no reason for suspicion) does not exist in law in ...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 24.131
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-education-pstrgsehwt-pro03a",
+      "q": "Much of the complexity of life cannot be explained by evolution, but is perfectly explained by Creationism. Nature is marked by clear design...",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 20.69
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-education-ughbuesbf-con03a",
+      "q": "The quality of education suffers when university education is free Without university fees, universities become dependent on the state for f...",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 19.017
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-education-usuprmhbu-con02a",
+      "q": "Affirmative action creates bad workplaces for all minorities Affirmative action creates a negative workplaces for all minorities whose group...",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 18.68
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-free-speech-debate-ldhwprhs-pro02a",
+      "q": "Because religion promotes certainty of belief, divinely inspired hatred is easy to use to justify and promote violent actions and discrimina...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 20.1
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-free-speech-debate-yfsdfkhbwu-pro02a",
+      "q": "A bargaining chip In much the same way that material investment in countries can be used as a bargaining chip to secure improvements in area...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 20.315
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-health-ahiahbgbsp-pro02a",
+      "q": "Reduce smoking A ban on smoking in public places would help reduce the rates of people smoking, by making it appear socially unusual \u2013 peopl...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 19.147
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-health-dhghhbampt-con01a",
+      "q": "A huge number of fully accepted medical practices started being seen as something a bit off the wall, it\u2019s wrong to deny sick people access ...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 15.962
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-health-dhghwapgd-con01a",
+      "q": "Generic drugs often prove to be less effective than their brand name counterparts, and can even be dangerous Generic drugs are meant to reta...",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 22.129
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-health-dhiacihwph-pro01a",
+      "q": "Easily affordable drugs will mean greater access Generic drugs are much cheaper to produce, which is ideal for Africa\u2019s struggling populatio...",
+      "ndcg10": 0.3869,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 14.542
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-health-hgwhwbjfs-pro03a",
+      "q": "Better nutrition leads to better students. There is a growing body of evidence linking a healthy lifestyle, comprising of both adequate nutr...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 16.549
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-international-aghbfcpspr-pro03a",
+      "q": "There is already a precedent for paying reparations to such states. In the past, dominating global powers have paid reparations and compensa...",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 18.749
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-international-amehbuaisji-con04a",
+      "q": "ICC trials violate the due process guarantees of the US constitution US ratification of the Rome Statute would lead to the possibility of Am...",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 18.062
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-international-appghblsba-con03a",
+      "q": "It is not in the interest of South Africa to annex a poor, underdeveloped country It is not in South Africa\u2019s interests to annex Lesotho. Le...",
+      "ndcg10": 0.3869,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 19.97
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-international-gmehwasr-con03a",
+      "q": "Unforeseeable consequences We do not know where arming the rebels will lead. The most obvious parallel has to be Afghanistan in the 1980s wh...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 22.377
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-international-gmehwasr-pro05a",
+      "q": "Diplomacy is not going anywhere The best solution would be a ceasefire between the two sides in the Syrian civil war and a negotiated settle...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 21.193
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-international-gpdwhwcusa-pro03a",
+      "q": "A UN standing army would be more effective in operations themselves. A UN standing army would be more effective than the variety of troops s...",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 29.572
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-international-ipecfiepg-con02a",
+      "q": "Defaulting would not solve Greece\u2019s problems The proposition argue that the hardship endured by the default would only be temporary, but an ...",
+      "ndcg10": 0.301,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 19.652
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-international-siacphbnt-pro01a",
+      "q": "Technology will lead job growth for youths. The rate of unemployment in Sub-Saharan Africa remains above the global average, at 7.55% in 201...",
+      "ndcg10": 0.2891,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 21.459
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-international-siacphbnt-pro04a",
+      "q": "Changing education systems and democracy. Technology has enabled access to e-books and resources for students and teachers [1] . Such change...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 19.017
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-law-lgplhbssbco-pro02a",
+      "q": "Suicide is a selfish act that causes suffering to others Suicide is an entirely selfish act that causes immense pain and suffering for those...",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 13.951
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-law-phwmfri-con03a",
+      "q": "Creates the perception that fines are like taxes, rather than a punishment If we detach fines from the crimes committed, people are more lik...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 19.656
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-law-phwmfri-pro01a",
+      "q": "Rich and poor now face equality of impact of punishment The purpose of a fine is to ensure that the offender faces the consequences of their...",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 13.401
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-law-umtlilhotac-con02a",
+      "q": "Open justice \u2013 crimes with large numbers of victims The principle of open justice, including the right to a public trial [1] , is enshrined ...",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 19.066
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-philosophy-elhbrd-pro03a",
+      "q": "The decision to die is a deeply personal one - it is no business of the state. Ultimately, the decision to die is a personal one, it may aff...",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 23.282
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-politics-cpegiepgh-con01a",
+      "q": "For Britain to join the single currency is simply unthinkable; jobs will be lost The EU creates economic conditions that threaten jobs. As e...",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 16.98
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-politics-glghssi-pro03a",
+      "q": "An independent Scotland has enormous economic potential to join other small European nations, especially as a leader in technology and renew...",
+      "ndcg10": 0.3869,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 17.413
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-politics-gvhbhlsbr-con04a",
+      "q": "The public is apathetic to reform. Whether or not reform of the House of Lords should be a top priority in the current economic climate is d...",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 16.065
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-politics-lghwdecm-con02a",
+      "q": "Directly elected mayors provide opportunities for populists. The position of elected mayor is likely to attract populist and maverick candid...",
+      "ndcg10": 0.2891,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 18.526
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-politics-oapdhwinkp-con01a",
+      "q": "North Korea is an irrational regime that is a strategic threat to numerous great powers North Korea is an irrational and irresponsible regim...",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 17.587
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-politics-ypppgvhwmv-con03a",
+      "q": "There are alternatives that tackle the real causes of voter disengagement Compulsory voting hides the problem which is causing people to be ...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 16.051
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-politics-ypppgvhwmv-pro03a",
+      "q": "It will cause more people to become interested in politics Compulsory voting increases the number of people who cast their vote 1. People wh...",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 18.776
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-religion-grcrgshwbr-pro03a",
+      "q": "Religious symbols cause division within Western society. Religious symbols can be seen as possible tools for fuelling division within societ...",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 20.24
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-religion-msgfhwbamec-con02a",
+      "q": "It will cause resentment and make certain communities feel targeted. Arranged marriages are seen as a very important aspect of the identity ...",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 20.856
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-science-wsihwclscaaw-con01a",
+      "q": "Cyber attacks are often carried out by non-state actors Cyber attacks are often carried out by non-state actors, such as cyberterrorists or ...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 18.868
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-society-epiasghbf-con04a",
+      "q": "Where are the men? Is the feminisation of labour emerging with a de-masculinisation of jobs? If so, how do women cope in the work environmen...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 12.032
+    },
+    {
+      "ds": "ArguAna",
+      "qid": "test-sport-otshwbe2uuyt-con03a",
+      "q": "The boycott would affect Poland and the Ukrainian people as well as Yanukovych A boycott of Euro 2012 even if it was meant to be limited to ...",
+      "ndcg10": 0.3333,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 20.614
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "01d208b33561362f7714f714d3bc4a1f7aa1637c",
+      "q": "Bank distress in the news: Describing events through deep learning",
+      "ndcg10": 0.107,
+      "r10": 0.2,
+      "r100": 0.2,
+      "ms": 1.391
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "063c6ae786c34d3722c6d9060df6339e246bbc3b",
+      "q": "Texture Synthesis Using Convolutional Neural Networks",
+      "ndcg10": 0.6548,
+      "r10": 0.6,
+      "r100": 0.6,
+      "ms": 0.457
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "071961fc3d61b893c12f07abfa2906859152e3a9",
+      "q": "Learning to Rank Non-Factoid Answers: Comment Selection in Web Forums",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.2,
+      "ms": 1.299
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "0ce7927d613e66a2062516e9e85e1b9a36d54029",
+      "q": "The leadership of emergence : A complex systems leadership theory of emergence at successive organizational levels",
+      "ndcg10": 0.3392,
+      "r10": 0.2,
+      "r100": 0.2,
+      "ms": 1.876
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "1eed0e731008236ddc956ffbbe9051e13d54f2ec",
+      "q": "Smart antennas for satellite communications on the move",
+      "ndcg10": 0.3452,
+      "r10": 0.4,
+      "r100": 1.0,
+      "ms": 1.437
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "20534da8c7ee7063cbb32620d53e7322f90be2e0",
+      "q": "First Demonstration of 28 GHz and 39 GHz Transmission Lines and Antennas on Glass Substrates for 5G Modules",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.4,
+      "ms": 1.934
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "2094f315289ccf9b676e0790fb3dd1bc4acad98c",
+      "q": "Introducing MVTec ITODD \u2014 A Dataset for 3D Object Recognition in Industry",
+      "ndcg10": 0.2669,
+      "r10": 0.4,
+      "r100": 1.0,
+      "ms": 1.619
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "2a8bcf35e6b5b3910eea160b3a1fb3e6bcb3966e",
+      "q": "Fast Sparse Gaussian Markov Random Fields Learning Based on Cholesky Factorization",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.2,
+      "ms": 0.917
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "30ef88ee401f70cf43b330b475d30f7f5e722630",
+      "q": "Face recognition under partial occlusion using HMM and Face Edge Length Model",
+      "ndcg10": 0.2531,
+      "r10": 0.4,
+      "r100": 0.8,
+      "ms": 1.168
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "337f48a82d9d2739d35b41cfc4e8cd3dc906639d",
+      "q": "Accelerating aggregation using intra-cycle parallelism",
+      "ndcg10": 0.3392,
+      "r10": 0.2,
+      "r100": 0.2,
+      "ms": 0.265
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "349099074825c262b3f7c150ac8d470aabcebada",
+      "q": "Breaking the Barrier of Transactions: Mining Inter-Transaction Association Rules",
+      "ndcg10": 0.5196,
+      "r10": 0.8,
+      "r100": 0.8,
+      "ms": 1.255
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "3713243ded59fd9b0a4428bd101616bad7393311",
+      "q": "Enablers and Barriers to the Organizational Adoption of Sustainable Business Practices",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 1.983
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "39959bc480d2972d8bb925708e6e8ad59664bcdb",
+      "q": "Control theoretic approach to tracking radar: First step towards cognition",
+      "ndcg10": 0.4693,
+      "r10": 0.3333,
+      "r100": 0.3333,
+      "ms": 1.019
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "3ad8328b066bedca77c858a399a77521563d5c99",
+      "q": "Root Exploit Detection and Features Optimization: Mobile Device and Blockchain Based Medical Data Management",
+      "ndcg10": 0.1696,
+      "r10": 0.2,
+      "r100": 0.4,
+      "ms": 1.316
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "3f64d4fab50db41c0145759b7410fb4c8b977452",
+      "q": "Operational Flexibility and Financial Hedging: Complements or Substitutes?",
+      "ndcg10": 0.6844,
+      "r10": 0.6,
+      "r100": 0.6,
+      "ms": 0.958
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "458f1428273254fc5dd399f3c104f507680ddd54",
+      "q": "Measuring discrimination in algorithmic decision making",
+      "ndcg10": 0.3392,
+      "r10": 0.2,
+      "r100": 0.2,
+      "ms": 0.793
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "484550334c626a749bada57e51a0db4a29085f87",
+      "q": "Global outer-urban navigation with OpenStreetMap",
+      "ndcg10": 0.3392,
+      "r10": 0.2,
+      "r100": 0.6,
+      "ms": 0.565
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "4ceb63d79341ba3caa08bd1c6c141478d32a8244",
+      "q": "Design of advanced digital heartbeat monitor using basic electronic components",
+      "ndcg10": 0.3392,
+      "r10": 0.2,
+      "r100": 0.2,
+      "ms": 1.195
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "4e3fb831a5d2961f2829da4477856b6a9b7f8930",
+      "q": "SynopSys: large graph analytics in the SAP HANA database through summarization",
+      "ndcg10": 0.6992,
+      "r10": 0.6,
+      "r100": 1.0,
+      "ms": 1.378
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "546b3592f59b3445ef12fba506b729c832198c33",
+      "q": "Photo-Realistic Single Image Super-Resolution Using a Generative Adversarial Network",
+      "ndcg10": 0.214,
+      "r10": 0.2,
+      "r100": 0.4,
+      "ms": 1.191
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "548a49c717dc1ce0263ceff445b5609361c26cde",
+      "q": "Decision trees for predicting the academic success of students",
+      "ndcg10": 0.5531,
+      "r10": 0.4,
+      "r100": 0.8,
+      "ms": 1.658
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "59dca5c15c275f26c7ae34fc940449aeb918c68b",
+      "q": "Collaborative video reindexing via matrix factorization",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.6,
+      "ms": 0.101
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "5bb6b779de7929c573f39cd84169cafbd72e5bae",
+      "q": "Could We Issue Driving Licenses to Autonomous Vehicles?",
+      "ndcg10": 0.1461,
+      "r10": 0.2,
+      "r100": 0.6,
+      "ms": 1.081
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "5cd7b83eb30797aa8bf49b4b7a3f6a433aca4a75",
+      "q": "SMOTE-GPU: Big Data preprocessing on commodity hardware for imbalanced classification",
+      "ndcg10": 0.3392,
+      "r10": 0.2,
+      "r100": 0.4,
+      "ms": 1.296
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "6519bf5580fcdcc9c50fd72c6c8dc5d040d443e8",
+      "q": "A survey of multi-source energy harvesting systems",
+      "ndcg10": 0.3342,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 1.39
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "7d132ec7b7f94fe1397f6c1e8e5bb4fa42806ad1",
+      "q": "What to believe: Bayesian methods for data analysis",
+      "ndcg10": 0.214,
+      "r10": 0.2,
+      "r100": 0.4,
+      "ms": 1.432
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "83591848730f3fc7f208d4646ed4338c237bd161",
+      "q": "Providing Context-Aware Security for IoT Environments Through Context Sharing Feature",
+      "ndcg10": 0.8358,
+      "r10": 0.8,
+      "r100": 0.8,
+      "ms": 0.876
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "88ee8b13451deac38384c9f31196227f2535aa65",
+      "q": "Stochastic Geometric Analysis of User Mobility in Heterogeneous Wireless Networks",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.25,
+      "ms": 1.349
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "8aba3628ad8c9cec11b2b518a96b883bda8b3cbb",
+      "q": "Broadband millimetre-wave passive spatial combiner based on coaxial waveguide",
+      "ndcg10": 0.1461,
+      "r10": 0.2,
+      "r100": 0.8,
+      "ms": 0.799
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "8f03f545ff791a70455ad4624208357e41dcfc0c",
+      "q": "Unlinkable Coin Mixing Scheme for Transaction Privacy Enhancement of Bitcoin",
+      "ndcg10": 0.7227,
+      "r10": 0.6,
+      "r100": 1.0,
+      "ms": 1.175
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "901a4c9388b3cb9d30edc3e4a7ea7efb0b4e228b",
+      "q": "Question Answering in the Context of Stories Generated by Computers",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.4,
+      "ms": 1.842
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "9af1f7b6d79e6ce314d1842a8d32402328fcaca7",
+      "q": "Variance Reduction for Faster Non-Convex Optimization",
+      "ndcg10": 0.6552,
+      "r10": 0.6,
+      "r100": 0.6,
+      "ms": 0.817
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "a2707a57828b95443a7f3ef8153576299a2ad707",
+      "q": "IoT based autonomous percipient irrigation system using raspberry Pi",
+      "ndcg10": 0.5677,
+      "r10": 0.8,
+      "r100": 1.0,
+      "ms": 0.648
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "a352061134daa2c47861b8c4216ee5482a93be1d",
+      "q": "BPM Governance: An Exploratory Study in Public Organizations",
+      "ndcg10": 0.5087,
+      "r10": 0.4,
+      "r100": 0.6,
+      "ms": 1.127
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "a91eca9d11755108c8c1a4354ed5b6c5a89ca4f8",
+      "q": "FingerCode: A Filterbank for Fingerprint Representation and Matching",
+      "ndcg10": 0.3392,
+      "r10": 0.2,
+      "r100": 0.2,
+      "ms": 1.582
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "a95fd5d561bc2996b4d6d5574139ad8162cb78ce",
+      "q": "Health management and pattern analysis of daily living activities of people with dementia using in-home sensors and machine learning techniq...",
+      "ndcg10": 0.2685,
+      "r10": 0.5,
+      "r100": 0.75,
+      "ms": 2.367
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "c1173b8d8efb8c2d989ce0e51fe21f6b0b8d1478",
+      "q": "Semi-Supervised Image-to-Video Adaptation for Video Action Recognition",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.8,
+      "ms": 1.291
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "c20b4068be640ebaffbc56382c3e4e0bcf62664e",
+      "q": "Factored Language Models and Generalized Parallel Backoff",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.8,
+      "ms": 0.95
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "c46d80f83813fba0e8363a0ab36a19fba062540e",
+      "q": "Learning Actionable Representations with Goal-Conditioned Policies",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.4,
+      "ms": 0.728
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "c9dee006f3b6b2b30e422ad2fd8abb86c751376d",
+      "q": "Hidradenitis Suppurativa in Children Treated with Finasteride-A Case Series.",
+      "ndcg10": 0.8688,
+      "r10": 0.8,
+      "r100": 1.0,
+      "ms": 1.484
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "d212691257354c201a32729b997ede447e498640",
+      "q": "Novel DC-DC Multilevel Boost Converter",
+      "ndcg10": 0.6164,
+      "r10": 0.6,
+      "r100": 1.0,
+      "ms": 0.142
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "d406239de17bbb4f66d4c835f2a5f1be977b4131",
+      "q": "Affordances as a Framework for Robot Control",
+      "ndcg10": 0.3904,
+      "r10": 0.25,
+      "r100": 0.5,
+      "ms": 1.425
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "de1505819e145b5c22a6e09002510413019f7228",
+      "q": "DeepFood: Deep Learning-Based Food Image Recognition for Computer-Aided Dietary Assessment",
+      "ndcg10": 0.2482,
+      "r10": 0.4,
+      "r100": 0.6,
+      "ms": 1.121
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "e0a8b67880070624ef8787a08bbbd5aa178d65ac",
+      "q": "Incorporating Syntactic Uncertainty in Neural Machine Translation with a Forest-to-Sequence Model",
+      "ndcg10": 0.6157,
+      "r10": 0.6,
+      "r100": 1.0,
+      "ms": 2.045
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "eb240f463fa57740986a92ee744c3ad75f8228e9",
+      "q": "Intrusion Detection : Support Vector Machines and Neural Networks",
+      "ndcg10": 0.1021,
+      "r10": 0.2,
+      "r100": 0.8,
+      "ms": 1.058
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "ef1fbd95c7220003835b839c47bdf3fdb7e54b7b",
+      "q": "Students' perceptions of using Facebook as an interactive learning resource at university",
+      "ndcg10": 0.5503,
+      "r10": 0.6,
+      "r100": 0.6,
+      "ms": 1.666
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "f4195462f27158c4afd86ca364347dacfd228bdd",
+      "q": "Towards an Information Security Framework for the Automotive Domain",
+      "ndcg10": 0.5543,
+      "r10": 0.6,
+      "r100": 0.6,
+      "ms": 1.588
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "f6c1eda98cef66438dc89fd9a3d4fcc0a795418a",
+      "q": "Planar broadband annular-ring antenna with circular polarization for RFID system",
+      "ndcg10": 0.5439,
+      "r10": 0.8,
+      "r100": 0.8,
+      "ms": 1.158
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "f7f32e86c23a902ac55fba8b8191026f563bec5b",
+      "q": "Subjectivity and Sentiment Analysis of Modern Standard Arabic",
+      "ndcg10": 0.3836,
+      "r10": 0.4,
+      "r100": 0.8,
+      "ms": 1.341
+    },
+    {
+      "ds": "SCIDOCS",
+      "qid": "fe76c167920898330a66e3f2509ff1cd41e231bc",
+      "q": "Comparative abilities of Microsoft Kinect and Vicon 3D motion capture for gait analysis.",
+      "ndcg10": 0.3392,
+      "r10": 0.2,
+      "r100": 0.6,
+      "ms": 1.648
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1019",
+      "q": "An additional kick was supplied by an El Ni\u00f1o weather pattern that peaked in 2016 and temporarily warmed much of the surface of the planet, ...",
+      "ndcg10": 0.511,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 7.69
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "109",
+      "q": "Local and regional sea levels continue to exhibit typical natural variability\u2014in some places rising and in others falling.",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.5,
+      "ms": 3.824
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1093",
+      "q": "Ocean acidification is the terrifying threat whereby all that man-made CO2 we\u2019ve been pumping into the atmosphere may react with the sea to ...",
+      "ndcg10": 0.6131,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 7.067
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1112",
+      "q": "\u201cThe jet stream forms a boundary between the cold north and the warmer south, but the lower temperature difference means the winds are now w...",
+      "ndcg10": 0.3869,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 4.881
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1119",
+      "q": "Prof Adam Scaife, a climate modelling expert at the UK\u2019s Met Office, said the evidence for a link to shrinking Arctic ice was now good: \u2018The...",
+      "ndcg10": 0.5294,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 5.995
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1157",
+      "q": "\u201cIn 2013 the level of U.S. farm output was about 2.7 times its 1948 level, and productivity was growing at an average annual rate of 1.52%.",
+      "ndcg10": 0.2346,
+      "r10": 0.3333,
+      "r100": 0.3333,
+      "ms": 6.673
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1334",
+      "q": "We simply could never release enough CO2 into the atmosphere to cause the pH to go below 7 [the point in the pH scale at which a solution be...",
+      "ndcg10": 0.4693,
+      "r10": 0.3333,
+      "r100": 0.6667,
+      "ms": 5.504
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1360",
+      "q": "In fact, the trend, while not statistically significant, is downward.\u201d",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 3.716
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1365",
+      "q": "Satellite temperature readings going back to 1979 show 1998 was by far the warmest year in the satellite era",
+      "ndcg10": 0.6131,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 4.401
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1376",
+      "q": "Also, it is increasingly clear that the planet was significantly warmer than today several times during the past 10,000 years.",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.4,
+      "ms": 5.199
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1390",
+      "q": "\u201cLyme Disease is much more common in northern, cooler regions of the United States than in southern, warmer regions.",
+      "ndcg10": 0.2961,
+      "r10": 0.3333,
+      "r100": 0.3333,
+      "ms": 5.157
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1421",
+      "q": "The melting in the polar ice caps and in high altitude plains can lead to the dangerous release of methane gas",
+      "ndcg10": 0.5585,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 5.297
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1510",
+      "q": "Doubling the concentration of atmospheric CO2 from its pre-industrial level, in the absence of other forcings and feedbacks, would likely ca...",
+      "ndcg10": 0.4996,
+      "r10": 0.75,
+      "r100": 0.75,
+      "ms": 7.148
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1565",
+      "q": "They changed the name from 'global warming' to 'climate change'.",
+      "ndcg10": 0.2372,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 3.623
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1575",
+      "q": "Arctic sea ice loss is matched by Antarctic sea ice gain.",
+      "ndcg10": 0.1815,
+      "r10": 0.3333,
+      "r100": 0.6667,
+      "ms": 2.455
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1691",
+      "q": "Sea level rise is now increasing faster than predicted due to unexpectedly rapid ice melting.",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.297
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1758",
+      "q": "Temperature errors in the Great Lakes region are not used in any global temperature records.",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 3.932
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1774",
+      "q": "The CERN CLOUD experiment only tested one-third of one out of four requirements necessary to blame global warming on cosmic rays, and two of...",
+      "ndcg10": 0.2961,
+      "r10": 0.3333,
+      "r100": 0.3333,
+      "ms": 5.886
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1783",
+      "q": "Internal variability can only account for small amounts of warming and cooling over periods of decades, and scientific studies have consiste...",
+      "ndcg10": 0.1681,
+      "r10": 0.25,
+      "r100": 1.0,
+      "ms": 6.176
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1792",
+      "q": "Greenland's ice loss is accelerating & will add metres of sea level rise in upcoming centuries.",
+      "ndcg10": 0.3869,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 4.029
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1822",
+      "q": "Trudeau's carbon tax will raise gas prices by 11 cents/litre.",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.187
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1862",
+      "q": "Carbon dioxide is not \"a primary contributor to the global warming that we see.\"",
+      "ndcg10": 0.3172,
+      "r10": 0.6667,
+      "r100": 1.0,
+      "ms": 4.8
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1935",
+      "q": "No state generates as much solar power as California, or has as many people whose jobs depend on it.",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 4.198
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1971",
+      "q": "The carbon footprint on wind [energy] is significant.",
+      "ndcg10": 0.5135,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 3.324
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "1981",
+      "q": "The EPA director under Obama said the Clean Power Initiative would have no effect on man-made CO2 emissions.",
+      "ndcg10": 0.5856,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 3.191
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "2192",
+      "q": "The data suggests solar activity is influencing the global climate causing the world to get warmer.\"",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.2,
+      "ms": 3.89
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "2204",
+      "q": "All the indicators show that global warming is still happening.",
+      "ndcg10": 0.2891,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.529
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "2214",
+      "q": "\"We found [U.S. weather] stations located next to the exhaust fans of air conditioning units, surrounded by asphalt parking lots and roads, ...",
+      "ndcg10": 0.4693,
+      "r10": 0.3333,
+      "r100": 0.3333,
+      "ms": 6.709
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "2272",
+      "q": "It found the scientists' rigour and honesty are not in doubt, and their behaviour did not prejudice the IPCC's conclusions, though they did ...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.3333,
+      "ms": 6.928
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "2359",
+      "q": "Therefore human emissions upset the natural balance, rising CO2 to levels not seen in at least 800,000 years.",
+      "ndcg10": 0.3462,
+      "r10": 0.5,
+      "r100": 0.75,
+      "ms": 4.522
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "2500",
+      "q": "Believers think the warming is man-made, while the skeptics believe the warming is natural and contributions from man are minimal and certai...",
+      "ndcg10": 0.2021,
+      "r10": 0.3333,
+      "r100": 0.6667,
+      "ms": 4.803
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "2509",
+      "q": "In 1905, PDO switched to a warm phase.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.239
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "2510",
+      "q": "In 1946, PDO switched to a cool phase.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.148
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "2608",
+      "q": "And their wind and manure emit more than one third of emissions of another, methane, which warms the world 20 times faster than carbon dioxi...",
+      "ndcg10": 0.2566,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 5.075
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "2836",
+      "q": "Thanks to a rapid rebound in recent months, global sea ice levels now equal those seen 29 years ago, when the year 1979 also drew to a close...",
+      "ndcg10": 0.148,
+      "r10": 0.3333,
+      "r100": 0.3333,
+      "ms": 5.328
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "2994",
+      "q": "'Mauna Loa has been producing a readout which supports Manning's predetermined goal by showing steady growth in atmospheric CO2 concentratio...",
+      "ndcg10": 0.6367,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 4.855
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "3066",
+      "q": "The claim that 2.2 conventional jobs are destroyed for every new job created in the alternative energy industry is based on a study which re...",
+      "ndcg10": 0.1461,
+      "r10": 0.2,
+      "r100": 0.2,
+      "ms": 8.55
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "356",
+      "q": "This requires us to work towards avoiding catastrophic possibilities rather than looking at probabilities, as learning from mistakes is not ...",
+      "ndcg10": 0.1681,
+      "r10": 0.25,
+      "r100": 0.25,
+      "ms": 5.98
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "36",
+      "q": "When the exact same group of 'experts' who claimed it was global cooling in 1977 now claim it's global warming you can easily see why I am s...",
+      "ndcg10": 0.2961,
+      "r10": 0.3333,
+      "r100": 0.6667,
+      "ms": 5.416
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "401",
+      "q": "On Feb. 7, several major newspapers carried stories of the declaration by NASA and NOAA that the past five years have been the warmest on re...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 5.946
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "412",
+      "q": "From 1970 until 1998 there was a warming period that raised temperatures by about 0.7 F that helped spawn the global warming alarmist moveme...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.3333,
+      "ms": 5.248
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "555",
+      "q": "In Alaska, brown bears are changing their feeding habits to eat elderberries that ripen earlier.",
+      "ndcg10": 0.7777,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.627
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "598",
+      "q": "If ECS is as low as the Energy Balance literature suggests, it means that the climate models we have been using for decades run too hot and ...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.3333,
+      "ms": 7.833
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "705",
+      "q": "policies based on previous climate model output and predictions might need to be reconsidered",
+      "ndcg10": 0.2463,
+      "r10": 0.25,
+      "r100": 0.5,
+      "ms": 3.61
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "791",
+      "q": "\u2018Clean coal\u2019 is an approach in which the emissions from coal-burning power plants would be captured and pumped underground.",
+      "ndcg10": 0.7654,
+      "r10": 0.6667,
+      "r100": 1.0,
+      "ms": 5.849
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "806",
+      "q": "Days of near-100-degree-Fahrenheit temperatures cooked the Mountain West in early July, and a scorching heat wave lingered over the Pacific ...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.5,
+      "ms": 5.423
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "859",
+      "q": "By 2080, without dramatic reductions in emissions, southern Europe will be in permanent extreme drought, much worse than the American dust b...",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.3333,
+      "ms": 4.614
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "95",
+      "q": "[climate scientists] say that aspects of the case of Hurricane Harvey suggest global warming is making a bad situation worse.",
+      "ndcg10": 0.6131,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 4.908
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "967",
+      "q": "He said: \u2018We have had five warming cycles since about 900AD, each followed by a dramatic cooling cycle.\u2019",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.3333,
+      "ms": 3.414
+    },
+    {
+      "ds": "ClimateFEVER",
+      "qid": "971",
+      "q": "Sea ice has diminished much faster than scientists and climate models anticipated.",
+      "ndcg10": 0.5856,
+      "r10": 0.5,
+      "r100": 0.75,
+      "ms": 2.845
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_LD-2009022",
+      "q": "Szechwan dish food cuisine",
+      "ndcg10": 0.2489,
+      "r10": 0.0571,
+      "r100": 0.4857,
+      "ms": 0.099
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_LD-2010019",
+      "q": "gallo roman architecture in paris",
+      "ndcg10": 0.8522,
+      "r10": 0.8,
+      "r100": 1.0,
+      "ms": 2.741
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_LD-2010057",
+      "q": "Einstein Relativity theory",
+      "ndcg10": 1.0,
+      "r10": 0.1695,
+      "r100": 0.7627,
+      "ms": 0.079
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_LD-20120121",
+      "q": "vietnam food recipes",
+      "ndcg10": 0.2985,
+      "r10": 0.1818,
+      "r100": 0.6364,
+      "ms": 0.04
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_LD-20120321",
+      "q": "tango music composers",
+      "ndcg10": 0.0784,
+      "r10": 0.0169,
+      "r100": 0.4068,
+      "ms": 0.225
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_LD-20120332",
+      "q": "tango dance history",
+      "ndcg10": 0.432,
+      "r10": 0.1562,
+      "r100": 0.8438,
+      "ms": 0.14
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_LD-2012311",
+      "q": "John Lennon Yoko Ono album Starting Over",
+      "ndcg10": 0.8604,
+      "r10": 0.3077,
+      "r100": 1.0,
+      "ms": 0.413
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_LD-2012319",
+      "q": "1994 short story collection Alice Munro is Open",
+      "ndcg10": 0.8052,
+      "r10": 0.8,
+      "r100": 1.0,
+      "ms": 2.62
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_LD-2012354",
+      "q": "greatest guitarist",
+      "ndcg10": 0.9216,
+      "r10": 0.1111,
+      "r100": 0.5679,
+      "ms": 0.107
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_LD-2012367",
+      "q": "invented telescope",
+      "ndcg10": 0.7968,
+      "r10": 0.3043,
+      "r100": 0.8696,
+      "ms": 0.04
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_XER-113",
+      "q": "Formula 1 drivers that won the Monaco Grand Prix",
+      "ndcg10": 0.9364,
+      "r10": 0.1406,
+      "r100": 0.4375,
+      "ms": 3.769
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_XER-114",
+      "q": "Formula one races in Europe",
+      "ndcg10": 0.3843,
+      "r10": 0.0577,
+      "r100": 0.4808,
+      "ms": 2.843
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_XER-115",
+      "q": "Formula One World Constructors' Champions",
+      "ndcg10": 0.7421,
+      "r10": 0.1892,
+      "r100": 0.6486,
+      "ms": 0.756
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_XER-122",
+      "q": "Movies with eight or more Academy Awards",
+      "ndcg10": 0.3719,
+      "r10": 0.1579,
+      "r100": 0.2632,
+      "ms": 1.166
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_XER-132",
+      "q": "living nordic classical composers",
+      "ndcg10": 0.0734,
+      "r10": 0.0238,
+      "r100": 0.3333,
+      "ms": 0.068
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_XER-143",
+      "q": "Hanseatic league in Germany in the Netherlands Circle",
+      "ndcg10": 0.4035,
+      "r10": 0.1379,
+      "r100": 0.1724,
+      "ms": 4.184
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_XER-65",
+      "q": "Pacific navigators Australia explorers",
+      "ndcg10": 0.3301,
+      "r10": 0.0667,
+      "r100": 0.5333,
+      "ms": 0.076
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_XER-72",
+      "q": "films shot in Venice",
+      "ndcg10": 0.5305,
+      "r10": 0.1364,
+      "r100": 0.2727,
+      "ms": 2.315
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_XER-79",
+      "q": "Works by Charles Rennie Mackintosh",
+      "ndcg10": 0.9052,
+      "r10": 0.8182,
+      "r100": 1.0,
+      "ms": 1.354
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "INEX_XER-87",
+      "q": "Axis powers of World War II",
+      "ndcg10": 0.7065,
+      "r10": 0.1905,
+      "r100": 0.6429,
+      "ms": 3.016
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "QALD2_te-11",
+      "q": "Who is the Formula 1 race driver with the most races?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.375,
+      "ms": 5.045
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "QALD2_te-46",
+      "q": "Which professional surfers were born on the Philippines?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.5,
+      "ms": 4.082
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "QALD2_te-51",
+      "q": "Give me all Frisian islands that belong to the Netherlands.",
+      "ndcg10": 0.776,
+      "r10": 0.32,
+      "r100": 0.88,
+      "ms": 4.083
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "QALD2_te-57",
+      "q": "Give me the Apollo 14 astronauts.",
+      "ndcg10": 0.343,
+      "r10": 0.25,
+      "r100": 0.875,
+      "ms": 2.89
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "QALD2_te-60",
+      "q": "Give me a list of all lakes in Denmark.",
+      "ndcg10": 0.2985,
+      "r10": 0.1176,
+      "r100": 0.3529,
+      "ms": 5.337
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "QALD2_te-67",
+      "q": "Who are the parents of the wife of Juan Carlos I?",
+      "ndcg10": 0.1681,
+      "r10": 0.25,
+      "r100": 0.5,
+      "ms": 4.313
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "QALD2_te-80",
+      "q": "Give me all books by William Goldman with more than 300 pages.",
+      "ndcg10": 0.5423,
+      "r10": 0.375,
+      "r100": 0.9375,
+      "ms": 2.183
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "QALD2_te-81",
+      "q": "Which books by Kerouac were published by Viking Press?",
+      "ndcg10": 0.4856,
+      "r10": 0.375,
+      "r100": 0.875,
+      "ms": 1.863
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "QALD2_te-84",
+      "q": "Who created the comic Captain America?",
+      "ndcg10": 0.5919,
+      "r10": 0.3846,
+      "r100": 0.9231,
+      "ms": 3.156
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "QALD2_tr-13",
+      "q": "Which classis does the Millepede belong to?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 3.62
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "QALD2_tr-75",
+      "q": "Who has been the 5th president of the United States of America?",
+      "ndcg10": 0.6334,
+      "r10": 0.75,
+      "r100": 1.0,
+      "ms": 4.717
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "QALD2_tr-82",
+      "q": "In which programming language is GIMP written?",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 3.966
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "QALD2_tr-83",
+      "q": "Who produced films starring Natalie Portman?",
+      "ndcg10": 0.9337,
+      "r10": 0.1698,
+      "r100": 0.4717,
+      "ms": 0.472
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_ES-111",
+      "q": "eagle rock, ca",
+      "ndcg10": 0.9398,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.125
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_ES-119",
+      "q": "john elliott",
+      "ndcg10": 0.9364,
+      "r10": 0.3333,
+      "r100": 0.9259,
+      "ms": 0.172
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_ES-125",
+      "q": "nokia e73",
+      "ndcg10": 0.3026,
+      "r10": 0.1667,
+      "r100": 1.0,
+      "ms": 0.033
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_ES-15",
+      "q": "bradley center",
+      "ndcg10": 0.8316,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.067
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_ES-17",
+      "q": "butte montana",
+      "ndcg10": 0.5869,
+      "r10": 0.4167,
+      "r100": 1.0,
+      "ms": 0.039
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_ES-20",
+      "q": "carolina",
+      "ndcg10": 0.4362,
+      "r10": 0.2308,
+      "r100": 0.8462,
+      "ms": 0.054
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_ES-30",
+      "q": "eloan line of credit",
+      "ndcg10": 0.3973,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 2.529
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_ES-32",
+      "q": "fitzgerald auto mall chambersburg pa",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.057
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_ES-4",
+      "q": "NAACP Image Awards",
+      "ndcg10": 1.0,
+      "r10": 0.2326,
+      "r100": 0.9767,
+      "ms": 0.106
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_ES-50",
+      "q": "laura steele bob and tom",
+      "ndcg10": 0.8316,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.549
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_ES-88",
+      "q": "thomas jefferson",
+      "ndcg10": 0.7126,
+      "r10": 0.1579,
+      "r100": 1.0,
+      "ms": 0.091
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_LS-24",
+      "q": "matt berry tv series",
+      "ndcg10": 0.8848,
+      "r10": 0.8571,
+      "r100": 1.0,
+      "ms": 0.181
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_LS-25",
+      "q": "members of u2?",
+      "ndcg10": 0.4789,
+      "r10": 0.3636,
+      "r100": 0.9091,
+      "ms": 2.584
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_LS-29",
+      "q": "nations where Portuguese is an official language",
+      "ndcg10": 0.7094,
+      "r10": 0.3043,
+      "r100": 0.8696,
+      "ms": 2.914
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_LS-35",
+      "q": "republics of the former Yugoslavia",
+      "ndcg10": 0.753,
+      "r10": 0.2121,
+      "r100": 0.7273,
+      "ms": 4.117
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_LS-46",
+      "q": "where the British monarch is also head of state",
+      "ndcg10": 0.5442,
+      "r10": 0.3125,
+      "r100": 0.6875,
+      "ms": 5.728
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "TREC_Entity-18",
+      "q": "Members of the band Jefferson Airplane.",
+      "ndcg10": 0.7015,
+      "r10": 0.2963,
+      "r100": 1.0,
+      "ms": 4.157
+    },
+    {
+      "ds": "FEVER",
+      "qid": "101300",
+      "q": "San Francisco Bay Area contains zero towns.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.326
+    },
+    {
+      "ds": "FEVER",
+      "qid": "106404",
+      "q": "Secret and technologically advanced airplanes were produced in Burbank, California.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.593
+    },
+    {
+      "ds": "FEVER",
+      "qid": "108352",
+      "q": "Nate Diaz declined to ever compete in World Extreme Cagefighting.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.275
+    },
+    {
+      "ds": "FEVER",
+      "qid": "109817",
+      "q": "Louis Malle worked in a French industry.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.024
+    },
+    {
+      "ds": "FEVER",
+      "qid": "127981",
+      "q": "Zoe Saldana was born on June 19.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.948
+    },
+    {
+      "ds": "FEVER",
+      "qid": "128844",
+      "q": "A near-Earth object is not a solar body.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.185
+    },
+    {
+      "ds": "FEVER",
+      "qid": "129780",
+      "q": "Richard Dawson was not born on November 20th, 1932.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.048
+    },
+    {
+      "ds": "FEVER",
+      "qid": "13474",
+      "q": "Taarak Mehta Ka Ooltah Chashmah is a sitcom.",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.843
+    },
+    {
+      "ds": "FEVER",
+      "qid": "135150",
+      "q": "Kung Fu Panda was released on stage.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.542
+    },
+    {
+      "ds": "FEVER",
+      "qid": "136604",
+      "q": "Zac Efron is a citizen.",
+      "ndcg10": 0.1846,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 3.612
+    },
+    {
+      "ds": "FEVER",
+      "qid": "137267",
+      "q": "Menace II Society is only set in 1970.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.367
+    },
+    {
+      "ds": "FEVER",
+      "qid": "138743",
+      "q": "Personality is unaffected by the development of personal memories.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 6.007
+    },
+    {
+      "ds": "FEVER",
+      "qid": "139090",
+      "q": "SummerSlam was a concert.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.95
+    },
+    {
+      "ds": "FEVER",
+      "qid": "143965",
+      "q": "Antigua and Barbuda was named in honor of the Panagia.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 7.583
+    },
+    {
+      "ds": "FEVER",
+      "qid": "1494",
+      "q": "Food Network is available in the United States.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 6.139
+    },
+    {
+      "ds": "FEVER",
+      "qid": "158897",
+      "q": "Unison (Celine Dion album) was originally released in May 1990.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.154
+    },
+    {
+      "ds": "FEVER",
+      "qid": "163833",
+      "q": "William Blackstone was born in Boston.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.428
+    },
+    {
+      "ds": "FEVER",
+      "qid": "172320",
+      "q": "Scream 2 is exclusively a German film.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.604
+    },
+    {
+      "ds": "FEVER",
+      "qid": "17376",
+      "q": "Joseph Merrick's was the subject of a historical drama.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 6.754
+    },
+    {
+      "ds": "FEVER",
+      "qid": "174991",
+      "q": "Jerry Bruckheimer directed the 1998 American action drama The Man in the Iron Mask.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.15
+    },
+    {
+      "ds": "FEVER",
+      "qid": "179112",
+      "q": "The Good German starred Tobey Maguire.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.975
+    },
+    {
+      "ds": "FEVER",
+      "qid": "179815",
+      "q": "Vic Mensa died June 6, 1993.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.499
+    },
+    {
+      "ds": "FEVER",
+      "qid": "180702",
+      "q": "Cary Elwes was born in April 1962.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.315
+    },
+    {
+      "ds": "FEVER",
+      "qid": "183460",
+      "q": "Henry III of France was succeeded by the first French king of the House of Bourbon.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 7.363
+    },
+    {
+      "ds": "FEVER",
+      "qid": "187572",
+      "q": "Dan Brown is an author.",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.807
+    },
+    {
+      "ds": "FEVER",
+      "qid": "194187",
+      "q": "Jeb Bush's maternal parent is Barbara Bush.",
+      "ndcg10": 0.6934,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.746
+    },
+    {
+      "ds": "FEVER",
+      "qid": "194432",
+      "q": "The Indiana Pacers were established as an ABA member.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.179
+    },
+    {
+      "ds": "FEVER",
+      "qid": "204557",
+      "q": "Commodore is only a land rank.",
+      "ndcg10": 0.3869,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.975
+    },
+    {
+      "ds": "FEVER",
+      "qid": "216779",
+      "q": "Timur was an Arabian lord.",
+      "ndcg10": 0.3869,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.345
+    },
+    {
+      "ds": "FEVER",
+      "qid": "21854",
+      "q": "Physics' main goal is to understand the behavior of the universe.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 6.148
+    },
+    {
+      "ds": "FEVER",
+      "qid": "221252",
+      "q": "The Block (album) has only an unofficial single.",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.452
+    },
+    {
+      "ds": "FEVER",
+      "qid": "224566",
+      "q": "Vampire Academy is a 2014 film.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.558
+    },
+    {
+      "ds": "FEVER",
+      "qid": "25290",
+      "q": "The Love Club EP is the debut extended play by Jayden Smith.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.406
+    },
+    {
+      "ds": "FEVER",
+      "qid": "26878",
+      "q": "Bank of America has platforms.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.962
+    },
+    {
+      "ds": "FEVER",
+      "qid": "33313",
+      "q": "Alex Jones was born in the seventies.",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.67
+    },
+    {
+      "ds": "FEVER",
+      "qid": "34583",
+      "q": "Wolfgang Amadeus Mozart was a wrestler.",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 3.19
+    },
+    {
+      "ds": "FEVER",
+      "qid": "35882",
+      "q": "Pearl (Steven Universe) exists as a magical dog.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.216
+    },
+    {
+      "ds": "FEVER",
+      "qid": "39977",
+      "q": "Key & Peele has yet to be nominated for a Writers Guild Award.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.154
+    },
+    {
+      "ds": "FEVER",
+      "qid": "42963",
+      "q": "Betsy Hodges was never a candidate for an election.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.75
+    },
+    {
+      "ds": "FEVER",
+      "qid": "59903",
+      "q": "The Paper was only released in 1894.",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 4.776
+    },
+    {
+      "ds": "FEVER",
+      "qid": "64874",
+      "q": "Keith Godchaux knew the Grateful Dead.",
+      "ndcg10": 0.3155,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.576
+    },
+    {
+      "ds": "FEVER",
+      "qid": "64966",
+      "q": "Camp Flog Gnaw is a convention.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.314
+    },
+    {
+      "ds": "FEVER",
+      "qid": "71911",
+      "q": "The Tenth Doctor recruits Wilfred Mott to assist him throughout The End of Time.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.888
+    },
+    {
+      "ds": "FEVER",
+      "qid": "74475",
+      "q": "Quay had its first public showing in Manhattan.",
+      "ndcg10": 0.3066,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 3.468
+    },
+    {
+      "ds": "FEVER",
+      "qid": "74648",
+      "q": "Ned Stark was introduced in 1996's A Game of Thrones.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 6.306
+    },
+    {
+      "ds": "FEVER",
+      "qid": "74951",
+      "q": "Caesar is an original play by Orson Welles.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.027
+    },
+    {
+      "ds": "FEVER",
+      "qid": "81305",
+      "q": "Mikhail Prokhorov is not a former chairman.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.692
+    },
+    {
+      "ds": "FEVER",
+      "qid": "85454",
+      "q": "Nero is a person.",
+      "ndcg10": 0.6131,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 3.409
+    },
+    {
+      "ds": "FEVER",
+      "qid": "88977",
+      "q": "Woodrow Wilson lived during The Russo-Persian War.",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 2.911
+    },
+    {
+      "ds": "FEVER",
+      "qid": "94779",
+      "q": "Petyr Baelish is nicknamed Littlefinger.",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.171
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a72f74a55429901807daf59",
+      "q": "Which American comedian born on March 21, 1962, appeared in the movie \"Sleepless in Seattle?\"",
+      "ndcg10": 0.8316,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.565
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a738fe855429908901be2fb",
+      "q": "What film was written and directed by Joby Harold with music written by Samuel Sim?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.875
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a7622d75542994ccc9186f1",
+      "q": "Who was born earlier, Garry Marshall or Leni Riefenstahl?",
+      "ndcg10": 0.8316,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.105
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a77f2af5542995d83181333",
+      "q": "Who was born first, Grigory Margulis or Leonid Levin?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.299
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a7a5cc35542996c55b2dd7c",
+      "q": "What position did Christian Albrecht Bluhme during the second military conflict as a result of the Schleswig-Holstein Question?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.465
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a7bbc59554299294a54aaa9",
+      "q": "Steve Denton and Albert Costa are both tennis players, which one began playing at the age if five?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.95
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a7c2f145542996dd594b8b4",
+      "q": "The actress who made her film debut in Friday Night Lights also starred in a 2014 French-American crime-thriller directed by whi?",
+      "ndcg10": 0.8772,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.734
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a7ccb3655429909bec7680b",
+      "q": "Who bestowed Kaganoi Shigemochi with a blade made by the person that founded the Muramasa school?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.394
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a7e0c045542995f4f4023c5",
+      "q": "Who was born first Doug Liman or Saul Metzstein?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.3
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a7ec6f355429934daa2fc61",
+      "q": "Which magazine is based out of more countries, Adventist World or Baseball Digest?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.502
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a7f90a15542995d8a8ddea5",
+      "q": "What Future Publishing founder co-hosted the annual TED Conference with June Cohen?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.773
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a7fa22b5542992097ad2fa6",
+      "q": "\"A Swingin' Safari\" was a song written originally by German songwriter Bert Kaempfert but made popular by who?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.671
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a80071f5542992bc0c4a684",
+      "q": "Alice David is the voice of Lara Croft in a video game developed by which company ?",
+      "ndcg10": 0.8503,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 6.591
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a803d695542996402f6a494",
+      "q": "What is the main difference between the game Plateau and the game Colt Express?",
+      "ndcg10": 0.9197,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.215
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a811667554299260e20a23d",
+      "q": "What occupations do both Ian Hunter and Rob Thomas have?",
+      "ndcg10": 0.2044,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 2.079
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a81d19b55429926c1cdad90",
+      "q": "Tryon D. Lewis is a lawyer from Odessa, Texas which is located in what county?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.734
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a81ed345542995ce29dcc85",
+      "q": "The Florida Atlantic Owls team represents a school classified by the Carnegie Foundation as what?",
+      "ndcg10": 0.7977,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.191
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a84fd085542994c784ddaba",
+      "q": "Devil's Food is a singles compilation by an American rock and roll band that has also been known to play country shows under what?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 7.088
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a87defa5542993e715abfec",
+      "q": "Nicholas Scibetta's hit man brother-in-law, who confessed to being involved in the murder of 19 people, helped prosecutors convict what Gamb...",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.398
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a886c0c55429938390d3f51",
+      "q": "Who owns the broadcasting platform where Games Done Quick is broadcast?",
+      "ndcg10": 0.6131,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 3.596
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a88e605554299206df2b39c",
+      "q": "What is the population of the town at the intersection of Interstate Highways 77 and the longest Interstate highway within the borders of Vi...",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.413
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a89f68f5542992e4fca84b6",
+      "q": "What kind of person of authority does Governor of Sheerness and Stapleton Cotton, 1st Viscount Combermere have in common?",
+      "ndcg10": 0.6934,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.844
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a8a03245542992e4fca84d5",
+      "q": "What profession does Spice Girls discography and Emma Bunton have in common?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.097
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a8b57f25542995d1e6f1371",
+      "q": "Were Scott Derrickson and Ed Wood of the same nationality?",
+      "ndcg10": 0.6131,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 4.016
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5a8ba59a554299240d9c2058",
+      "q": "The Duke Steps Out stars an actress who was ranked tenth on a list of greatest female Hollywood stars in what year?",
+      "ndcg10": 0.9197,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 6.643
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ab27f7b554299722f9b4d4f",
+      "q": "Who was the head promotor of the singer of \"For The Good Times\"?",
+      "ndcg10": 0.1934,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 4.382
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ab4f7fc5542991779162d43",
+      "q": "Kete Krachi is a town in what region?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.76
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5aba67c255429955dce3ee10",
+      "q": "Both The Badgeman and +44 were bands concieved in which country?",
+      "ndcg10": 0.8772,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.276
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5aba749055429901930fa7d8",
+      "q": "What occupation do Chris Menges and Aram Avakian share?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 1.965
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5abae1055542996cc5e49ec9",
+      "q": "Which genus has more species, Mahonia or Diplazium?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.809
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5abd552555429933744ab776",
+      "q": "Where will the 2017 Atlantic 10 Men's Basketball Tournament be hosted?",
+      "ndcg10": 0.6131,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 2.886
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5abd72475542993062266c9a",
+      "q": "Are After Midnight Project and Aaroh both rock bands?",
+      "ndcg10": 0.6131,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 2.276
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5abdf8c45542993f32c2a072",
+      "q": "The Death of Cook depicts the death of James Cook at a bay on what coast?",
+      "ndcg10": 0.8503,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.852
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5abfd3d65542994516f4550b",
+      "q": "Are both Don Giovanni and Cardillac operas with three acts?",
+      "ndcg10": 0.9197,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.525
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ac3c08a5542995ef918c217",
+      "q": "who features in the series which McClure hosts",
+      "ndcg10": 0.6131,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 3.512
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ac41379554299204fd21ef1",
+      "q": "Do Czes\u0142aw Mi\u0142osz and Nathalie Sarraute have the same nationality?",
+      "ndcg10": 0.8066,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.244
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ac4e593554299076e296e37",
+      "q": "OU812 was the second album to feature a vocalist that also played what instrument in \"Finish What Ya Started\"?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.659
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5adbd70c55429947ff173843",
+      "q": "What is the title of the memoir written by the honoree of the Black and White Ball?",
+      "ndcg10": 0.6131,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 5.407
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ade043d5542997dc7907122",
+      "q": "Which scientist at the University of Alabama in Huntsville co-developed a satellite temperature record with John Christy?",
+      "ndcg10": 0.6934,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.581
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ae0ae4555429945ae959419",
+      "q": "Jal Pari, which translated in another language refers to which legendary creature which are sometimes associated with perilous events such a...",
+      "ndcg10": 0.8503,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.835
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ae0bc185542993d6555ec29",
+      "q": "Penny Rae Bridges starred in a television sitcom with what other actor?",
+      "ndcg10": 0.3869,
+      "r10": 0.5,
+      "r100": 0.5,
+      "ms": 3.491
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ae0ec48554299422ee9955a",
+      "q": "How was Ada Lovelace, the first computer programmer, related to Lord Byron in Childe Byron?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.099
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ae13f3c5542997b2ef7d168",
+      "q": "Arthur Noss was a gunner for the commader during which two European theatre battles in WWII?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.186
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ae377c45542990afbd1e16b",
+      "q": "The last film that Kim Hyun-seok wrote was in 2015, what day was it released?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.449
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ae4d3a55542990ba0bbb164",
+      "q": "What creature of American folklore gained notoriety in 1964?",
+      "ndcg10": 0.8316,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.215
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ae5669755429960a22e02ec",
+      "q": "Which of the campaign that brought out the term Vichy Republican on social media was formally launched on June 16, 2015, at Trump Tower in N...",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.986
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ae614215542992663a4f254",
+      "q": "Name an American actress who starred both in High School High and General Hospital.",
+      "ndcg10": 0.6131,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 4.227
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ae63b2255429908198fa526",
+      "q": "What is the date played of this college football game at Sun Life Stadium in Miami Gardens, Florida, where Clemson defeated the No. 4 Oklaho...",
+      "ndcg10": 0.6934,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.66
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ae6fee3554299572ea54670",
+      "q": "The player who defeated Johnny Majors for the Heisman Trophy in 1956 was born in what year?",
+      "ndcg10": 0.7977,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.534
+    },
+    {
+      "ds": "HotpotQA",
+      "qid": "5ae7922f5542994a481bbdac",
+      "q": "Where was the university at which Barrie Ciliberti was a professor located?",
+      "ndcg10": 0.6131,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 4.225
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1009388",
+      "q": "what's right in health care",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 2.511
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1027209",
+      "q": "who does cameron boyce play in liv and maddie",
+      "ndcg10": 0.3155,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.985
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1028652",
+      "q": "who invented corn flakes",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.17
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1029003",
+      "q": "what is varignon's theorem",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.051
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1039495",
+      "q": "who is the boss of google?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.035
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1045374",
+      "q": "what is targeted victory",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 1.53
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1048359",
+      "q": "what is php in mental health care",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.884
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1049867",
+      "q": "who sang here i go again",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.351
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1059045",
+      "q": "what is cameroon most important resource",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 1.768
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1060040",
+      "q": "what is betts",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 1.59
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1067640",
+      "q": "what is a signal transduction pathway example",
+      "ndcg10": 0.2891,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.767
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1067764",
+      "q": "what is a sales cycle process?",
+      "ndcg10": 0.301,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.789
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1074807",
+      "q": "what is a demand fee",
+      "ndcg10": 0.3562,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.684
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1086384",
+      "q": "what can be used in place of a coffee filter?",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.292
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1088332",
+      "q": "weather in oran",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 1.647
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1091973",
+      "q": "benson radiology",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.028
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1092161",
+      "q": "northampton county tax department pa phone number",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.285
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1093082",
+      "q": "meaning of copper for a policeman",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.454
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1093172",
+      "q": "mastercard stock prices",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.051
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1099433",
+      "q": "how do hoa fees work",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 0.307
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "140921",
+      "q": "dendritic spines",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.011
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "200600",
+      "q": "heels or heal",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 0.785
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "242107",
+      "q": "how long can i keep cooked italian sausage in refrigerator",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.433
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "265729",
+      "q": "how long keep financial records",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 0.299
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "408563",
+      "q": "is dog the bounty hunter married to beth",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.818
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "429675",
+      "q": "is tom robinson found guilty",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 1.54
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "47864",
+      "q": "awareness of others definition",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 2.149
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "497757",
+      "q": "side effects steroid injection",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.109
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "51090",
+      "q": "benefits of oxygen pills",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.002
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "527568",
+      "q": "types of ethnic foods list",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 1.997
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "531490",
+      "q": "uh uh definition",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.048
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "536995",
+      "q": "view pay stub",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 0.082
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "538333",
+      "q": "voluntary muscle definition",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 0.118
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "544319",
+      "q": "weather in gig harbor, wa",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 1.621
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "558548",
+      "q": "what are extenuating circumstances",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.712
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "570070",
+      "q": "what are the four steps of the scientific method",
+      "ndcg10": 0.3562,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.71
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "601684",
+      "q": "what country does fennel come from",
+      "ndcg10": 0.3562,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 0.674
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "603050",
+      "q": "what county is belvidere in il",
+      "ndcg10": 0.3869,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.653
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "643572",
+      "q": "what does modulus mean",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 0.179
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "721409",
+      "q": "what is average mileage on a car",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 3.239
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "792789",
+      "q": "what is rumination syndrome",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 1.555
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "804996",
+      "q": "what is the anthem zip code",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.12
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "825954",
+      "q": "what is the indication for microalbumin creatinine ratio",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.542
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "865660",
+      "q": "what job can you get with a degree in art education",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 3.697
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "866251",
+      "q": "what kind of animals are at the franklin park zoo",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.864
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "924398",
+      "q": "what were the terms of the treaty of nanjing",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.313
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "96749",
+      "q": "concurrent disorders definition",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 0.083
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "971233",
+      "q": "where do most of earth's large deserts occur",
+      "ndcg10": 0.301,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.742
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "988540",
+      "q": "definition of ionization e",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.034
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "994479",
+      "q": "which health care system provides all citizens or residents with equal access to health care services",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 3.224
+    },
+    {
+      "ds": "NQ",
+      "qid": "test1009",
+      "q": "who plays heather in beauty and the beast",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.202
+    },
+    {
+      "ds": "NQ",
+      "qid": "test1037",
+      "q": "why is the angel of the north there",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 3.999
+    },
+    {
+      "ds": "NQ",
+      "qid": "test1041",
+      "q": "what is the genus of a bald eagle",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.461
+    },
+    {
+      "ds": "NQ",
+      "qid": "test115",
+      "q": "who appoints the members of the given branch in the united states",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.82
+    },
+    {
+      "ds": "NQ",
+      "qid": "test123",
+      "q": "what is the difference between ron and mon",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.84
+    },
+    {
+      "ds": "NQ",
+      "qid": "test1501",
+      "q": "where is the tv show the curse of oak island filmed",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.963
+    },
+    {
+      "ds": "NQ",
+      "qid": "test1607",
+      "q": "total number of mna in pakistan national assembly",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.305
+    },
+    {
+      "ds": "NQ",
+      "qid": "test1618",
+      "q": "was nightmare before christmas originally a disney movie",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.515
+    },
+    {
+      "ds": "NQ",
+      "qid": "test1635",
+      "q": "can a ucc be filed on an individual",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.97
+    },
+    {
+      "ds": "NQ",
+      "qid": "test1721",
+      "q": "what is the meaning of the name von",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 3.84
+    },
+    {
+      "ds": "NQ",
+      "qid": "test1727",
+      "q": "when did the term sustainability start to be used",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 3.593
+    },
+    {
+      "ds": "NQ",
+      "qid": "test1805",
+      "q": "who laid foundation stone of islamia college peshawar",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.202
+    },
+    {
+      "ds": "NQ",
+      "qid": "test1829",
+      "q": "where does blood go when it leaves the pulmonary artery",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 3.063
+    },
+    {
+      "ds": "NQ",
+      "qid": "test194",
+      "q": "what is the function of the semicolon in a c statement",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.595
+    },
+    {
+      "ds": "NQ",
+      "qid": "test198",
+      "q": "did the cast of friends really go to london",
+      "ndcg10": 0.2641,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 4.093
+    },
+    {
+      "ds": "NQ",
+      "qid": "test1989",
+      "q": "krypton-85 decays by emission of a beta particle. the product of this decay is",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 5.247
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2032",
+      "q": "where does transcription occur in a gram negative bacterium",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.887
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2079",
+      "q": "who sings somebody's watching me with michael jackson",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.05
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2233",
+      "q": "who won the champions league final in 2016",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.57
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2247",
+      "q": "here we go round the mulberry bush origin",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.382
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2270",
+      "q": "who was the highest ranking official in the early christian church",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 3.865
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2320",
+      "q": "who was an early advocate for using scientific methods based on inductive reasoning",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.5,
+      "ms": 3.059
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2360",
+      "q": "where was the diary of a wimpy kid filmed",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 4.615
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2393",
+      "q": "what was the biggest tank in world war 2",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 4.038
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2430",
+      "q": "where are the cones in the eye located",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.537
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2539",
+      "q": "how many pennsylvania house of representatives are there",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.579
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2577",
+      "q": "who did the assyrians conquer in 722 bce",
+      "ndcg10": 0.3869,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.378
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2598",
+      "q": "where is dia de los muertos celebrated in mexico",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.726
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2651",
+      "q": "who played bat masterson in the tv series",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.485
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2721",
+      "q": "how many episodes are there in ordeal by innocence",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.973
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2845",
+      "q": "how many paintings of sunflowers did van gogh paint",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.21
+    },
+    {
+      "ds": "NQ",
+      "qid": "test29",
+      "q": "does joe die in the purge election year",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 5.227
+    },
+    {
+      "ds": "NQ",
+      "qid": "test2974",
+      "q": "when does kubo and the two strings release",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.0,
+      "ms": 5.63
+    },
+    {
+      "ds": "NQ",
+      "qid": "test306",
+      "q": "what were the results of the development of florida's railroads",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 5.811
+    },
+    {
+      "ds": "NQ",
+      "qid": "test3090",
+      "q": "what album is help by the beatles on",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.318
+    },
+    {
+      "ds": "NQ",
+      "qid": "test31",
+      "q": "who do you meet at the gates of heaven",
+      "ndcg10": 0.4307,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.148
+    },
+    {
+      "ds": "NQ",
+      "qid": "test3108",
+      "q": "who talks for belle in beauty and the beast",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.649
+    },
+    {
+      "ds": "NQ",
+      "qid": "test3193",
+      "q": "who came up with the idea of the transcontinental railroad",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.968
+    },
+    {
+      "ds": "NQ",
+      "qid": "test3404",
+      "q": "who is the man in listen to what the man said",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.844
+    },
+    {
+      "ds": "NQ",
+      "qid": "test428",
+      "q": "i will die to defend your right to say it",
+      "ndcg10": 1.0,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.298
+    },
+    {
+      "ds": "NQ",
+      "qid": "test495",
+      "q": "where is final four being held this year",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.5,
+      "ms": 1.994
+    },
+    {
+      "ds": "NQ",
+      "qid": "test598",
+      "q": "when did the sims 4 toddlers come out",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 0.5,
+      "ms": 2.719
+    },
+    {
+      "ds": "NQ",
+      "qid": "test639",
+      "q": "what is the origin of the name robinson",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 3.746
+    },
+    {
+      "ds": "NQ",
+      "qid": "test697",
+      "q": "how long is one full rotation of the earth",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 4.03
+    },
+    {
+      "ds": "NQ",
+      "qid": "test698",
+      "q": "the 100 what did clarke do to be in jail",
+      "ndcg10": 0.2372,
+      "r10": 0.5,
+      "r100": 1.0,
+      "ms": 4.292
+    },
+    {
+      "ds": "NQ",
+      "qid": "test740",
+      "q": "who is next in line to inherit the british throne",
+      "ndcg10": 0.0,
+      "r10": 0.0,
+      "r100": 1.0,
+      "ms": 4.736
+    },
+    {
+      "ds": "NQ",
+      "qid": "test770",
+      "q": "how did the mini gun get its name",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.656
+    },
+    {
+      "ds": "NQ",
+      "qid": "test826",
+      "q": "where was the 3/5 compromise originally stated in the constitution",
+      "ndcg10": 0.5,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 4.069
+    },
+    {
+      "ds": "NQ",
+      "qid": "test929",
+      "q": "where did they film woody the woodpecker movie",
+      "ndcg10": 0.6309,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 2.826
+    },
+    {
+      "ds": "NQ",
+      "qid": "test997",
+      "q": "what is 36 as a product of prime",
+      "ndcg10": 0.3333,
+      "r10": 1.0,
+      "r100": 1.0,
+      "ms": 3.828
+    }
+  ]
+}

@@ -66,9 +66,27 @@ import { useTheme } from 'next-themes'
  *                                         annotation — doesn't affect the bar
  *                                         itself, which still just draws
  *                                         `values[ci]`.
+ *       notes        Array<string>        per-category annotation line shown small
+ *                                         + indented under that bar's tooltip row
+ *                                         (sample terms in a df bucket, what a
+ *                                         bucket contains, …). Rendered verbatim,
+ *                                         so any "e.g." prefix is the caller's.
+ *                                         Tooltip-only, like breakdown.
  *   }>
  *   views        Array<{ label, categories, series }>   toggle datasets. The
  *                first is shown by default. Renders on-theme segmented buttons.
+ *   catTicks     Array<{ at, label }>   replaces the per-category labels with a
+ *                small set of axis ticks at FRACTIONAL category indices (same
+ *                `at` space as `markers`). For a histogram of buckets whose
+ *                labels are the bin edges, five ticks read far better than one
+ *                rotated label per bar. Settable per view.
+ *   markers      Array<{ at, label, color, strong }>   reference lines drawn
+ *                across the plot at a FRACTIONAL category index (`at`): 0 is the
+ *                left edge of the first band, N the right edge of the last, 6.3
+ *                is 30% into the seventh band. Lets a continuous statistic (a
+ *                mean, a percentile) be placed on a categorical axis of buckets.
+ *                `strong` draws it solid and bold instead of dashed. Settable
+ *                per view (view.markers wins over the top-level prop).
  *
  * ── Example: horizontal single-series with an All/Focus toggle ───────────────
  *   <BarChart
@@ -210,6 +228,8 @@ function ChartImpl({
   categories,
   series,
   views,
+  markers,
+  catTicks,
 }) {
   const { theme, resolvedTheme } = useTheme()
   const isDark = (resolvedTheme || theme) === 'dark'
@@ -425,6 +445,7 @@ function ChartImpl({
     (hasVariantRow ? 26 : 0) +
     (hasScaleRow ? 26 : 0)
   const catLabelFont = mobile ? 12 : 10.5
+  const rCatTicks = resolved.catTicks ?? catTicks
   // Font sizes, scaled up a touch on mobile.
   const fTick = mobile ? 13 : 10
   const fBarTxt = mobile ? 12 : 10
@@ -451,8 +472,14 @@ function ChartImpl({
     m = mobile ? { t: topPad, r: 48, b: 42, l: leftM } : { t: topPad, r: 74, b: 44, l: leftM }
   } else {
     H = height || (mobile ? 360 : 420)
-    // extra bottom room for angled category labels
-    m = mobile ? { t: topPad, r: 14, b: 86, l: 42 } : { t: topPad, r: 18, b: 96, l: 58 }
+    // extra bottom room for angled category labels; plain axis ticks need far less
+    m = rCatTicks
+      ? mobile
+        ? { t: topPad, r: 14, b: 46, l: 42 }
+        : { t: topPad, r: 18, b: 52, l: 58 }
+      : mobile
+      ? { t: topPad, r: 14, b: 86, l: 42 }
+      : { t: topPad, r: 18, b: 96, l: 58 }
   }
   const pw = W - m.l - m.r
   const ph = H - m.t - m.b
@@ -480,8 +507,13 @@ function ChartImpl({
   // (a per-category weight array) — that turns the vertical bar chart into a
   // variable-width / mosaic chart where each bar's width encodes a second value.
   const hasVarW = Array.isArray(rBarWidths) && rBarWidths.length === N && N > 0
-  const wOf = (ci) => (hasVarW ? rBarWidths[ci] : 1)
-  const totalW = hasVarW ? rBarWidthsTotal || rBarWidths.reduce((a, b) => a + b, 0) || N : N || 1
+  // floor each width so a near-zero value still renders as a thin (not invisible) bar
+  const wFloor = hasVarW
+    ? (rBarWidthsTotal || rBarWidths.reduce((a, b) => a + b, 0) || N) * 0.006
+    : 0
+  const wArr = hasVarW ? rBarWidths.map((w) => Math.max(w, wFloor)) : null
+  const wOf = (ci) => (hasVarW ? wArr[ci] : 1)
+  const totalW = hasVarW ? wArr.reduce((a, b) => a + b, 0) : N || 1
   const span = catEnd - catStart
   const edges = (() => {
     const e = []
@@ -494,6 +526,14 @@ function ChartImpl({
   })()
   const bandAt = (ci) => (wOf(ci) / totalW) * span
   const catCenter = (ci) => (edges[ci] ?? catStart) + bandAt(ci) / 2
+  // Fractional category index -> pixel. 0 is the left edge of the first band, N the
+  // right edge of the last, 6.5 the middle of the seventh. Lets a continuous value
+  // (an axis tick, a mean) be placed on an axis made of buckets.
+  const posAtCat = (at) => {
+    const clamped = Math.max(0, Math.min(N, at))
+    const ci = Math.min(N - 1, Math.floor(clamped))
+    return (edges[ci] ?? catStart) + (clamped - ci) * bandAt(ci)
+  }
   const innerAt = (ci) => bandAt(ci) * (1 - barGap)
   const groupThickAt = (ci) => innerAt(ci) / G
   const groupOffset = (ci, gi) => -innerAt(ci) / 2 + groupThickAt(ci) * (gi + 0.5)
@@ -538,7 +578,29 @@ function ChartImpl({
 
   // Category labels + active-band highlight.
   const catLayer = []
-  for (let ci = 0; ci < N; ci++) {
+  if (rCatTicks && !horizontal) {
+    rCatTicks.forEach((t, i) => {
+      if (t == null || !Number.isFinite(t.at)) return
+      const x = posAtCat(t.at)
+      catLayer.push(
+        <line key={`ct${i}`} x1={x} y1={m.t + ph} x2={x} y2={m.t + ph + 5} stroke={C.axis} />
+      )
+      catLayer.push(
+        <text
+          key={`ctl${i}`}
+          x={x}
+          y={m.t + ph + 17}
+          textAnchor="middle"
+          fontSize={catLabelFont}
+          fill={C.muted}
+          fontFamily="var(--font-mono, ui-monospace, monospace)"
+        >
+          {t.label}
+        </text>
+      )
+    })
+  }
+  for (let ci = 0; ci < N && !(rCatTicks && !horizontal); ci++) {
     const cc = catCenter(ci)
     const raw = String(cats[ci])
     if (horizontal) {
@@ -824,6 +886,13 @@ function ChartImpl({
             `color:rgba(255,255,255,0.5);font-style:italic;max-width:220px">` +
             `Outlier, bar clipped to keep the rest readable.</div>`
           : ''
+        // Optional per-bar annotation line, shown small and indented under the row —
+        // same idea as breakdown. Printed verbatim: the caller owns the wording.
+        const note = s.notes && s.notes[ci]
+        const noteHtml = note
+          ? `<div style="margin:2px 0 0 15px;font-size:0.82em;line-height:1.35;` +
+            `color:rgba(255,255,255,0.5);max-width:240px">${esc(note)}</div>`
+          : ''
         return (
           `<div style="display:flex;align-items:center;gap:6px;margin-top:3px;` +
           `padding:${isNear ? '2px 4px' : '0'};margin-left:${isNear ? '-4px' : '0'};` +
@@ -838,6 +907,7 @@ function ChartImpl({
           `<b style="color:#fff;margin-left:10px;font-size:${isNear ? '1.05em' : '1em'}">` +
           `${esc(label)}</b></div>` +
           breakdownHtml +
+          noteHtml +
           capNoteHtml
         )
       })
@@ -852,6 +922,57 @@ function ChartImpl({
   }
 
   // Invisible hover zones — one per category band spanning the full plot.
+  // ── Reference lines on the category axis ──────────────────────────────────
+  // `at` is a fractional category index, so a continuous stat (mean 0.563) can be
+  // placed on an axis of buckets without pretending the buckets are numeric.
+  const rMarkers = resolved.markers ?? markers
+  const markerLayer = []
+  if (Array.isArray(rMarkers) && N > 0) {
+    rMarkers.forEach((mk, i) => {
+      if (mk == null || !Number.isFinite(mk.at)) return
+      const p = posAtCat(mk.at)
+      const col = mk.color || C.ink
+      const x1 = horizontal ? m.l : p
+      const y1 = horizontal ? p : m.t
+      const x2 = horizontal ? m.l + pw : p
+      const y2 = horizontal ? p : m.t + ph
+      markerLayer.push(
+        <line
+          key={`mk${i}`}
+          x1={x1}
+          y1={y1}
+          x2={x2}
+          y2={y2}
+          stroke={col}
+          strokeWidth={mk.strong ? 1.6 : 1}
+          strokeDasharray={mk.strong ? '' : '3 3'}
+          opacity={mk.strong ? 1 : 0.8}
+        />
+      )
+      if (mk.label) {
+        // `side` picks which way the label reads; it flips anyway if that would push it
+        // outside the plot (monospace, so the width estimate is reliable)
+        const lw = String(mk.label).length * fTick * 0.62
+        const wantLeft = mk.side === 'left'
+        const flip = !horizontal && (wantLeft ? p - lw > m.l : p + lw > m.l + pw)
+        markerLayer.push(
+          <text
+            key={`mkl${i}`}
+            x={horizontal ? m.l + 6 : p + (flip ? -5 : 5)}
+            y={horizontal ? p - 5 : m.t + 11 + (mk.row || 0) * 11}
+            textAnchor={horizontal ? 'start' : flip ? 'end' : 'start'}
+            fontSize={fTick}
+            fontWeight={mk.strong ? '700' : '400'}
+            fill={col}
+            fontFamily="var(--font-mono, ui-monospace, monospace)"
+          >
+            {mk.label}
+          </text>
+        )
+      }
+    })
+  }
+
   const hoverLayer = []
   for (let ci = 0; ci < N; ci++) {
     const cc = catCenter(ci)
@@ -1177,6 +1298,7 @@ function ChartImpl({
           <line x1={m.l} y1={m.t} x2={m.l} y2={m.t + ph} stroke={C.axis} />
           <line x1={m.l} y1={m.t + ph} x2={m.l + pw} y2={m.t + ph} stroke={C.axis} />
           {barLayer}
+          {markerLayer}
           {textLayer}
           {hoverLayer}
           {rValueLabel && horizontal && (

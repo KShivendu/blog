@@ -25,6 +25,7 @@ import StaticEmbeddingDemo from './StaticEmbeddingDemo'
 import StaticPipeline from './StaticPipeline'
 import LoadModelAnimated from './LoadModelAnimated'
 import CoordinatedOmission from './CoordinatedOmission'
+import ScoreHistogram from './ScoreHistogram'
 import { ClosedLoopChart, OpenLoopChart, BadHarnessChart } from './LoadTestCharts'
 import Term from './Term'
 
@@ -53,6 +54,7 @@ export const MDXComponents = {
   StaticPipeline,
   LoadModelAnimated,
   CoordinatedOmission,
+  ScoreHistogram,
   ClosedLoopChart,
   OpenLoopChart,
   BadHarnessChart,
