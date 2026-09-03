@@ -1,5 +1,5 @@
 import dynamic from 'next/dynamic'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 
 /*
@@ -86,6 +86,28 @@ import { useTheme } from 'next-themes'
 // is swapped to the lighter dark-accent (#34d399) in dark mode (see colorsFor).
 const DEFAULT_COLORS = ['#047857', '#0891b2', '#7048e8', '#0d9488', '#64748b', '#2563eb']
 const VIEW_W = 760
+// Greedy word wrap for monospace text: at most `maxLines` lines of `maxChars`,
+// the last line ellipsised if the string still doesn't fit.
+const wrapMono = (str, maxChars, maxLines) => {
+  const lines = []
+  let cur = ''
+  for (const word of String(str).split(/\s+/)) {
+    const next = cur ? `${cur} ${word}` : word
+    if (next.length <= maxChars || !cur) {
+      cur = next
+    } else {
+      lines.push(cur)
+      cur = word
+      if (lines.length === maxLines) break
+    }
+  }
+  if (lines.length < maxLines && cur) lines.push(cur)
+  if (lines.length === maxLines && lines[maxLines - 1].length > maxChars)
+    lines[maxLines - 1] = lines[maxLines - 1].slice(0, maxChars - 1) + '…'
+  return lines
+}
+// Below this rendered width the chart switches to 1-unit-per-pixel geometry.
+const NARROW_W = 560
 
 // Theme-aware categorical: use the lighter green as the lead colour in dark.
 function colorsFor(isDark) {
@@ -261,6 +283,22 @@ function ChartImpl({
   const [cmp, setCmp] = useState(null)
   const cmpRef = useRef(null)
   const wrapRef = useRef(null) // outer wrapper — anchor for a locked tooltip
+  // Measured wrapper width. The SVG is a fixed-unit viewBox stretched to
+  // width:100%, so on a phone every glyph and marker shrinks with the column.
+  // Below `NARROW_W` we shrink the viewBox to the real pixel width instead:
+  // 1 SVG unit = 1 CSS px, so type and points render at their stated size.
+  const [boxW, setBoxW] = useState(null)
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    // Measure once up front: inside a closed <details> the subtree isn't
+    // rendered, so ResizeObserver stays silent until the reader opens it.
+    setBoxW(el.getBoundingClientRect().width || null)
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(([e]) => setBoxW(e.contentRect.width || null))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   const [activeX, setActiveX] = useState(null)
   const [hidden, setHidden] = useState(() => new Set())
 
@@ -339,9 +377,23 @@ function ChartImpl({
   }
 
   // ── Geometry ────────────────────────────────────────────────────────────
-  const W = VIEW_W
-  const H = height
-  const m = { t: title ? 46 : 20, r: 22, b: 50, l: 62 }
+  const narrow = boxW != null && boxW < NARROW_W
+  const W = narrow ? Math.max(300, Math.round(boxW)) : VIEW_W
+  // Keep a phone-sized chart roughly square-ish instead of a tall slab.
+  const H = narrow ? Math.min(height, Math.round(W * 1.15)) : height
+  const F = narrow
+    ? { title: 11.5, tick: 10, axis: 10.5, label: 10 }
+    : { title: 15, tick: 10.5, axis: 12, label: 11 }
+  // Titles are monospace, so width is predictable: wrap onto a second line
+  // rather than let a long one run off both edges of a phone-width chart.
+  const titleLines = !title
+    ? []
+    : narrow
+    ? wrapMono(title, Math.max(16, Math.floor((W - 8) / (F.title * 0.62))), 2)
+    : [title]
+  const m = narrow
+    ? { t: title ? 20 + titleLines.length * 13 : 14, r: 14, b: 44, l: 52 }
+    : { t: title ? 46 : 20, r: 22, b: 50, l: 62 }
   const pw = W - m.l - m.r
   const ph = H - m.t - m.b
 
@@ -406,10 +458,10 @@ function ChartImpl({
     gridLayer.push(
       <text
         key={`yl${i}`}
-        x={m.l - 8}
+        x={m.l - (narrow ? 6 : 8)}
         y={y + 3.5}
         textAnchor="end"
-        fontSize="10.5"
+        fontSize={F.tick}
         fill={C.muted}
         fontFamily="var(--font-mono, ui-monospace, monospace)"
       >
@@ -424,9 +476,9 @@ function ChartImpl({
       <text
         key={`xl${i}`}
         x={x}
-        y={m.t + ph + 16}
+        y={m.t + ph + (narrow ? 15 : 16)}
         textAnchor="middle"
-        fontSize="10.5"
+        fontSize={F.tick}
         fill={C.muted}
         fontFamily="var(--font-mono, ui-monospace, monospace)"
       >
@@ -528,7 +580,7 @@ function ChartImpl({
             x={xS(x) + dx}
             y={yS(y) + dy}
             textAnchor={anchor}
-            fontSize="11"
+            fontSize={F.label}
             fill={C.ink}
             fontFamily="var(--font-mono, ui-monospace, monospace)"
             style={{ pointerEvents: 'none' }}
@@ -955,15 +1007,19 @@ function ChartImpl({
         >
           {title && (
             <text
-              x={m.l + pw / 2}
-              y={26}
+              x={narrow ? W / 2 : m.l + pw / 2}
+              y={narrow ? 16 : 26}
               textAnchor="middle"
-              fontSize="15"
+              fontSize={F.title}
               fontWeight="600"
               fill={C.ink}
               fontFamily="var(--font-mono, ui-monospace, monospace)"
             >
-              {title}
+              {titleLines.map((ln, i) => (
+                <tspan key={i} x={narrow ? W / 2 : m.l + pw / 2} dy={i === 0 ? 0 : 13}>
+                  {ln}
+                </tspan>
+              ))}
             </text>
           )}
           {gridLayer}
@@ -1150,7 +1206,7 @@ function ChartImpl({
               x={m.l + pw / 2}
               y={H - 8}
               textAnchor="middle"
-              fontSize="12"
+              fontSize={F.axis}
               fill={C.ink}
               fontFamily="var(--font-mono, ui-monospace, monospace)"
             >
@@ -1159,9 +1215,9 @@ function ChartImpl({
           )}
           {yLabel && (
             <text
-              transform={`translate(15 ${m.t + ph / 2}) rotate(-90)`}
+              transform={`translate(${narrow ? 11 : 15} ${m.t + ph / 2}) rotate(-90)`}
               textAnchor="middle"
-              fontSize="12"
+              fontSize={F.axis}
               fill={C.ink}
               fontFamily="var(--font-mono, ui-monospace, monospace)"
             >
