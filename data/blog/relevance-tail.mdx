@@ -13,11 +13,24 @@ authors: ['kshivendu']
 
 Any serious team tracks latency as p50, p90, p99. Reporting just "our average latency is 40ms" is naive, because it hides the p99 150ms tail that's hurting users. Yet we report search relevance as a single average NDCG all the time, and somehow that's normal. It's the same mistake, and for relevance the average is still the default.
 
+## Distribution vs average
+
 I ran a plain word-BM25 baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries). Instead of averaging each metric, I pooled the per-query scores and read the percentiles. The mean NDCG@10 is **0.526**, which _feels_ respectable, as if every query comes back roughly half-right. In reality, they range from perfect to nothing: one in five queries retrieves nothing relevant in the top 10, and the average buries every one.
+
+Let's look at the distribution.
+
+<ScoreHistogram />
+
+Observations:
+
+- 119 queries score exactly 0 and 129 score exactly 1.0. That's **41% of the eval** parked on the two end bars, and the mean is neither of them.
+- Only **43 of 599** queries land within ±0.05 of the mean (0.525), so it describes a query that mostly doesn't exist.
+- p10 is **0.000**, which means the entire bottom tenth of the eval sits inside that one red bar.
+- Switch to recall@10 and the split sharpens: **63%** of queries at the two ends, 13 near the mean.
 
 ## The mean hides the floor
 
-Pool the per-query scores and the distribution shows what the mean can't:
+Read the same three runs as percentiles instead of averages, and the floor shows up:
 
 export const pctCats = ['NDCG@10', 'recall@10', 'recall@100']
 export const pctColors = {
@@ -74,46 +87,6 @@ p10 is 0.000 for both NDCG@10 and recall@10: over 10% of queries score a hard ze
 1. **recall@100: the typical query is perfect, the mean says 0.765.** The median query recalls every relevant doc (p50 = 1.000), but a tail flooring at p10 = 0.126 drags the mean down to a number no real query got.
 2. **The mean's error flips sign between metrics.** It overstates recall@10's median (0.563 vs 0.500) and understates NDCG@10's (0.526 vs 0.554), so you can't correct for it in your head.
 
-The distribution is the whole story. Here's per-query recall@10, bucketed:
-
-export const histCats = [
-  '=0',
-  '(0,.1]',
-  '(.1,.2]',
-  '(.2,.3]',
-  '(.3,.4]',
-  '(.4,.5]',
-  '(.5,.6]',
-  '(.6,.7]',
-  '(.7,.8]',
-  '(.8,.9]',
-  '(.9,1)',
-  '=1.0',
-]
-export const histColors = histCats.map((c) =>
-  c === '=0' ? '#f87171' : c === '=1.0' ? '#10b981' : '#94a3b8'
-)
-
-<BarChart
-  orientation="vertical"
-  title="The distribution behind the average: per-query recall@10 (599 NanoBEIR queries)"
-  subtitle="share of queries by score — red = total failure, green = perfect. the mean (0.563) lands in the hollow middle"
-  valueLabel="% of queries"
-  valueMax={46}
-  categories={histCats}
-  series={[
-    {
-      name: '% of queries',
-      values: [20, 4, 5, 7, 5, 3, 8, 3, 1, 2, 0, 43],
-      colors: histColors,
-      text: ['20', '4', '5', '7', '5', '3', '8', '3', '1', '2', '0', '43'],
-      textPosition: 'outside',
-    },
-  ]}
-/>
-
-Two spikes, a hollow middle: 43% of queries score exactly 1.0 and 20% exactly 0 (63% at the extremes), while the mean, 0.563, sits in the `(.5,.6]` valley where about 8% of queries live. It describes almost no real query, which is why p50 and p10 tell you more than the average can.
-
 ## It hides your improvements, too
 
 The mean also hides your gains. Take a real improvement: plain word BM25, then apply a Porter stemmer and a stopword list (`word_en`). It moves mean recall@10 by **+0.022**, a bump you'd squint at. But look where the gain lands:
@@ -161,7 +134,7 @@ The gain shows up wherever the live mass sits: the median for recall@10, the low
 
 Latency and relevance are the same problem pointed at opposite tails. For latency, higher is worse, so you watch the high end: p90, p99. For relevance, higher is better, so the tail that hurts is the low end: **p10, the worst-query floor**. It's the same instinct, just mirrored.
 
-And it is instinct for latency. I timed this BM25 baseline at **3.9ms p50, 8.6ms p90**. Reporting only the 5ms mean would be a mistake, because the p90 is the request a real user is waiting on. p10 relevance is that same user, on the tail that actually hurts. We just forget to report it.
+And it is instinct for latency. I timed this BM25 baseline at **3.5ms p50, 7.2ms p90**. Reporting only the 4.4ms mean would be a mistake, because the p90 is the request a real user is waiting on. p10 relevance is that same user, on the tail that actually hurts. We just forget to report it.
 
 ## The ask
 
