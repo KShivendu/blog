@@ -4,106 +4,54 @@ date: '2025-11-29'
 lastmod: '2025-11-29'
 tags: ['search', 'internals', 'infra']
 draft: true
-summary: 'Measuring how brute-force and HNSW vector search scale with dataset size and dimension, and what binary quantization actually buys you versus the napkin math.'
+summary: 'Measuring how brute-force and HNSW vector search scale with dataset size and dimension, how well single-constant napkin math predicts them, and where the measurements break.'
 images: ['/static/images/blogs/exa-clean.jpg']
 authors: ['kshivendu']
 ---
 
-![Exa Napkin Math Blog Cover Image](/static/images/blogs/exa-clean.jpg)
+Two knobs decide what a vector query costs: how many vectors you search, and how wide each one is. I wanted the actual shape of both curves on real hardware, and I wanted to know how far napkin math gets you before it stops matching.
 
-Latency vs Recall
+So, four sweeps. Brute-force scan and HNSW, each swept over dataset size (100k to 10M at 256-dim) and over embedding dimension (128 to 1536 at 1M vectors), and each run twice: once at fp32, once under binary quantization.
 
-We'll study:
+Everything here is latency and build time. I haven't measured recall yet, so read every binary-quant number as the speed half of a tradeoff whose cost half is still open.
 
-- Effect of increasing dataset size: `range(0, 10M, 100M, 1B)`
-- Effect of increasing dims
-
-We'll do it with the following:
-
-- Effect of binary quantization
-
-And we'll do this with two different approaches:
-
-- Brute force vector comparisons (with SIMD optimizations)
-- HNSW
-
-All numbers below are measured with [`bfb`](https://github.com/qdrant/bfb) against an **isolated** Qdrant node (16-core / 64 GB, ARM; vectors in RAM), server-side p50, 8 concurrent queries (`-p 8`), on random vectors. Single run — treat as preliminary.
+**What this ran on.** All numbers are measured with [`bfb`](https://github.com/qdrant/bfb) against a single-node **Qdrant Cloud cluster — 2 vCPU, 8 GiB RAM, ARM (Graviton), Qdrant 1.18.2** — driven from a separate 2-vCPU EC2 box in the same region. Latency is **server-side p50 at 8 concurrent queries** (`-p 8`) on random vectors unless stated otherwise. Single run — treat as preliminary. (One gotcha: the node's telemetry reports the _16-core / 64 GB host_ it's packed onto, not the 2 vCPU / 8 GiB quota that actually bounds it — every number here reflects the quota.)
 
 ## Results: brute-force scaling
 
 First, dataset-size scaling with HNSW disabled (`indexing_threshold = 0`) so every query is a full scan. Random 256-dim vectors, 2000 queries per point (500 for the ≥5M cells).
 
-<LineChart
-  title="Brute-force search latency vs dataset size (256-dim)"
-  xLabel="dataset size (vectors)"
-  yLabel="server p50 latency (ms)"
-  xScale="log"
-  yScale="log"
-  yUnit=" ms"
-  height={440}
-  xTicks={[
-    [100000, '100k'],
-    [200000, '200k'],
-    [500000, '500k'],
-    [1000000, '1M'],
-    [2000000, '2M'],
-    [5000000, '5M'],
-    [10000000, '10M'],
-  ]}
-  series={[
-    {
-      name: 'fp32 full scan',
-      color: '#7048e8',
-      marker: 'circle',
-      points: [
-        [100000, 33.2],
-        [200000, 76.1],
-        [500000, 185.5],
-        [1000000, 365.3],
-        [2000000, 438.0],
-        [5000000, 1849.3],
-        [10000000, 1197.4],
-      ],
-    },
-    {
-      name: 'binary quant',
-      color: 'accent',
-      marker: 'square',
-      points: [
-        [100000, 1.6],
-        [200000, 28.7],
-        [500000, 85.5],
-        [1000000, 147.1],
-        [2000000, 192.5],
-        [5000000, 281.5],
-        [10000000, 466.5],
-      ],
-    },
-    {
-      name: 'O(N) fit (100k–1M)',
-      color: '#64748b',
-      dashed: true,
-      showMarkers: false,
-      points: [
-        [100000, 36.6],
-        [200000, 73.3],
-        [500000, 183.2],
-        [1000000, 366.4],
-        [2000000, 732.8],
-        [5000000, 1832.1],
-        [10000000, 3664.2],
-      ],
-    },
-  ]}
-/>
+**Rule of thumb.** A brute-force query reads the entire dataset once, so its latency is just how long that read takes: **fp32 ≈ dataset-GB / 30 seconds** (this node scans ~30 GB of vectors a second). Binary quant is 32× smaller and ~13× faster. Both effects fold into one product of dataset size $N$ and dimension $d$:
+
+$$
+t \approx \frac{N \cdot d}{R}
+$$
+
+Fitting single-query latency on this node:
+
+$$
+t_{\text{ms}} \approx 1.3\times10^{-7}\,N d \ \text{ (fp32)}, \qquad t_{\text{ms}} \approx 1.0\times10^{-8}\,N d \ \text{ (binary quant)}
+$$
+
+Binary quant is ~13×, not the full 32×, because of the rescore: after the 1-bit Hamming scan it re-ranks the top candidates in full precision, and that eats the missing ~2.5×. The rule lands within ~10% across the measured range:
+
+| $N \times d$ | data read (fp32) | fp32: rule → measured | BQ: rule → measured |
+| ------------ | ---------------- | --------------------- | ------------------- |
+| 100k × 768   | 0.31 GB          | 10.0 → 10.1 ms        | 0.77 → 0.74 ms      |
+| 1M × 768     | 3.07 GB          | 100 → 99 ms           | 7.7 → 7.8 ms        |
+| 100k × 1536  | 0.61 GB          | 20 → 18 ms            | —                   |
+| 1M × 1536    | 6.14 GB          | 200 → 193 ms          | —                   |
+
+That ~30 GB/s isn't a Qdrant number — it's memory bandwidth, and memory bandwidth scales with cores. A full scan is a SIMD sequential read, which [napkin math](https://github.com/sirupsen/napkin-math) pegs at **~20 GiB/s per thread** and **~200 GiB/s fully threaded**: a single core can't keep enough cache-line fetches in flight to saturate the memory channels, so it takes many cores' worth of outstanding requests to get there. Our 2-vCPU slice sits at ~30 GB/s, about two cores' worth of that per-thread rate. So the scan rate isn't a universal constant — it climbs with core count until the channels saturate, which is why our ~30 GB/s is a 2-vCPU figure and a bigger box brute-forces proportionally faster.
+
+But only up to the box's own ceiling: a single socket's aggregate DRAM bandwidth. DDR5 does ~38 GB/s per channel, and a server socket has 8–12 of them, so realized sequential-read bandwidth tops out around **300–500 GB/s per socket** — that's the ~200 GiB/s threaded figure above. Cores stop helping once they issue enough outstanding requests to fill that (by Little's Law, ~27 KB in flight to saturate 300 GB/s at ~90 ns latency, roughly 10–40 cores), and every core past that does nothing for a scan. Concretely: our dbpedia 1M × 1536 fp32 scan runs 193 ms on 2 vCPUs but would take ~20 ms on a full socket at ~300 GB/s — a 10× from cores, then it hits the memory wall and stops. To go faster you change the hardware, not the code: more sockets (with a NUMA tax) or HBM (GPUs at 3–8 TB/s). Binary quant instead shrinks the bytes 32×, which is why it keeps paying off well past the point where more cores don't.
+
+The _same_ product hits a second, harder wall — memory: $N \cdot d \cdot b \le \text{RAM}$ ($b = 4$ bytes fp32, $1/8$ byte BQ). So all of brute force is one number, $N \cdot d$, run against a time wall and a space wall. The two sweeps below slice it one variable at a time (both at 8 concurrent queries, so their absolute latencies run above the single-query rule — read them for the _shape_, linear in $N$ here and in $d$ next).
 
 <LineChart
-  title="Throughput vs dataset size"
+  title="Brute-force scaling vs dataset size (256-dim)"
   xLabel="dataset size (vectors)"
-  yLabel="throughput (req/s)"
   xScale="log"
-  yScale="log"
-  yUnit=" req/s"
   height={440}
   xTicks={[
     [100000, '100k'],
@@ -114,33 +62,92 @@ First, dataset-size scaling with HNSW disabled (`indexing_threshold = 0`) so eve
     [5000000, '5M'],
     [10000000, '10M'],
   ]}
-  series={[
+  views={[
     {
-      name: 'fp32 full scan',
-      color: '#7048e8',
-      marker: 'circle',
-      points: [
-        [100000, 184.6],
-        [200000, 102.2],
-        [500000, 42.8],
-        [1000000, 21.8],
-        [2000000, 19.0],
-        [5000000, 4.3],
-        [10000000, 6.5],
+      label: 'Latency (p50)',
+      yLabel: 'server p50 latency (ms)',
+      yScale: 'log',
+      yUnit: ' ms',
+      series: [
+        {
+          name: 'fp32 full scan',
+          color: '#7048e8',
+          marker: 'circle',
+          points: [
+            [100000, 33.2],
+            [200000, 76.1],
+            [500000, 185.5],
+            [1000000, 365.3],
+            [2000000, 438.0],
+            [5000000, 1849.3],
+            [10000000, 1197.4],
+          ],
+        },
+        {
+          name: 'binary quant',
+          color: 'accent',
+          marker: 'square',
+          points: [
+            [100000, 1.6],
+            [200000, 28.7],
+            [500000, 85.5],
+            [1000000, 147.1],
+            [2000000, 192.5],
+            [5000000, 281.5],
+            [10000000, 466.5],
+          ],
+        },
+        {
+          name: 'O(N) fit (100k–1M)',
+          color: '#64748b',
+          dashed: true,
+          showMarkers: false,
+          points: [
+            [100000, 36.6],
+            [200000, 73.3],
+            [500000, 183.2],
+            [1000000, 366.4],
+            [2000000, 732.8],
+            [5000000, 1832.1],
+            [10000000, 3664.2],
+          ],
+        },
       ],
     },
     {
-      name: 'binary quant',
-      color: 'accent',
-      marker: 'square',
-      points: [
-        [100000, 413.9],
-        [200000, 217.1],
-        [500000, 86.9],
-        [1000000, 63.9],
-        [2000000, 45.6],
-        [5000000, 31.3],
-        [10000000, 14.4],
+      label: 'Throughput',
+      yLabel: 'throughput (req/s)',
+      yScale: 'log',
+      yUnit: ' req/s',
+      series: [
+        {
+          name: 'fp32 full scan',
+          color: '#7048e8',
+          marker: 'circle',
+          points: [
+            [100000, 184.6],
+            [200000, 102.2],
+            [500000, 42.8],
+            [1000000, 21.8],
+            [2000000, 19.0],
+            [5000000, 4.3],
+            [10000000, 6.5],
+          ],
+        },
+        {
+          name: 'binary quant',
+          color: 'accent',
+          marker: 'square',
+          points: [
+            [100000, 413.9],
+            [200000, 217.1],
+            [500000, 86.9],
+            [1000000, 63.9],
+            [2000000, 45.6],
+            [5000000, 31.3],
+            [10000000, 14.4],
+          ],
+        },
       ],
     },
   ]}
@@ -237,79 +244,25 @@ Fixing the dataset at 1M vectors and sweeping the embedding dimension (still ful
 
 fp32 full-scan latency is **linear in dimension** — the dashed fit `0.94·dim + 129 ms` lands R² = 0.9998. The ~129 ms intercept is fixed per-query overhead; the 0.94 ms/dim slope is the actual scan (one more multiply-add per vector per dimension, bandwidth-bound). Binary quant is essentially **constant** (~126 ms, the flat dashed line): a BQ vector is `dim / 8` bytes, so even at 1536-d it's only 192 bytes and the scan is dominated by fixed overhead, not the comparison. High-dimensional embeddings are exactly where binary quant pays off most.
 
-### Time complexity analysis of HNSW vector indexing:
+## Why the HNSW build costs O(N log N)
 
-Each HNSW insertion needs a search, and assuming it takes K ops to add the found K links. This means insertion time is:
+Every HNSW insertion is itself a search: to link a new vector you first have to find its neighbours in the graph built so far. Inserting into a graph of $i$ nodes costs $O(\log i)$ to search plus a constant $k$ to write the links, so building the whole graph costs
 
-(O(log1) + k) + (O(log2) + k) + .... (O(logN) + k)
+$$
+\sum_{i=1}^{N} \big(O(\log i) + k\big) = \log(1 \cdot 2 \cdot 3 \cdots N) + kN = \log(N!) + kN
+$$
 
-Sigma(log(I), i*from=1, i_to=N) + kN
-= log(1 * 2 \_ 3 \* .... N) + kN
-= log(N!) + kN
+Stirling's approximation for large $N$ gives $\log(N!) \approx N \log N - N$, so
 
-We have Stirling's approximation for large N:
+$$
+\log(N!) + kN \approx N \log N + (k - 1)N
+$$
 
-log(N!)≈NlogN−N
+$k$ is constant, which leaves $O(N \log N)$. That's what you trade for the flat search curve, and it's the one cost here you can't engineer away: every vector you add pays $\log N$ just to find out where it belongs.
 
-log(N!)+kN≈NlogN−N+kN=NlogN+(k−1)N
-
-Since K is constant, time complexity is O(NLogN) which is very bad
-
-### HNSW in practice
+## HNSW in practice
 
 That `O(N log N)` build cost isn't just theory — here's what it looks like on the same node. Each collection was uploaded with `indexing_threshold = 0` (no index), then flipped to `1` to trigger a full HNSW build, timing the indexing, then searched.
-
-**Search latency stays flat as the dataset grows** — the whole point of HNSW:
-
-<LineChart
-  title="HNSW search latency vs dataset size (256-dim)"
-  xLabel="dataset size (vectors)"
-  yLabel="server p50 latency (ms)"
-  xScale="log"
-  yUnit=" ms"
-  height={420}
-  xTicks={[
-    [100000, '100k'],
-    [200000, '200k'],
-    [500000, '500k'],
-    [1000000, '1M'],
-    [2000000, '2M'],
-    [5000000, '5M'],
-    [10000000, '10M'],
-  ]}
-  series={[
-    {
-      name: 'fp32',
-      color: '#7048e8',
-      marker: 'circle',
-      points: [
-        [100000, 20.1],
-        [200000, 23.0],
-        [500000, 30.4],
-        [1000000, 37.6],
-        [2000000, 32.6],
-        [5000000, 65.2],
-        [10000000, 44.1],
-      ],
-    },
-    {
-      name: 'binary quant',
-      color: 'accent',
-      marker: 'square',
-      points: [
-        [100000, 4.0],
-        [200000, 6.8],
-        [500000, 8.8],
-        [1000000, 7.8],
-        [2000000, 12.3],
-        [5000000, 21.7],
-        [10000000, 55.0],
-      ],
-    },
-  ]}
-/>
-
-Where brute force went from 34 ms to ~1.2 s over 100k→10M, HNSW search barely moves (~20–65 ms fp32, ~4–55 ms bq). It should be `O(log N)`, but over this range the signal is swamped by fixed overhead and noise — a log-N fit only reaches R² ≈ 0.7, so I won't draw a line and pretend it's clean. The takeaway is just: near-flat. You pay for that at build time.
 
 **Indexing time grows super-linearly with N** — the `O(N log N)` tax:
 
@@ -468,7 +421,366 @@ fp32 build climbs from 50 s (100k) to ~80 min (5M) to **~2.6 h at 10M** (9,391 s
 
 Both are ~linear in dimension (dashed fits: fp32 `1.39·dim + 495`, R² = 0.96; BQ `0.17·dim + 222`, R² = 0.88) — each of the N log N distance evaluations during construction costs O(dim). fp32's slope is **~8× BQ's** (1.39 vs 0.17 s/dim): the graph is cheap to build under BQ because those distances run on 1-bit-per-dimension codes.
 
-Why am I doing this? How it aligns with my life philosophy?
+**Rule of thumb.** The one to remember: **a 1M × 768-dim fp32 build is ~30 min on this node; binary quant cuts it ~5×; it grows as `N·log₂N` and linearly in dimension.** When you need a number for a specific dimension, the per-1M-vector cost splits into a fixed part plus a per-dimension part:
 
-- I think napkin maths is a meta technique. It's very generalizable and very powerful. I want to see how well I can predict the system and its behaviour with the numbers I'll get.
-- Although, this is good for
+- **fp32 ≈ 7 min + (dim / 40) min per 1M vectors**
+- **BQ ≈ 4 min + (dim / 340) min per 1M vectors**
+
+| per 1M vectors | fp32    | BQ     |
+| -------------- | ------- | ------ |
+| 256-dim        | ~13 min | ~4 min |
+| 768-dim        | ~30 min | ~6 min |
+| 1536-dim       | ~45 min | ~8 min |
+
+These per-1M numbers already bake in the `log₂N` factor at its N=1M value (`log₂(1M) ≈ 20`, frozen into the `7` and the `40`). So for other dataset sizes, multiply by the number of millions of vectors, then nudge up as that log term re-emerges — each doubling of N adds ~5%, so it runs a touch worse than linear. In practice 2M is 2.1× the 1M number (not 2×) and 10M is ~11.7× (not 10×): 10M × 256 fp32 ≈ 13 min × 11.7 ≈ 2.5 h.
+
+Underneath, both sweeps share one structure: the build is `N·log₂(N)` insertions, and each insertion is a distance-guided search whose cost splits into an `O(d)` distance evaluation plus dimension-independent graph bookkeeping (link writes, heap ops). Fold both into one formula in $N$ and $d$:
+
+$$
+t_{\text{build}} \approx N \log_2 N \,(\alpha\, d + \beta)
+$$
+
+Fitting both sweeps jointly on this node:
+
+$$
+\begin{aligned}
+\text{fp32:}\quad & \alpha = 7.3\times10^{-8}\,\text{s}, \quad \beta = 2.1\times10^{-5}\,\text{s}\\
+\text{BQ:}\quad & \alpha = 8.8\times10^{-9}\,\text{s}, \quad \beta = 1.1\times10^{-5}\,\text{s}
+\end{aligned}
+$$
+
+$\alpha d$ is the distance evaluation per insertion — fp32 is **8× costlier** than 1-bit codes — and $\beta$ is the bookkeeping, only ~2× between them. At 256-dim this reduces to ≈ $4\times10^{-5}\,N\log_2 N$ s, matching the dataset-size fit above. Because $\alpha d$ and $\beta$ are comparable at 256-dim but $\alpha d$ takes over by 1536, **BQ's build advantage widens with dimension: 2.5× faster at 128-dim, 5.4× at 1536**. The formula holds within ~15% across 100k→10M and 128→1536-dim:
+
+| $N \times d$ | fp32: rule → measured | BQ: rule → measured |
+| ------------ | --------------------- | ------------------- |
+| 1M × 256     | 787 → 792 s           | 263 → 257 s         |
+| 10M × 256    | 9,180 → 9,390 s       | 3,070 → 3,110 s     |
+| 1M × 768     | 1,530 → 1,830 s       | 353 → 372 s         |
+| 1M × 1536    | 2,650 → 2,510 s       | 489 → 467 s         |
+
+The 1M × 768 row is the worst fit at ~16%, and it sits _above_ the line in both quantizations — one collection that built under extra contention, not a break in the model. Two things to carry away: **doubling the dataset more than doubles the build** (the `log₂N` factor adds ~5% per doubling at this scale, so 1M→2M is 2.1×, not 2×), and **fp32 build cost climbs with dimension while BQ stays near its floor** — which is why quantization is the first lever when your embeddings are wide.
+
+That's the build-time bill. The payoff is on the read side: **search latency stays flat as the dataset grows** — the whole point of HNSW.
+
+<LineChart
+  title="HNSW search latency vs dataset size (256-dim)"
+  xLabel="dataset size (vectors)"
+  yLabel="server p50 latency (ms)"
+  xScale="log"
+  yUnit=" ms"
+  height={420}
+  xTicks={[
+    [100000, '100k'],
+    [200000, '200k'],
+    [500000, '500k'],
+    [1000000, '1M'],
+    [2000000, '2M'],
+    [5000000, '5M'],
+    [10000000, '10M'],
+  ]}
+  series={[
+    {
+      name: 'fp32',
+      color: '#7048e8',
+      marker: 'circle',
+      points: [
+        [100000, 20.1],
+        [200000, 23.0],
+        [500000, 30.4],
+        [1000000, 37.6],
+        [2000000, 32.6],
+        [5000000, 65.2],
+      ],
+    },
+    {
+      name: 'binary quant',
+      color: 'accent',
+      marker: 'square',
+      points: [
+        [100000, 4.0],
+        [200000, 6.8],
+        [500000, 8.8],
+        [1000000, 7.8],
+        [2000000, 12.3],
+        [5000000, 21.7],
+        [10000000, 55.0],
+      ],
+    },
+  ]}
+/>
+
+Where brute force went from 34 ms to ~1.2 s over 100k→10M, HNSW search barely moves: ~20–65 ms fp32, ~4–55 ms bq. That near-flatness is the `O(log N)` payoff — but over this range the log signal is weak and noisy (a log-N fit reaches only R² ≈ 0.76 fp32, 0.63 bq), so each doubling of N adds a few ms and no more. The fp32 line stops at 5M for a reason: **10M × 256 fp32 is 10.2 GB on an 8 GiB node, so it doesn't fit — `srv_p50` fell to 51 s of swapping, not searching.** That's the RAM wall showing up as a cliff, and it's why binary quant (0.32 GB at the same point, 55 ms) is the only one that reaches 10M here.
+
+So dataset size isn't what moves HNSW latency. **Dimension is.** Fixing N at 1M and sweeping the width:
+
+<LineChart
+  title="HNSW search latency vs dimension (1M vectors)"
+  xLabel="embedding dimension"
+  yLabel="server p50 latency (ms)"
+  yUnit=" ms"
+  height={420}
+  xTicks={[
+    [128, '128'],
+    [256, '256'],
+    [512, '512'],
+    [768, '768'],
+    [1536, '1536'],
+  ]}
+  series={[
+    {
+      name: 'fp32',
+      color: '#7048e8',
+      marker: 'circle',
+      points: [
+        [128, 23.0],
+        [256, 34.0],
+        [512, 54.6],
+        [768, 90.9],
+        [1536, 167.1],
+      ],
+    },
+    {
+      name: 'binary quant',
+      color: 'accent',
+      marker: 'square',
+      points: [
+        [128, 9.1],
+        [256, 10.4],
+        [512, 14.0],
+        [768, 17.9],
+        [1536, 39.1],
+      ],
+    },
+  ]}
+/>
+
+This one is clean and linear: **fp32 `≈ 0.10·dim + 8 ms` (R² = 0.996), BQ `≈ 0.022·dim + 4 ms` (R² = 0.97)**. Each of the `O(log N)` hops evaluates a handful of distances, and each distance costs `O(dim)` — fp32's per-dim slope is **~5× BQ's** (0.10 vs 0.022 ms/dim), the 1-bit-vs-float distance gap again.
+
+**Rule of thumb.** HNSW search latency doesn't collapse to one law the way the scan and build do — it's a linear-in-dimension term over a fixed floor, with only a weak log-N rise on top. On this node (`-p 8`, index in RAM):
+
+- **fp32 ≈ dim/10 + 8 ms** per query at 1M
+- **BQ ≈ dim/45 + 4 ms** per query at 1M
+- **N adds a weak log rise:** ~6–7 ms per doubling, so 1M→10M lifts latency ~20 ms, small next to the dimension term. Nearly flat, which is the whole point of the index.
+- **Hard limit — RAM:** the vectors must fit, or latency falls off a cliff (10M × 256 fp32 → 51 s). Quantization pushes that wall out 32×, which is why it matters for search and not just storage.
+
+## When to reach for HNSW: the SLA-budget view
+
+HNSW pays off at scale, but it charges for it: an `O(N log N)` build (time + energy), extra RAM for the graph, approximate recall, and rebuild jitter. Below some dataset size none of that is worth it — a plain SIMD full scan is exact, needs no index, and answers instantly. So the useful question isn't "brute force or HNSW?" but **"how many vectors can brute force serve inside my latency budget?"** Everything past that line is where HNSW earns its keep.
+
+Brute force is a linear scan, so single-query latency is `≈ a·N`. Invert it and each SLA implies a maximum N. Here's the measured single-query latency vs N on the 2 vCPU / 8 GiB node, fp32 vs binary quant, at 768-dim:
+
+<LineChart
+  title="Brute-force search latency vs dataset size (768-dim)"
+  xLabel="dataset size (vectors)"
+  yLabel="server p50 latency (ms)"
+  xScale="log"
+  yScale="log"
+  yUnit=" ms"
+  height={440}
+  xTicks={[
+    [1000, '1k'],
+    [10000, '10k'],
+    [100000, '100k'],
+    [1000000, '1M'],
+  ]}
+  series={[
+    {
+      name: 'fp32 full scan',
+      color: '#7048e8',
+      marker: 'circle',
+      points: [
+        [1000, 0.19],
+        [5000, 0.3],
+        [10000, 0.44],
+        [50000, 5.08],
+        [100000, 10.05],
+        [250000, 24.71],
+        [500000, 49.53],
+        [1000000, 99.5],
+      ],
+    },
+    {
+      name: 'binary quant',
+      color: 'accent',
+      marker: 'square',
+      points: [
+        [1000, 0.17],
+        [5000, 0.22],
+        [10000, 0.25],
+        [50000, 0.48],
+        [100000, 0.74],
+        [250000, 1.15],
+        [500000, 5.34],
+        [1000000, 7.81],
+      ],
+    },
+  ]}
+/>
+
+Read as a capacity table — the most vectors brute force can serve under a single-query p50 SLA (768-dim):
+
+| SLA (p50) | brute force, fp32 | brute force + binary quant |
+| --------- | ----------------- | -------------------------- |
+| 1 ms      | ~25k              | ~220k                      |
+| 10 ms     | ~100k             | ~1.3M                      |
+| 50 ms     | ~500k             | ~9M\*                      |
+| 100 ms    | ~1.0M             | ~19M\*                     |
+| 200 ms    | ~2.0M             | ~40M\*                     |
+| 500 ms    | ~2.6M †           | ~83M †                     |
+| 1 s       | ~2.6M †           | ~83M †                     |
+
+_\* extrapolated beyond the 1M measured point. † capped by the 8 GiB RAM wall, not latency._
+
+There are **two ceilings, not one.** Below ~200 ms you're compute-bound (latency linear in N). Past a point you hit the **RAM wall** — the vectors simply have to fit: fp32 768-dim tops out at ~2.6M in 8 GiB, and no latency budget buys you more. That wall is the hard "now you need HNSW (or sharding)" line. Binary quant pushes _both_ ceilings out — ~13× on latency and ~32× on memory (768-dim BQ is 96 bytes/vector → ~83M fit in 8 GiB) — which is why quantization, not HNSW, is the first lever to reach for. (1536-dim roughly halves every number: ~1.0M under 100 ms fp32, RAM wall ~1.3M, since latency and footprint both scale with dimension.)
+
+Caveats: these are server-side p50 for a single query — add your network round-trip as a fixed floor (so a 1 ms _end-to-end_ SLA is unachievable over any real network). And the BQ column is a speed/capacity story with the accuracy cost still unmeasured — see below.
+
+## How many cores? Throughput and the second bottleneck
+
+Everything above is single-query latency. Production serves many queries at once, so the real capacity question is throughput — and this is where core count finally enters. The napkin prediction splits by workload, because the two algorithms hit different bottlenecks:
+
+- **Brute force is memory-bandwidth-bound.** Every query reads the whole dataset, so throughput can't exceed `memory-bandwidth / bytes-per-query`, and that ceiling has no core term in it. Concurrent scans share the one memory bus, so adding cores past the handful needed to saturate it buys nothing.
+- **HNSW is compute-bound.** A query touches only ~`ef · log₂N` vectors by random gather — kilobytes, not the whole dataset — so each query is independent CPU work and throughput scales ~linearly with cores: `≈ cores / single-query-latency`.
+
+I swept search concurrency (`-p`) against a 100k × 256 fp32 brute-force collection on the 2-vCPU node to test the first claim:
+
+<LineChart
+  title="Brute-force throughput and latency vs concurrency (100k × 256, 2 vCPU)"
+  xLabel="concurrent queries (-p)"
+  xScale="log"
+  height={440}
+  xTicks={[
+    [1, '1'],
+    [2, '2'],
+    [4, '4'],
+    [8, '8'],
+    [16, '16'],
+    [32, '32'],
+    [64, '64'],
+    [128, '128'],
+  ]}
+  views={[
+    {
+      label: 'Throughput',
+      yLabel: 'achieved throughput (q/s)',
+      yUnit: ' q/s',
+      series: [
+        {
+          name: 'fp32 brute force',
+          color: '#7048e8',
+          marker: 'circle',
+          points: [
+            [1, 73],
+            [2, 138],
+            [4, 129],
+            [8, 118],
+            [16, 100],
+            [24, 92],
+            [32, 76],
+            [48, 72],
+            [64, 60],
+            [96, 56],
+            [128, 51],
+          ],
+        },
+      ],
+    },
+    {
+      label: 'Latency (p50)',
+      yLabel: 'server p50 latency (ms)',
+      yScale: 'log',
+      yUnit: ' ms',
+      series: [
+        {
+          name: 'fp32 brute force',
+          color: '#7048e8',
+          marker: 'circle',
+          points: [
+            [1, 1.35],
+            [2, 1.38],
+            [4, 10.46],
+            [8, 25.83],
+            [16, 64.11],
+            [24, 99.36],
+            [32, 135.77],
+            [48, 216.73],
+            [64, 293.45],
+            [96, 458.47],
+            [128, 613.16],
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+The shape is textbook bandwidth-bound, and it matches the napkin number:
+
+- **Throughput peaks at concurrency = core count (2), at 138 q/s, then _declines_** (129 → 118 → … → 51). Two cores share one memory bus; past two concurrent scans they contend for DRAM, so more concurrency subtracts. An open-loop sweep pushes the sustainable ceiling to ~186 q/s before it collapses.
+- **Napkin check:** 100k × 256 fp32 is 102 MB/query, so at 30 GB/s the ceiling is `30 / 0.102 ≈ 293 q/s`. Measured ~186 — **63% of the bandwidth ideal**, the rest lost to round-trip and non-ideal scan.
+- **Past the knee, latency is pure queueing** — linear in concurrency. `p50/p` converges to ~4.6 ms (p=48→128), so latency ≈ concurrency × 4.6 ms. Textbook M/M/2.
+
+To measure the HNSW half, I ran both algorithms on the **same 1M × 256 data** against a local Qdrant, index off vs on, sweeping concurrency. (Client and server share the 2 cores here, so absolute throughput runs below a dedicated setup — but that confound is identical for both, so the comparison holds.)
+
+<LineChart
+  title="Throughput vs concurrency: HNSW vs brute force, same 1M × 256 data (co-located)"
+  xLabel="concurrent queries (-p)"
+  yLabel="achieved throughput (q/s)"
+  xScale="log"
+  yUnit=" q/s"
+  height={430}
+  xTicks={[
+    [1, '1'],
+    [2, '2'],
+    [4, '4'],
+    [8, '8'],
+    [16, '16'],
+    [32, '32'],
+    [64, '64'],
+  ]}
+  series={[
+    {
+      name: 'HNSW (index on)',
+      color: '#7048e8',
+      marker: 'circle',
+      points: [
+        [1, 203.8],
+        [2, 211.9],
+        [4, 216.3],
+        [8, 213.7],
+        [16, 219.7],
+        [32, 248.7],
+        [64, 274.0],
+      ],
+    },
+    {
+      name: 'brute force (index off)',
+      color: '#64748b',
+      marker: 'square',
+      points: [
+        [1, 39.3],
+        [2, 24.3],
+        [4, 19.5],
+        [8, 16.6],
+        [16, 16.2],
+        [32, 19.7],
+      ],
+    },
+  ]}
+/>
+
+The curves diverge exactly as the bottleneck split predicts. **Brute force peaks at p=1 (39 q/s) and falls** — one 1M scan saturates the memory bus (host CPU pinned at 97% from the first query), so extra concurrency only thrashes it. **HNSW climbs from 204 to 274 q/s** as concurrency fills the cores (CPU 87% → 99%): each query touches kilobytes, not the whole dataset, so independent queries pack onto the cores instead of fighting over the bus. On identical data that's a **7× throughput ceiling** (up to ~13× at matched concurrency), on top of a **6.6× lower single-query latency** (4.6 ms vs 30.5 ms).
+
+And the napkin core-prediction lands: HNSW throughput ≈ `cores / query-latency` = `2 / 4.6 ms ≈ 433 q/s` ideal, measured 274 — **63% of it**, the rest lost to the co-located client stealing a core (the same ~63% efficiency the brute-force _bandwidth_ prediction hit above).
+
+**Rule of thumb (throughput).** Brute-force throughput is set by memory bandwidth and barely moves with cores — serve at concurrency ≈ core count, expect `≈ 0.6 × (bandwidth / dataset-bytes-per-query)`, and raise it only with a fatter memory bus, not more cores on the same one. **HNSW throughput scales with cores** — `≈ 0.6 × cores / query-latency` — because queries are independent compute, until the graph's random-gather traffic eventually saturates the bus (a much higher ceiling). For **both**, single-query latency is core-independent: a query is one core's serial work, so cores buy throughput and trim tail latency under load, never single-query speed. The one thing a 2-core box can't show directly is the linear-in-cores slope — that needs a multi-core resize, the next run once the cloud cluster's key is back.
+
+## What napkin math got right, and what I'd measure next
+
+Two of the four curves collapse to a single constant with R² > 0.999: brute-force scan at 3.7×10⁻⁴ ms per vector (256-dim), and the HNSW build at 4.3×10⁻⁵ s per `N log₂ N`. With those two numbers you can predict this node on a dataset you haven't loaded yet, which is the whole reason to do the exercise.
+
+The three places the numbers stop cooperating are the ones worth another run:
+
+- **fp32 brute force above 2M.** 5M measured slower than 10M, reproducibly. Repeat each point, sweep `-p`, and pin scan parallelism so latency tracks data size instead of the scheduler.
+- **Recall under binary quantization.** Every BQ number above is a speedup with no accuracy cost attached to it, which makes a 32× storage cut look free. It isn't, and I don't yet know the price.
+- **HNSW search vs `log N`.** A log-N fit only reaches R² ≈ 0.7 over 100k–10M because fixed overhead swamps the signal. That needs a wider range of N, not a better fit.
