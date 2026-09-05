@@ -573,11 +573,11 @@ I'd ship GroupCov: it un-fragments the rare words that hurt precision while keep
 
 ### Dropping the stopword list, too
 
-Of the two hand-built pieces the recipe still leans on — Porter to group the stem candidates, and that stopword list — the list I can drop.
+Of the two hand-built pieces left — Porter to group stem candidates, and the stopword list — I can drop the list.
 
-A stopword isn't a linguistic category; it's just a word that's common everywhere: `the`, `of`, `is` turn up in every document no matter the topic. That's a frequency fact, so I can measure it instead of maintaining a list. I down-weight each term by its **global rarity**: a normalized `log(T/cf)` (T = total tokens in a big background collection, cf = how often the term occurs in it), raised to a power γ that sets how hard the common words get squashed. Note this is _collection_ frequency — total occurrences, not IDF's _document_ count — and using it directly is what makes this a stopword prior and not just IDF again.
+A stopword isn't a linguistic category, just a word that's _usually_ common everywhere. Usually: query `vitamin A` and a stoplist drops the `A`, so the vitamin A page and a vitamin C page score the same — it deleted the token that told them apart. So don't cut, down-weight by _degree_. I weight each term by its **global rarity** — a normalized `log(T/cf)` (T = tokens in a big background corpus, cf = the term's count), raised to a power γ that squashes the common words. Using _collection_ frequency, not IDF's document count, is what makes it a stopword prior and not IDF again.
 
-You can read the weights straight off. At γ=1: `the` gets **0.00**, `of` 0.045, `is` 0.10, `will` 0.25 — squashed toward zero — while `running` 0.50, `vitamin` 0.48, `quantum` 0.61, and our friend `belvidere` 0.79 pass through nearly intact. No list, and because the background is just token counts, it works in any language.
+Read the weights off. At γ=1, `the` → **0.00**, `of` 0.05, `is` 0.10, while `running` 0.50, `quantum` 0.61, and `belvidere` 0.79 pass through intact. No list, and since it's just token counts, it works in any language.
 
 export const stopCats = [
   'no stopwords',
@@ -632,9 +632,9 @@ export const stopView = (values, text) => ({
 
 Observations:
 
-1. **The prior matches the list** — **0.5456** vs the NLTK list's 0.5454, a tie (+0.0002), and it takes the best Recall@100 of the bunch at 0.8009. One frequency parameter does the same work as a curated list, with nothing to maintain.
-2. **Don't suppress too hard.** Crank γ to 2 and it overshoots to 0.5271 (−0.018, loses 9 of 12) — a harder exponent starts shaving mid-common _content_ words a list leaves alone (`Vitamin C` → both `vitamin` and `c` get damped). γ=0.5 is the sweet spot: kill the true stopwords, spare the borderline content.
-3. **This half is language-agnostic.** The NLTK list is English; token frequencies exist in every language, so the stopword step folds straight into the multilingual result below. That leaves Porter — grouping the stem candidates — as the last hand-built piece.
+1. **The prior matches the list** — **0.5456** vs the NLTK list's 0.5454, a tie, and the best Recall@100 here (0.801). One parameter, nothing to maintain.
+2. **Don't suppress too hard** — crank γ to 2 and it overshoots (0.527, loses 9/12): a harder exponent starts shaving mid-common _content_ words too (`Vitamin C` → both `vitamin` and `c` damped). γ=0.5 is the sweet spot.
+3. **Language-agnostic** — token frequencies exist in every language, so this step folds into the multilingual result. That leaves Porter as the last hand-built piece.
 
 The bigger payoff — one tokenizer for **every language**, retiring the per-language analyzer stack entirely — is its own post: **[One analyzer, every language](/blog/token-search-multilingual)**.
 
