@@ -455,6 +455,72 @@ The best version, the winning bar in the chart above, folds the learned pairs in
 
 </details>
 
+## Expand the document instead
+
+Everything so far expands the query at search time. There is a mirror image: expand the document at index time and leave the query as plain words. That is what [Inference-free SPLADE](/blog/if-splade) does with a neural model, the encoder writes the expansions into each document and the query is just raw tokens, no model call. The same flip works for our lexical families, with no model at all.
+
+The question is how much of the weighting survives the move. Three of the four pieces do.
+
+- **Attestation weights** bake into the added term's impact.
+- **Learned pairs** are just more terms to write into the document.
+- **Anchoring comes for free.** A document keeps its own words at their sharp IDF, and the expanded forms go in at the reduced family IDF. Whether a document holds the exact query word is a fact about the document, known at index time, so the conditional anchoring we built on the query side is precomputable per document.
+
+The one piece that can't move is the **coordination gate**. It scales the anchor by how much of the rest of the query a document matches, and the rest of the query isn't known until search time. So it stays a query-side, rerank-stage step.
+
+I ran the document-side version (attestation, learned pairs, anchoring, no coordination) against our query-side default across the 12 datasets.
+
+export const docCats = [
+  'query-side, best match',
+  'index-side stemming',
+  'doc-side anchoring',
+  'coord-soft (query-side)',
+]
+export const docColors = ['#94a3b8', '#94a3b8', '#10b981', '#6ee7b7']
+export const docFmt = (v, d) => v.map((x) => x.toFixed(d))
+export const docView = (values, text) => ({
+  categories: docCats,
+  series: [{ name: 'v', values, colors: docColors, text, textPosition: 'outside' }],
+})
+
+<BarChart
+  orientation="horizontal"
+  title="Expand the query, or expand the document?"
+  subtitle="12 NanoBEIR (599 queries) · k1=1.5 · doc-side anchoring beats the query default · toggle the metric →"
+  categories={docCats}
+  views={[
+    {
+      label: 'mean',
+      default: true,
+      valueLabel: 'NDCG@10 mean (higher is better)',
+      valueMax: 0.6,
+      valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
+      ...docView([0.5451, 0.5508, 0.5551, 0.5598], docFmt([0.5451, 0.5508, 0.5551, 0.5598], 3)),
+    },
+    {
+      label: 'p50',
+      valueLabel: 'NDCG@10 p50, the median query (higher is better)',
+      valueMax: 0.64,
+      valueTicks: [0, 0.2, 0.4, 0.6],
+      ...docView([0.6083, 0.6131, 0.6131, 0.6131], docFmt([0.6083, 0.6131, 0.6131, 0.6131], 3)),
+    },
+    {
+      label: 'p25',
+      valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
+      valueMax: 0.32,
+      valueTicks: [0, 0.1, 0.2, 0.3],
+      ...docView([0.2805, 0.2727, 0.2891, 0.2897], docFmt([0.2805, 0.2727, 0.2891, 0.2897], 3)),
+    },
+  ]}
+/>
+
+- **Document-side anchoring beats our query-side `max`.** 0.5551 vs 0.5451 on the mean, 0.289 vs 0.281 on the tail. A paired bootstrap puts the gap at **+0.010, 95% CI [+0.004, +0.017]**, above zero in 99.9% of resamples. It also matches index-side stemming's mean and clears its tail (0.289 vs 0.273).
+- **It gets both halves at once.** The summed term-frequency aggregates evidence like stemming, which is the mean, and anchoring keeps the exact word at its own sharp IDF, which is the tail. `max` had the sharp IDF but discarded evidence. Stemming aggregated evidence but diluted the IDF. Document-side anchoring keeps both.
+- **The query is a plain BM25 lookup again.** No family expansion and no posting-list merge at search time, and the scoring is additive, so WAND and BlockMax-WAND work. Coordination was the thing that broke those additive bounds and forced a rerank stage. Moving anchoring to the document keeps fast top-k and recovers most of coordination's gain without it.
+
+The coordination gate is the one piece left on the query side, and it earns its keep in a specific place. Adding it back (coord-soft, 0.5598) buys another 0.005 over document-side anchoring, but the bootstrap can't separate them (93% of resamples, the interval crosses zero). Its whole contribution lands on the entity corpora: document-side anchoring's only per-dataset losses are MSMARCO and DBPedia, where anchoring over-boosts a lone-token match like a stray "van", and coordination is exactly what gates that. Where the families actually help, FiQA (+0.058), NQ (+0.035), Touché (+0.015), the document side already has it.
+
+So the ES-level weighting is not stuck at query time. Bake it into the documents and the query stays a plain, fast, WAND-friendly BM25 lookup, the same trade [Inference-free SPLADE](/blog/if-splade) makes, minus the GPU.
+
 ## It only works in English
 
 Every piece here is English machinery. Porter is English suffix rules, the stopword list is English, and the learned pairs were trained on English text, so they only know English words. Point this index at German or Chinese and none of it carries over. You would rebuild the stemmer, the stopword list, and the pair table once per language.
@@ -468,3 +534,4 @@ That per-language pipeline is the real cost of the query-side trick, not the acc
 - A stemmer is one query expansion seen from the other side. Match its two choices, the shared stem IDF and the forms counted as one, and query-side reproduces it exactly, the same NDCG on every query. Keep each form's own IDF and take the best match instead, and you trade a little mean for a better weak-query tail.
 - The gap to Elasticsearch is the k1 parameter, not the stemmer. Snowball is slightly worse than Porter, so the analyzer's machinery beyond stemming is decoration.
 - Once expansion makes the word family a swappable lookup, learned word pairs catch `high`/`higher`/`highest` and `behavioral`/`behaviour` that no suffix rule merges. All of it is English, so [Token Search](/blog/token-search) runs the same idea over BPE token IDs, config-free and multilingual.
+- The weighting even moves to the document side. Bake attestation, learned pairs, and anchoring into each document and query with plain tokens, and it beats the query-side default (**+0.010**, bootstrap clears zero) while keeping search a fast, WAND-friendly BM25 lookup, the lexical take on [Inference-free SPLADE](/blog/if-splade).
