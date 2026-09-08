@@ -128,10 +128,10 @@ The last column is index-side stemming, for contrast. It merges all four forms i
 
 **Combine: take the best variant, not the sum.** A document's credit for `race` is the single best-matching variant, `max` over the family of `weight · BM25(variant)`. Summing them instead craters the mean to **0.494**. A common form like `racing` then dumps its whole score onto every motorsport document, race or not. The `max` caps each query word at one strong hit, which is what stemming does for free by folding the forms into one word.
 
-Run them across the 12 datasets. Expansion can reproduce stemming exactly, or make the opposite choice:
+Run them across the 12 datasets, both on the same stopword-stripped base:
 
-export const sideCats = ['stem the index', 'expand, count as one', 'expand, best match']
-export const sideColors = ['#94a3b8', '#94a3b8', '#10b981']
+export const sideCats = ['stem the index', 'expand the query']
+export const sideColors = ['#94a3b8', '#10b981']
 export const sideFmt = (v, d) => v.map((x) => x.toFixed(d))
 export const sideView = (values, text) => ({
   categories: sideCats,
@@ -141,7 +141,7 @@ export const sideView = (values, text) => ({
 <BarChart
   orientation="horizontal"
   title="Stem the index, or expand the query?"
-  subtitle="12 NanoBEIR (599 queries) · k1=1.5 · expansion reproduces stemming, or trades a hair of mean for the tail · toggle the metric →"
+  subtitle="12 NanoBEIR (599 queries) · k1=1.5 · same operation, two sides · toggle the metric →"
   categories={sideCats}
   views={[
     {
@@ -150,32 +150,32 @@ export const sideView = (values, text) => ({
       valueLabel: 'NDCG@10 mean (higher is better)',
       valueMax: 0.6,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
-      ...sideView([0.5518, 0.5508, 0.5451], sideFmt([0.5518, 0.5508, 0.5451], 3)),
+      ...sideView([0.5508, 0.5451], sideFmt([0.5508, 0.5451], 3)),
     },
     {
       label: 'p50',
       valueLabel: 'NDCG@10 p50, the median query (higher is better)',
       valueMax: 0.64,
       valueTicks: [0, 0.2, 0.4, 0.6],
-      ...sideView([0.6096, 0.6131, 0.6083], sideFmt([0.6096, 0.6131, 0.6083], 3)),
+      ...sideView([0.6131, 0.6083], sideFmt([0.6131, 0.6083], 3)),
     },
     {
       label: 'p25',
       valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
       valueMax: 0.3,
       valueTicks: [0, 0.1, 0.2],
-      ...sideView([0.2683, 0.2727, 0.2805], sideFmt([0.2683, 0.2727, 0.2805], 3)),
+      ...sideView([0.2727, 0.2805], sideFmt([0.2727, 0.2805], 3)),
     },
   ]}
 />
 
-- **Expansion can reproduce stemming exactly.** Score every form at the shared stem IDF and count the forms in a document as one, and query-side lands right on stemming (**0.5508** vs 0.5518, the last 0.001 is reconstruction noise). Stemming is one setting of the expansion knobs, not a separate thing.
-- **The default expansion makes the opposite choice, and wins the tail.** Keep each form at its own sharp IDF and take the single best-matching form. The mean slips a hair (0.5451 vs 0.5518), but the weak-query tail rises (p25 **0.281** vs 0.268), because the exact query word keeps its own IDF instead of being diluted into the family.
+- **Expansion reproduces stemming exactly.** Make the two choices stemming makes, score every form at the shared stem IDF and count the forms in a document as one, and query-side lands on the stemmed index to the digit: **0.5508** mean, 0.6131 median, 0.2727 tail, all identical, and 593 of 599 queries tie. Stemming is one setting of the expansion knobs, not a separate thing.
+- **The version we use flips both choices, and wins the tail.** Keep each form at its own sharp IDF and take the single best-matching form. The mean slips a little (0.5451 vs 0.5508), but the weak-query tail rises (p25 **0.281** vs 0.273), because the exact query word keeps its own IDF instead of being diluted into the family.
 
 <details>
 <summary>Why the missing piece is tf aggregation, not the IDF</summary>
 
-The 0.007 mean gap has an obvious suspect. Index-side stemming scores every form through one merged IDF, and expansion uses each variant's own IDF instead. So I tried the fix: score the whole stem family through a single IDF, from the union document frequency or the summed df. It made things worse, and wrecked the tail.
+The 0.006 mean gap (stemming over the best-match expansion) has an obvious suspect. Index-side stemming scores every form through one merged IDF, and expansion uses each variant's own IDF instead. So I tried the fix: score the whole stem family through a single IDF, from the union document frequency or the summed df. It made things worse, and wrecked the tail.
 
 ```
 combined by max, k1=1.5             mean    p50     p25
@@ -188,7 +188,7 @@ Why did it wreck the tail? A family IDF dilutes the exact query word's own IDF. 
 
 Take `what album is help by the Beatles on`. Alone, `help` has IDF 3.78. Merge it with `helped`, `helping` and `helps` and the shared IDF drops to 3.33, so the word carrying the query loses its edge and the gold document falls from rank 1 to rank 3. Expansion keeps `help` at 3.78 and holds rank 1. Per-variant IDF isn't the cause of the mean gap, it's what protects the tail.
 
-The real 0.007 is tf aggregation. I rebuilt index-side stemming from the separate posting lists: union IDF, sum the raw term-frequencies of every form in a document, one saturation. It lands right back on the hard-stem number.
+The real 0.006 is tf aggregation. I rebuilt index-side stemming from the separate posting lists: union IDF, sum the raw term-frequencies of every form in a document, one saturation. It lands right back on the hard-stem number (0.5508 vs 0.5508, tying 593 of 599 queries).
 
 ```
 union IDF + summed tf (= index-side stem)   mean 0.5508  p50 0.613  p25 0.2727
@@ -465,6 +465,6 @@ That per-language pipeline is the real cost of the query-side trick, not the acc
 
 - A plain BM25 word index reaches Elasticsearch's `english` analyzer (0.5522 vs 0.5528 across 12 NanoBEIR datasets, and past it on the weak-query tail), all query-side, with no destructive index rewrite.
 - Stemming is the whole lever, **+0.022** over a plain index. Stopwords barely register, and even cost 0.001 stacked on top of stemming.
-- A stemmer does the same job as query expansion, from the other side. Expanding a query word into its stem family, weighted by attestation and combined by `max`, matches index-side stemming within 0.007 and wins the weak-query tail.
+- A stemmer is one query expansion seen from the other side. Match its two choices, the shared stem IDF and the forms counted as one, and query-side reproduces it exactly (593 of 599 queries tie). Keep each form's own IDF and take the best match instead, and you trade a little mean for a better weak-query tail.
 - The gap to Elasticsearch is the k1 parameter, not the stemmer. Snowball is slightly worse than Porter, so the analyzer's machinery beyond stemming is decoration.
 - Once expansion makes the word family a swappable lookup, learned word pairs catch `high`/`higher`/`highest` and `behavioral`/`behaviour` that no suffix rule merges. All of it is English, so [Token Search](/blog/token-search) runs the same idea over BPE token IDs, config-free and multilingual.
