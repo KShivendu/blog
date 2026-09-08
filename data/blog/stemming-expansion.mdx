@@ -160,7 +160,9 @@ family IDF, union df                0.5434  0.613   0.2453
 family IDF, summed df               0.5415  0.613   0.2453
 ```
 
-Why did it wreck the tail? A family IDF dilutes the exact query word's own IDF. A weak query usually rides on one exact content-word match, and a family IDF scores that word with the whole family's document frequency, which is bigger and less discriminative. Take `what album is help by the Beatles on`. Alone, `help` has IDF 3.78. Merge it with `helped`, `helping` and `helps` and the shared IDF drops to 3.33, so the word carrying the query loses its edge and the gold document falls from rank 1 to rank 3. Expansion keeps `help` at 3.78 and holds rank 1. Per-variant IDF isn't the cause of the mean gap, it's what protects the tail.
+Why did it wreck the tail? A family IDF dilutes the exact query word's own IDF. A weak query usually rides on one exact content-word match, and a family IDF scores that word with the whole family's document frequency, which is bigger and less discriminative.
+
+Take `what album is help by the Beatles on`. Alone, `help` has IDF 3.78. Merge it with `helped`, `helping` and `helps` and the shared IDF drops to 3.33, so the word carrying the query loses its edge and the gold document falls from rank 1 to rank 3. Expansion keeps `help` at 3.78 and holds rank 1. Per-variant IDF isn't the cause of the mean gap, it's what protects the tail.
 
 The real 0.007 is tf aggregation. I rebuilt index-side stemming from the separate posting lists: union IDF, sum the raw term-frequencies of every form in a document, one saturation. It lands right back on the hard-stem number.
 
@@ -275,7 +277,9 @@ fat                  3.11           3.67        11.4
 lifestyle            3.18           3.12         9.9
 ```
 
-`dietary` and `diet` share 457 neighbours like these. Across them the dot product is 746 and the two norms are 32.8 and 29.9, so cosine = 746 / (32.8 · 29.9) = **0.76**, well over the 0.30 cutoff. Do the same for `dietary` and `algorithm` and they only share generic words like `baseline` and `evaluated`, so the cosine is **0.19**, under the cutoff and dropped. This is exactly what suffix rules can't see. Porter stems `dietary` to `dietari` and `diet` to `diet`, so it keeps them apart, but they live in the same sentences.
+`dietary` and `diet` share 457 neighbours like these. Across them the dot product is 746 and the two norms are 32.8 and 29.9, so cosine = 746 / (32.8 · 29.9) = **0.76**, well over the 0.30 cutoff. Do the same for `dietary` and `algorithm` and they only share generic words like `baseline` and `evaluated`, so the cosine is **0.19**, under the cutoff and dropped.
+
+This is exactly what suffix rules can't see. Porter stems `dietary` to `dietari` and `diet` to `diet`, so it keeps them apart, but they live in the same sentences.
 
 **Step 2, the weight.** Passing the cutoff only adds `diet` to `dietary`'s family. Its weight is the usual attestation formula, from the document counts in the index we're searching. In NanoSciFact, `dietary` is in 51 documents and `diet` in 70:
 
@@ -343,7 +347,7 @@ dietary -> diet             0.55        0.65
 behavioral -> behaviour     0.42        0.49
 ```
 
-- **The gate filters the junk, and where you set it matters.** The false friends cluster just under the cutoff. `cancer`/`canine` and `events`/`eve` both score 0.25, below the 0.30 gate, so they never get in. That gate is a real knob. At 0.25 the false friends slip through (mean 0.5516). At 0.30 they're chopped (mean **0.5522**, tail past Elasticsearch). Push higher and it cuts good pairs instead: `viral`/`virus` at 0.37 is gone by 0.40. So 0.30 is the sweet spot. Anything that does clear the gate still meets the attestation weight, which shrinks a rare wrong word to near zero.
+- **The gate filters the junk, and where you set it matters.** The false friends cluster just under the cutoff. `cancer`/`canine` and `events`/`eve` both score 0.25, below the 0.30 gate, so they never get in. That gate is a real knob. At 0.25 the false friends slip through (mean 0.5516). At 0.30 they're chopped (mean **0.5522**, tail past Elasticsearch). Push higher and it cuts good pairs instead: `viral`/`virus` at 0.37 is gone by 0.40. So 0.30 is the sweet spot.
 
 To be clear, this ties Elasticsearch, it doesn't beat it outright. And the pairs were learned on a big general corpus, so truly rare words never clear the cutoff and fall back to Porter. A bigger or domain-specific table would go further.
 
@@ -400,7 +404,9 @@ export const winView = (values, text) => ({
 
 One catch. The gain is clean here, but the weighting is tuned on this 12-dataset panel, and the margin concentrates in morphological-question corpora like FiQA and Touché. Drop those two and it stops separating from plain stemming, so this is a same-panel win, not a proven-general one.
 
-Here's why it can't go further. On entity queries, the ones where the weighting can't help, a learned sparse model like [SPLADE](/blog/splade-bm25) pulls far ahead. Reranking the same candidate pool, it beat this BM25 by **+0.22** NDCG on NanoMSMARCO and **+0.23** on NanoNQ. It wins by expanding `gogh` to `vincent` and `belle` to `beauty`, semantic links that tell van-Gogh-the-painter from a passing "van". No co-occurrence table I have holds those pairs, they're spelling neighbours (`belle` to `bell`), not meaning, so no amount of lexical weighting reaches them. That's the ceiling of this whole line of work. Stemming and learned morphology carry a plain word index all the way to a production analyzer. Everything past that is semantic, and semantics needs a trained model, not a longer word list.
+Here's why it can't go further. On entity queries, the ones where the weighting can't help, a learned sparse model like [SPLADE](/blog/splade-bm25) pulls far ahead. Reranking the same candidate pool, it beat this BM25 by **+0.22** NDCG on NanoMSMARCO and **+0.23** on NanoNQ. It wins by expanding `gogh` to `vincent` and `belle` to `beauty`, semantic links that tell van-Gogh-the-painter from a passing "van". My co-occurrence table holds none of those. It only has spelling neighbours like `belle` to `bell`, so no amount of lexical weighting reaches them.
+
+That's the ceiling of this whole line of work. Stemming and learned morphology carry a plain word index all the way to a production analyzer. Everything past that is semantic, and semantics needs a trained model, not a longer word list.
 
 <details>
 <summary>Anchoring, coordination, and the stack that edges Elasticsearch</summary>
