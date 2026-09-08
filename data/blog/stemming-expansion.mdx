@@ -128,10 +128,10 @@ The last column is index-side stemming, for contrast. It merges all four forms i
 
 **Combine: take the best variant, not the sum.** A document's credit for `race` is the single best-matching variant, `max` over the family of `weight · BM25(variant)`. Summing them instead craters the mean to **0.494**. A common form like `racing` then dumps its whole score onto every motorsport document, race or not. The `max` caps each query word at one strong hit, which is what stemming does for free by folding the forms into one word.
 
-Run them across the 12 datasets, both on the same stopword-stripped base:
+Run them across the 12 datasets, all on the same stopword-stripped base:
 
-export const sideCats = ['stem the index', 'expand the query']
-export const sideColors = ['#94a3b8', '#10b981']
+export const sideCats = ['stem the index', 'expand, count as one', 'expand, best match']
+export const sideColors = ['#94a3b8', '#94a3b8', '#10b981']
 export const sideFmt = (v, d) => v.map((x) => x.toFixed(d))
 export const sideView = (values, text) => ({
   categories: sideCats,
@@ -150,21 +150,21 @@ export const sideView = (values, text) => ({
       valueLabel: 'NDCG@10 mean (higher is better)',
       valueMax: 0.6,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
-      ...sideView([0.5508, 0.5451], sideFmt([0.5508, 0.5451], 3)),
+      ...sideView([0.5508, 0.5508, 0.5451], sideFmt([0.5508, 0.5508, 0.5451], 3)),
     },
     {
       label: 'p50',
       valueLabel: 'NDCG@10 p50, the median query (higher is better)',
       valueMax: 0.64,
       valueTicks: [0, 0.2, 0.4, 0.6],
-      ...sideView([0.6131, 0.6083], sideFmt([0.6131, 0.6083], 3)),
+      ...sideView([0.6131, 0.6131, 0.6083], sideFmt([0.6131, 0.6131, 0.6083], 3)),
     },
     {
       label: 'p25',
       valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
       valueMax: 0.3,
       valueTicks: [0, 0.1, 0.2],
-      ...sideView([0.2727, 0.2805], sideFmt([0.2727, 0.2805], 3)),
+      ...sideView([0.2727, 0.2727, 0.2805], sideFmt([0.2727, 0.2727, 0.2805], 3)),
     },
   ]}
 />
