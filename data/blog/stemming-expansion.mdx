@@ -18,6 +18,10 @@ I found the stemmer does most of the work. And if you think about it, you can do
 
 Once you see the stemmer as query expansion, you can do even better by learning the expansions from the corpus, not Porter's fixed rules. That catches `high`/`higher`/`highest`, which no stemmer merges. If you are smart about weighting those learnt expansions, you can even beat Elasticsearch's `english` analyzer. In [Token Search](/blog/token-search) I run the same idea over BPE token IDs and drop the English pipeline entirely.
 
+<StemExpandHero />
+
+The top lane is stemming: at build time every form folds into one term, the query with it, and the index is rewritten. The bottom lane is expansion: the index stays as-is and the query fans into its family, weighted, best match wins. On `race` both reach the same four forms. Switch to `high` and Porter can't merge the family at all, but a learned expansion still reaches it.
+
 ## Stemming carries the gain, stopwords barely register
 
 Start with a plain BM25 word index (lowercase, split on non-letters, no stemming, no stopwords), then add one step at a time. Numbers are NDCG@10 over 599 queries. We show the median (p50) and the weak-query quartile (p25) next to the mean, since [the mean hides where a change actually helps](/blog/relevance-tail).
