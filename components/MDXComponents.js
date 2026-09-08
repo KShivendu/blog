@@ -18,6 +18,7 @@ import TokenCompressionPipeline from './TokenCompressionPipeline'
 import TokenCompressionAnimated from './TokenCompressionAnimated'
 import TokenSearchAnalyzer from './TokenSearchAnalyzer'
 import StemExpandHero from './StemExpandHero'
+import SimilarityGate from './SimilarityGate'
 import CompressionWidget from './CompressionWidget'
 import PerpendicularCircle from './PerpendicularCircle'
 import CosineWalk from './CosineWalk'
@@ -49,6 +50,7 @@ export const MDXComponents = {
   TokenCompressionAnimated,
   TokenSearchAnalyzer,
   StemExpandHero,
+  SimilarityGate,
   CompressionWidget,
   PerpendicularCircle,
   CosineWalk,

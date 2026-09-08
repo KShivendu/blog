@@ -351,7 +351,11 @@ dietary -> diet             0.55        0.65
 behavioral -> behaviour     0.42        0.49
 ```
 
-- **The gate filters the junk, and where you set it matters.** The false friends cluster just under the cutoff. `cancer`/`canine` and `events`/`eve` both score 0.25, below the 0.30 gate, so they never get in. That gate is a real knob. At 0.25 the false friends slip through (mean 0.5516). At 0.30 they're chopped (mean **0.5522**, tail past Elasticsearch). Push higher and it cuts good pairs instead: `viral`/`virus` at 0.37 is gone by 0.40. So 0.30 is the sweet spot.
+- **The gate filters the junk.** False friends like `cancer`/`canine` and `events`/`eve` cluster at 0.25, just under the cutoff, so they never get in.
+
+<SimilarityGate />
+
+Where you set the gate matters. Toggle it above: drop to 0.25 and the junk slips through (mean 0.5516), push to 0.40 and it starts cutting good pairs like `viral`/`virus`, so 0.30 is the sweet spot (**0.5522**, tail past Elasticsearch).
 
 To be clear, this ties Elasticsearch, it doesn't beat it outright. And the pairs were learned on a big general corpus, so truly rare words never clear the cutoff and fall back to Porter. A bigger or domain-specific table would go further.
 
