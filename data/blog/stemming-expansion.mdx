@@ -76,7 +76,7 @@ Three things in that chart matter:
 - **Stopwords barely register, and stack badly with stemming.** On their own they add **+0.003** (0.5294 to 0.5321). Added on top of stemming they _cost_ 0.001 (0.5518 to 0.5508 for the full `word_en` pipeline). Dropping `the`/`of`/`and` barely helps, because BM25's IDF already down-weights them to almost nothing.
 - **The gain reaches the tail.** p25 is the bottom quartile of queries. Stemming lifts it +0.034, close to the +0.039 it adds to the median. So it's finding relevant documents the plain index missed. That's real recall, not reshuffling.
 
-So on this benchmark the whole English pipeline comes down to the stemmer. And the stemmer is worth a closer look, because you can do the exact same thing from the query side instead.
+So the whole English pipeline comes down to the stemmer. And you can do its job from the query side instead.
 
 ## The same collapse, moved to the query
 
@@ -144,9 +144,9 @@ export const sideView = (values, text) => ({
   ]}
 />
 
-- **They're within 0.007 on the mean** (0.5518 vs 0.5451) and a rounding error apart on the median (0.610 vs 0.608). The same operation, two ways.
+- **They're within 0.007 on the mean** (0.5518 vs 0.5451) and a rounding error apart on the median (0.610 vs 0.608).
 - **Query-side wins the weak-query tail.** p25 rises from 0.268 to **0.281**. Expansion keeps each query word at its own sharp IDF, where stemming dilutes it into the whole stem family.
-- **Index-side keeps a 0.007 edge on the mean.** It aggregates a bit more evidence per document, and expansion trades that sliver for the better tail and for never rewriting the index (the mechanism is below).
+- **Index-side keeps a 0.007 edge on the mean.** It aggregates a bit more evidence per document, and expansion trades that sliver for the better tail and for never rewriting the index.
 
 <details>
 <summary>Why index-side wins the mean, and how to reclaim it from the query side</summary>
@@ -195,7 +195,7 @@ I keep the `max` in the post because it holds the best tail (0.2805), which is w
 
 </details>
 
-So the two are the same idea, split only by where the merge happens. But query-side leaves the index untouched, and the family we expand into is just a lookup we control. Porter is one choice, and for matching a real search engine, not even the best one.
+So the two are the same idea, split only by where the merge happens. The family we expand into is just a lookup we control. Porter is one choice, and not even the best one.
 
 ## Does a real search engine do better?
 
@@ -263,8 +263,6 @@ The similarity check is only a gate: keep a pair if the two words are close enou
 
 <details>
 <summary>How a learned pair gets its similarity and its weight, worked through</summary>
-
-Two steps. First score how alike two words behave, then weight the ones that pass like any other variant.
 
 **Step 1, the similarity.** Take `dietary` and `diet`. For each word, we look at which words sit near it (within five words) across the corpus. Common neighbours like `the` get discounted, distinctive ones like `fiber` get boosted. That's PPMI (positive pointwise mutual information). Each word ends up as a list of weighted neighbours, and the similarity is the cosine between two such lists. Reproduced on the benchmark corpus, the shared neighbours and their PPMI weights look like this:
 
@@ -347,9 +345,7 @@ behavioral -> behaviour     0.42        0.49
 
 - **The gate filters the junk, and where you set it matters.** The false friends cluster just under the cutoff. `cancer`/`canine` and `events`/`eve` both score 0.25, below the 0.30 gate, so they never get in. That gate is a real knob. At 0.25 the false friends slip through (mean 0.5516). At 0.30 they're chopped (mean **0.5522**, tail past Elasticsearch). Push higher and it cuts good pairs instead: `viral`/`virus` at 0.37 is gone by 0.40. So 0.30 is the sweet spot. Anything that does clear the gate still meets the attestation weight, which shrinks a rare wrong word to near zero.
 
-Similarity is the fixed PPMI score from the pair table. The weight is `df_variant / (df_variant + 0.5 · df_query)` in the dataset being searched.
-
-To be clear, this ties Elasticsearch, it doesn't beat it outright. And the pairs were learned on a big general corpus, so truly rare words never clear the cutoff and fall back to Porter. But a swappable query-side lookup already matches a real search engine and reaches past what its stemmer can do. A bigger or domain-specific table would go further.
+To be clear, this ties Elasticsearch, it doesn't beat it outright. And the pairs were learned on a big general corpus, so truly rare words never clear the cutoff and fall back to Porter. A bigger or domain-specific table would go further.
 
 ## Where the weighting tops out
 
