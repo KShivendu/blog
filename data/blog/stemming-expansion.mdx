@@ -103,7 +103,26 @@ races    df  92    weight 0.42
 raced    df  19    weight 0.13
 ```
 
-`racing` is nearly as common as `race`, so it's trusted almost fully. `raced` is rare, so a `raced` hit counts for little. Trusting every variant equally instead costs **0.010** on the mean (0.545 to 0.535), because the rare junk forms Porter drags in start scoring like the real word.
+`racing` is nearly as common as `race`, so it's trusted almost fully. `raced` is rare, so a `raced` hit is discounted hard. Trusting every variant equally instead costs **0.010** on the mean (0.545 to 0.535), because the rare junk forms Porter drags in start scoring like the real word.
+
+<details>
+<summary>Doesn't a rare variant's high IDF undo its low weight?</summary>
+
+It nearly does, and cancelling that is the whole point of the weight. BM25 rewards rare terms, so a rare variant carries a _higher_ IDF than the query word. On NanoDBPedia (N=6045), `raced` sits in 19 documents against `race`'s 258:
+
+```
+variant    df   weight    idf   weight·idf
+race      258    1.00    3.15      3.15
+racing    230    0.64    3.27      2.09
+races      92    0.42    4.18      1.74
+raced      19    0.13    5.74      0.74
+```
+
+Read the IDF column alone and it's backwards. Unweighted, `raced` contributes **5.74** to a document that holds it, above the actual query word `race` at **3.15**. BM25 would rank the rare inflection over the word you searched for, pure rarity windfall.
+
+The weight cancels it. `raced`'s 0.13 pulls its 5.74 down to **0.74**, back under `race`'s 3.15, so the family lands in the right order: race > racing > races > raced. But 0.74 isn't nothing. The high IDF still cushions the low weight (0.13 · 5.74 = 0.74, not 0.13 · 3.15 = 0.41), so a rare variant still counts, it just can't outrank the word you typed.
+
+</details>
 
 **Combine: take the best variant, not the sum.** A document's credit for `race` is the single best-matching variant, `max` over the family of `weight · BM25(variant)`. Summing them instead craters the mean to **0.494**. A common form like `racing` then dumps its whole score onto every motorsport document, race or not. The `max` caps each query word at one strong hit, which is what stemming does for free by folding the forms into one word.
 
