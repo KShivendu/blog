@@ -183,7 +183,7 @@ export default function StemExpandHero() {
           {C.word}
         </span>
         <span style={arrow}>→</span>
-        <span style={mech(!top)}>{top ? 'Porter stem' : `expand ×${C.expand.length} · max`}</span>
+        <span style={mech(!top)}>{top ? 'Porter stem' : 'expand + best match'}</span>
         <span style={arrow}>→</span>
         {top
           ? C.forms.map((f) => (
