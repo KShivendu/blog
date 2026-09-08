@@ -10,12 +10,14 @@ import PlotlyChart from './PlotlyChart'
 import LineChart from './LineChart'
 import BarChart from './BarChart'
 import VocabHistogram from './VocabHistogram'
+import PostingCurves from './PostingCurves'
 import ZipfSpiral from './ZipfSpiral'
 import DecadeFacets from './DecadeFacets'
 import SpladeVsIF from './SpladeVsIF'
 import TokenCompressionPipeline from './TokenCompressionPipeline'
 import TokenCompressionAnimated from './TokenCompressionAnimated'
 import TokenSearchAnalyzer from './TokenSearchAnalyzer'
+import StemExpandHero from './StemExpandHero'
 import CompressionWidget from './CompressionWidget'
 import PerpendicularCircle from './PerpendicularCircle'
 import CosineWalk from './CosineWalk'
@@ -39,12 +41,14 @@ export const MDXComponents = {
   LineChart,
   BarChart,
   VocabHistogram,
+  PostingCurves,
   ZipfSpiral,
   DecadeFacets,
   SpladeVsIF,
   TokenCompressionPipeline,
   TokenCompressionAnimated,
   TokenSearchAnalyzer,
+  StemExpandHero,
   CompressionWidget,
   PerpendicularCircle,
   CosineWalk,
