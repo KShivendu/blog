@@ -111,16 +111,18 @@ raced    df  19    weight 0.13
 It nearly does, and cancelling that is the whole point of the weight. BM25 rewards rare terms, so a rare variant carries a _higher_ IDF than the query word. On NanoDBPedia (N=6045), `raced` sits in 19 documents against `race`'s 258:
 
 ```
-variant    df   weight    idf   weight·idf
-race      258    1.00    3.15      3.15
-racing    230    0.64    3.27      2.09
-races      92    0.42    4.18      1.74
-raced      19    0.13    5.74      0.74
+variant    df   weight    idf   weight·idf   stem idf
+race      258    1.00    3.15      3.15         2.59
+racing    230    0.64    3.27      2.09         2.59
+races      92    0.42    4.18      1.74         2.59
+raced      19    0.13    5.74      0.74         2.59
 ```
 
 Read the IDF column alone and it's backwards. Unweighted, `raced` contributes **5.74** to a document that holds it, above the actual query word `race` at **3.15**. BM25 would rank the rare inflection over the word you searched for, pure rarity windfall.
 
 The weight cancels it. `raced`'s 0.13 pulls its 5.74 down to **0.74**, back under `race`'s 3.15, so the family lands in the right order: race > racing > races > raced. But 0.74 isn't nothing. The high IDF still cushions the low weight (0.13 · 5.74 = 0.74, not 0.13 · 3.15 = 0.41), so a rare variant still counts, it just can't outrank the word you typed.
+
+The last column is index-side stemming, for contrast. It merges all four forms into one term with the union document frequency (454 documents), so every hit, `race` or `raced`, scores at the same flattened **2.59**. That cuts both ways. It dilutes the query word (`race` drops from its own 3.15 to 2.59), which is exactly what costs stemming the weak-query tail. And it over-credits the rare form (`raced` jumps from 0.74 to 2.59), scoring a `raced`-only document as if it held the word you typed. Query-side keeps both sharp: the exact word at 3.15, the rare variant at 0.74.
 
 </details>
 
