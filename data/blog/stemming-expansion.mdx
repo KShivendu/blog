@@ -128,10 +128,10 @@ The last column is index-side stemming, for contrast. It merges all four forms i
 
 **Combine: take the best variant, not the sum.** A document's credit for `race` is the single best-matching variant, `max` over the family of `weight · BM25(variant)`. Summing them instead craters the mean to **0.494**. A common form like `racing` then dumps its whole score onto every motorsport document, race or not. The `max` caps each query word at one strong hit, which is what stemming does for free by folding the forms into one word.
 
-Run both sides across the 12 datasets and they land in the same place:
+Run them across the 12 datasets. Expansion can reproduce stemming exactly, or make the opposite choice:
 
-export const sideCats = ['index-side stemming', 'query-side expansion']
-export const sideColors = ['#6ee7b7', '#10b981']
+export const sideCats = ['stem the index', 'expand, count as one', 'expand, best match']
+export const sideColors = ['#94a3b8', '#94a3b8', '#10b981']
 export const sideFmt = (v, d) => v.map((x) => x.toFixed(d))
 export const sideView = (values, text) => ({
   categories: sideCats,
@@ -141,40 +141,39 @@ export const sideView = (values, text) => ({
 <BarChart
   orientation="horizontal"
   title="Stem the index, or expand the query?"
-  subtitle="12 NanoBEIR (599 queries) · same k1=1.5 · within noise on the mean, expansion wins the tail · toggle the metric →"
+  subtitle="12 NanoBEIR (599 queries) · k1=1.5 · expansion reproduces stemming, or trades a hair of mean for the tail · toggle the metric →"
   categories={sideCats}
   views={[
     {
       label: 'mean',
+      default: true,
       valueLabel: 'NDCG@10 mean (higher is better)',
       valueMax: 0.6,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
-      ...sideView([0.5518, 0.5451], sideFmt([0.5518, 0.5451], 3)),
+      ...sideView([0.5518, 0.5508, 0.5451], sideFmt([0.5518, 0.5508, 0.5451], 3)),
     },
     {
       label: 'p50',
       valueLabel: 'NDCG@10 p50, the median query (higher is better)',
       valueMax: 0.64,
       valueTicks: [0, 0.2, 0.4, 0.6],
-      ...sideView([0.6096, 0.6083], sideFmt([0.6096, 0.6083], 3)),
+      ...sideView([0.6096, 0.6131, 0.6083], sideFmt([0.6096, 0.6131, 0.6083], 3)),
     },
     {
       label: 'p25',
-      default: true,
       valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
       valueMax: 0.3,
       valueTicks: [0, 0.1, 0.2],
-      ...sideView([0.2683, 0.2805], sideFmt([0.2683, 0.2805], 3)),
+      ...sideView([0.2683, 0.2727, 0.2805], sideFmt([0.2683, 0.2727, 0.2805], 3)),
     },
   ]}
 />
 
-- **They're within 0.007 on the mean** (0.5518 vs 0.5451) and a rounding error apart on the median (0.610 vs 0.608).
-- **Query-side wins the weak-query tail.** p25 rises from 0.268 to **0.281**. Expansion keeps each query word at its own sharp IDF, where stemming dilutes it into the whole stem family.
-- **Index-side keeps a 0.007 edge on the mean.** It aggregates a bit more evidence per document, and expansion trades that sliver for the better tail and for never rewriting the index.
+- **Expansion can reproduce stemming exactly.** Score every form at the shared stem IDF and count the forms in a document as one, and query-side lands right on stemming (**0.5508** vs 0.5518, the last 0.001 is reconstruction noise). Stemming is one setting of the expansion knobs, not a separate thing.
+- **The default expansion makes the opposite choice, and wins the tail.** Keep each form at its own sharp IDF and take the single best-matching form. The mean slips a hair (0.5451 vs 0.5518), but the weak-query tail rises (p25 **0.281** vs 0.268), because the exact query word keeps its own IDF instead of being diluted into the family.
 
 <details>
-<summary>Why index-side wins the mean, and how to reclaim it from the query side</summary>
+<summary>Why the missing piece is tf aggregation, not the IDF</summary>
 
 The 0.007 mean gap has an obvious suspect. Index-side stemming scores every form through one merged IDF, and expansion uses each variant's own IDF instead. So I tried the fix: score the whole stem family through a single IDF, from the union document frequency or the summed df. It made things worse, and wrecked the tail.
 
