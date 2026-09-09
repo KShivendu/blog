@@ -122,29 +122,23 @@ Lifting is worth about 1.8x more than putting back, and the two roughly add up. 
 
 Keeping the higher score also beats adding the two together, **+0.0195** against **+0.0130**. Adding them double-counts every word the two already agree on. The `max` only steps in where they disagree.
 
-## How simple can the BM25 be?
+<details>
+<summary>How much of BM25 do you actually need? (85% of it comes from `idf` alone)</summary>
 
-This is only a backstop, so how much of BM25 does it need? I stripped pieces out one at a time. Each version gets its own sweep of `C`, since dropping `tf` changes the scale by roughly 10x.
+Strip out the word counts and document lengths entirely, so the floor is just `0.31 × idf(t)`, and you still get **0.6425 against the full rule's 0.6454**. That's 85% of the gain from one constant, with no average document length to maintain and no per-document normalisation. Worth taking if you don't want the bookkeeping.
 
-| form inside the floor                   | mean       | vs SPLADE   | p50       | p25       | zero  | W/L  |
-| --------------------------------------- | ---------- | ----------- | --------- | --------- | ----- | ---- |
-| SPLADE v3, no floor                     | 0.6253     | -           | 0.631     | 0.351     | 12.2% | -    |
-| `idf · tf(k1+1)/(tf + k1·L)`, full BM25 | **0.6454** | **+0.0201** | 0.672     | 0.360     | 10.3% | 12/1 |
-| drop length normalisation (b=0)         | 0.6428     | +0.0174     | **0.682** | 0.379     | 10.6% | 10/3 |
-| `idf` alone, no tf at all               | 0.6425     | +0.0171     | 0.673     | 0.372     | 10.5% | 10/3 |
-| `idf · sqrt(tf)`                        | 0.6406     | +0.0153     | 0.651     | **0.380** | 10.6% | 12/1 |
-| `idf · (1 + ln tf)`                     | 0.6385     | +0.0131     | 0.647     | **0.380** | 10.9% | 10/3 |
-| `idf · tf`, raw tf-idf                  | 0.6280     | +0.0027     | 0.631     | 0.339     | 11.9% | 8/5  |
-| `idf · tf / L`, no saturation           | 0.6252     | −0.0001     | 0.631     | 0.342     | 11.9% | 8/5  |
+| form inside the floor                   | mean       | vs SPLADE   | p25       | zero  | W/L  |
+| --------------------------------------- | ---------- | ----------- | --------- | ----- | ---- |
+| `idf · tf(k1+1)/(tf + k1·L)`, full BM25 | **0.6454** | **+0.0201** | 0.360     | 10.3% | 12/1 |
+| `idf` alone, no word counts at all      | 0.6425     | +0.0171     | 0.372     | 10.5% | 10/3 |
+| `idf · sqrt(tf)`                        | 0.6406     | +0.0153     | **0.380** | 10.6% | 12/1 |
+| `idf · tf`, raw tf-idf, no saturation   | 0.6280     | +0.0027     | 0.339     | 11.9% | 8/5  |
 
-Observations:
+The one thing not to do is drop the saturation and keep the raw word count. Plain `idf × tf` falls to 0.6280, and pushing its constant up makes it far worse, −0.0546 at C=0.2. Word counts either need BM25's saturation or they need leaving out.
 
-- **`max(w_splade, C·idf(t))` keeps 85% of the gain**, +0.0171 of +0.0201. No term frequencies, no document lengths, no `avgdl` to maintain, one constant. For most people that's the version to implement.
-- **Both ways of removing saturation fail.** `idf·tf/L` is the k1 → ∞ limit and is worth nothing. Raw tf-idf is worse, −0.0546 once `C` reaches 0.2.
-- **But `idf` alone is the k1 → 0 limit, and it works.** Put those two rows together and BM25's word-count term is doing damage control, not adding signal. All `k1` does here is keep `tf` from mattering, and taking that all the way costs 0.003.
-- **The mean and the tail want different forms.** Full BM25 wins the mean at 0.6454, but its p25 of 0.360 is the _worst_ of the four working forms. Dropping length normalisation gives the best p50 at 0.682, and `sqrt(tf)` and `log(tf)` tie for the best p25 at 0.380, a full +0.020 over full BM25. If weak queries are what you care about, take the simpler form and lose a little mean.
+Which fits SPLADE, whose own weight grows only 1.19x from one occurrence to two and _drops_ past ten. Note the tail column too: full BM25 wins the mean but has the worst p25 of the working forms, and `sqrt(tf)` gives up 0.005 on the mean for +0.020 on p25.
 
-SPLADE does the same thing to word counts. Its weight grows 1.19x from one occurrence to two where BM25 grows 1.30x, and past ten occurrences it _drops_. That's because it #[max-pools](it keeps the highest weight any single position gave a term, and a max cannot grow with repeats) instead of adding positions up.
+</details>
 
 <details>
 <summary>What the rule does to each term type, and 13% of the index you can drop</summary>
