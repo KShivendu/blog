@@ -187,15 +187,10 @@ doc: race x1, racing x2  (length 44)   weights: race 1.0, racing 0.64
 
 So the two are the same idea, split only by where the merge happens.
 
-A benchmark on my own BM25 is easy to fool, so I ran the same 13 datasets through Elasticsearch's `english` analyzer (Lucene BM25, standard tokenizer, possessive stripping, stopwords, a Porter stemmer). It gets **0.5763**. The query-side version, expanding each word into its Porter family with no index rewrite, gets **0.5774** at Lucene's default `k1`=1.2, a hair past it, and a touch further ahead on recall (recall@10 **0.626 vs 0.618**). The `k1` knob does more than the linguistics: at my old `k1`=1.5 the same expansion sits at 0.5736, just under Elasticsearch, and 1.2 tips it over.
+A benchmark on my own BM25 is easy to fool, so I ran the same 13 datasets through Elasticsearch's `english` analyzer (Lucene BM25, standard tokenizer, possessive stripping, stopwords, a Porter stemmer), at its default `k1`=1.2. It gets **0.5786**. The query-side version, expanding each word into its Porter family with no index rewrite, gets **0.5774** at the same k1: a dead heat on NDCG, Elasticsearch ahead by a hair. Flip to recall and the query-side index pulls ahead, recall@10 **0.626 vs 0.620** and recall@100 0.817 vs 0.816, so it surfaces slightly more of the relevant documents and just orders the very top a touch differently. And `k1` favors neither side: both prefer 1.2 to my old 1.5 by about the same margin (ES 0.5763 to 0.5786, expansion 0.5736 to 0.5774).
 
-export const esCats = [
-  'Elasticsearch english',
-  'Porter expansion, k1=1.5',
-  'Porter expansion, k1=1.2',
-  'Snowball expansion, k1=1.2',
-]
-export const esColors = ['#94a3b8', '#94a3b8', '#10b981', '#94a3b8']
+export const esCats = ['Elasticsearch english', 'Porter expansion', 'Snowball expansion']
+export const esColors = ['#94a3b8', '#10b981', '#94a3b8']
 export const esFmt = (v, d) => v.map((x) => x.toFixed(d))
 export const esView = (values, text) => ({
   categories: esCats,
@@ -205,7 +200,7 @@ export const esView = (values, text) => ({
 <BarChart
   orientation="horizontal"
   title="Query-side expansion vs Elasticsearch"
-  subtitle="13 NanoBEIR (645 queries ES covers) · query-side Porter expansion edges Elasticsearch at Lucene's default k1 · toggle the metric →"
+  subtitle="13 NanoBEIR (645 queries) · all at Lucene's default k1=1.2 · neck and neck on NDCG, expansion ahead on recall · toggle the metric →"
   categories={esCats}
   views={[
     {
@@ -214,21 +209,21 @@ export const esView = (values, text) => ({
       valueLabel: 'NDCG@10 mean (higher is better)',
       valueMax: 0.6,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
-      ...esView([0.5763, 0.5736, 0.5774, 0.5759], esFmt([0.5763, 0.5736, 0.5774, 0.5759], 3)),
+      ...esView([0.5786, 0.5774, 0.5759], esFmt([0.5786, 0.5774, 0.5759], 3)),
     },
     {
       label: 'p50',
       valueLabel: 'NDCG@10 p50, the median query (higher is better)',
       valueMax: 0.66,
       valueTicks: [0, 0.2, 0.4, 0.6],
-      ...esView([0.6309, 0.6185, 0.6282, 0.6241], esFmt([0.6309, 0.6185, 0.6282, 0.6241], 3)),
+      ...esView([0.6309, 0.6282, 0.6241], esFmt([0.6309, 0.6282, 0.6241], 3)),
     },
     {
       label: 'p25',
       valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
       valueMax: 0.34,
       valueTicks: [0, 0.1, 0.2, 0.3],
-      ...esView([0.312, 0.2977, 0.301, 0.2977], esFmt([0.312, 0.2977, 0.301, 0.2977], 3)),
+      ...esView([0.3066, 0.301, 0.2977], esFmt([0.3066, 0.301, 0.2977], 3)),
     },
   ]}
 />
@@ -295,7 +290,7 @@ export const lrnView = (values, text) => ({
       valueLabel: 'NDCG@10 mean (higher is better)',
       valueMax: 0.6,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
-      ...lrnView([0.5774, 0.5807, 0.5763], lrnFmt([0.5774, 0.5807, 0.5763], 3)),
+      ...lrnView([0.5774, 0.5807, 0.5786], lrnFmt([0.5774, 0.5807, 0.5786], 3)),
     },
     {
       label: 'p50',
@@ -309,12 +304,12 @@ export const lrnView = (values, text) => ({
       valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
       valueMax: 0.32,
       valueTicks: [0, 0.1, 0.2, 0.3],
-      ...lrnView([0.301, 0.301, 0.312], lrnFmt([0.301, 0.301, 0.312], 3)),
+      ...lrnView([0.301, 0.301, 0.3066], lrnFmt([0.301, 0.301, 0.3066], 3)),
     },
   ]}
 />
 
-- **It edges past Elasticsearch.** On top of Porter it lifts the mean from 0.5774 to **0.5807**, a hair over ES's 0.5763, and cuts the share of queries that return nothing from 15.2% to 14.7% (ES sits at 15.3%). Elasticsearch still holds the weak-query tail (p25 0.312 vs 0.301). Per dataset the pairs win 8 and lose 3, adding most on ArguAna and SciFact (+0.015, +0.013) and MSMARCO (+0.008).
+- **It edges past Elasticsearch.** On top of Porter it lifts the mean from 0.5774 to **0.5807**, a hair over ES's 0.5786 (both now at Lucene's default k1=1.2), and cuts the share of queries that return nothing from 15.2% to 14.7% (ES sits at 15.0%). Elasticsearch still holds the weak-query tail (p25 0.307 vs 0.301). Per dataset the pairs win 8 and lose 3, adding most on ArguAna and SciFact (+0.015, +0.013) and MSMARCO (+0.008).
 - **It catches what Porter can't.** Comparatives Porter splits apart (`high`/`higher`), related words with different endings (`viral`/`virus`), and British/American spellings (`behavioral`/`behaviour`). Each pair clears a PPMI similarity gate, then earns an attestation weight:
 
 ```
@@ -337,7 +332,7 @@ To be clear, this edges Elasticsearch on the mean, but ES still holds the weak-q
 
 ## Where the weighting tops out
 
-Porter plus learned pairs already edges Elasticsearch, so I spent a while trying to push the weighting itself further. It works. The best design keeps a query word at its own sharp IDF, not the diluted family IDF, whenever a document actually contains that word. Then it gates that boost by how much of the rest of the query the document matches. So a stray "van" in an unrelated document never earns the van-Gogh boost. Stack that weighting on the Porter-plus-learned family and it clears the analyzer on the exact same queries: **0.589 vs 0.576** on the mean, **0.333 vs 0.312** on the weak-query tail, and a lower zero-rate.
+Porter plus learned pairs already edges Elasticsearch, so I spent a while trying to push the weighting itself further. It works. The best design keeps a query word at its own sharp IDF, not the diluted family IDF, whenever a document actually contains that word. Then it gates that boost by how much of the rest of the query the document matches. So a stray "van" in an unrelated document never earns the van-Gogh boost. Stack that weighting on the Porter-plus-learned family and it clears the analyzer on the exact same queries: **0.589 vs 0.579** on the mean, **0.333 vs 0.307** on the weak-query tail, and a lower zero-rate.
 
 export const winCats = [
   'Elasticsearch english',
@@ -364,7 +359,7 @@ export const winView = (values, text) => ({
       valueLabel: 'NDCG@10 mean (higher is better)',
       valueMax: 0.6,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
-      ...winView([0.5763, 0.5795, 0.5881, 0.5894], winFmt([0.5763, 0.5795, 0.5881, 0.5894], 3)),
+      ...winView([0.5786, 0.5795, 0.5881, 0.5894], winFmt([0.5786, 0.5795, 0.5881, 0.5894], 3)),
     },
     {
       label: 'p50',
@@ -378,12 +373,12 @@ export const winView = (values, text) => ({
       valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
       valueMax: 0.36,
       valueTicks: [0, 0.1, 0.2, 0.3],
-      ...winView([0.312, 0.3066, 0.3165, 0.3333], winFmt([0.312, 0.3066, 0.3165, 0.3333], 3)),
+      ...winView([0.3066, 0.3066, 0.3165, 0.3333], winFmt([0.3066, 0.3066, 0.3165, 0.3333], 3)),
     },
   ]}
 />
 
-- **The stack beats Elasticsearch on the mean and the tail.** 0.5894 vs 0.5763 (**+0.013**), the weak-query tail 0.3333 vs 0.3120 (**+0.021**), and a lower zero-rate (14.1% vs 15.3%), all on the identical query set.
+- **The stack beats Elasticsearch on the mean and the tail.** 0.5894 vs 0.5786 (**+0.011**), the weak-query tail 0.3333 vs 0.3066 (**+0.027**), and a lower zero-rate (14.1% vs 15.0%), all on the identical query set at k1=1.2.
 - **Each trick adds to the last.** Anchoring lifts the mean from 0.5795 to 0.5881 and the tail from 0.3066 to 0.3165; folding the learned pairs into the anchored family pushes both further, to 0.5894 and 0.3333.
 
 One catch. The gain is clean here, but the weighting is tuned on this 13-dataset panel, and the margin concentrates in morphological-question corpora like FiQA and Touché. Drop those two and it stops separating from plain stemming, so this is a same-panel win, not a proven-general one.
@@ -481,11 +476,11 @@ So the ES-level weighting is not stuck at query time. Bake it into the documents
 
 Every piece here is English machinery. Porter is English suffix rules, the stopword list is English, and the learned pairs were trained on English text, so they only know English words. Point this index at German or Chinese and none of it carries over. You would rebuild the stemmer, the stopword list, and the pair table once per language.
 
-That per-language pipeline is the real cost of the query-side trick, not the accuracy. [Token Search](/blog/token-search) keeps the same machinery (expand a word into a family, weight the variants, take the `max`) but runs it over the tokenizer's own subword IDs instead of English words. The tokenizer is the only language-specific part, and one tokenizer already covers every language it was trained on. So the same method that edges Elasticsearch here needs no new stemmer, stopword list, or pair table for the next language. In that post it even beats a dedicated Chinese segmenter with zero setup.
+That per-language pipeline is the real cost of the query-side trick, not the accuracy. [Token Search](/blog/token-search) keeps the same machinery (expand a word into a family, weight the variants, take the `max`) but runs it over the tokenizer's own subword IDs instead of English words. The tokenizer is the only language-specific part, and one tokenizer already covers every language it was trained on. So the same method that matches Elasticsearch here needs no new stemmer, stopword list, or pair table for the next language. In that post it even beats a dedicated Chinese segmenter with zero setup.
 
 ## Key Takeaways
 
-- Query-side Porter expansion over a plain word index edges Elasticsearch's `english` analyzer (0.5774 vs 0.5763 across 13 NanoBEIR datasets, and ahead on recall@10), with no destructive index rewrite.
+- Query-side Porter expansion over a plain word index matches Elasticsearch's `english` analyzer on NDCG (0.5774 vs 0.5786 across 13 NanoBEIR datasets, both at Lucene's default k1=1.2) and edges it on recall@10 (0.626 vs 0.620), with no destructive index rewrite.
 - Stemming is the whole lever, **+0.025** over a plain index. Stopwords barely register, +0.006 alone and only +0.001 stacked on top of stemming.
 - A stemmer is one query expansion seen from the other side. Match its two choices, the shared stem IDF and the forms counted as one, and query-side reproduces it to within 0.001, matching it on all but a dozen or so queries. Keep each form's own IDF and take the best match instead, and you trade a little mean for a better weak-query tail.
 - The gap to Elasticsearch is the k1 parameter, not the stemmer. Snowball is slightly worse than Porter, so the analyzer's machinery beyond stemming is decoration.
