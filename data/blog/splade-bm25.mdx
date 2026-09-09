@@ -177,9 +177,21 @@ The rule also separates content words from stopwords by 4.8x in final weight, 1.
 </details>
 
 <details>
-<summary>Where it breaks (78 queries on NDCG@10, 13 on recall@10)</summary>
+<summary>Where it breaks, and by how much</summary>
 
-Out of 649 queries, 131 get better on NDCG@10 and **78 get worse**. On recall@10 it's 47 better and **13 worse**. The losses come in two shapes, and they sit at opposite ends of the same dial.
+Out of 649 queries, 131 get better on NDCG@10 and 78 get worse. But counting queries treats a rank 1-to-2 swap the same as rescuing a document from rank 40, so here is the size of the moves instead:
+
+| move size            | NDCG@10 better | worse | recall@10 better | worse |
+| -------------------- | -------------- | ----- | ---------------- | ----- |
+| tiny, under 0.05     | 46             | 42    | 13               | 5     |
+| small, 0.05 to 0.15  | 51             | 31    | 10               | 3     |
+| medium, 0.15 to 0.35 | 19             | 3     | 14               | 5     |
+| large, over 0.35     | **15**         | **2** | **10**           | **0** |
+| total NDCG moved     | **+17.84**     | −4.82 | **+11.91**       | −1.50 |
+
+The losses are almost all tiny. Where the rule moves a query a long way, it is **15 wins to 2** on NDCG@10 and **10 wins to none** on recall@10, and it gains 3.7x more NDCG mass than it loses (7.9x on recall@10). The median winner moves +0.069 and the median loser −0.041.
+
+So the failures are mostly the rank 1-to-2 kind. They still tell you what the rule gets wrong, and they come in two shapes that sit at opposite ends of the same dial.
 
 **It revives words the question didn't care about.** On `how many paintings of sunflowers did van gogh paint`, SPLADE had decided `many` doesn't help find documents. It's right, "how many" is just how you phrase a counting question. The floor gives `many` a weight anyway, and a different van Gogh sunflowers page that was 0.06 behind jumps 2.3 points past the correct answer. Both pages are about the same paintings. Only one says how many there are. The same thing happens with `next`, `job`, `get` and `should`, all sitting around idf 4 where BM25 thinks they're moderately informative.
 
