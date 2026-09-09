@@ -5,7 +5,7 @@ date: '2026-07-10'
 lastmod: '2026-07-10'
 tags: ['search', 'nlp', 'internals', 'rag']
 draft: true
-summary: 'A search engine stems your text to make race, racing and raced match. But stemming does the same job as query expansion seen from the other side, and once you frame it that way the set of words you expand into is a knob. I built a plain BM25 word index across 13 NanoBEIR datasets, found stemming carries almost the entire gain (stopwords barely register), and then swapped Porter for pairs learned from data to catch high/higher/highest that no stemmer merges, matching Elasticsearch English-analyzer quality with a query-side trick and no destructive index rewrite.'
+summary: 'A search engine stems your text to make race, racing and raced match. But stemming does the same job as query expansion seen from the other side, and once you frame it that way the set of words you expand into is a knob. I built a plain BM25 word index across 13 NanoBEIR datasets, found the stemmer drives almost all of the gain (stopwords a distant second), and then swapped Porter for pairs learned from data to catch high/higher/highest that no stemmer merges, matching Elasticsearch English-analyzer quality with a query-side trick and no destructive index rewrite.'
 images: ['/static/images/blogs/tokenization-compression.jpg']
 authors: ['kshivendu']
 ---
@@ -22,9 +22,9 @@ Once you see the stemmer as query expansion, you can do even better by learning 
 
 The top lane is stemming: at build time every form folds into one term, the query with it, and the index is rewritten. The bottom lane is expansion: the index stays as-is and the query fans into its family, weighted, best match wins. On `race` both reach the same four forms. Switch to `high` and Porter can't merge the family at all, but a learned expansion still reaches it.
 
-## Stemming carries the gain, stopwords barely register
+## The stemmer makes the biggest jump
 
-Start with a plain BM25 word index (lowercase, split on non-letters, no stemming, no stopwords), then add one step at a time. Numbers are NDCG@10 over the 645 NanoBEIR queries Elasticsearch's `english` analyzer returns results for, the same set every chart in this post uses, so the bars are always comparable. We show the median (p50) and the weak-query quartile (p25) next to the mean, since [the mean hides where a change actually helps](/blog/relevance-tail).
+Start with a plain BM25 word index (lowercase, split on non-letters, no stemming, no stopwords), then add one step at a time. Numbers are NDCG@10 over the 645 NanoBEIR queries Elasticsearch's `english` analyzer returns results for, the same set every chart in this post uses, all at Lucene's default BM25 (k1=1.2, b=0.75), so the bars are always comparable. We show the median (p50) and the weak-query quartile (p25) next to the mean, since [the mean hides where a change actually helps](/blog/relevance-tail).
 
 export const ladderCats = ['word (plain)', '+ stopwords', '+ stemming', '+ both (word_en)']
 export const ladderColors = ['#94a3b8', '#94a3b8', '#10b981', '#6ee7b7']
@@ -37,7 +37,7 @@ export const ladderView = (values, text) => ({
 <BarChart
   orientation="horizontal"
   title="What moves a plain BM25 word index?"
-  subtitle="13 NanoBEIR (645 queries) · stemming is the lever, stopwords are noise · toggle the metric →"
+  subtitle="13 NanoBEIR (645 queries) · stemming is the lever, stopwords a minor add · toggle the metric →"
   categories={ladderCats}
   views={[
     {
@@ -46,8 +46,8 @@ export const ladderView = (values, text) => ({
       valueMax: 0.6,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
       ...ladderView(
-        [0.5521, 0.5583, 0.5771, 0.5781],
-        ladderFmt([0.5521, 0.5583, 0.5771, 0.5781], 3)
+        [0.5522, 0.5606, 0.5747, 0.5793],
+        ladderFmt([0.5522, 0.5606, 0.5747, 0.5793], 3)
       ),
     },
     {
@@ -57,8 +57,8 @@ export const ladderView = (values, text) => ({
       valueMax: 0.64,
       valueTicks: [0, 0.2, 0.4, 0.6],
       ...ladderView(
-        [0.6131, 0.6131, 0.6309, 0.6309],
-        ladderFmt([0.6131, 0.6131, 0.6309, 0.6309], 3)
+        [0.6131, 0.6131, 0.6131, 0.6309],
+        ladderFmt([0.6131, 0.6131, 0.6131, 0.6309], 3)
       ),
     },
     {
@@ -66,19 +66,16 @@ export const ladderView = (values, text) => ({
       valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
       valueMax: 0.34,
       valueTicks: [0, 0.1, 0.2, 0.3],
-      ...ladderView(
-        [0.2685, 0.2891, 0.3066, 0.3155],
-        ladderFmt([0.2685, 0.2891, 0.3066, 0.3155], 3)
-      ),
+      ...ladderView([0.2832, 0.2811, 0.301, 0.3066], ladderFmt([0.2832, 0.2811, 0.301, 0.3066], 3)),
     },
   ]}
 />
 
 Three things in that chart matter:
 
-- **Stemming is the whole lever.** It lifts the mean from **0.5521** to **0.5771**, a **+0.025** jump, and drags the weak-query tail up with it (p25 0.269 to 0.307).
-- **Stopwords barely register.** On their own they add **+0.006** (0.5521 to 0.5583). Added on top of stemming they add another 0.001 (0.5771 to 0.5781 for the full `word_en` pipeline). Dropping `the`/`of`/`and` barely helps either way, because BM25's IDF already down-weights them to almost nothing.
-- **The gain is real recall.** p25 is the bottom quartile of queries. Stemming lifts it **+0.038**, about twice the median's move (0.613 to 0.631). It's finding relevant documents the plain index missed on hard queries, not reshuffling the easy ones.
+- **Stemming is the whole lever.** It lifts the mean from **0.5522** to **0.5747**, a **+0.022** jump, and drags the weak-query tail up with it (p25 0.283 to 0.301).
+- **Stopwords add a little.** On their own they add **+0.008** (0.5522 to 0.5606), and **+0.005** stacked on stemming (0.5747 to 0.5793 for the full `word_en` pipeline). Small next to stemming's +0.022, since BM25's IDF already down-weights `the`/`of`/`and` to almost nothing, but not quite nothing.
+- **The gain is real recall.** p25 is the bottom quartile of queries. Stemming lifts it **+0.018** while the median holds flat (0.613). It's finding relevant documents the plain index missed on hard queries, not reshuffling the easy ones.
 
 So the whole English pipeline comes down to the stemmer. And you can do its job from the query side instead.
 
@@ -131,7 +128,7 @@ export const sideView = (values, text) => ({
 <BarChart
   orientation="horizontal"
   title="Stem the index, or expand the query?"
-  subtitle="13 NanoBEIR (645 queries) · Porter family · k1=1.5 · same operation, two sides · toggle the metric →"
+  subtitle="13 NanoBEIR (645 queries) · Porter family · k1=1.2 · same operation, two sides · toggle the metric →"
   categories={sideCats}
   views={[
     {
@@ -140,32 +137,32 @@ export const sideView = (values, text) => ({
       valueLabel: 'NDCG@10 mean (higher is better)',
       valueMax: 0.6,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
-      ...sideView([0.5783, 0.5783, 0.5737], sideFmt([0.5783, 0.5783, 0.5737], 3)),
+      ...sideView([0.5795, 0.5795, 0.5775], sideFmt([0.5795, 0.5795, 0.5775], 3)),
     },
     {
       label: 'p50',
       valueLabel: 'NDCG@10 p50, the median query (higher is better)',
       valueMax: 0.64,
       valueTicks: [0, 0.2, 0.4, 0.6],
-      ...sideView([0.6309, 0.6309, 0.6185], sideFmt([0.6309, 0.6309, 0.6185], 3)),
+      ...sideView([0.6309, 0.6309, 0.6282], sideFmt([0.6309, 0.6309, 0.6282], 3)),
     },
     {
       label: 'p25',
       valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
       valueMax: 0.34,
       valueTicks: [0, 0.1, 0.2, 0.3],
-      ...sideView([0.3155, 0.3155, 0.2977], sideFmt([0.3155, 0.3155, 0.2977], 3)),
+      ...sideView([0.3066, 0.3066, 0.301], sideFmt([0.3066, 0.3066, 0.301], 3)),
     },
   ]}
 />
 
-- **Expansion reproduces stemming.** Make the two choices stemming makes, score every form at the shared stem IDF and count the forms in a document as one, and query-side lands on the stemmed index to within 0.001 (**0.5783** mean, 0.6309 median, 0.3155 tail), matching it on all but a dozen or so queries. Stemming is one setting of the expansion knobs, not a separate thing.
-- **The default we use makes the opposite two choices.** Keep each form at its own sharp IDF and take the single best-matching form instead. On this panel that lands within noise of stemming, a hair behind on the mean (0.5737 vs 0.5783) and on the tail, so the combine barely moves the needle. The real lever is the IDF, and that comes next.
+- **Expansion reproduces stemming.** Make the two choices stemming makes, score every form at the shared stem IDF and count the forms in a document as one, and query-side lands on the stemmed index to within 0.001 (**0.5795** mean, 0.6309 median, 0.3066 tail), matching it on all but a dozen or so queries. Stemming is one setting of the expansion knobs, not a separate thing.
+- **The default we use makes the opposite two choices.** Keep each form at its own sharp IDF and take the single best-matching form instead. On this panel that lands within noise of stemming, a hair behind on the mean (0.5775 vs 0.5795) and on the tail, so the combine barely moves the needle. The real lever is the IDF, and that comes next.
 
 <details>
 <summary>Why the missing piece is tf aggregation, not the IDF</summary>
 
-The 0.005 mean gap (stemming over the best-match expansion) has an obvious suspect. Index-side stemming scores every form through one merged IDF, and expansion uses each variant's own IDF instead. But scoring the whole stem family through a single union IDF makes it worse, not better, because it dilutes the exact query word's own IDF.
+The 0.002 mean gap (stemming over the best-match expansion) has an obvious suspect. Index-side stemming scores every form through one merged IDF, and expansion uses each variant's own IDF instead. But scoring the whole stem family through a single union IDF makes it worse, not better, because it dilutes the exact query word's own IDF.
 
 Take `what album is help by the Beatles on`. Alone, `help` has IDF 3.78. Merge it with `helped`, `helping` and `helps` and the shared IDF drops to 3.33, so the word carrying the query loses its edge and the gold document falls from rank 1 to rank 3. Keeping `help` at its own 3.78 holds rank 1. The IDF isn't the mean gap.
 
@@ -176,9 +173,9 @@ A document that uses `race`, `racing` and `raced` gets one saturated count of al
 ```
 doc: race x1, racing x2  (length 44)   weights: race 1.0, racing 0.64
                                        idf: race 3.15, racing 3.27, union 2.59
-  max        = max( 1.0·3.15·sat(1), 0.64·3.27·sat(2) ) = max(2.85, 2.78) = 2.85
-  sum        = 2.59 · sat( 1.0·1 + 0.64·2 ) = 2.59 · sat(2.28) = 3.64
-  stemming   = 2.59 · sat( 1 + 2 )          = 2.59 · sat(3)    = 4.07
+  max        = max( 1.0·3.15·sat(1), 0.64·3.27·sat(2) ) = max(2.87, 2.70) = 2.87
+  sum        = 2.59 · sat( 1.0·1 + 0.64·2 ) = 2.59 · sat(2.28) = 3.51
+  stemming   = 2.59 · sat( 1 + 2 )          = 2.59 · sat(3)    = 3.87
 ```
 
 `max` keeps `race` and throws the two `racing` hits away. Summing folds them in, so the merged count is 2.28, saturated once and scored at the union IDF (2.59, below `race`'s own 3.15). Stemming does the same with every form at full weight. Summing the term-frequencies is what reproduces the stemmed index. The `max` we use is the one real difference, and on this panel it barely moves the number.
@@ -187,7 +184,7 @@ doc: race x1, racing x2  (length 44)   weights: race 1.0, racing 0.64
 
 So the two are the same idea, split only by where the merge happens.
 
-A benchmark on my own BM25 is easy to fool, so I ran the same 13 datasets through Elasticsearch's `english` analyzer (Lucene BM25, standard tokenizer, possessive stripping, stopwords, a Porter stemmer), at its default `k1`=1.2. It gets **0.5786**. The query-side version, expanding each word into its Porter family with no index rewrite, gets **0.5774** at the same k1: a dead heat on NDCG, Elasticsearch ahead by a hair. Flip to recall and the query-side index pulls ahead, recall@10 **0.626 vs 0.620** and recall@100 0.817 vs 0.816, so it surfaces slightly more of the relevant documents and just orders the very top a touch differently. And `k1` favors neither side: both prefer 1.2 to my old 1.5 by about the same margin (ES 0.5763 to 0.5786, expansion 0.5736 to 0.5774).
+A benchmark on my own BM25 is easy to fool, so I ran the same 13 datasets through Elasticsearch's `english` analyzer (Lucene BM25, standard tokenizer, possessive stripping, stopwords, a Porter stemmer), at its default `k1`=1.2. It gets **0.5786**. The query-side version, expanding each word into its Porter family with no index rewrite, gets **0.5774** at the same k1: a dead heat on NDCG, Elasticsearch ahead by a hair. Flip to recall and the query-side index pulls ahead, recall@10 **0.626 vs 0.620** and recall@100 0.817 vs 0.816, so it surfaces slightly more of the relevant documents and just orders the very top a touch differently.
 
 export const esCats = ['Elasticsearch english', 'Porter expansion', 'Snowball expansion']
 export const esColors = ['#94a3b8', '#10b981', '#94a3b8']
@@ -436,7 +433,7 @@ export const docView = (values, text) => ({
 <BarChart
   orientation="horizontal"
   title="Expand the query, or expand the document?"
-  subtitle="13 NanoBEIR (645 queries) · k1=1.5 · doc-side anchoring beats the query default · toggle the metric →"
+  subtitle="13 NanoBEIR (645 queries) · k1=1.2 · doc-side anchoring beats the query default · toggle the metric →"
   categories={docCats}
   views={[
     {
@@ -445,30 +442,30 @@ export const docView = (values, text) => ({
       valueLabel: 'NDCG@10 mean (higher is better)',
       valueMax: 0.6,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
-      ...docView([0.5737, 0.5783, 0.5829, 0.5879], docFmt([0.5737, 0.5783, 0.5829, 0.5879], 3)),
+      ...docView([0.5775, 0.5795, 0.5842, 0.5894], docFmt([0.5775, 0.5795, 0.5842, 0.5894], 3)),
     },
     {
       label: 'p50',
       valueLabel: 'NDCG@10 p50, the median query (higher is better)',
       valueMax: 0.64,
       valueTicks: [0, 0.2, 0.4, 0.6],
-      ...docView([0.6185, 0.6309, 0.6309, 0.6309], docFmt([0.6185, 0.6309, 0.6309, 0.6309], 3)),
+      ...docView([0.6282, 0.6309, 0.6309, 0.6309], docFmt([0.6282, 0.6309, 0.6309, 0.6309], 3)),
     },
     {
       label: 'p25',
       valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
       valueMax: 0.34,
       valueTicks: [0, 0.1, 0.2, 0.3],
-      ...docView([0.2977, 0.3155, 0.301, 0.3155], docFmt([0.2977, 0.3155, 0.301, 0.3155], 3)),
+      ...docView([0.301, 0.3066, 0.3333, 0.3333], docFmt([0.301, 0.3066, 0.3333, 0.3333], 3)),
     },
   ]}
 />
 
-- **Document-side anchoring beats our query-side `max`.** 0.5829 vs 0.5737 on the mean, 0.301 vs 0.298 on the tail. A paired bootstrap puts the gap at **+0.009, 95% CI [+0.003, +0.016]**, above zero in 99.9% of resamples. It edges index-side stemming's mean too (0.5829 vs 0.5783), though that gap sits inside the bootstrap noise.
+- **Document-side anchoring beats our query-side `max`.** 0.5842 vs 0.5775 on the mean, and a big jump on the tail, 0.333 vs 0.301. A paired bootstrap puts the mean gap at **+0.007, 95% CI [+0.001, +0.013]**, above zero in 98.6% of resamples. It also clears index-side stemming, on the mean (0.5842 vs 0.5795) and the tail (0.333 vs 0.307).
 - **It gets both halves at once.** The summed term-frequency aggregates evidence like stemming, which is the mean, and anchoring keeps the exact word at its own sharp IDF, which is the tail. `max` had the sharp IDF but discarded evidence. Stemming aggregated evidence but diluted the IDF. Document-side anchoring keeps both.
 - **The query is a plain BM25 lookup again.** No family expansion and no posting-list merge at search time, and the scoring is additive, so WAND and BlockMax-WAND work. Coordination was the thing that broke those additive bounds and forced a rerank stage. Moving anchoring to the document keeps fast top-k and recovers most of coordination's gain without it.
 
-The coordination gate is the one piece left on the query side, and it earns its keep in a specific place. Adding it back (coord-soft, 0.5879) buys another 0.005 over document-side anchoring, but the bootstrap can't separate them (94% of resamples, the interval crosses zero). Its contribution lands on the entity corpora: document-side anchoring's per-dataset losses are MSMARCO, DBPedia, and ArguAna, where anchoring over-boosts a lone-token match like a stray "van", and coordination is exactly what gates that. Where the families actually help, FiQA (+0.058), NQ (+0.035), Touché (+0.015), the document side already has it.
+The coordination gate is the one piece left on the query side, and it earns its keep in a specific place. Adding it back (coord-soft, 0.5894) buys another 0.005 over document-side anchoring, but the bootstrap can't separate them (96% of resamples, the interval crosses zero). Its contribution lands on the entity corpora: document-side anchoring's per-dataset losses are MSMARCO, ArguAna, and SCIDOCS, where anchoring over-boosts a lone-token match like a stray "van", and coordination is exactly what gates that. Where the families actually help, FiQA (+0.049), NQ (+0.021), Touché (+0.011), the document side already has it.
 
 So the ES-level weighting is not stuck at query time. Bake it into the documents and the query stays a plain, fast, WAND-friendly BM25 lookup, the same trade [Inference-free SPLADE](/blog/if-splade) makes, minus the GPU.
 
@@ -481,8 +478,8 @@ That per-language pipeline is the real cost of the query-side trick, not the acc
 ## Key Takeaways
 
 - Query-side Porter expansion over a plain word index matches Elasticsearch's `english` analyzer on NDCG (0.5774 vs 0.5786 across 13 NanoBEIR datasets, both at Lucene's default k1=1.2) and edges it on recall@10 (0.626 vs 0.620), with no destructive index rewrite.
-- Stemming is the whole lever, **+0.025** over a plain index. Stopwords barely register, +0.006 alone and only +0.001 stacked on top of stemming.
+- Stemming is the whole lever, **+0.022** over a plain index. Stopwords add a little, +0.008 alone and +0.005 stacked on top of stemming.
 - A stemmer is one query expansion seen from the other side. Match its two choices, the shared stem IDF and the forms counted as one, and query-side reproduces it to within 0.001, matching it on all but a dozen or so queries. Keep each form's own IDF and take the best match instead, and you trade a little mean for a better weak-query tail.
-- The gap to Elasticsearch is the k1 parameter, not the stemmer. Snowball is slightly worse than Porter, so the analyzer's machinery beyond stemming is decoration.
+- At Lucene's default k1, query-side expansion and Elasticsearch land in the same place, so the analyzer's machinery beyond stemming is decoration. Snowball expansion is slightly worse than Porter, and the possessive stripping and exact tokenizer don't move the needle.
 - Once expansion makes the word family a swappable lookup, learned word pairs catch `high`/`higher`/`highest` and `behavioral`/`behaviour` that no suffix rule merges. All of it is English, so [Token Search](/blog/token-search) runs the same idea over BPE token IDs, config-free and multilingual.
-- The weighting even moves to the document side. Bake attestation, learned pairs, and anchoring into each document and query with plain tokens, and it beats the query-side default (**+0.009**, bootstrap clears zero) while keeping search a fast, WAND-friendly BM25 lookup, the lexical take on [Inference-free SPLADE](/blog/if-splade).
+- The weighting even moves to the document side. Bake attestation, learned pairs, and anchoring into each document and query with plain tokens, and it beats the query-side default (**+0.007**, bootstrap clears zero) while keeping search a fast, WAND-friendly BM25 lookup, the lexical take on [Inference-free SPLADE](/blog/if-splade).
