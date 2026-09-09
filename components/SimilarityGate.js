@@ -5,9 +5,9 @@ import { useEffect, useState } from 'react'
 // sits at (PPMI cosine similarity, attestation weight). A vertical gate keeps
 // the pairs to its right and drops the rest. Three presets mirror the blog's
 // threshold sweep exactly:
-//   0.25  junk slips in   (mean 0.5516)
-//   0.30  the sweet spot  (mean 0.5522)
-//   0.40  good pairs lost  (viral/virus at 0.37 is gone)
+//   0.25  junk slips in    (mean 0.5807, but the junk carries no weight)
+//   0.30  the sweet spot   (mean 0.5807, junk excluded at no cost)
+//   0.40  good pairs lost   (viral/virus at 0.37 is gone, mean falls to 0.5780)
 // Green = kept good pair, orange = junk that slipped past the gate, grey =
 // dropped. False friends carry no real weight, so they sit on the floor.
 //
@@ -28,8 +28,8 @@ const JUNK = [
   { pair: 'events → eve', sim: 0.25, w: 0.02 },
 ]
 const GATES = [
-  { g: 0.25, mean: '0.5516', tag: 'junk slips in' },
-  { g: 0.3, mean: '0.5522', tag: 'the sweet spot' },
+  { g: 0.25, mean: '0.5807', tag: 'junk slips in' },
+  { g: 0.3, mean: '0.5807', tag: 'the sweet spot' },
   { g: 0.4, mean: null, tag: 'good pairs lost' },
 ]
 
@@ -317,7 +317,7 @@ export default function SimilarityGate() {
         <span style={{ fontSize: 12.5, color: c.muted, fontFamily: MONO }}>
           {GATES[gi].mean
             ? `mean NDCG@10 ${GATES[gi].mean}`
-            : 'viral → virus (0.37) drops with the junk, and the mean falls'}
+            : 'viral → virus (0.37) drops with the junk, and the mean falls to 0.5807 → 0.5780'}
         </span>
       </div>
     </div>
