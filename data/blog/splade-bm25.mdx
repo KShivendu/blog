@@ -176,6 +176,21 @@ The rule also separates content words from stopwords by 4.8x in final weight, 1.
 
 </details>
 
+<details>
+<summary>Where it breaks (78 queries on NDCG@10, 13 on recall@10)</summary>
+
+Out of 649 queries, 131 get better on NDCG@10 and **78 get worse**. On recall@10 it's 47 better and **13 worse**. The losses come in two shapes, and they sit at opposite ends of the same dial.
+
+**It revives words the question didn't care about.** On `how many paintings of sunflowers did van gogh paint`, SPLADE had decided `many` doesn't help find documents. It's right, "how many" is just how you phrase a counting question. The floor gives `many` a weight anyway, and a different van Gogh sunflowers page that was 0.06 behind jumps 2.3 points past the correct answer. Both pages are about the same paintings. Only one says how many there are. The same thing happens with `next`, `job`, `get` and `should`, all sitting around idf 4 where BM25 thinks they're moderately informative.
+
+**And it trusts rare words too much.** On `Should election day be a national holiday?`, the floor does exactly what it's designed for: `holiday` has idf 6.52, so it gets a large weight, and two documents that merely mention holidays climb past a document about why voting is inconvenient. The rare word worked perfectly and still gave the wrong answer, because containing the rare word isn't the same as answering the question.
+
+No cutoff avoids both. Ignore low-idf words and you keep the second failure, trust high-idf words and you get it worse. I tried gating on idf, restricting by term type, and capping the floor's value, and all three cost more than they saved.
+
+One reassuring detail. Every relevant document that fell out of the top 10 had its own score go **up**, not down: `Global_warming` went 38.76 to 41.72 and still fell out, `Mauna_Loa_Observatory` 45.36 to 45.97. The floor never hurt those documents, it helped their competitors more.
+
+</details>
+
 ## The cheap version
 
 The setup people actually deploy is [inference-free](/blog/if-splade). Encode documents once with the doc-only model, send raw query terms at weight 1.0, no query-time model call. [`splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) plus a BM25 floor:
