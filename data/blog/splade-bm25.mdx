@@ -215,13 +215,13 @@ The setup people actually deploy is [inference-free](/blog/if-splade). Encode do
 
 That holds up, CI [+0.0013, +0.0236], but it's about half what the full model gets, and the best `C` drops from 0.31 to 0.20. Inference-free queries give every word a weight of 1.0, so the query side does no sorting at all and the document side carries the whole ranking. The floor is overwriting a bigger share of the signal, so it goes too far sooner.
 
-## Why IDF wins a fight it should lose
+## SPLADE deletes, IDF doesn't
 
-This is the part I didn't expect. BM25's IDF is a corpus statistic. It knows nothing about the sentence a word sits in. SPLADE's weights are learned end to end on the retrieval task, by a transformer that read the whole passage. IDF should not beat that on the document's own words.
+Neither side is better than the other here, and that's the point. Replace SPLADE's weights with IDF everywhere and you get 0.5665 against SPLADE's own 0.5689, a dead tie. Take the higher of the two and you get 0.5967. The value is in the `max`, not in either input.
 
-Here's what's going on. SPLADE deletes words aggressively, because training penalises it for every word it keeps (the [FLOPS regulariser](https://arxiv.org/abs/2004.05665)). Deleting is usually right, since most of what it deletes is `the` and `for`. But nothing catches it when it's wrong, and then a real word contributes exactly nothing instead of a little. IDF can't make that mistake. A rare word scores high whether or not the model noticed it.
+They tie because they fail in different places. SPLADE deletes words aggressively, since training penalises it for every word it keeps (the [FLOPS regulariser](https://arxiv.org/abs/2004.05665)). Deleting is usually right, because most of what it deletes is `the` and `for`. But nothing catches it when it's wrong, and then a real word contributes exactly nothing instead of a little. IDF can't make that particular mistake, since a rare word scores high whether or not the model noticed it. It makes different mistakes instead, and the `<details>` above has two of them.
 
-The two also aren't fighting each other much. The `max` fires on 53% of content words, so roughly half the time SPLADE's own weight is already higher and stays. It's a floor under the learned weights, holding them up from below.
+So they're not competing much. The `max` fires on 53% of content words, and the other 47% SPLADE's own weight is already higher and stays. It's a floor under the learned weights, holding them up from below.
 
 One note if you go looking for the exponent yourself. SPLADE's document weights fit `idf^0.508` and its query weights fit `idf^0.567`, but the product `w_q · w_d` fits **0.9936**. BM25 applies IDF once at exponent 1.0. SPLADE splits the same total into two square roots, so fitting either side alone says BM25 is twice too steep when it isn't.
 
