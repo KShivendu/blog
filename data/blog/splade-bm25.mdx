@@ -217,9 +217,17 @@ That holds up, CI [+0.0013, +0.0236], but it's about half what the full model ge
 
 ## SPLADE deletes, IDF doesn't
 
-Neither side is better than the other here, and that's the point. Replace SPLADE's weights with IDF everywhere and you get 0.5665 against SPLADE's own 0.5689, a dead tie. Take the higher of the two and you get 0.5967. The value is in the `max`, not in either input.
+The value is in the `max`, not in either input. Neither one alone gets you there:
 
-They tie because they fail in different places. SPLADE deletes words aggressively, since training penalises it for every word it keeps (the [FLOPS regulariser](https://arxiv.org/abs/2004.05665)). Deleting is usually right, because most of what it deletes is `the` and `for`. But nothing catches it when it's wrong, and then a real word contributes exactly nothing instead of a little. IDF can't make that particular mistake, since a rare word scores high whether or not the model noticed it. It makes different mistakes instead, and the `<details>` above has two of them.
+| for every word the document contains | NDCG@10    | W/L  |
+| ------------------------------------ | ---------- | ---- |
+| always trust SPLADE's weight         | 0.6251     | -    |
+| always trust BM25's weight           | 0.6101     | 5/8  |
+| take the higher of the two           | **0.6454** | 12/1 |
+
+BM25's weights on their own are _worse_ than SPLADE's, by 0.015. Taking the higher of the two beats SPLADE by 0.020 and BM25 by 0.035.
+
+That works because they fail in different places. SPLADE deletes words aggressively, since training penalises it for every word it keeps (the [FLOPS regulariser](https://arxiv.org/abs/2004.05665)). Deleting is usually right, because most of what it deletes is `the` and `for`. But nothing catches it when it's wrong, and then a real word contributes exactly nothing instead of a little. IDF can't make that particular mistake, since a rare word scores high whether or not the model noticed it. It makes different mistakes instead, and the `<details>` above has two of them.
 
 So they're not competing much. The `max` fires on 53% of content words, and the other 47% SPLADE's own weight is already higher and stays. It's a floor under the learned weights, holding them up from below.
 
