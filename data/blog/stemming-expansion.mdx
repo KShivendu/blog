@@ -113,7 +113,7 @@ Compare the `weight·idf` and `stem idf` columns in that table and you can see t
 
 </details>
 
-**Combine: don't just add the variants up.** A document that matches several forms shouldn't score as if it matched several different words. Add each form's own score and a common form like `racing` piles its full weight onto every motorsport document, race or not, and the mean drops to **0.568**. Two things cap that: take the single best-matching form (`max`), or fold the forms into one term and score them under a single saturation, the way stemming does by folding the family into one word. The chart below runs both, and a couple of variations.
+**Combine: take the best variant, not the sum.** A document's credit for `race` is the single best-matching variant, `max` over the family of `weight · BM25(variant)`. Add every matching form's full score instead and the mean craters to **0.520**, because a common form like `racing` dumps its whole score onto every motorsport document, race or not. The `max` caps each query word at one strong hit, which is what stemming does for free by folding the forms into one word.
 
 Run them across the 13 datasets, all on the Porter family and the same stopword-stripped base:
 
@@ -161,8 +161,8 @@ export const sideView = (values, text) => ({
   ]}
 />
 
-- **Expansion reproduces stemming.** Make the two choices stemming makes, score every form at the shared stem IDF and count the forms in a document as one, and query-side lands on the stemmed index to within 0.001 (**0.5795** mean, 0.6309 median, 0.3066 tail), matching it on all but a dozen or so queries. Stemming is one setting of the expansion knobs, not a separate thing.
-- **`max` is the simplest combine, not the best.** Keep each form at its own sharp IDF and take the single best-matching form, and you land a hair behind stemming (0.5775 vs 0.5795); it's the clean baseline I carry into the Elasticsearch comparison. But merge the family the other way, one union IDF over the attestation-weighted term-frequencies with a single saturation, and you edge _past_ stemming to **0.5819**, the best combine here. Weighting which forms count, then aggregating them under one saturation, is the seed of the document-side trick later.
+- **Expansion reproduces stemming.** Make the two choices stemming makes, score every form at the shared stem IDF and count the forms in a document as one, and query-side lands on the stemmed index to within 0.001 (**0.5795** mean, 0.6309 median, 0.3066 tail), matching it on all but a dozen or so queries. Taking the single best form instead, our `max`, lands a hair behind at **0.5775**, since it throws away the extra evidence a multi-form document offers. Stemming is one setting of the expansion knobs, not a separate thing.
+- **A weighted merge does better still.** Fold the forms into one term the way stemming does, but sum the _attestation-weighted_ term-frequencies before the single saturation. It keeps the evidence `max` throws away, and unlike plain stemming it discounts the rare junk forms Porter drags in, so a `raced` hit no longer counts like `race`. That reaches **0.5819**, past stemming and every other combine here, and it's the seed of the document-side trick later.
 
 <details>
 <summary>Why the missing piece is tf aggregation, not the IDF</summary>
@@ -178,12 +178,12 @@ A document that uses `race`, `racing` and `raced` gets one saturated count of al
 ```
 doc: race x1, racing x2  (length 44)   weights: race 1.0, racing 0.64
                                        idf: race 3.15, racing 3.27, union 2.59
-  max        = max( 1.0·3.15·sat(1), 0.64·3.27·sat(2) ) = max(2.87, 2.70) = 2.87
-  sum        = 2.59 · sat( 1.0·1 + 0.64·2 ) = 2.59 · sat(2.28) = 3.51
-  stemming   = 2.59 · sat( 1 + 2 )          = 2.59 · sat(3)    = 3.87
+  max            = max( 1.0·3.15·sat(1), 0.64·3.27·sat(2) ) = max(2.87, 2.70) = 2.87
+  weighted merge = 2.59 · sat( 1.0·1 + 0.64·2 ) = 2.59 · sat(2.28) = 3.51
+  stemming       = 2.59 · sat( 1 + 2 )          = 2.59 · sat(3)    = 3.87
 ```
 
-`max` keeps `race` and throws the two `racing` hits away. Summing folds them in, so the merged count is 2.28, saturated once and scored at the union IDF (2.59, below `race`'s own 3.15). Stemming does the same with every form at full weight. Summing the term-frequencies is what reproduces the stemmed index. The `max` we use is the one real difference, and on this panel it barely moves the number.
+`max` keeps `race` and throws the two `racing` hits away, which is why it trails. Both merges fold the hits back in under one saturation, scored at the union IDF (2.59, below `race`'s own 3.15): the weighted merge at count 2.28 (racing discounted to 0.64), plain stemming at the full count 3. On this document, with legitimate `racing` hits, the full count scores highest; across the panel, discounting the rarer junk forms is what lifts the weighted merge past stemming.
 
 </details>
 
