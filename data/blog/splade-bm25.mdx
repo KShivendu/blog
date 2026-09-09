@@ -123,18 +123,22 @@ Observations:
 - **It reorders, it doesn't retrieve.** Recall@10 gains +0.0160 but recall@100 only +0.0057. So the rule pulls relevant documents from rank 30 or 60 into the top 10. It isn't finding ones SPLADE missed.
 - **The same floor on the query vector buys tail only.** `max(w_q, 0.25·idf)` moves p25 by +0.019 and the mean by nothing. Take it if the weak-query quartile is what you're optimising.
 
-### Lift and restore are separate repairs
+### Taking the rule apart
 
-| variant                                | mean       | vs SPLADE   | p50       | p25   | zero  | W/L  |
-| -------------------------------------- | ---------- | ----------- | --------- | ----- | ----- | ---- |
-| SPLADE v3                              | 0.6253     | -           | 0.631     | 0.351 | 12.2% | -    |
-| lift only, never re-add a pruned term  | 0.6379     | +0.0126     | 0.649     | 0.356 | 11.4% | 12/1 |
-| re-add only, never touch a kept weight | 0.6325     | +0.0071     | 0.631     | 0.346 | 10.8% | 8/5  |
-| both, the full rule                    | **0.6454** | **+0.0201** | **0.672** | 0.360 | 10.3% | 12/1 |
+| variant                                | mean       | vs SPLADE   | p50       | p25   | zero  | recall@10 | W/L  |
+| -------------------------------------- | ---------- | ----------- | --------- | ----- | ----- | --------- | ---- |
+| SPLADE v3, no floor                    | 0.6253     | -           | 0.631     | 0.351 | 12.2% | 0.6472    | -    |
+| lift only, never re-add a pruned word  | 0.6379     | +0.0126     | 0.649     | 0.356 | 11.4% | 0.6548    | 12/1 |
+| re-add only, never touch a kept weight | 0.6325     | +0.0071     | 0.631     | 0.346 | 10.8% | 0.6587    | 8/5  |
+| never revive a stopword or punctuation | 0.6443     | +0.0192     | 0.672     | 0.360 | 10.3% | 0.6619    | 12/1 |
+| add the two scores instead of maxing   | 0.6384     | +0.0131     | 0.633     | 0.387 | 10.9% | 0.6622    | 9/4  |
+| **the full rule**                      | **0.6454** | **+0.0201** | **0.672** | 0.360 | 10.3% | 0.6632    | 12/1 |
 
-Lifting is worth about 1.8x more than putting back, and the two roughly add up. SPLADE makes both mistakes, underrating words it keeps and deleting words it shouldn't, and each is worth fixing separately.
+Observations:
 
-Keeping the higher score also beats adding the two together, **+0.0195** against **+0.0130**. Adding them double-counts every word the two already agree on. The `max` only steps in where they disagree.
+- **Lifting is worth about 1.8x more than putting back**, and the two roughly add up. SPLADE makes both mistakes, underrating words it keeps and deleting words it shouldn't, and each is worth fixing separately.
+- **Skipping stopwords and punctuation is free.** SPLADE deletes 70.9% of the query-reachable stopwords it sees, on purpose, and the rule puts them all back at weights around 0.20 against 1.23 for content words. Skipping them costs 0.0011 on the mean, gives identical p50, p25 and zero-rate, and drops 13% of the added postings. Take it.
+- **Keeping the higher score beats adding the two.** Adding double-counts every word the two already agree on, and the `max` only steps in where they disagree. Note the sum has the better p25 at 0.387, so if the weak-query tail is all you care about it is worth a look.
 
 <details>
 <summary>How much of BM25 do you actually need? (85% of it comes from `idf` alone)</summary>
