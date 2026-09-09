@@ -19,7 +19,7 @@ I went looking for what the model had learned to produce that shape. It hasn't l
 
 ## The shape
 
-Take one sentence and look at what a single word position votes for. Every position in SPLADE proposes weights over the whole 30,522-token vocabulary, and the document's final vector is the per-token max across positions.
+Take one sentence and look at what a single word position votes for. Every position proposes weights over the whole 30,522-token vocabulary, and the document's final vector is the per-token max across positions, so we can pull one position out and read it on its own.
 
 ```
   "The bank raised interest rates because inflation kept climbing."
@@ -44,7 +44,7 @@ Across 1,297 content-word positions, `w₂/w₁` has a median of **0.743**. Zipf
 
 ## Where it comes from
 
-Before the last two operations, the numbers are boringly regular. Fit the raw logits against log rank over the top 200 vocabulary entries:
+Before the last two operations the numbers are boringly regular. Fit the raw logits against log rank over the top 200 vocabulary entries and we get this:
 
 | position kind     | slope | R²        | positions |
 | ----------------- | ----- | --------- | --------- |
@@ -62,7 +62,7 @@ $$
 
 Zipf's law for word frequency is `1/r`. The MLM head's vocabulary distribution is `1/√r`, so **half Zipf's exponent**. Flatter, and no plateau or cliff anywhere in it.
 
-Then two things happen to that line.
+Then the last two operations get hold of it.
 
 ### The relu makes the cliff
 
@@ -103,7 +103,7 @@ Observations:
 
 ## Why it matters
 
-A power law has a fat tail, so truncating it throws away real mass. A compressed exponential doesn't. That distinction decides whether you can prune the index.
+A power law has a fat tail, so truncating it throws away real mass. A compressed exponential doesn't. That distinction is what decides whether we can prune the index, and it is why I went looking at the shape in the first place.
 
 And you can, aggressively. Dropping every expansion term below a single global weight threshold of 0.5 removes **46% of the postings** and costs 0.0001 NDCG@10 across 13 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai/nanobeir-66e1a0af21dfd93e620cd9f6) datasets (0.6250 against 0.6251, bootstrap CI [−0.0047, +0.0043]). One constant, applied per posting, no per-document sorting.
 
