@@ -113,12 +113,17 @@ Compare the `weight·idf` and `stem idf` columns in that table and you can see t
 
 </details>
 
-**Combine: take the best variant, not the sum.** A document's credit for `race` is the single best-matching variant, `max` over the family of `weight · BM25(variant)`. Summing them instead craters the mean to **0.494**. A common form like `racing` then dumps its whole score onto every motorsport document, race or not. The `max` caps each query word at one strong hit, which is what stemming does for free by folding the forms into one word.
+**Combine: don't just add the variants up.** A document that matches several forms shouldn't score as if it matched several different words. Add each form's own score and a common form like `racing` piles its full weight onto every motorsport document, race or not, and the mean drops to **0.568**. Two things cap that: take the single best-matching form (`max`), or fold the forms into one term and score them under a single saturation, the way stemming does by folding the family into one word. The chart below runs both, and a couple of variations.
 
 Run them across the 13 datasets, all on the Porter family and the same stopword-stripped base:
 
-export const sideCats = ['stem the index', 'expand, count as one', 'expand, best match']
-export const sideColors = ['#94a3b8', '#94a3b8', '#10b981']
+export const sideCats = [
+  'stem the index',
+  'expand, count as one',
+  'expand, best match',
+  'expand, weighted merge',
+]
+export const sideColors = ['#94a3b8', '#94a3b8', '#6ee7b7', '#10b981']
 export const sideFmt = (v, d) => v.map((x) => x.toFixed(d))
 export const sideView = (values, text) => ({
   categories: sideCats,
@@ -128,7 +133,7 @@ export const sideView = (values, text) => ({
 <BarChart
   orientation="horizontal"
   title="Stem the index, or expand the query?"
-  subtitle="13 NanoBEIR (645 queries) · Porter family · k1=1.2 · same operation, two sides · toggle the metric →"
+  subtitle="13 NanoBEIR (645 queries) · Porter family · k1=1.2 · index and query side match, a weighted merge beats both · toggle the metric →"
   categories={sideCats}
   views={[
     {
@@ -137,27 +142,27 @@ export const sideView = (values, text) => ({
       valueLabel: 'NDCG@10 mean (higher is better)',
       valueMax: 0.6,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
-      ...sideView([0.5795, 0.5795, 0.5775], sideFmt([0.5795, 0.5795, 0.5775], 3)),
+      ...sideView([0.5795, 0.5795, 0.5775, 0.5819], sideFmt([0.5795, 0.5795, 0.5775, 0.5819], 3)),
     },
     {
       label: 'p50',
       valueLabel: 'NDCG@10 p50, the median query (higher is better)',
       valueMax: 0.64,
       valueTicks: [0, 0.2, 0.4, 0.6],
-      ...sideView([0.6309, 0.6309, 0.6282], sideFmt([0.6309, 0.6309, 0.6282], 3)),
+      ...sideView([0.6309, 0.6309, 0.6282, 0.6309], sideFmt([0.6309, 0.6309, 0.6282, 0.6309], 3)),
     },
     {
       label: 'p25',
       valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
       valueMax: 0.34,
       valueTicks: [0, 0.1, 0.2, 0.3],
-      ...sideView([0.3066, 0.3066, 0.301], sideFmt([0.3066, 0.3066, 0.301], 3)),
+      ...sideView([0.3066, 0.3066, 0.301, 0.3066], sideFmt([0.3066, 0.3066, 0.301, 0.3066], 3)),
     },
   ]}
 />
 
 - **Expansion reproduces stemming.** Make the two choices stemming makes, score every form at the shared stem IDF and count the forms in a document as one, and query-side lands on the stemmed index to within 0.001 (**0.5795** mean, 0.6309 median, 0.3066 tail), matching it on all but a dozen or so queries. Stemming is one setting of the expansion knobs, not a separate thing.
-- **The default we use makes the opposite two choices.** Keep each form at its own sharp IDF and take the single best-matching form instead. On this panel that lands within noise of stemming, a hair behind on the mean (0.5775 vs 0.5795) and on the tail, so the combine barely moves the needle. The real lever is the IDF, and that comes next.
+- **`max` is the simplest combine, not the best.** Keep each form at its own sharp IDF and take the single best-matching form, and you land a hair behind stemming (0.5775 vs 0.5795); it's the clean baseline I carry into the Elasticsearch comparison. But merge the family the other way, one union IDF over the attestation-weighted term-frequencies with a single saturation, and you edge _past_ stemming to **0.5819**, the best combine here. Weighting which forms count, then aggregating them under one saturation, is the seed of the document-side trick later.
 
 <details>
 <summary>Why the missing piece is tf aggregation, not the IDF</summary>
