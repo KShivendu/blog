@@ -51,10 +51,14 @@ Other words it dropped while the query was shouting about them: `macro` (query w
 
 For every term a document contains, score it both ways and keep the higher one.
 
-```napkin
-bm25(t,d) = idf(t) × tf(t,d)·(k1+1) / (tf(t,d) + k1·(1 - b + b·|d|/avgdl))
-w[t]      = max( w_splade[t] , C · bm25(t,d) )        C = 0.31, k1 = 1.2, b = 0.75
-```
+$$
+\mathrm{bm25}(t,d) = \mathrm{idf}(t)\cdot\frac{f_{t,d}\,(k_1+1)}{f_{t,d} + k_1\left(1 - b + b\,\frac{|d|}{\mathrm{avgdl}}\right)}
+$$
+
+$$
+w_t = \max\big(\,w^{\text{splade}}_t\;,\; C\cdot \mathrm{bm25}(t,d)\,\big)
+\qquad C = 0.31,\; k_1 = 1.2,\; b = 0.75
+$$
 
 SPLADE's added words are safe. BM25 scores a word the document doesn't have at zero, so the `max` never fires on them. And a word SPLADE zeroed comes back at its BM25 value. One line, two fixes: it **lifts** words SPLADE underrated and **puts back** words it deleted.
 
@@ -129,7 +133,7 @@ Keeping the higher score also beats adding the two together, **+0.0195** against
 <details>
 <summary>How much of BM25 do you actually need? (85% of it comes from `idf` alone)</summary>
 
-Strip out the word counts and document lengths entirely, so the floor is just `0.31 × idf(t)`, and you still get **0.6425 against the full rule's 0.6454**. That's 85% of the gain from one constant, with no average document length to maintain and no per-document normalisation. Worth taking if you don't want the bookkeeping.
+Strip out the word counts and document lengths entirely, so the floor is just $0.31\cdot\mathrm{idf}(t)$, and you still get **0.6425 against the full rule's 0.6454**. That's 85% of the gain from one constant, with no average document length to maintain and no per-document normalisation. Worth taking if you don't want the bookkeeping.
 
 | form inside the floor                   | mean       | vs SPLADE   | p25       | zero  | W/L  |
 | --------------------------------------- | ---------- | ----------- | --------- | ----- | ---- |
@@ -138,7 +142,7 @@ Strip out the word counts and document lengths entirely, so the floor is just `0
 | `idf · sqrt(tf)`                        | 0.6406     | +0.0153     | **0.380** | 10.6% | 12/1 |
 | `idf · tf`, raw tf-idf, no saturation   | 0.6280     | +0.0027     | 0.339     | 11.9% | 8/5  |
 
-The one thing not to do is drop the saturation and keep the raw word count. Plain `idf × tf` falls to 0.6280, and pushing its constant up makes it far worse, −0.0546 at C=0.2. Word counts either need BM25's saturation or they need leaving out.
+The one thing not to do is drop the saturation and keep the raw word count. Plain $\mathrm{idf}\cdot f_{t,d}$ falls to 0.6280, and pushing its constant up makes it far worse, −0.0546 at C=0.2. Word counts either need BM25's saturation or they need leaving out.
 
 Which fits SPLADE, whose own weight grows only 1.19x from one occurrence to two and _drops_ past ten. Note the tail column too: full BM25 wins the mean but has the worst p25 of the working forms, and `sqrt(tf)` gives up 0.005 on the mean for +0.020 on p25.
 
