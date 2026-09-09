@@ -12,9 +12,9 @@ authors: ['kshivendu']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-A search engine's `english` analyzer does a few things to your text before it hits the index: lowercase it, drop stopwords, and #[stem](strip suffixes so a word's inflections share one index term) so `race`, `racing` and `raced` all become one term, `race`. I wanted to know which of those actually matters, so I built a plain BM25 word index and tested each step one at a time over [13 NanoBEIR datasets](https://huggingface.co/collections/zeta-alpha-ai/nanobeir-66e1a0af21dfd93e620cd9f6).
+A search engine's `english` analyzer does a few things to your text before it hits the index: lowercase it, drop stopwords, and #[stem](strip suffixes so a word's inflections share one index term) so `race`, `racing` and `raced` all become one term, `race`. I wanted to know which of those actually matters, so I built a plain BM25 word index and tested each step one at a time over [13 NanoBEIR datasets](https://huggingface.co/collections/zeta-alpha-ai/nanobeir-66e1a0af21dfd93e620cd9f6), small subsampled stand-ins for the full BEIR retrieval benchmarks (finance QA, argument retrieval, entity search, and more).
 
-I found the stemmer does most of the work. And if you think about it, you can do the stemmer's job on the query-expansion side instead of altering the index. Stemming folds `racing` into `race` in the index when you build it. Expansion leaves the index alone and rewrites the query `race` into `race OR racing OR raced` when you search. Same word family, just handled on a different side. Both land in nearly the same place.
+I found the stemmer does most of the work. And you can do the stemmer's job on the query-expansion side instead of altering the index. Stemming folds `racing` into `race` in the index when you build it. Expansion leaves the index alone and rewrites the query `race` into `race OR racing OR raced` when you search. Same word family, just handled on a different side. Both land in nearly the same place.
 
 Once you see the stemmer as query expansion, you can do even better by learning the expansions from the corpus, not Porter's fixed rules. That catches `high`/`higher`/`highest`, which no stemmer merges. If you are smart about weighting those learnt expansions, you can even beat Elasticsearch's `english` analyzer. In [Token Search](/blog/token-search) I run the same idea over BPE token IDs and drop the English pipeline entirely.
 
@@ -24,7 +24,7 @@ The top lane is stemming: at build time every form folds into one term, the quer
 
 ## The stemmer makes the biggest jump
 
-Start with a plain BM25 word index (lowercase, split on non-letters, no stemming, no stopwords), then add one step at a time. Numbers are NDCG@10 over the 645 NanoBEIR queries Elasticsearch's `english` analyzer returns results for, the same set every chart in this post uses, all at Lucene's default BM25 (k1=1.2, b=0.75), so the bars are always comparable. We show the median (p50) and the weak-query quartile (p25) next to the mean, since [the mean hides where a change actually helps](/blog/relevance-tail).
+Start with a plain BM25 word index (lowercase, split on non-letters, no stemming, no stopwords), then add one step at a time. Numbers are NDCG@10 over the 645 NanoBEIR queries Elasticsearch's `english` analyzer returns results for, the same set every chart in this post uses, all at Lucene's default BM25 (k1=1.2, b=0.75), so the bars are always comparable. NDCG@10 rates the top ten results from 0 to 1 by how close they are to the ideal ranking; on this benchmark a couple hundredths is a solid win and a few thousandths is near the noise floor. We show the median (p50) and the weak-query quartile (p25) next to the mean, since [the mean hides where a change actually helps](/blog/relevance-tail).
 
 export const ladderCats = ['word (plain)', '+ stopwords', '+ stemming', '+ both (word_en)']
 export const ladderColors = ['#94a3b8', '#94a3b8', '#10b981', '#6ee7b7']
@@ -74,7 +74,7 @@ export const ladderView = (values, text) => ({
 Three things in that chart matter:
 
 - **Stemming is the whole lever.** It lifts the mean from **0.5522** to **0.5747**, a **+0.022** jump, and drags the weak-query tail up with it (p25 0.283 to 0.301).
-- **Stopwords add a little.** On their own they add **+0.008** (0.5522 to 0.5606), and **+0.005** stacked on stemming (0.5747 to 0.5793 for the full `word_en` pipeline). Small next to stemming's +0.022, since BM25's IDF already down-weights `the`/`of`/`and` to almost nothing, but not quite nothing.
+- **Stopwords add a little.** On their own they add **+0.008** (0.5522 to 0.5606), and **+0.005** stacked on stemming (0.5747 to 0.5793 for the full `word_en` pipeline: lowercase, drop stopwords, stem). Small next to stemming's +0.022, since BM25's IDF already down-weights `the`/`of`/`and` to almost nothing, but not quite nothing.
 - **The gain is real recall.** p25 is the bottom quartile of queries. Stemming lifts it **+0.018** while the median holds flat (0.613). It's finding relevant documents the plain index missed on hard queries, not reshuffling the easy ones.
 
 So the whole English pipeline comes down to the stemmer. And you can do its job from the query side instead.
@@ -100,7 +100,7 @@ The documents are never touched, so the four forms stay as four separate words i
 | `races`  | 92  | 0.42   | 4.18 | 1.74       | 2.59     |
 | `raced`  | 19  | 0.13   | 5.74 | **0.74**   | 2.59     |
 
-`race` is the query word itself, so it's pinned to weight 1.00. Every other form runs through the formula, which climbs toward 1 as a variant gets more common but never reaches it (even `race` as a variant of a rarer query word tops out near 0.97), so no expansion ever outweighs the word you typed. Read the `weight·idf` column, not the raw IDF: `racing` is nearly as common as `race`, so it's trusted almost fully, while `raced` is rare and its hit is discounted hard, from a raw 5.74 down to **0.74**. The `stem idf` column is what index-side stemming assigns the same match instead: it flattens all four forms into one term at the union IDF, a single **2.59** for every form. Trusting every variant equally instead costs **0.010** on the mean (0.545 to 0.535), because the rare junk forms Porter drags in start scoring like the real word.
+`race` is the query word itself, so it's pinned to weight 1.00, not the 0.67 the formula would hand it, since the word you typed shouldn't be discounted. Every other form runs through the formula, which climbs toward 1 as a variant gets more common but never reaches it, so no expansion ever outweighs the word you typed. Read the `weight·idf` column, not the raw IDF: `racing` is nearly as common as `race`, so it's trusted almost fully, while `raced` is rare and its hit is discounted hard, from a raw 5.74 down to **0.74**. The `stem idf` column is what index-side stemming assigns the same match instead: it flattens all four forms into one term at the union IDF, a single **2.59** for every form. Trusting every variant equally instead costs **0.015** on the mean (0.577 to 0.562), because the rare junk forms Porter drags in start scoring like the real word.
 
 <details>
 <summary>Doesn't a rare variant's high IDF undo its low weight?</summary>
@@ -173,7 +173,7 @@ export const sideView = (values, text) => ({
 
 - **Expansion reproduces stemming.** Make the two choices stemming makes, score every form at the shared stem IDF and count the forms in a document as one, and query-side lands on the stemmed index to within 0.001 (**0.5795** mean, 0.6309 median, 0.3066 tail), matching it on all but a dozen or so queries. Taking the single best form instead, our `max`, lands a hair behind at **0.5775**, since it throws away the extra evidence a multi-form document offers. Stemming is one setting of the expansion knobs, not a separate thing.
 - **A weighted merge does better still.** Fold the forms into one term the way stemming does, but sum the _attestation-weighted_ term-frequencies before the single saturation. It keeps the evidence `max` throws away, and unlike plain stemming it discounts the rare junk forms Porter drags in, so a `raced` hit no longer counts like `race`. That reaches **0.5819**, past stemming and every other combine here, and it's the seed of the document-side trick later.
-- **A real search engine lands right in the pack.** Elasticsearch's `english` analyzer scores **0.5786** on the same queries at the same k1, a dead heat with our `max` and below the weighted merge. On recall the query-side index even edges ahead (recall@10 **0.626 vs 0.620**). A production pipeline is one more point in this combine landscape, not a different league, and everything it does beyond stemming turns out to be decoration.
+- **A real search engine lands right in the pack.** Elasticsearch's `english` analyzer scores **0.5786** on the same queries at the same k1, a dead heat with our `max` and below the weighted merge. On recall the query-side index even edges ahead (recall@10 **0.626 vs 0.620**). A production pipeline is one more point in this combine landscape, not a different league, and its machinery beyond stemming barely registers.
 
 <details>
 <summary>Why the missing piece is tf aggregation, not the IDF</summary>
@@ -182,7 +182,7 @@ The 0.002 mean gap (stemming over the best-match expansion) has an obvious suspe
 
 Take `what album is help by the Beatles on`. Alone, `help` has IDF 3.78. Merge it with `helped`, `helping` and `helps` and the shared IDF drops to 3.33, so the word carrying the query loses its edge and the gold document falls from rank 1 to rank 3. Keeping `help` at its own 3.78 holds rank 1. The IDF isn't the mean gap.
 
-The real gap is tf aggregation. I rebuilt index-side stemming from the separate posting lists: union IDF, sum the raw term-frequencies of every form in a document, one saturation. It lands right back on the stemmed index, within 0.001, matching it on all but a dozen or so queries. (Raw scores differ on the rest, always a short or numeric form the family drops like `25s` or `going`/`go`.)
+The real gap is tf aggregation. I rebuilt index-side stemming from the separate posting lists: union IDF, sum the raw term-frequencies of every form in a document, one saturation. It lands right back on the stemmed index, within 0.001. (Raw scores differ on a dozen or so, always a short or numeric form the family drops like `25s` or `going`/`go`.)
 
 A document that uses `race`, `racing` and `raced` gets one saturated count of all three under stemming, and only the single best form under expansion's `max`. That extra evidence is the mean edge. On one real NanoDBPedia document with `race` once and `racing` twice:
 
@@ -286,7 +286,7 @@ export const lrnView = (values, text) => ({
   ]}
 />
 
-- **It edges past Elasticsearch.** On top of Porter it lifts the mean from 0.5774 to **0.5807**, a hair over ES's 0.5786 (both now at Lucene's default k1=1.2), and cuts the share of queries that return nothing from 15.2% to 14.7% (ES sits at 15.0%). Elasticsearch still holds the weak-query tail (p25 0.307 vs 0.301). Per dataset the pairs win 8 and lose 3, adding most on ArguAna and SciFact (+0.015, +0.013) and MSMARCO (+0.008).
+- **It edges past Elasticsearch.** On top of Porter it lifts the mean from 0.5774 to **0.5807**, a hair over ES's 0.5786 (both now at Lucene's default k1=1.2), and cuts the zero-rate (queries scoring NDCG@10 of 0) from 15.2% to 14.7% (ES sits at 15.0%). Elasticsearch still holds the weak-query tail (p25 0.307 vs 0.301). Per dataset the pairs win 8, lose 3, tie 2, adding most on ArguAna and SciFact (+0.015, +0.013) and MSMARCO (+0.008).
 - **It catches what Porter can't.** Comparatives Porter splits apart (`high`/`higher`), related words with different endings (`viral`/`virus`), and British/American spellings (`behavioral`/`behaviour`). Each pair clears a PPMI similarity gate, then earns an attestation weight:
 
 ```
@@ -305,7 +305,7 @@ behavioral -> behaviour     0.42        0.49
 
 Where you set the gate matters at the top end. Toggle it above: drop to 0.25 and false friends like `cancer`/`canine` slip in, but they carry no real weight, so the mean holds at 0.5807. Push to 0.40 and it starts cutting good pairs like `viral`/`virus`, and the mean falls to 0.5780. So 0.30 keeps the junk out at no cost, and that's the cutoff I use.
 
-To be clear, this edges Elasticsearch on the mean, but ES still holds the weak-query tail. And the pairs were learned on a big general corpus, so truly rare words never clear the cutoff and fall back to Porter. A bigger or domain-specific table would go further.
+This edges Elasticsearch on the mean, but ES still holds the weak-query tail. And the pairs were learned on a big general corpus, so truly rare words never clear the cutoff and fall back to Porter. A bigger or domain-specific table would go further.
 
 ## Where the weighting tops out
 
@@ -358,11 +358,11 @@ export const winView = (values, text) => ({
 - **The stack beats Elasticsearch on the mean and the tail.** 0.5894 vs 0.5786 (**+0.011**), the weak-query tail 0.3333 vs 0.3066 (**+0.027**), and a lower zero-rate (14.1% vs 15.0%), all on the identical query set at k1=1.2.
 - **Each trick adds to the last.** Anchoring lifts the mean from 0.5795 to 0.5881 and the tail from 0.3066 to 0.3165; folding the learned pairs into the anchored family pushes both further, to 0.5894 and 0.3333.
 
-One catch. The gain is clean here, but the weighting is tuned on this 13-dataset panel, and the margin concentrates in morphological-question corpora like FiQA and Touché. Drop those two and it stops separating from plain stemming, so this is a same-panel win, not a proven-general one.
+One catch. The gain is clean here, but the weighting is tuned on this 13-dataset panel, and the margin concentrates in corpora where queries and answers share inflected word forms, like FiQA and Touché. Drop those two and it stops separating from plain stemming, so this is a same-panel win, not a proven-general one.
 
-Here's why it can't go further. On entity queries, the ones where the weighting can't help, a learned sparse model like [SPLADE](/blog/splade-bm25) pulls far ahead. Reranking the same candidate pool, it beat this BM25 by **+0.22** NDCG on NanoMSMARCO and **+0.23** on NanoNQ. It wins by expanding `gogh` to `vincent` and `belle` to `beauty`, semantic links that tell van-Gogh-the-painter from a passing "van". My co-occurrence table holds none of those. It only has spelling neighbours like `belle` to `bell`, so no amount of lexical weighting reaches them.
+Here's why it can't go further. On entity queries, the ones where the weighting can't help, a learned sparse model like [SPLADE](/blog/splade-bm25) pulls far ahead. Reranking the same candidate pool, it beat this BM25 by **+0.22** NDCG on NanoMSMARCO and **+0.23** on NanoNQ, single-dataset gaps that dwarf the hundredths we've been trading over the whole panel. It wins by expanding `gogh` to `vincent` and `belle` to `beauty`, semantic links that tell van-Gogh-the-painter from a passing "van". My co-occurrence table holds none of those. It only has spelling neighbours like `belle` to `bell`, so no amount of lexical weighting reaches them.
 
-That's the ceiling of this whole line of work. Stemming and learned morphology carry a plain word index all the way to a production analyzer. Everything past that is semantic, and semantics needs a trained model, not a longer word list.
+That's the ceiling of this whole line of work. Stemming and learned morphology carry a plain word index to a production analyzer, and careful weighting nudges a little past it on this panel. But a general leap beyond that is semantic, and semantics needs a trained model, not a longer word list.
 
 <details>
 <summary>Anchoring, coordination, and the stack that edges Elasticsearch</summary>
@@ -379,7 +379,7 @@ Query: "van gogh paintings"
   distractor:  "... a delivery van ..."       matches only "van"              -> boost OFF
 ```
 
-The best version, the winning bar in the chart above, folds the learned pairs into the family too, so the same anchoring and coordination run over Porter's morphology plus the learned comparatives and spellings. It's a pooled-significant gain over plain stemming: the 95% bootstrap interval stays above zero, stable across seeds, the scoring audited clean. But it never clears a held-out test once you drop FiQA and Touché. So it's a same-panel win, not a general one.
+The best version, the winning bar in the chart above, folds the learned pairs into the family too, so the same anchoring and coordination run over Porter's morphology plus the learned comparatives and spellings. It's a pooled-significant gain over plain stemming: the 95% bootstrap interval stays above zero, stable across seeds, the scoring audited clean. But it never clears a held-out test once you drop FiQA and Touché.
 
 </details>
 
@@ -443,9 +443,9 @@ export const docView = (values, text) => ({
 
 - **Document-side anchoring beats our query-side `max`.** 0.5842 vs 0.5775 on the mean, and a big jump on the tail, 0.333 vs 0.301. A paired bootstrap puts the mean gap at **+0.007, 95% CI [+0.001, +0.013]**, above zero in 98.6% of resamples. It also clears index-side stemming, on the mean (0.5842 vs 0.5795) and the tail (0.333 vs 0.307).
 - **It gets both halves at once.** The summed term-frequency aggregates evidence like stemming, which is the mean, and anchoring keeps the exact word at its own sharp IDF, which is the tail. `max` had the sharp IDF but discarded evidence. Stemming aggregated evidence but diluted the IDF. Document-side anchoring keeps both.
-- **The query is a plain BM25 lookup again.** No family expansion and no posting-list merge at search time, and the scoring is additive, so WAND and BlockMax-WAND work. Coordination was the thing that broke those additive bounds and forced a rerank stage. Moving anchoring to the document keeps fast top-k and recovers most of coordination's gain without it.
+- **The query is a plain BM25 lookup again.** No family expansion and no posting-list merge at search time, and the scoring is additive, so WAND and BlockMax-WAND (the top-k shortcuts that let BM25 skip documents that can't crack the current top results) still work. Coordination was the thing that broke those additive bounds and forced a rerank stage. Moving anchoring to the document keeps fast top-k and recovers most of coordination's gain without it.
 
-The coordination gate is the one piece left on the query side, and it earns its keep in a specific place. Adding it back (coord-soft, 0.5894) buys another 0.005 over document-side anchoring, but the bootstrap can't separate them (96% of resamples, the interval crosses zero). Its contribution lands on the entity corpora: document-side anchoring's per-dataset losses are MSMARCO, ArguAna, and SCIDOCS, where anchoring over-boosts a lone-token match like a stray "van", and coordination is exactly what gates that. Where the families actually help, FiQA (+0.049), NQ (+0.021), Touché (+0.011), the document side already has it.
+The coordination gate is the one piece left on the query side, and it earns its keep in a specific place. Adding it back (coord-soft, 0.5894) buys another 0.005 over document-side anchoring, but the bootstrap can't separate them (96% of resamples, the interval crosses zero). Its contribution lands on the entity corpora: document-side anchoring's per-dataset losses are MSMARCO, ArguAna, and SCIDOCS, where anchoring over-boosts a lone-token match, and coordination is exactly what gates that. Where the families actually help, FiQA (+0.049), NQ (+0.021), Touché (+0.011), the document side already has it.
 
 So the ES-level weighting is not stuck at query time. Bake it into the documents and the query stays a plain, fast, WAND-friendly BM25 lookup, the same trade [Inference-free SPLADE](/blog/if-splade) makes, minus the GPU.
 
@@ -455,7 +455,7 @@ Every piece here is English machinery. Porter is English suffix rules, the stopw
 
 That per-language pipeline is the real cost of the query-side trick, not the accuracy. [Token Search](/blog/token-search) keeps the same machinery (expand a word into a family, weight the variants, take the `max`) but runs it over the tokenizer's own subword IDs instead of English words. The tokenizer is the only language-specific part, and one tokenizer already covers every language it was trained on. So the same method that matches Elasticsearch here needs no new stemmer, stopword list, or pair table for the next language. In that post it even beats a dedicated Chinese segmenter with zero setup.
 
-## Key Takeaways
+## Key takeaways
 
 - Query-side Porter expansion over a plain word index matches Elasticsearch's `english` analyzer on NDCG (0.5774 vs 0.5786 across 13 NanoBEIR datasets, both at Lucene's default k1=1.2) and edges it on recall@10 (0.626 vs 0.620), with no destructive index rewrite.
 - Stemming is the whole lever, **+0.022** over a plain index. Stopwords add a little, +0.008 alone and +0.005 stacked on top of stemming.
