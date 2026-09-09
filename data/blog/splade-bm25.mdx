@@ -13,23 +13,31 @@ authors: ['kshivendu']
 
 [SPLADE](https://huggingface.co/naver/splade-v3) learns a weight for every word instead of computing one. It also #[expands](adds terms the document never contained, so a query for "retirement" can match a document that only says "401k") each document with words it never had. Those added words get all the attention.
 
-I went looking at the other half, the words the document already has. SPLADE gets some of those badly wrong. Sometimes it scores a word at zero while the word is sitting right there in the text. BM25 never does that, so I used BM25 as a floor: score every word both ways and keep the higher one. NDCG@10 goes from **0.6253 to 0.6454** across 13 NanoBEIR datasets, and the share of queries that come back with nothing useful drops from **12.2% to 10.3%**. It wins on 12 of the 13, and needs nothing SPLADE doesn't already have.
+I went looking at the other half, the words the document already has. SPLADE gets some of those badly wrong. Sometimes it scores a word at zero while the word is sitting right there in the text. BM25 never does that, so I used BM25 as a floor: score every word both ways and keep the higher one. NDCG@10 goes from **0.6253 to 0.6454** across 13 NanoBEIR datasets, and the share of queries that come back with nothing useful drops from **12.2% to 10.3%**. It wins on 12 of the 13.
 
 ## SPLADE forgets words that are right there
 
 One query shows the whole thing.
 
 ```
-NanoFiQA2018 · "What approaches are there for pricing a small business?"
-SPLADE scores 0.000 on this query. BM25 scores 0.289.
+NanoFiQA2018, query 106
+  "What approaches are there for pricing a small business?"
 
-           word    w_query    w_doc    product
-        pricing      2.164    2.189      4.738
-       business      1.454    2.236      3.252
-          small      2.199    0.000      0.000   <-- killed
+the document it should find (id 76695, 482 wordpieces), excerpted:
+  "...this is my academic understanding of business pricing. The LOWEST
+   amount a seller would accept is the liquidation value... from my
+   research, it looks like many small business use Seller Discretionary
+   Earnings (SDE) instead of EBITDA..."
+
+SPLADE never surfaces it: NDCG@10 of 0.000. BM25 gets 0.289.
+
+     word   in doc?   w_query    w_doc    product
+  pricing     x1        2.164    2.189      4.738
+ business     x7        1.454    2.236      3.252
+    small     x1        2.199    0.000      0.000   <-- killed
 ```
 
-The product column is what scores. The document has the word `small` in it. The query side weights it **2.199**, near the top of the query. The document side gives it **zero**. SPLADE encodes the two sides separately and multiplies them, so a zero on either side kills the match.
+The product column is what scores. `small` is in the document, and the query side weights it **2.199**, near the top of the query. The document side gives it **zero**. SPLADE encodes the two sides separately and multiplies them, so a zero on either side kills the match.
 
 That's not a one-off. On the queries where SPLADE loses to BM25, the document side zeroes a content word that's in the right document **12.0%** of the time. On the queries it wins, **4.5%**. The query side is clean either way at about 3%, so only one side is at fault.
 
