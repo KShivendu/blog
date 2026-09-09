@@ -1,0 +1,118 @@
+---
+title: 'What SPLADE Actually Adds'
+subtitle: 'A straight line, a clip, and a squash'
+date: '2026-09-10'
+lastmod: '2026-09-10'
+tags: ['search', 'nlp', 'transformers', 'internals', 'rag']
+draft: true
+summary: "SPLADE adds words a document never contained, and the weights it gives them look strange: the top three or four are nearly tied, then it falls off a cliff. Zipf's law predicts the opposite shape. The cause turns out to be two lines of arithmetic rather than anything the model learned. The raw scores are a clean straight line against log rank with slope -0.5, then a relu clips everything below zero and a log1p squashes what's left."
+authors: ['kshivendu']
+---
+
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
+
+[SPLADE](https://huggingface.co/naver/splade-v3) adds words to a document that the document never contained. Search for "retirement" and it can match a page that only ever says "401k". Every write-up covers that much.
+
+What nobody shows is the _weights_ it gives those added words, and they have an odd shape. The top three or four are nearly tied, and then the list falls off a cliff. If you know [Zipf's law](https://en.wikipedia.org/wiki/Zipf%27s_law) you would expect the opposite: a steep drop from first to second, then a long flat tail. SPLADE does the reverse.
+
+I went looking for what the model had learned to produce that shape. It hasn't learned it. It comes out of two lines of arithmetic at the end of the network.
+
+## The shape
+
+Take one sentence and look at what a single word position votes for. Every position in SPLADE proposes weights over the whole 30,522-token vocabulary, and the document's final vector is the per-token max across positions.
+
+```
+  "The bank raised interest rates because inflation kept climbing."
+                                                        ↑
+                                            this position votes:
+
+   rank  word          weight     Zipf would say
+     1   climbing       0.983         1.000
+     2   rising         0.830         0.500      ← still 84% of the top
+     3   climb          0.799         0.333      ← still 81%
+     4   rise           0.544         0.250
+     5   increasing     0.495         0.200
+     6   trend          0.125         0.167      ← cliff
+     7   increase       0.073         0.143
+     8   spike          0.065         0.125
+     9   everything else  0.000
+```
+
+Rank 2 keeps 84% of rank 1's weight where Zipf predicts 50%. Ranks 6 onward collapse to nothing where Zipf predicts a slow taper. The whole list is 8 words out of 30,522.
+
+Across 1,297 content-word positions, `w₂/w₁` has a median of **0.743**. Zipf says 0.500 always, so this is not a quirk of one sentence.
+
+## Where it comes from
+
+Before the last two operations, the numbers are boringly regular. Fit the raw logits against log rank over the top 200 vocabulary entries:
+
+| position kind     | slope | R²        | positions |
+| ----------------- | ----- | --------- | --------- |
+| content           | 0.505 | 0.923     | 2,289     |
+| subword           | 0.539 | 0.887     | 220       |
+| stopword          | 0.540 | **0.986** | 1,885     |
+| punctuation       | 0.605 | 0.979     | 917       |
+| `[CLS]` / `[SEP]` | 0.534 | 0.972     | 120       |
+
+A straight line, and a tight one. In every case the slope is about **0.5**, which means
+
+$$
+\text{logit}(r) \approx C - 0.5\ln r \quad\Longrightarrow\quad p(r) \sim \frac{1}{\sqrt{r}}
+$$
+
+Zipf's law for word frequency is `1/r`. The MLM head's vocabulary distribution is `1/√r`, so **half Zipf's exponent**. Flatter, and no plateau or cliff anywhere in it.
+
+Then two things happen to that line.
+
+### The relu makes the cliff
+
+SPLADE's weight is `log(1 + relu(logit))`. The relu sets every negative logit to zero. On the `climbing` position, **8 of the top 200 logits are above zero**. Everything from rank 9 down isn't small, it's gone.
+
+That's the cliff. It isn't a steep decline, it's a hard edge, and its position is wherever the logits happen to cross zero.
+
+### The log1p makes the plateau
+
+`log(1+x)` compresses large values much harder than small ones. Watch the top of the list:
+
+```
+  rank    logit    log(1+relu)     gap to rank 1
+    1     1.673       0.983
+    2     1.293       0.830        29% in logits  ->  16% in weights
+    3     1.223       0.799        37%            ->  19%
+```
+
+A 29% gap in logit space arrives as a 16% gap in weight space. The compression squashes the head of the list flat, and that's the plateau.
+
+## Fitting it properly
+
+Six decay families against the real weights, median absolute error across all positions:
+
+| position kind | exponential | power law | Mandelbrot | stretched | linear | log-linear |
+| ------------- | ----------- | --------- | ---------- | --------- | ------ | ---------- |
+| content       | 20.8%       | 32.9%     | 20.5%      | **11.4%** | 24.6%  | 15.5%      |
+| subword       | 20.6%       | 30.9%     | 20.2%      | **12.0%** | 26.6%  | 15.8%      |
+| stopword      | 21.0%       | 34.2%     | 23.3%      | **11.5%** | 17.9%  | 12.3%      |
+| punctuation   | 21.0%       | 33.6%     | 22.1%      | **11.4%** | 18.8%  | 13.8%      |
+
+Observations:
+
+- **The power law is the worst fit of the six**, at 33%. This is the one people reach for when they hear "vocabulary distribution", and it fails because it has the shape backwards: steep head, fat tail, where the data has a flat head and no tail.
+- **A stretched exponential halves the error**, from 20.8% to 11.4%. It is `w = A·exp(-k·r^β)` with one extra knob over a plain exponential, and the fitted `β` is **1.65** for content positions. `β = 1` is a plain exponential and `β > 1` is a compressed one, which is exactly "flat head, then a sharper cliff".
+- **How much of that is the `log1p`?** Refit in raw `relu(logit)` space and `β` drops from 1.65 to **1.25**. So of the 0.65 excess above a plain exponential, removing the log accounts for 0.40, about 60%. The remaining 40% is genuine flatness in the logits.
+- **Log-linear wins on `[CLS]`/`[SEP]`**, 10.7% against the stretched fit's 11.8%. Those positions have the cleanest power-law logits of any kind (R² 0.986), so the power law survives the relu there and nowhere else.
+
+## Why it matters
+
+A power law has a fat tail, so truncating it throws away real mass. A compressed exponential doesn't. That distinction decides whether you can prune the index.
+
+And you can, aggressively. Dropping every expansion term below a single global weight threshold of 0.5 removes **46% of the postings** and costs 0.0001 NDCG@10 across 13 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai/nanobeir-66e1a0af21dfd93e620cd9f6) datasets (0.6250 against 0.6251, bootstrap CI [−0.0047, +0.0043]). One constant, applied per posting, no per-document sorting.
+
+That works because of the cliff. The terms below the threshold were already near-zero, and there are no surprises further down, because the relu already deleted everything that would have been there.
+
+## Key Takeaways
+
+- One SPLADE position gives its top few added words nearly equal weight and then falls to zero, which is the reverse of the Zipf shape people expect. Rank 2 keeps 74% of rank 1's weight at the median, where Zipf predicts 50%.
+- The shape isn't learned. The raw logits are a straight line against log rank with slope about 0.5, so `p(r) ~ 1/√r`, half Zipf's exponent, with no plateau or cliff in it.
+- The relu makes the cliff by deleting every negative logit, leaving 8 surviving words out of 30,522 on the position I traced. The `log1p` makes the plateau by compressing the top of the list, and accounts for about 60% of the departure from a plain exponential.
+- A stretched exponential with `β = 1.65` halves the fit error against a plain exponential. A power law is the worst of six families tested, at 33% median error.
+- Because the tail is thin rather than fat, a single global threshold of 0.5 prunes 46% of the index for 0.0001 NDCG@10.
