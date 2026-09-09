@@ -1,93 +1,250 @@
 ---
-title: 'SPLADE Into a BM25 Field'
-subtitle: 'The Tokenizer Trap'
-date: '2026-06-10'
-lastmod: '2026-06-10'
-tags: ['search', 'sparse-retrieval', 'nlp', 'information-retrieval']
+title: 'Patching SPLADE with BM25'
+subtitle: 'A learned sparse model still wants IDF'
+date: '2026-09-09'
+lastmod: '2026-09-09'
+tags: ['search', 'nlp', 'internals', 'rag']
 draft: true
-summary: 'A friend said they expand SPLADE terms into an OpenSearch BM25 text field and it works. We tested it — 0.36 NDCG@10, worse than plain BM25. Here is why, and how to mostly fix it.'
+summary: "I spent a day trying to derive a better BM25 out of SPLADE's learned weights and got +0.0022 against a ceiling of +0.0064. So I ran it backwards and gave SPLADE BM25's IDF instead: take the higher of the two weights for every term a document actually contains, and NDCG@10 goes from 0.6253 to 0.6454 across 13 NanoBEIR datasets, winning on 12 of them. The rule survives dropping tf, k1, b and document lengths, which says BM25's IDF is a better literal channel than the one SPLADE learned end to end."
 authors: ['kshivendu']
 ---
 
-> This is a short follow-up to [Inference-Free SPLADE: Full Quality, 13× Faster Queries](/blog/if-splade).
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-A friend mentioned they expand SPLADE document vectors into a standard OpenSearch text field and it "just works." No impact indexing, no special sparse vector field — just dump the expanded tokens as a string and let BM25 score them.
+[SPLADE](https://huggingface.co/naver/splade-v3) beats BM25 by learning a weight for every term instead of computing one. It also #[expands](adds terms the document never contained, so a query for "retirement" can match a document that only says "401k") documents with terms they don't contain, which is the part everyone talks about. I wanted the opposite of the usual write-up: not "look how much better the learned model is", but **which piece of BM25 the learned model should have kept**.
 
-We already had all the benchmark infrastructure from the IF-SPLADE post, so we tried it.
+I started by trying to distil SPLADE into a better BM25 formula. That failed, and it failed against a ceiling I measured, so I know exactly how much it could ever have earned. Then I ran the same comparison backwards and found something much better: **give SPLADE back BM25's IDF and it gets +0.0201 NDCG@10, winning on 12 of 13 datasets**. The rule is one line and it needs nothing SPLADE doesn't already have.
 
-## The Setup
+## First, the thing that didn't work
 
-For each document, take the SPLADE sparse vector (token indices + float weights) and convert it to a plain text string. Three variants:
+The obvious move is to read SPLADE's weights and fit a formula to them. I did a lot of this. Gradient boosting on similarity features reached R² 0.19 predicting SPLADE's expansion weights, an [EBM](https://interpret.ml/docs/ebm.html) confirmed the signal was spread thin across ten features rather than concentrated in one, and symbolic-regression-shaped attempts on top of that went nowhere.
 
-- **Binary**: include each expanded token once
-- **Weighted**: repeat token `round(weight × 3)` times, approximating TF
-- **Raw**: repeat token `max(1, min(20, round(weight)))` times — the naive approach, using raw SPLADE weights as repetition counts
+The one thing that did work came out of an idea about _shape_. SPLADE's per-position expansions decay as a compressed exponential, `A*exp(-k*r^1.65)`, which is a flat head then a cliff. My [stemming post](/blog/stemming-expansion) weights a query word's expansion family by attestation, `df_variant / (df_variant + 0.5·df_query)`, which is a smooth hyperbolic decay in document frequency. Different curves over the same ranked family. The geometric mean of the two beats either one alone:
 
-Index with standard Lucene BM25 (`k1=0.9, b=0.4`). Query with raw query text, no model.
-
-Model: [`naver/splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) on BEIR scifact.
-
-## First Run: Worse Than BM25
-
-| Approach                   |    NDCG@10 |
-| -------------------------- | ---------: |
-| Impact scoring (reference) | **0.6953** |
-| BM25 baseline              |     0.6789 |
-| BM25 text, raw             |     0.3778 |
-| BM25 text, weighted (×3)   |     0.3976 |
-| BM25 text, binary          |     0.3607 |
-
-All three variants land around 0.36–0.40 — significantly below the BM25 baseline. "Just works" was an overstatement.
-
-## What Went Wrong: Tokenizer Mismatch
-
-The document tokens are BERT subwords with `##` stripped: `cardiac`, `my`, `ocardial`, `corona`, `##ary`. Lucene's standard text analyzer tokenizes query text differently — it lowercases and splits on whitespace/punctuation, but has no concept of BERT subword splitting.
-
-So "myocardial" in a query goes through Lucene's analyzer as a single token `myocardial`, which never matches the BERT-stored `my` + `ocardial` subwords in the doc index. The query and doc token spaces are misaligned at the vocabulary level.
-
-Fix: pre-tokenize the query with BERT before handing it to Lucene.
-
-```python
-def bert_tokenize_query(tokenizer, text: str) -> str:
-    tokens = tokenizer.tokenize(text, add_special_tokens=False)
-    return " ".join(t.replace("##", "") for t in tokens if t and not t.startswith("["))
+```napkin
+w(t) = sqrt( attestation(t) × exp(-k·(r^1.65 - 1)) )     k = 0.139, r = rank in the family by df
 ```
 
-## Second Run: With BERT Query Tokenization
+That's **+0.0022** over Porter plus learned pairs, 8 wins and 4 losses, and the optimum sits exactly at the 50/50 geometric mean with a smooth hump either side of it. Pure rank decay loses (-0.0013). Attestation alone is the baseline. Only the blend helps.
 
-| Approach                         |    NDCG@10 |
-| -------------------------------- | ---------: |
-| Impact scoring (reference)       | **0.6953** |
-| BM25 text, weighted + BERT query |     0.6572 |
-| BM25 text, raw + BERT query      |     0.6311 |
-| BM25 text, binary + BERT query   |     0.6198 |
-| BM25 baseline                    |     0.6789 |
-| BM25 text (no BERT query, best)  |     0.3976 |
+Then I measured the ceiling, and the +0.0022 stopped looking like a stepping stone.
 
-Much better. Weighted mode with BERT query tokenization reaches **0.6572** — above BM25 and only 3.8% below impact scoring.
+### The ceiling for this whole approach is +0.0064
 
-## Why There's Still a Gap
+All of SPLADE's advantage over BM25 is expansion, so I asked what a _perfect_ expansion would be worth. We take SPLADE's own doc-side expansion terms as an oracle candidate set, map them into word space, and weight each one the way BM25 would if it appeared once. That splits the question in two on purpose: the oracle tells us _which_ words belong in a document, and one constant tells us _how much_ they count.
 
-Even with correct tokenization, BM25 TF-IDF normalization works against SPLADE. Two problems:
+| system                                                                 | NDCG@10    | vs BM25 | vs my best  |
+| ---------------------------------------------------------------------- | ---------- | ------- | ----------- |
+| `bm25_word`, plain                                                     | 0.5571     | -       | −0.0220     |
+| Porter + learned pairs (the [previous post](/blog/stemming-expansion)) | 0.5791     | +0.0220 | -           |
+| oracle expansion only, k=25                                            | 0.5766     | +0.0195 | −0.0025     |
+| both, oracle + query-side                                              | **0.5855** | +0.0284 | **+0.0064** |
 
-**Document length penalty.** SPLADE doc vectors average 325 non-zeros. When stored as text, BM25's length normalization (`b=0.4`) penalizes these documents as "long." A BM25 document has ~50–100 real tokens; a SPLADE-expanded one has 325 repeated-or-not tokens. The scorer treats expansion as verbosity.
+Perfect knowledge of which words belong in every document is worth **+0.0064** on top of a query-side expansion pipeline. Not +0.05, not +0.02. And that is a floor on the ceiling, since 17% of SPLADE's expansion vocabulary is multi-piece wordpieces like `##ctable` that a word index can't express at all.
 
-**IDF distortion.** BM25 computes IDF over the corpus. Rare SPLADE expansion terms (low-frequency medical vocabulary) get high IDF weight regardless of their SPLADE activation weight. The SPLADE weight signal is replaced by corpus frequency statistics, which aren't the same thing.
+The reason it's so small is a compliment to the cheap method: perfect doc-side expansion is worth +0.0195 on bare BM25 but only +0.0064 once query-side Porter and learned pairs are already there. **Two thirds of what SPLADE's expansion would give you, a Porter family and a PPMI pair table already found.** They arrive at the same words from opposite directions.
 
-Impact scoring sidesteps both: it stores the SPLADE float weights directly as integers (scale=100) and computes an exact dot product, no normalization applied.
+So the best case for "distil SPLADE into BM25" is +0.0064, I got a third of it, and the remaining part needs the model. That's when I turned the question around.
 
-## What This Means in Practice
+<details>
+<summary>The same substitution, with the opposite sign, in an earlier post</summary>
 
-If you're using SPLADE expansion in Elasticsearch or OpenSearch with a standard `text` field:
+In [SPLADE Into a BM25 Field](/blog/splade-bm25-field) I flattened SPLADE's float weights into repeated text tokens so a plain Lucene `text` field could score them, and concluded that IDF replacing those weights was a structural defect that couldn't be tuned away.
 
-1. **BERT-tokenize your queries.** Without this you lose ~40% quality. The doc tokens are BERT subwords; the query must use the same vocabulary.
-2. **Use weighted repetition, not binary.** Binary drops all weight signal; `round(weight × scale)` preserves the rough ordering.
-3. **Expect ~4% quality loss vs impact scoring.** That gap is structural — BM25 normalization and IDF distortion can't be tuned away.
+Both results are right, and the difference is the whole point of the rule below. That setup destroys the weight vector entirely, so IDF is all that survives, and it is strictly worse than the floats it replaced. The rule here keeps SPLADE's weight and takes the higher of the two, so IDF only wins where SPLADE was already lower. **IDF is a bad replacement for the weight vector and a good floor under it.**
 
-If your engine supports sparse vector fields or impact scoring (`FeatureField` in Lucene, `rank_features` in Elasticsearch, neural sparse in OpenSearch), use those instead. The text field approach is a fallback for engines with no sparse vector support.
+That post also blames BM25's length normalisation for treating a 325-term expanded document as verbose, which lines up with what I find below: of the two factors in BM25's tf term, length normalisation is the one that hurts on its own and only helps in combination with tf.
+
+</details>
+
+## The number I should have noticed sooner
+
+Sitting in my own results was this, which I had filed as a dead end:
+
+- SPLADE with only the terms a document actually contains, using SPLADE's own learned weights: **0.5781**
+- Plain BM25 on a word index: **0.5845**
+
+I read that as "no headroom in the weighting" and moved on. It actually says **BM25's literal weighting is better than the one SPLADE learned**, so the swap is worth making in the other direction. (Those two runs use different term spaces, wordpieces against words, so it isn't a clean head to head. The rule below is, and it settles the same question.)
+
+## The rule
+
+For every term a document actually contains, score it both ways and keep whichever is higher.
+
+```napkin
+bm25(t,d) = idf(t) × tf(t,d)·(k1+1) / (tf(t,d) + k1·(1 - b + b·|d|/avgdl))
+w[t]      = max( w_splade[t] , C · bm25(t,d) )        C = 0.31, k1 = 1.2, b = 0.75
+```
+
+Two details fall out of that. SPLADE's expansions survive untouched, because BM25 gives a term the document doesn't contain a score of zero, so the `max` never fires there. And a term SPLADE pruned to nothing gets re-added at its BM25 value, so we get two repairs out of one line: it **lifts** underweighted terms and **restores** deleted ones. Applying it only to terms some query can reach gives bit-identical scores and adds far fewer postings, since a term no query touches can never change a ranking.
+
+export const rCats = ['SPLADE v3', 'max(w, 0.31·bm25)', 'max(w, 0.31·idf)', '+ query-side floor']
+export const rColors = ['#94a3b8', '#10b981', '#6ee7b7', '#a7f3d0']
+export const rFmt = (v, d) => v.map((x) => x.toFixed(d))
+export const rView = (values, text) => ({
+  categories: rCats,
+  series: [{ name: 'v', values, colors: rColors, text, textPosition: 'outside' }],
+})
+
+<BarChart
+  orientation="horizontal"
+  title="Giving SPLADE back BM25's IDF"
+  subtitle="13 NanoBEIR (649 queries) · naver/splade-v3 · toggle the metric →"
+  categories={rCats}
+  views={[
+    {
+      label: 'mean',
+      default: true,
+      valueLabel: 'NDCG@10 mean (higher is better)',
+      valueMax: 0.7,
+      valueTicks: [0, 0.2, 0.4, 0.6],
+      ...rView([0.6253, 0.6454, 0.6425, 0.6464], rFmt([0.6253, 0.6454, 0.6425, 0.6464], 4)),
+    },
+    {
+      label: 'p25',
+      valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
+      valueMax: 0.42,
+      valueTicks: [0, 0.1, 0.2, 0.3, 0.4],
+      ...rView([0.351, 0.36, 0.372, 0.379], rFmt([0.351, 0.36, 0.372, 0.379], 3)),
+    },
+    {
+      label: 'recall@10',
+      valueLabel: 'Recall@10 (higher is better)',
+      valueMax: 0.72,
+      valueTicks: [0, 0.2, 0.4, 0.6],
+      ...rView([0.6472, 0.6632, 0.6626, 0.667], rFmt([0.6472, 0.6632, 0.6626, 0.667], 4)),
+    },
+    {
+      label: 'zero-rate',
+      valueLabel: 'Share of queries returning nothing relevant (lower is better)',
+      valueMax: 0.15,
+      valueTicks: [0, 0.05, 0.1, 0.15],
+      ...rView([0.122, 0.103, 0.105, 0.1], rFmt([0.122, 0.103, 0.105, 0.1], 3)),
+    },
+  ]}
+/>
+
+Observations:
+
+- **The rule is worth +0.0201 NDCG@10**, 0.6253 to 0.6454, with a bootstrap CI of [+0.0125, +0.0281] and wins on **12 of the 13 datasets**. The only loss is NanoMSMARCO at −0.0091. Biggest gains are NanoSciFact +0.0540 and NanoFiQA2018 +0.0433.
+- **The tail moves too**, which is what I care about most after [the mean hides where a change helps](/blog/relevance-tail). The share of queries returning #[nothing relevant](no judged-relevant document anywhere in the top 10, so NDCG@10 is exactly 0) drops from 12.2% to 10.3%, and p25 goes 0.351 to 0.360.
+- **It's mostly a reordering fix, not a retrieval fix.** Recall@10 gains +0.0160 while recall@100 gains only +0.0057, so the rule is pulling relevant documents from rank 30 or 60 up into the top 10 rather than finding ones SPLADE missed entirely.
+- **A query-side floor buys tail and nothing else.** Adding `max(w_q, 0.25·idf)` on the query vector moves the mean by +0.0009 (noise) but p25 by +0.019 and recall@10 by +0.0038. Worth having if the weak-query quartile is what you're optimising, and it costs a win on the per-dataset record (11/2 instead of 12/1).
+
+## Why it works: what SPLADE does to a word that's right there
+
+Before I trusted the number I wanted the mechanism, and my first two guesses were both wrong. Here is the one that survived, and we can watch it happen in a single query.
+
+```
+NanoFiQA2018 · "What approaches are there for pricing a small business?"
+SPLADE scores 0.000 on this query. BM25 scores 0.289.
+
+           word    w_query    w_doc    product
+        pricing      2.164    2.189      4.738
+       business      1.454    2.236      3.252
+          small      2.199    0.000      0.000   <-- killed
+```
+
+Read the product column, since that is what actually scores. The gold document contains the word `small`. The query encoder weights it at **2.199**, one of the highest weights in the whole query. The document encoder gives it **zero**. The two sides are encoded independently and then multiplied, so either one zeroing a term kills the match, and a query BM25 partly answers comes back empty.
+
+That is not a one-off. Across the queries where SPLADE loses to BM25, the document encoder zeroes a content word that is present in the gold document **12.0%** of the time, against **4.5%** on the queries SPLADE wins. The query encoder is clean either way at about 3%, so the fault is on one side only. Other words it threw away with the query shouting about them: `macro` (query weight 2.629), `strata` (2.137), `arte` (2.445).
+
+<details>
+<summary>Two mechanisms I proposed and had to retract</summary>
+
+First guess: SPLADE goes semantic and promotes documents on invented words. I measured what share of the top-ranked document's score came from literal matches, and on two datasets it looked damning, 33% on lost queries against 47% on wins. On all thirteen it was 50.8% against 50.4%. No effect. I had picked those two datasets _because_ SPLADE does badly on them, which is exactly the way to manufacture a mechanism that isn't there.
+
+Second guess: the drop rate doesn't distinguish losses. I measured a median per-query drop rate of 0.0000 in every bucket and concluded deletion couldn't be the cause. That was a median-hides-the-tail error. Most queries have no dropped terms, a minority have several, and re-adding those terms turns out to be worth +0.0071 of the rule's +0.0201 on its own. A median of zero does not mean a mechanism is absent.
+
+</details>
+
+### Lift and restore are separate repairs, roughly additive
+
+Split the rule into its two halves and we can see it repairing two different failures:
+
+| variant                                | NDCG@10    | vs SPLADE   | W/L  |
+| -------------------------------------- | ---------- | ----------- | ---- |
+| lift only, never re-add a pruned term  | 0.6379     | +0.0126     | 12/1 |
+| re-add only, never touch a kept weight | 0.6325     | +0.0071     | 8/5  |
+| both, the full rule                    | **0.6454** | **+0.0201** | 12/1 |
+
+Lift is the bigger half at about 1.8x, and the two are close to additive. So SPLADE underweights terms it keeps _and_ deletes terms it should keep, at different rates, and both are worth repairing.
+
+Taking the higher of the two scores also beats adding them. With the same query-side floor on both sides of the comparison, the additive version gets **+0.0130** where the `max` gets **+0.0195**, because summing double-counts every term the two systems already agree on, while `max` only intervenes where they disagree.
+
+## How simple can the BM25 be?
+
+The rule's job is to be a backstop, so I tried removing pieces of BM25 from it. Each form gets its own sweep of `C`, since dropping `tf` moves the scale by an order of magnitude.
+
+| form inside the floor                   | NDCG@10    | vs SPLADE   | W/L  |
+| --------------------------------------- | ---------- | ----------- | ---- |
+| `idf · tf(k1+1)/(tf + k1·L)`, full BM25 | **0.6454** | **+0.0201** | 12/1 |
+| drop length normalisation (b=0)         | 0.6428     | +0.0174     | 10/3 |
+| `idf` alone, no tf at all               | 0.6425     | +0.0171     | 10/3 |
+| `idf · sqrt(tf)`                        | 0.6406     | +0.0153     | 12/1 |
+| `idf · (1 + ln tf)`                     | 0.6385     | +0.0131     | 10/3 |
+| `idf · tf`, raw tf-idf                  | 0.6280     | +0.0027     | 8/5  |
+| `idf · tf / L`, no saturation           | 0.6252     | −0.0001     | 8/5  |
+
+Observations:
+
+- **`max(w_splade, C·idf(t))` keeps 85% of the gain**, +0.0171 of +0.0201, with no term frequencies, no document lengths, no `avgdl` to maintain and one constant. For most people that's the version to implement.
+- **The two ways of removing saturation both fail.** `idf·tf/L` is the k1 → ∞ limit and is worth nothing. Raw tf-idf is worse, −0.0546 once `C` is pushed to 0.2.
+- **But `idf` alone is the k1 → 0 limit, and that works.** Read those two rows together and we get something odd about BM25: its tf machinery is doing damage control here rather than adding signal. The whole value of `k1` is stopping `tf` from mattering, and taking that to its limit costs 0.003.
+
+That last point squares with SPLADE's own behaviour. Its weight for a term grows only 1.19x from tf=1 to tf=2, against BM25's 1.30x at k1=0.9, and above tf=10 it _falls_, since SPLADE #[max-pools](it keeps the highest weight any single position gave a term, and a max cannot grow with repeats) over positions instead of summing them. Term frequency is nearly worthless information for a weight of this kind, and both models arrive at that independently.
+
+<details>
+<summary>What the rule does to each term type, and 13% of the index you can drop</summary>
+
+Per type, over query-reachable terms present in the document:
+
+| type        | n       | rule fires | re-added | SPLADE p50 | C·bm25 p50 | final p50 | mass  |
+| ----------- | ------- | ---------- | -------- | ---------- | ---------- | --------- | ----- |
+| content     | 265,943 | 53.1%      | 20.3%    | 1.027      | 0.978      | 1.232     | 77.0% |
+| subword     | 36,143  | 57.4%      | 28.8%    | 0.928      | 0.941      | 1.170     | 9.9%  |
+| stopword    | 149,418 | 80.5%      | 70.9%    | 0.000      | 0.204      | 0.257     | 12.4% |
+| punctuation | 12,538  | 90.2%      | 85.6%    | 0.000      | 0.040      | 0.046     | 0.7%  |
+
+Subword pieces turn out to be unremarkable. They match content words at every percentile on all three quantities, which is why restricting the rule to content-plus-subword never beat flooring everything. The overrides look like ordinary morphology: `##ise` 0.018 → 1.235, `##ers` 0.451 → 1.214, `##isation` 0.531 → 1.109.
+
+I expected the opposite, because subword _literals_ have the highest SPLADE weights of any type at p50 1.408. But that measures terms present in SPLADE's vector, and the rule acts on terms present in the document, which includes the 28.8% SPLADE pruned to zero. Include the zeros and subword p50 drops to 0.928, right next to content.
+
+Stopwords are the interesting row. SPLADE deletes most query-reachable stopwords outright and the rule puts every one of them back, so they end up as 35% of all the terms it touches and 12.4% of the final weight mass. Excluding stopwords and punctuation costs **+0.0190 instead of +0.0201**, both at 12 wins and 1 loss, which is inside the noise. So that 13% of added mass is free to drop.
+
+One more thing falls out of that table. The rule ends up separating content words from stopwords by about 4.7x in final weight (1.232 against 0.257) where SPLADE's own literal weighting separates them by 2.3x (1.206 against 0.518). It is more discriminating about term type than SPLADE is, while containing no notion of term type at all, because IDF does that work implicitly.
+
+</details>
+
+## The cheap version
+
+The setup someone would actually deploy is [inference-free](/blog/if-splade): encode documents once with the doc-only model and send raw query terms at weight 1.0, so there is no query-time model call. [`splade-v3-doc`](https://huggingface.co/naver/splade-v3-doc) plus a BM25 floor:
+
+| system                                  | NDCG@10    | vs base     | W/L  | recall@10 |
+| --------------------------------------- | ---------- | ----------- | ---- | --------- |
+| `splade-v3-doc`, inference-free queries | 0.5953     | -           | -    | 0.6281    |
+| + floor at C=0.20                       | **0.6074** | **+0.0120** | 10/3 | +0.0230   |
+| + floor at C=0.31                       | 0.5917     | −0.0036     | 7/6  | +0.0074   |
+
+Real, with a CI of [+0.0013, +0.0236], but about half the symmetric model's gain, and the best `C` drops from 0.31 to 0.20.
+
+I predicted it would help _more_ here, since this model's literal weights are much weaker, p50 0.641 against the symmetric model's 1.179, so there would be more to replace. The mechanism runs the other way. With inference-free queries every query term carries weight 1.0, so the query side contributes no discrimination at all and the document side carries the whole ranking signal. Flooring the document side therefore overwrites a larger share of the total, saturates sooner, and over-floors earlier.
+
+## What I take from this
+
+The two directions cost about the same effort and paid very differently:
+
+- BM25 learning from SPLADE: **+0.0022**, against a measured ceiling of +0.0064.
+- SPLADE learning from BM25: **+0.0201**, on 12 of 13 datasets.
+
+Every attempt in the first direction that tried to _replace_ a BM25 quantity with a SPLADE-flavoured one failed, and I only understood why afterwards. I measured SPLADE's doc-side weights against IDF and got an exponent of 0.508, concluded BM25's IDF was twice too steep, and shipped `sqrt(idf)` into a retrieval test where it lost on 9 of 13 datasets. The catch is that SPLADE's score is a _product_ of two vectors, so we have to fit the product and not a factor of it. The query side fits at 0.567, the document side at 0.508, and the exponent fitted directly on `w_q · w_d` is **0.9936**. BM25 applies IDF once at exponent 1.0. SPLADE splits the same total into two square roots, and fitting one factor of a product tells you nothing about the product.
+
+The direction that worked _added_ a term SPLADE didn't have rather than replacing one it did.
 
 ## Key Takeaways
 
-- **"It works" depends on query tokenization.** Without BERT query tokenization, SPLADE-in-BM25 is worse than plain BM25.
-- **With BERT query tokenization**, weighted mode reaches 0.6572 NDCG@10 vs 0.6953 for impact scoring — a workable fallback.
-- **The residual gap is structural.** BM25 length normalization and IDF distortion replace the SPLADE weight signal; impact scoring preserves it.
+- Take the higher of SPLADE's learned weight and `C · bm25(t,d)` for every term a document contains, and NDCG@10 goes from 0.6253 to 0.6454 across 13 NanoBEIR datasets, winning on 12 of them, with the zero-result rate dropping from 12.2% to 10.3%.
+- The rule survives dropping tf, k1, b and document lengths. `max(w_splade, 0.31·idf(t))` keeps 85% of the gain with one constant and no index statistics beyond document frequency.
+- It repairs two separate failures at once. SPLADE underweights terms it keeps (+0.0126) and deletes terms it should have kept (+0.0071), and the two are close to additive.
+- Removing tf saturation entirely fails, but ignoring tf entirely works. BM25's `k1` is damage control here rather than signal, which matches SPLADE's own weights barely tracking tf and reversing above tf=10.
+- The opposite direction, distilling SPLADE into a better BM25, has a ceiling of +0.0064 once query-side Porter and learned pairs are in place, because two thirds of what SPLADE's expansion adds those already find. I got +0.0022 of it.
+- Any single-side fit against a two-sided model is a trap. Fitting SPLADE's document weights alone says BM25's IDF exponent should be 0.5, the product says 0.9936, and the retrieval test agrees with the product.
