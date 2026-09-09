@@ -13,7 +13,7 @@ authors: ['kshivendu']
 
 [SPLADE](https://huggingface.co/naver/splade-v3) learns a weight for every word instead of computing one. It also #[expands](adds terms the document never contained, so a query for "retirement" can match a document that only says "401k") each document with words it never had. Those added words get all the attention.
 
-I went looking at the other half, the words the document already has. SPLADE gets some of those badly wrong. Sometimes it scores a word at zero while the word is sitting right there in the text. BM25 never does that, so I used BM25 as a floor: score every word both ways and keep the higher one. That's worth **+0.0201 NDCG@10** and wins on 12 of 13 datasets, and it needs nothing SPLADE doesn't already have.
+I went looking at the other half, the words the document already has. SPLADE gets some of those badly wrong. Sometimes it scores a word at zero while the word is sitting right there in the text. BM25 never does that, so I used BM25 as a floor: score every word both ways and keep the higher one. NDCG@10 goes from **0.6253 to 0.6454** across 13 NanoBEIR datasets, and the share of queries that come back with nothing useful drops from **12.2% to 10.3%**. It wins on 12 of the 13, and needs nothing SPLADE doesn't already have.
 
 ## SPLADE forgets words that are right there
 
