@@ -125,14 +125,14 @@ Observations:
 
 ### Taking the rule apart
 
-| variant                                | mean       | vs SPLADE   | p50       | p25   | zero  | recall@10 | W/L  |
-| -------------------------------------- | ---------- | ----------- | --------- | ----- | ----- | --------- | ---- |
-| SPLADE v3, no floor                    | 0.6253     | -           | 0.631     | 0.351 | 12.2% | 0.6472    | -    |
-| lift only, never re-add a pruned word  | 0.6379     | +0.0126     | 0.649     | 0.356 | 11.4% | 0.6548    | 12/1 |
-| re-add only, never touch a kept weight | 0.6325     | +0.0071     | 0.631     | 0.346 | 10.8% | 0.6587    | 8/5  |
-| never revive a stopword or punctuation | 0.6443     | +0.0192     | 0.672     | 0.360 | 10.3% | 0.6619    | 12/1 |
-| add the two scores instead of maxing   | 0.6384     | +0.0131     | 0.633     | 0.387 | 10.9% | 0.6622    | 9/4  |
-| **the full rule**                      | **0.6454** | **+0.0201** | **0.672** | 0.360 | 10.3% | 0.6632    | 12/1 |
+| variant                                    | mean       | vs SPLADE   | p50       | p25       | zero      | recall@10  | W/L      |
+| ------------------------------------------ | ---------- | ----------- | --------- | --------- | --------- | ---------- | -------- |
+| SPLADE v3, no floor                        | 0.6253     | -           | 0.631     | 0.351     | 12.2%     | 0.6472     | -        |
+| lift only, never re-add a pruned word      | 0.6379     | +0.0126     | 0.649     | 0.356     | 11.4%     | 0.6548     | 12/1     |
+| re-add only, never touch a kept weight     | 0.6325     | +0.0071     | 0.631     | 0.346     | 10.8%     | 0.6587     | 8/5      |
+| add the two scores instead of maxing       | 0.6384     | +0.0131     | 0.633     | 0.387     | 10.9%     | 0.6622     | 9/4      |
+| **never revive a stopword or punctuation** | **0.6443** | **+0.0192** | **0.672** | **0.360** | **10.3%** | **0.6619** | **12/1** |
+| **the full rule**                          | **0.6454** | **+0.0201** | **0.672** | 0.360     | 10.3%     | 0.6632     | 12/1     |
 
 Observations:
 
