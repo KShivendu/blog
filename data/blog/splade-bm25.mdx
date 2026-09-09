@@ -34,14 +34,20 @@ One query shows the whole thing.
   ────────────────────────────────────────────────────
    pricing        x1      2.164  ×   2.189  =    4.738
    business       x7      1.454  ×   2.236  =    3.252
-   small          x1      2.199  ×   0.000  =    0.000   ← the match dies
+   small          x1      2.199  ×   0.000  =    0.000   ← contributes nothing
   ────────────────────────────────────────────────────
 
-  SPLADE ranks this document nowhere       NDCG@10   0.000
-  BM25 finds it                            NDCG@10   0.289
+  pricing and business still match, so the document scores 12.99.
+  That puts it 12th of 4598. Tenth place scored 13.41, so it misses
+  the top 10 by 0.42 and NDCG@10 counts it as nothing.
+
+  restore small at its BM25 value (+0.9) and the document scores
+  14.34, which is 8th. Now it counts.
 ```
 
-The product column is what scores. `small` is in the document, and the query side weights it **2.199**, near the top of the query. The document side gives it **zero**. SPLADE encodes the two sides separately and multiplies them, so a zero on either side kills the match.
+`small` is in the document, and the query side weights it **2.199**, near the top of the query. The document side gives it **zero**. SPLADE encodes the two sides separately and multiplies them, so a zero on either side means that word contributes nothing at all.
+
+The document still scores well on the other two words. It just scores 0.42 too low to make the top 10, and the word it lost is the one that would have covered the gap four times over.
 
 That's not a one-off. On the queries where SPLADE loses to BM25, the document side zeroes a content word that's in the right document **12.0%** of the time. On the queries it wins, **4.5%**. The query side is clean either way at about 3%, so only one side is at fault.
 
