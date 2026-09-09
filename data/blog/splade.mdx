@@ -42,6 +42,118 @@ Rank 2 keeps 84% of rank 1's weight where Zipf predicts 50%. Ranks 6 onward coll
 
 Across 1,297 content-word positions, `w₂/w₁` has a median of **0.743**. Zipf says 0.500 always, so this is not a quirk of one sentence.
 
+export const ranks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+export const zipf = ranks.map((r) => [r, 1 / r])
+export const ser = (name, color, vals, dashed) => ({
+  name,
+  color,
+  dashed: dashed || false,
+  points: vals.map((v, i) => (v === null ? null : [i + 1, v])).filter(Boolean),
+})
+
+export const climbing = [1.0, 0.8439, 0.8126, 0.5535, 0.503, 0.1269, 0.0746, 0.0665]
+export const theTok = [1.0, 0.7435, 0.6951, 0.5754, 0.5184, 0.5083, 0.438, 0.2614, 0.2269, 0.1422]
+
+<LineChart
+  title="Two real positions, and what Zipf would predict"
+  xLabel="rank within the position's vote →"
+  yLabel="weight, relative to rank 1"
+  xTicks={[
+    [1, '1'],
+    [2, '2'],
+    [3, '3'],
+    [4, '4'],
+    [5, '5'],
+    [6, '6'],
+    [7, '7'],
+    [8, '8'],
+    [9, '9'],
+    [10, '10'],
+  ]}
+  xMin={1}
+  xMax={10}
+  yMin={0}
+  yMax={1.02}
+  yTipDecimals={3}
+  height={380}
+  series={[
+    ser(
+      'Zipf, 1/r',
+      '#94a3b8',
+      zipf.slice(0, 10).map((z) => z[1]),
+      true
+    ),
+    ser('position "climbing"', '#10b981', climbing),
+    ser('position "the"', '#38bdf8', theTok),
+  ]}
+/>
+
+Observations:
+
+- **Both real curves sit far above Zipf at ranks 2 and 3.** `climbing` keeps 84% of its top weight at rank 2 where Zipf predicts 50%, and 81% at rank 3 where Zipf predicts 33%. That flat start is the plateau.
+- **Then `climbing` falls through Zipf and stops.** It drops from 0.503 at rank 5 to 0.127 at rank 6, crosses under the Zipf line, and by rank 9 there is nothing left at all. Zipf has no such edge, it just keeps tapering.
+- **`the` is flatter still and runs longer.** A stopword position spreads its vote more evenly, which is why the stopword fit wants a higher exponent later on.
+
+That is two positions out of one sentence. Here is the median across 60 documents:
+
+export const cP25 = [
+  1.0, 0.6208, 0.4043, 0.2933, 0.2028, 0.1342, 0.1032, 0.0842, 0.0719, 0.0632, 0.0568, 0.0545,
+]
+export const cP50 = [
+  1.0, 0.7666, 0.5485, 0.4201, 0.3158, 0.2347, 0.1955, 0.1792, 0.1613, 0.1447, 0.1256, 0.1161,
+]
+export const cP75 = [
+  1.0, 0.8899, 0.6872, 0.5588, 0.465, 0.3703, 0.324, 0.29, 0.269, 0.2441, 0.2228, 0.2102,
+]
+export const sP50 = [
+  1.0, 0.8397, 0.7295, 0.638, 0.5694, 0.5178, 0.474, 0.4376, 0.4025, 0.3696, 0.3427, 0.3165,
+]
+
+<LineChart
+  title="Median decay across 1,297 content and 1,732 stopword positions (60 BEIR fiqa documents)"
+  xLabel="rank within the position's vote →"
+  yLabel="weight, relative to rank 1"
+  xTicks={[
+    [1, '1'],
+    [2, '2'],
+    [3, '3'],
+    [4, '4'],
+    [5, '5'],
+    [6, '6'],
+    [7, '7'],
+    [8, '8'],
+    [9, '9'],
+    [10, '10'],
+    [11, '11'],
+    [12, '12'],
+  ]}
+  xMin={1}
+  xMax={12}
+  yMin={0}
+  yMax={1.02}
+  yTipDecimals={3}
+  height={400}
+  series={[
+    ser(
+      'Zipf, 1/r',
+      '#94a3b8',
+      zipf.map((z) => z[1]),
+      true
+    ),
+    ser('content, p25', '#a7f3d0', cP25, true),
+    ser('content, p50', '#10b981', cP50),
+    ser('content, p75', '#a7f3d0', cP75, true),
+    ser('stopword, p50', '#38bdf8', sP50),
+  ]}
+/>
+
+Observations:
+
+- **The median content position keeps 77% of its weight at rank 2**, against Zipf's 50%, and the whole interquartile band (0.62 to 0.89) sits above it. The plateau is not one lucky sentence.
+- **It crosses under Zipf between ranks 6 and 7** and stays there. Content positions are flatter than Zipf at the head and steeper at the tail, which is exactly backwards from a power law.
+- **Stopword positions are flatter throughout.** The median is still at 0.32 by rank 12 where content has fallen to 0.12. A stopword has no strong candidate to concentrate on, so it spreads its vote.
+- **Note the sample shrinks past rank 6.** All 1,297 content positions have a term at ranks 1 to 6 by construction, since I only fitted positions with at least 6 non-zero terms. By rank 12 only 484 of them still have one, so the tail of that line is a median over the survivors.
+
 ## Where it comes from
 
 Before the last two operations the numbers are boringly regular. Fit the raw logits against log rank over the top 200 vocabulary entries and we get this:
@@ -82,6 +194,63 @@ That's the cliff. It isn't a steep decline, it's a hard edge, and its position i
 ```
 
 A 29% gap in logit space arrives as a 16% gap in weight space. The compression squashes the head of the list flat, and that's the plateau.
+
+export const lP25 = [
+  1.3664, 0.5245, 0.1575, -0.0373, -0.1582, -0.2599, -0.3388, -0.4041, -0.4554, -0.5047, -0.5447,
+  -0.5876,
+]
+export const lP50 = [
+  2.3647, 1.1426, 0.6215, 0.3595, 0.2014, 0.0894, -0.0093, -0.0904, -0.1408, -0.2048, -0.2605,
+  -0.303,
+]
+export const lP75 = [
+  4.052, 1.9338, 1.1498, 0.8012, 0.5588, 0.4097, 0.2985, 0.1973, 0.1224, 0.0605, 0.0043, -0.0482,
+]
+
+<LineChart
+  title="The same positions before relu and log1p touch them (raw MLM logits, 1,297 content positions)"
+  xLabel="rank within the position's vote →"
+  yLabel="raw logit"
+  xTicks={[
+    [1, '1'],
+    [2, '2'],
+    [3, '3'],
+    [4, '4'],
+    [5, '5'],
+    [6, '6'],
+    [7, '7'],
+    [8, '8'],
+    [9, '9'],
+    [10, '10'],
+    [11, '11'],
+    [12, '12'],
+  ]}
+  xMin={1}
+  xMax={12}
+  yMin={-0.7}
+  yMax={4.2}
+  yTipDecimals={3}
+  height={400}
+  series={[
+    ser(
+      'relu cuts here',
+      '#64748b',
+      ranks.map(() => 0),
+      true
+    ),
+    ser('logit, p25', '#fda4af', lP25, true),
+    ser('logit, p50', '#e11d48', lP50),
+    ser('logit, p75', '#fda4af', lP75, true),
+  ]}
+/>
+
+Observations:
+
+- **The median logit crosses zero at rank 7.** And rank 7 is exactly where content positions start running out of terms, 1,297 of them at rank 6 and 1,131 at rank 7. The cliff is not a decline, it is the relu deleting everything on the wrong side of that line.
+- **The p25 line crosses at rank 4, the p75 line at rank 12.** So the cliff's position varies a lot by position, which is why no fixed number of expansions per position would describe it.
+- **Above the cut the curve is smooth and steep**, 2.36 to 1.14 to 0.62 in the first three ranks. That is a 2x drop per rank, much steeper than the weights show, because `log1p` has not compressed it yet.
+
+Put the two charts side by side and the whole mechanism is there. The logits are a clean decline that crosses zero around rank 7. `relu` deletes the negative half, which makes the cliff. `log1p` squashes the positive half, which turns a 2x-per-rank decline into the near-flat plateau of 1.00, 0.77, 0.55.
 
 ## Fitting it properly
 
