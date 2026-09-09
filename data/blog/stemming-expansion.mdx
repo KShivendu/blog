@@ -115,15 +115,16 @@ Compare the `weight·idf` and `stem idf` columns in that table and you can see t
 
 **Combine: take the best variant, not the sum.** A document's credit for `race` is the single best-matching variant, `max` over the family of `weight · BM25(variant)`. Add every matching form's full score instead and the mean craters to **0.520**, because a common form like `racing` dumps its whole score onto every motorsport document, race or not. The `max` caps each query word at one strong hit, which is what stemming does for free by folding the forms into one word.
 
-Run them across the 13 datasets, all on the Porter family and the same stopword-stripped base:
+Run them across the 13 datasets, all on the Porter family and the same stopword-stripped base. A benchmark on my own BM25 is easy to fool, so Elasticsearch's own `english` analyzer runs on the same 645 queries too, a real production pipeline (Lucene BM25, standard tokenizer, possessive stripping, stopwords, a Porter stemmer) at its default `k1`=1.2:
 
 export const sideCats = [
   'stem the index',
   'expand, count as one',
   'expand, best match',
   'expand, weighted merge',
+  'Elasticsearch',
 ]
-export const sideColors = ['#94a3b8', '#94a3b8', '#6ee7b7', '#10b981']
+export const sideColors = ['#94a3b8', '#94a3b8', '#6ee7b7', '#10b981', '#64748b']
 export const sideFmt = (v, d) => v.map((x) => x.toFixed(d))
 export const sideView = (values, text) => ({
   categories: sideCats,
@@ -132,8 +133,8 @@ export const sideView = (values, text) => ({
 
 <BarChart
   orientation="horizontal"
-  title="Stem the index, or expand the query?"
-  subtitle="13 NanoBEIR (645 queries) · Porter family · k1=1.2 · index and query side match, a weighted merge beats both · toggle the metric →"
+  title="Stem, expand, or Elasticsearch?"
+  subtitle="13 NanoBEIR (645 queries) · Porter family · k1=1.2 · a weighted merge beats Elasticsearch; stemming and max sit right by it · toggle the metric →"
   categories={sideCats}
   views={[
     {
@@ -142,27 +143,37 @@ export const sideView = (values, text) => ({
       valueLabel: 'NDCG@10 mean (higher is better)',
       valueMax: 0.6,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
-      ...sideView([0.5795, 0.5795, 0.5775, 0.5819], sideFmt([0.5795, 0.5795, 0.5775, 0.5819], 3)),
+      ...sideView(
+        [0.5795, 0.5795, 0.5775, 0.5819, 0.5786],
+        sideFmt([0.5795, 0.5795, 0.5775, 0.5819, 0.5786], 3)
+      ),
     },
     {
       label: 'p50',
       valueLabel: 'NDCG@10 p50, the median query (higher is better)',
       valueMax: 0.64,
       valueTicks: [0, 0.2, 0.4, 0.6],
-      ...sideView([0.6309, 0.6309, 0.6282, 0.6309], sideFmt([0.6309, 0.6309, 0.6282, 0.6309], 3)),
+      ...sideView(
+        [0.6309, 0.6309, 0.6282, 0.6309, 0.6309],
+        sideFmt([0.6309, 0.6309, 0.6282, 0.6309, 0.6309], 3)
+      ),
     },
     {
       label: 'p25',
       valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
       valueMax: 0.34,
       valueTicks: [0, 0.1, 0.2, 0.3],
-      ...sideView([0.3066, 0.3066, 0.301, 0.3066], sideFmt([0.3066, 0.3066, 0.301, 0.3066], 3)),
+      ...sideView(
+        [0.3066, 0.3066, 0.301, 0.3066, 0.3066],
+        sideFmt([0.3066, 0.3066, 0.301, 0.3066, 0.3066], 3)
+      ),
     },
   ]}
 />
 
 - **Expansion reproduces stemming.** Make the two choices stemming makes, score every form at the shared stem IDF and count the forms in a document as one, and query-side lands on the stemmed index to within 0.001 (**0.5795** mean, 0.6309 median, 0.3066 tail), matching it on all but a dozen or so queries. Taking the single best form instead, our `max`, lands a hair behind at **0.5775**, since it throws away the extra evidence a multi-form document offers. Stemming is one setting of the expansion knobs, not a separate thing.
 - **A weighted merge does better still.** Fold the forms into one term the way stemming does, but sum the _attestation-weighted_ term-frequencies before the single saturation. It keeps the evidence `max` throws away, and unlike plain stemming it discounts the rare junk forms Porter drags in, so a `raced` hit no longer counts like `race`. That reaches **0.5819**, past stemming and every other combine here, and it's the seed of the document-side trick later.
+- **A real search engine lands right in the pack.** Elasticsearch's `english` analyzer scores **0.5786** on the same queries at the same k1, a dead heat with our `max` and below the weighted merge. On recall the query-side index even edges ahead (recall@10 **0.626 vs 0.620**). A production pipeline is one more point in this combine landscape, not a different league, and everything it does beyond stemming turns out to be decoration.
 
 <details>
 <summary>Why the missing piece is tf aggregation, not the IDF</summary>
@@ -187,50 +198,14 @@ doc: race x1, racing x2  (length 44)   weights: race 1.0, racing 0.64
 
 </details>
 
-So the two are the same idea, split only by where the merge happens.
+<details>
+<summary>Does the stemmer variant matter? Porter vs Snowball, and the rest of the analyzer</summary>
 
-A benchmark on my own BM25 is easy to fool, so I ran the same 13 datasets through Elasticsearch's `english` analyzer (Lucene BM25, standard tokenizer, possessive stripping, stopwords, a Porter stemmer), at its default `k1`=1.2. It gets **0.5786**. The query-side version, expanding each word into its Porter family with no index rewrite, gets **0.5774** at the same k1: a dead heat on NDCG, Elasticsearch ahead by a hair. Flip to recall and the query-side index pulls ahead, recall@10 **0.626 vs 0.620** and recall@100 0.817 vs 0.816, so it surfaces slightly more of the relevant documents and just orders the very top a touch differently.
+Swapping Porter for Snowball (Porter2, the newer one) as the expansion family is slightly _worse_, 0.5759 vs 0.5774, so the stemmer variant isn't the lever. Neither is anything else the `english` analyzer does beyond stemming. Possessive stripping (`john's` to `john`) is a wash: rerun Elasticsearch with it removed and the mean is unchanged, 0.5789 vs 0.5786. The exact tokenizer doesn't move the needle either. What the analyzer does that matters is exactly what our word index does, tokenize, drop stopwords, stem.
 
-export const esCats = ['Elasticsearch english', 'Porter expansion', 'Snowball expansion']
-export const esColors = ['#94a3b8', '#10b981', '#94a3b8']
-export const esFmt = (v, d) => v.map((x) => x.toFixed(d))
-export const esView = (values, text) => ({
-  categories: esCats,
-  series: [{ name: 'v', values, colors: esColors, text, textPosition: 'outside' }],
-})
+</details>
 
-<BarChart
-  orientation="horizontal"
-  title="Query-side expansion vs Elasticsearch"
-  subtitle="13 NanoBEIR (645 queries) · all at Lucene's default k1=1.2 · neck and neck on NDCG, expansion ahead on recall · toggle the metric →"
-  categories={esCats}
-  views={[
-    {
-      label: 'mean',
-      default: true,
-      valueLabel: 'NDCG@10 mean (higher is better)',
-      valueMax: 0.6,
-      valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
-      ...esView([0.5786, 0.5774, 0.5759], esFmt([0.5786, 0.5774, 0.5759], 3)),
-    },
-    {
-      label: 'p50',
-      valueLabel: 'NDCG@10 p50, the median query (higher is better)',
-      valueMax: 0.66,
-      valueTicks: [0, 0.2, 0.4, 0.6],
-      ...esView([0.6309, 0.6282, 0.6241], esFmt([0.6309, 0.6282, 0.6241], 3)),
-    },
-    {
-      label: 'p25',
-      valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
-      valueMax: 0.34,
-      valueTicks: [0, 0.1, 0.2, 0.3],
-      ...esView([0.3066, 0.301, 0.2977], esFmt([0.3066, 0.301, 0.2977], 3)),
-    },
-  ]}
-/>
-
-Swapping Porter for Snowball (Porter2, the newer one) as the family is slightly worse, 0.5759, and the possessive stripping and exact tokenizer don't matter either. So a production analyzer is a plain word index plus query-side Porter expansion at a sensible k1, and everything else in the `english` analyzer is decoration. The family we expand into is just a lookup we control, and Porter isn't even the best choice. Can a different one beat it?
+So the two are the same idea, split only by where the merge happens, and a production analyzer is just a plain word index merging at index time, which we match, and edge past, from the query side. The family we expand into is a lookup we control, and Porter isn't even the best choice. Can a different one beat it?
 
 ## Past the stemmer
 
