@@ -12,7 +12,7 @@ authors: ['kshivendu']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-A search engine's `english` analyzer does a few things to your text before it hits the index: lowercase it, drop stopwords, and #[stem](strip suffixes so a word's inflections share one index term) so `race`, `racing` and `raced` all become one term, `race`. I wanted to know which of those actually matters, so I built a plain BM25 word index and tested each step one at a time over [13 NanoBEIR datasets](https://huggingface.co/collections/zeta-alpha-ai/nanobeir-66e1a0af21dfd93e620cd9f6), small subsampled stand-ins for the full BEIR retrieval benchmarks (finance QA, argument retrieval, entity search, and more).
+A search engine's `english` analyzer does a few things to your text before it hits the index: lowercase it, drop stopwords, and #[stem](strip suffixes so a word's inflections share one index term) so `race`, `racing` and `raced` all become one term, `race`. I wanted to know which of those actually matters, so I built a plain BM25 word index and tested each step one at a time over 13 #[NanoBEIR](small subsampled stand-ins for the BEIR retrieval benchmarks) [datasets](https://huggingface.co/collections/zeta-alpha-ai/nanobeir-66e1a0af21dfd93e620cd9f6).
 
 I found the stemmer does most of the work. And you can do the stemmer's job on the query-expansion side instead of altering the index. Stemming folds `racing` into `race` in the index when you build it. Expansion leaves the index alone and rewrites the query `race` into `race OR racing OR raced` when you search. Same word family, just handled on a different side. Both land in nearly the same place.
 
