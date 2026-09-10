@@ -5,7 +5,7 @@ date: '2026-09-09'
 lastmod: '2026-09-09'
 tags: ['search', 'nlp', 'internals', 'rag']
 draft: true
-summary: "SPLADE sometimes scores a word at zero even though the document says it. Take the higher of SPLADE's weight and C·bm25 and NDCG@10 goes from 0.6253 to 0.6454 across 13 NanoBEIR datasets."
+summary: "SPLADE sometimes de-emphasizes or drops words that exist in a document. If you take max of SPLADE's weight and C·bm25, NDCG@10 goes from 0.6253 to 0.6454 across 13 NanoBEIR datasets."
 authors: ['kshivendu']
 ---
 
