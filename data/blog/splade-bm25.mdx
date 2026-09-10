@@ -5,7 +5,7 @@ date: '2026-09-09'
 lastmod: '2026-09-09'
 tags: ['search', 'nlp', 'internals', 'rag']
 draft: true
-summary: "SPLADE learns a weight for every term instead of computing one. For terms a document actually contains it sometimes gets that weight badly wrong: the word is right there, the query is shouting about it, and the document side scores it zero. Take the higher of SPLADE's weight and C·bm25 for every such term and NDCG@10 goes from 0.6253 to 0.6454 across 13 NanoBEIR datasets, winning on 12 of them. It survives dropping tf, k1, b and document lengths, so BM25's IDF is a better literal channel than the one SPLADE learned end to end."
+summary: "SPLADE sometimes scores a word at zero even though the document says it. Take the higher of SPLADE's weight and C·bm25 and NDCG@10 goes from 0.6253 to 0.6454 across 13 NanoBEIR datasets."
 authors: ['kshivendu']
 ---
 
