@@ -246,3 +246,17 @@ One note if you go looking for the exponent yourself. SPLADE's document weights 
 - The rule survives dropping tf, k1, b and document lengths. `max(w_splade, 0.31·idf(t))` keeps 85% of the gain with one constant and no index statistics beyond document frequency.
 - It fixes two separate failures. SPLADE underweights terms it keeps (+0.0126) and deletes terms it should have kept (+0.0071), and the two are close to additive.
 - On the inference-free setup people actually deploy, the same floor is worth +0.0120 with the constant retuned to 0.20.
+
+## Citation
+
+If you find this useful, please cite:
+
+```bibtex
+@misc{kumar2026spladebm25,
+  author       = {Kumar Shivendu},
+  title        = {Fixing SPLADE with BM25: Don't let it ignore a word that's right there},
+  year         = {2026},
+  url          = {https://www.kshivendu.dev/blog/splade-bm25},
+  note         = {Blog post}
+}
+```
