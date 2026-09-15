@@ -45,8 +45,8 @@ export const pctColors = {
 
 <BarChart
   orientation="horizontal"
-  title="Per-query score: mean vs median vs p10 floor (BM25, 12 NanoBEIR datasets)"
-  subtitle="gray = mean, teal = median (p50), amber = p25, red = p10 floor. 599 queries, pooled"
+  title="Mean vs percentiles, 599 queries"
+  subtitle="BM25 over 12 NanoBEIR datasets. p10 is 0.0 on NDCG@10 and recall@10."
   valueLabel="score (higher is better)"
   valueMax={100}
   valueTicks={[0, 20, 40, 60, 80, 100]}
