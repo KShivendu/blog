@@ -101,16 +101,27 @@ function buildView(rows, stats, mdef) {
     const i = EDGES.findIndex((e) => v < e)
     return 1 + (i < 0 ? EDGES.length - 1 : i)
   }
-  // Only the mean gets a marker. p10/p25/p50 lines were four dashed verticals of
-  // furniture, and the one thing this chart has to show is the mean standing in a gap.
-  const markers = [
-    {
-      at: bucketOf(st.mean) + 0.5,
-      label: `mean ${s100(st.mean)}`,
-      color: COLORS.mean,
-      strong: true,
-    },
+  // Markers sit in the bucket that holds them, so p50 = 50 doesn't land on the
+  // [40,50)/[50,60) seam and read as belonging to neither bar. Several stats in one
+  // bucket fan out across the band instead of stacking on one line.
+  const wanted = [
+    { v: st.p10, label: `p10 ${s100(st.p10)}`, color: COLORS.p10 },
+    { v: st.p25, label: `p25 ${s100(st.p25)}`, color: COLORS.p25 },
+    { v: st.p50, label: `p50 ${s100(st.p50)}`, color: COLORS.p50 },
+    { v: st.mean, label: `mean ${s100(st.mean)}`, color: COLORS.mean, strong: true },
   ]
+  const byBucket = new Map()
+  for (const w of wanted) {
+    const b = bucketOf(w.v)
+    if (!byBucket.has(b)) byBucket.set(b, [])
+    byBucket.get(b).push(w)
+  }
+  const markers = []
+  for (const [b, group] of byBucket) {
+    group.forEach((w, j) => {
+      markers.push({ ...w, at: b + (j + 1) / (group.length + 1), row: markers.length })
+    })
+  }
 
   // Five ticks placed by SCORE instead of one label per bar. The =0 and =100 bars each
   // hold a full slot, so the axis is linear across the ten interior bins with a slot of
@@ -126,12 +137,12 @@ function buildView(rows, stats, mdef) {
 
   return {
     label: mdef.label,
-    title: `Per-query ${mdef.label}, ${n} queries`,
+    title: `Per-query ${mdef.label}`,
     valueLabel: 'queries',
     catLabel: `${mdef.label} (x100)`,
     subtitle:
-      `${counts[0]} score 0 and ${counts[CATS.length - 1]} score 100, ` +
-      `but only ${nearMean} land within 5 of the mean (${s100(st.mean)})`,
+      `${n} queries, 12 NanoBEIR datasets · mean ${s100(st.mean)} · ` +
+      `p50 ${s100(st.p50)} · p25 ${s100(st.p25)}`,
     categories: catsFor(mdef.label),
     catTicks,
     markers,
