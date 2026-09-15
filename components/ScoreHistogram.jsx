@@ -35,6 +35,8 @@ const MID_LABELS = [
 ]
 const CATS = ['=0', ...MID_LABELS, '=1.0']
 
+const BASE = { zero: '#f87171', one: '#10b981', mid: '#94a3b8' }
+
 const COLORS = {
   zero: '#f87171', // found nothing
   one: '#10b981', // perfect
@@ -164,7 +166,123 @@ function buildView(rows, stats, mdef) {
   }
 }
 
-export default function ScoreHistogram() {
+// Per-query delta buckets, symmetric around an exact-zero spike. Bucketing the CHANGE
+// keeps the paired information: a query that went 1.0 -> 0.0 is a different event from
+// one that never moved, and a net-zero bucket can hide 30 arrivals against 30 departures.
+const D_NEG = [-1.0, -0.5, -0.3, -0.2, -0.1, 0]
+const D_POS = [0, 0.1, 0.2, 0.3, 0.5, 1.0]
+const D_CATS = [
+  '−1..−.5',
+  '−.5..−.3',
+  '−.3..−.2',
+  '−.2..−.1',
+  '−.1..0',
+  '=0',
+  '0..+.1',
+  '+.1..+.2',
+  '+.2..+.3',
+  '+.3..+.5',
+  '+.5..+1',
+]
+const ZERO_IDX = 5
+
+// `compare` mode answers "how much does a query change", not "how did the summary move".
+// Those are different questions: the delta of the medians is +0.100 on recall@10, while
+// the median of the deltas is +0.000, because 460 of 599 queries never move at all.
+function buildCompareView(rows, stats, mdef) {
+  const n = rows.length
+  const enKey = `${mdef.key}_en`
+  const deltas = rows.map((r) => r[enKey] - r[mdef.key])
+
+  const bucketOf = (x) => {
+    if (Math.abs(x) <= 1e-9) return ZERO_IDX
+    if (x < 0) {
+      for (let i = 0; i < D_NEG.length - 1; i++) if (x >= D_NEG[i] && x < D_NEG[i + 1]) return i
+      return 0
+    }
+    for (let i = 0; i < D_POS.length - 1; i++) if (x > D_POS[i] && x <= D_POS[i + 1]) return 6 + i
+    return D_CATS.length - 1
+  }
+
+  const buckets = D_CATS.map(() => [])
+  rows.forEach((r, i) => buckets[bucketOf(deltas[i])].push({ r, d: deltas[i] }))
+  const counts = buckets.map((b) => b.length)
+  const win = deltas.filter((d) => d > 1e-9).length
+  const loss = deltas.filter((d) => d < -1e-9).length
+
+  // Linear-interpolated percentile, matching numpy, so the chart and the prose that
+  // quotes these numbers can't drift apart.
+  const sorted = [...deltas].sort((a, b) => a - b)
+  const q = (p) => {
+    const i = (p / 100) * (sorted.length - 1)
+    const lo = Math.floor(i)
+    const hi = Math.ceil(i)
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo)
+  }
+  const st = stats[mdef.stat]
+  const stEn = stats[`${mdef.stat}|word_en`]
+  const meanD = stEn.mean - st.mean
+  const fmt = (v) => (v >= 0 ? `+${v.toFixed(3)}` : v.toFixed(3))
+
+  // A delta's position on this axis: the zero spike owns a whole slot, so the negative
+  // buckets sit left of it and the positive ones right, each slot one bucket wide.
+  const at = (x) => {
+    const i = bucketOf(x)
+    if (i === ZERO_IDX) return ZERO_IDX + 0.5
+    const edges = x < 0 ? D_NEG : D_POS
+    const j = x < 0 ? i : i - 6
+    const lo = edges[j]
+    const hi = edges[j + 1]
+    return i + (hi === lo ? 0.5 : (x - lo) / (hi - lo))
+  }
+
+  return {
+    label: mdef.label,
+    title: `${mdef.label}: how much each query actually changed`,
+    valueLabel: '% of queries',
+    subtitle:
+      `${win} improved, ${loss} got worse, ${n - win - loss} never moved · ` +
+      `mean Δ ${fmt(meanD)} but median Δ ${fmt(q(50))} · p10 Δ ${fmt(q(10))}`,
+    categories: D_CATS,
+    catTicks: [
+      { at: 0, label: '−1.0' },
+      { at: 4, label: '−0.1' },
+      { at: ZERO_IDX + 0.5, label: 'no change' },
+      { at: 7, label: '+0.1' },
+      { at: D_CATS.length, label: '+1.0' },
+    ],
+    markers: [
+      { at: at(q(10)), label: `p10 ${fmt(q(10))}`, color: COLORS.p10, side: 'left' },
+      { at: at(meanD), label: `mean ${fmt(meanD)}`, color: COLORS.mean, strong: true, row: 1 },
+      { at: at(q(90)), label: `p90 ${fmt(q(90))}`, color: COLORS.p50, row: 2 },
+    ],
+    series: [
+      {
+        name: '% of queries',
+        values: counts.map((c) => Math.round((c / n) * 1000) / 10),
+        color: BASE.mid,
+        colors: D_CATS.map((_, i) =>
+          i < ZERO_IDX ? BASE.zero : i === ZERO_IDX ? BASE.mid : BASE.one
+        ),
+        text: counts.map((c) => (c ? `${c}` : '')),
+        textPosition: 'outside',
+        notes: buckets.map((b, i) => {
+          if (!b.length) return 'no queries'
+          const worst = b.reduce((a, x) => (x.d < a.d ? x : a), b[0])
+          const best = b.reduce((a, x) => (x.d > a.d ? x : a), b[0])
+          const pick = i < ZERO_IDX ? worst : best
+          if (i === ZERO_IDX) return `${b.length} queries scored exactly the same either way`
+          return (
+            `${b.length} queries, e.g. ${pick.r.ds}: ${pick.r.q.slice(0, 60)}… ` +
+            `(${pick.r[mdef.key].toFixed(2)} → ${pick.r[enKey].toFixed(2)})`
+          )
+        }),
+      },
+    ],
+  }
+}
+
+export default function ScoreHistogram({ compare = false }) {
   const [data, setData] = useState(null)
 
   useEffect(() => {
@@ -180,9 +298,18 @@ export default function ScoreHistogram() {
 
   if (!data) return <div style={{ minHeight: 420, margin: '1.5rem 0' }} />
 
-  const views = METRICS.map((mdef) => buildView(data.rows, data.stats, mdef))
+  const views = METRICS.map((mdef) =>
+    compare ? buildCompareView(data.rows, data.stats, mdef) : buildView(data.rows, data.stats, mdef)
+  )
 
   // No shared valueMax: recall@100's 59% tower would squash the other two views into
   // the bottom third. Each view scales to its own data; the % labels carry the compare.
-  return <BarChart orientation="vertical" valueLabel="% of queries" valueUnit="%" views={views} />
+  return (
+    <BarChart
+      orientation="vertical"
+      valueLabel="% of queries"
+      valueUnit={compare ? '' : '%'}
+      views={views}
+    />
+  )
 }

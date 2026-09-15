@@ -397,6 +397,17 @@ function ChartImpl({
   const rTitle = activeScale?.title ?? resolved?.title ?? title
   const rSubtitle = activeScale?.subtitle ?? resolved?.subtitle ?? subtitle
   const isLog = rValueScale === 'log'
+  // Most negative datum across every series. Stays 0 for every existing chart, so the
+  // scale below is unchanged unless a caller actually sends negative values (a diverging
+  // delta chart: bars grow down from a zero line instead of up from the axis).
+  let dataFloor = 0
+  for (let ci = 0; ci < N; ci++) {
+    srs.forEach((s) => {
+      const v = s.values?.[ci]
+      if (v != null && v < dataFloor) dataFloor = v
+    })
+  }
+
   // Smallest positive datum — the log floor falls back to this when unspecified.
   let dataMin = Infinity
   for (let ci = 0; ci < N; ci++) {
@@ -408,7 +419,9 @@ function ChartImpl({
   if (!isFinite(dataMin)) dataMin = 1
 
   // Value-axis ticks: numbers or [value, label] pairs → {v, label}.
-  const rawTicks = rValueTicks || niceLinearTicks(0, (dataMax || 1) * 1.12, 5)
+  const diverging = !isLog && dataFloor < 0
+  const vFloor = diverging ? dataFloor * 1.12 : 0
+  const rawTicks = rValueTicks || niceLinearTicks(vFloor, (dataMax || 1) * 1.12, 5)
   const vt = rawTicks.map((t) =>
     Array.isArray(t) ? { v: t[0], label: t[1] } : { v: t, label: trim(t) }
   )
@@ -427,6 +440,8 @@ function ChartImpl({
     ? rValueMin != null
       ? rValueMin
       : Math.min(dataMin, ...tickVals.filter((v) => v > 0))
+    : diverging
+    ? Math.min(vFloor, ...tickVals)
     : 0
 
   // ── Geometry ────────────────────────────────────────────────────────────────
@@ -500,8 +515,11 @@ function ChartImpl({
       const lv = v <= vMin ? logMin : Math.log10(v)
       return valZero + ((lv - logMin) / (logMax - logMin)) * (valFull - valZero)
     }
-    return valZero + (v / vMax) * (valFull - valZero)
+    // vMin is 0 for every non-diverging chart, so this is the original v/vMax ramp.
+    return valZero + ((v - vMin) / (vMax - vMin)) * (valFull - valZero)
   }
+  // Pixel of value 0: the bar base, which is the axis edge unless bars diverge.
+  const valBase = valPx(0)
 
   // Per-category band width: equal by default, or proportional to `barWidths`
   // (a per-category weight array) — that turns the vertical bar chart into a
@@ -647,15 +665,15 @@ function ChartImpl({
       let cum = 0
       srs.forEach((s, si) => {
         if (groupOf(s, si) !== gk) return
-        const v = Math.max(0, s.values?.[ci] || 0)
+        const v = diverging ? s.values?.[ci] || 0 : Math.max(0, s.values?.[ci] || 0)
         // Zeros normally collapse to an invisible zero-width bar. Show a small
         // labeled nub instead when the zero is meaningful: any grouped chart, or
         // a single-series bar the author gave an explicit text label (e.g. a
         // "+0.000" saturated-percentile move). A plain unlabeled single-series
         // zero still hides.
         const hasLabel = s.text != null && s.text[ci] != null && s.text[ci] !== ''
-        if (v <= 0 && G === 1 && !hasLabel) return
-        const zeroStub = v <= 0
+        if (v === 0 && G === 1 && !hasLabel) return
+        const zeroStub = v === 0
         const rawEnd = cum + v
         // A value that overshoots the configured axis max gets its bar
         // clamped to the ceiling instead of drawn (or overflowing) past it —
@@ -829,11 +847,12 @@ function ChartImpl({
               )
             }
           } else if (!horizontal && pos === 'outside') {
+            const down = p1 > p0 // bar grows downward from the zero line
             textLayer.push(
               <text
                 key={`t${ci}-${si}`}
                 x={barC}
-                y={Math.min(p0, p1) - 4}
+                y={down ? Math.max(p0, p1) + 11 : Math.min(p0, p1) - 4}
                 textAnchor="middle"
                 fontSize={fBarTxtSm}
                 fill={C.ink}
@@ -1026,7 +1045,9 @@ function ChartImpl({
   }
 
   const legendSwatch = (s, si) => {
-    const c = s.colors ? s.colors[0] : s.color || C.accent
+    // An explicit `color` wins over `colors[0]`: a series that paints one bucket red for
+    // emphasis shouldn't advertise red as its identity in the legend.
+    const c = s.color || (s.colors && s.colors[0]) || C.accent
     return (
       <span
         style={{
@@ -1297,6 +1318,9 @@ function ChartImpl({
           <rect x={m.l} y={m.t} width={pw} height={ph} fill="none" stroke={C.grid} />
           <line x1={m.l} y1={m.t} x2={m.l} y2={m.t + ph} stroke={C.axis} />
           <line x1={m.l} y1={m.t + ph} x2={m.l + pw} y2={m.t + ph} stroke={C.axis} />
+          {diverging && !horizontal && (
+            <line x1={m.l} y1={valBase} x2={m.l + pw} y2={valBase} stroke={C.axis} />
+          )}
           {barLayer}
           {markerLayer}
           {textLayer}
