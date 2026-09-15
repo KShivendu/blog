@@ -1,6 +1,7 @@
 import dynamic from 'next/dynamic'
 import { useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
+import { chartChrome, vizPalette } from '../lib/viz-palette'
 
 /*
  * LineChart — hand-rolled SVG line chart for the blog.
@@ -95,9 +96,6 @@ import { useTheme } from 'next-themes'
  *   />
  */
 
-// Categorical palette, led by the Teletype-v2 terminal-green accent. First entry
-// is swapped to the lighter dark-accent (#34d399) in dark mode (see colorsFor).
-const DEFAULT_COLORS = ['#047857', '#0891b2', '#7048e8', '#0d9488', '#64748b', '#2563eb']
 const VIEW_W = 760
 // Greedy word wrap for monospace text: at most `maxLines` lines of `maxChars`,
 // the last line ellipsised if the string still doesn't fit.
@@ -122,32 +120,13 @@ const wrapMono = (str, maxChars, maxLines) => {
 // Below this rendered width the chart switches to 1-unit-per-pixel geometry.
 const NARROW_W = 560
 
-// Theme-aware categorical: use the lighter green as the lead colour in dark.
+// Categorical slots from lib/viz-palette, four identity hues followed by the
+// second step of each. The old hand-picked list put cyan #0891b2 next to teal
+// #0d9488, which is dE 6.9 apart and unreadable as two series, and it shipped its
+// light-mode values onto the dark card. These are validated per surface.
 function colorsFor(isDark) {
-  return isDark ? ['#34d399', ...DEFAULT_COLORS.slice(1)] : DEFAULT_COLORS
-}
-
-function palette(isDark) {
-  // Teletype-v2 neutrals + Graticule's faint plot gridline (matches page grid).
-  return isDark
-    ? {
-        ink: '#dde6e0',
-        muted: '#8a968e',
-        grid: '#141922',
-        axis: '#38473e',
-        tip: '#0a0f0d',
-        border: '#1e2822',
-        card: '#0d1310',
-      }
-    : {
-        ink: '#14161a',
-        muted: '#5f6570',
-        grid: '#eef1f6',
-        axis: '#c8cfc9',
-        tip: '#14161a',
-        border: '#e0e4e1',
-        card: '#ffffff',
-      }
+  const { series, seriesAlt } = vizPalette(isDark)
+  return [...series, ...seriesAlt]
 }
 
 // 1-2-5 decade ticks within [lo, hi] — the helper used by both reference reports.
@@ -280,7 +259,7 @@ function ChartImpl({
 }) {
   const { theme, resolvedTheme } = useTheme()
   const isDark = (resolvedTheme || theme) === 'dark'
-  const C = palette(isDark)
+  const C = chartChrome(isDark)
 
   const tipRef = useRef(null)
   // Which series' point the cursor is actually closest to (by pixel distance,
