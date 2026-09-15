@@ -5,7 +5,7 @@ date: '2026-08-27'
 lastmod: '2026-08-27'
 tags: ['search', 'evaluation', 'metrics']
 draft: false
-summary: 'Serious teams track latency as p50/p90/p99, not one average — so why report search relevance as one average NDCG? On 12 benchmarks the mean looks healthy while one in five queries returns nothing relevant. The average is hiding your worst searches.'
+summary: 'Serious teams track latency as p50/p90/p99, not one average. So why report search relevance as one average NDCG? A mean of 52.5 can sit on top of a fifth of queries finding nothing at all. The average is hiding your relevance tail.'
 authors: ['kshivendu']
 ---
 
@@ -32,7 +32,7 @@ Observations:
 
 ## The mean hides the reality
 
-Read the same three runs as percentiles instead of averages, and the floor shows up:
+Read the same three runs as percentiles instead of averages:
 
 export const pctCats = ['NDCG@10', 'recall@10', 'recall@100']
 export const pctColors = {
@@ -47,7 +47,7 @@ export const pctColors = {
 <BarChart
   orientation="horizontal"
   title="Per-query score: mean vs median vs p10 floor (BM25, 12 NanoBEIR datasets)"
-  subtitle="gray = mean, teal = median (p50), amber = p25, red = p10 floor — 599 queries, pooled"
+  subtitle="gray = mean, teal = median (p50), amber = p25, red = p10 floor. 599 queries, pooled"
   valueLabel="score (higher is better)"
   valueMax={100}
   valueTicks={[0, 20, 40, 60, 80, 100]}
@@ -84,10 +84,10 @@ export const pctColors = {
   ]}
 />
 
-p10 is 0.0 for both NDCG@10 and recall@10: over 10% of queries score a hard zero while the mean sits near 53. Two subtler things the average also hides:
+p10 is 0.0 for both NDCG@10 and recall@10: over 10% of queries score a hard zero while the mean sits near 53. Two subtler things:
 
-1. **recall@100: the typical query is perfect, the mean says 76.5.** The median query recalls every relevant doc (p50 = 100), but a tail flooring at p10 = 12.6 drags the mean down to a number no real query got.
-2. **The mean's error flips sign between metrics.** It overstates recall@10's median (56.3 vs 50.0) and understates NDCG@10's (52.5 vs 55.4), so you can't correct for it in your head.
+- On recall@100 the typical query is perfect (p50 = 100), but a tail flooring at p10 = 12.6 pulls the mean to 76.5, a number no real query got.
+- The mean's error flips sign between metrics. It overstates recall@10's median (56.3 vs 50.0) and understates NDCG@10's (52.5 vs 55.4), so you can't correct for it in your head.
 
 ## It hides your improvements, too
 
@@ -112,7 +112,7 @@ Observations:
 - recall@100 is the safest, **84 wins against 32 losses**.
 - The extremes are real queries. `who sang here i go again` goes 100 → 0, and `Which colors can one use to fill out a check in the US?` goes 0 → 100.
 
-The same run as a table:
+Reported properly, that run is:
 
 | NDCG@10   |  word | word_en |        Δ |
 | --------- | ----: | ------: | -------: |
@@ -121,11 +121,11 @@ The same run as a table:
 | p25       |  21.9 |    26.4 | **+4.5** |
 | zero-rate | 19.9% |   17.2% |  −2.7 pp |
 
-The mean is the smallest number in that Δ column. p25 moves 2.4× as far.
+The mean is the smallest number in that Δ column, and p25 moves 2.4× as far.
 
 Add **win/tie/loss: 172/294/133**. It needs a baseline scored on the same queries, which is why it rarely gets reported. 56% of the queries that moved got better, and +1.9 doesn't say that.
 
-Splitting the mean into what was gained and what was given back says it too:
+Splitting the mean into what was gained and what was given back:
 
 | metric     | gained | given back | net (the mean) |
 | ---------- | -----: | ---------: | -------------: |
@@ -133,9 +133,14 @@ Splitting the mean into what was gained and what was given back says it too:
 | recall@10  |   +4.2 |       −2.0 |           +2.2 |
 | recall@100 |   +4.0 |       −1.2 |           +2.8 |
 
-Every mean here is a small difference between two much larger numbers. NDCG@10 gives back two thirds of what it wins; recall@100 gives back a quarter. Those are different trades reported as similar gains.
+Every mean here is a small difference between two larger numbers. NDCG@10 gives back two thirds of what it wins, recall@100 a quarter. Same-looking gains, different trades.
 
-The Δ of percentiles answers a different question: did the whole distribution shift? Across six statistics:
+A saturated percentile can't show a gain. recall@10's p75 and p90 are already at 100, so a better method moves them +0.0, and the 43% of queries already scoring 100 have no headroom to lift the mean with.
+
+<details>
+<summary>The Δ of percentiles, across six statistics and all three metrics</summary>
+
+Subtracting one run's percentiles from the other's answers a different question: did the whole distribution shift?
 
 export const deltaCats = ['mean', 'p10', 'p25', 'p50', 'p75', 'p90']
 export const deltaColors = [
@@ -166,7 +171,7 @@ export const deltaColors = [
   ]}
 />
 
-Same gain, six ways: the mean smears it across every query (**+2.2**); the median reads it where the queries can actually move (**+10.0**, 4.6×). The p10, p75, and p90 bars sit at +0.0 because those percentiles are saturated (p10 at 0, p75 and p90 at 100), and a saturated percentile can't show a gain. The pattern holds across metrics:
+The mean smears the gain across every query (**+2.2**); the median reads it where the queries can actually move (**+10.0**, 4.6×). p10, p75 and p90 sit at +0.0 because they're saturated. The pattern holds across metrics:
 
 | metric     | mean Δ | where it shows up                                                         |
 | ---------- | -----: | ------------------------------------------------------------------------- |
@@ -174,7 +179,9 @@ Same gain, six ways: the mean smears it across every query (**+2.2**); the media
 | NDCG@10    |   +1.9 | p25 / p50 / p75 all move ~2× the mean (+3.7 to +4.5)                      |
 | recall@100 |   +2.8 | median already 100, so the gain lands in **p25: 50 → 63 (+12.6, 4.5×)**   |
 
-The gain shows up wherever the live mass sits: the median for recall@10, the lower quartiles for recall@100 whose median is already maxed. A saturated percentile moves nothing; the informative one moves 2–5× the mean.
+The gain shows up wherever the live mass sits, and the informative percentile moves 2-5× the mean.
+
+</details>
 
 ## The relevance tail
 
@@ -182,7 +189,7 @@ Latency and relevance are the same problem pointed at opposite tails. For latenc
 
 Report p25, not p10. p10 pins at 0 once more than 10% of queries fail, and 20% do here, so it can't show the tail moving. p25 is 21.9 on NDCG@10 and still moves when the method changes.
 
-And it is instinct for latency. I timed this BM25 baseline at **3.2ms p50, 7.2ms p90**. Reporting only the 4.4ms mean would be a mistake, because the p90 is the request a real user is waiting on. p25 relevance is that same user, on the tail that actually hurts. We just forget to report it.
+I timed this BM25 baseline at **3.2ms p50, 7.2ms p90**. Nobody would report only the 4.4ms mean, because the p90 is the request a real user is waiting on. p25 relevance is that same user. We just forget to report it.
 
 ## So what should we report instead?
 
