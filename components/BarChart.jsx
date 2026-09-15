@@ -92,7 +92,11 @@ import { chartChrome, vizPalette } from '../lib/viz-palette'
  *                mean, a percentile) be placed on a categorical axis of buckets.
  *                Dashed by default; `solid` drops the dash for a marker that
  *                shouldn't read as an estimate. Every marker keeps the same
- *                weight, so none of them outranks the bars. Settable per view
+ *                weight, so none of them outranks the bars.
+ *                The label rides a pill in the marker's colour. `side` is 'left'
+ *                or 'right' (default) and picks which side of the line it sits
+ *                on, flipping only when that side has no room. `row` stacks
+ *                labels that would otherwise collide. Settable per view
  *                (view.markers wins over the top-level prop).
  *
  * ── Example: horizontal single-series with an All/Focus toggle ───────────────
@@ -971,41 +975,45 @@ function ChartImpl({
         />
       )
       if (mk.label) {
-        // `side` picks which way the label reads; it flips anyway if that would push it
-        // outside the plot (monospace, so the width estimate is reliable)
+        // The label rides a pill filled with the marker's own colour. It reads as one
+        // object with the line, and the text only has to contrast with the pill, so a
+        // step that is pale against the card is still legible here.
         const lw = String(mk.label).length * fTick * 0.62
-        const wantLeft = mk.side === 'left'
-        const flip = !horizontal && (wantLeft ? p - lw > m.l : p + lw > m.l + pw)
-        // The label rides a pill filled with the marker's own colour. It reads as
-        // one object with the line, and the text only has to contrast with the
-        // pill, so a step that is pale against the card is still legible here.
-        const tx = horizontal ? m.l + 6 : p + (flip ? -5 : 5)
-        // Rows step by the pill's own height: the label used to be bare text, so 11px
-        // was enough, and a pill on row 1 now runs into the one above it.
-        const rowStep = fTick + 7
-        const ty = horizontal ? p - 5 : m.t + 11 + (mk.row || 0) * rowStep
-        const anchor = horizontal ? 'start' : flip ? 'end' : 'start'
-        const padX = 4
+        const padX = 6
         const boxW = lw + padX * 2
-        const boxH = fTick + 5
-        const boxX = anchor === 'start' ? tx - padX : tx - boxW + padX
+        const boxH = fTick + 8
+        const gap = 5 // line to pill edge
+
+        // `side` puts the pill left or right of its line ('right' by default). It only
+        // flips when the chosen side would push the pill outside the plot, so an
+        // explicit side is honoured wherever there's room for it.
+        const wantLeft = mk.side === 'left'
+        const fitsLeft = p - gap - boxW >= m.l
+        const fitsRight = p + gap + boxW <= m.l + pw
+        const onLeft = horizontal
+          ? false
+          : wantLeft
+          ? fitsLeft || !fitsRight
+          : !fitsRight && fitsLeft
+
+        // Rows step by the pill's own height plus a hairline, so stacked labels read as
+        // separate chips rather than one block.
+        const rowStep = boxH + 3
+        const ty = horizontal ? p - 7 : m.t + 12 + (mk.row || 0) * rowStep
+        const boxX = horizontal ? m.l + 6 : onLeft ? p - gap - boxW : p + gap
+        // Centre the pill on the glyph box, which for a baseline at `ty` and font size
+        // F runs about [ty - 0.75F, ty + 0.25F].
+        const boxY = ty - 0.25 * fTick - boxH / 2
+
         markerLayer.push(
-          <rect
-            key={`mkb${i}`}
-            x={boxX}
-            y={ty - fTick + 1}
-            width={boxW}
-            height={boxH}
-            rx={2.5}
-            fill={col}
-          />
+          <rect key={`mkb${i}`} x={boxX} y={boxY} width={boxW} height={boxH} rx={3} fill={col} />
         )
         markerLayer.push(
           <text
             key={`mkl${i}`}
-            x={tx}
+            x={boxX + boxW / 2}
             y={ty}
-            textAnchor={anchor}
+            textAnchor="middle"
             fontSize={fTick}
             fontWeight="600"
             fill={readableOn(col)}
