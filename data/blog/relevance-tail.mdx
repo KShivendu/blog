@@ -34,13 +34,14 @@ Observations:
 Read the same three runs as percentiles instead of averages:
 
 export const pctCats = ['NDCG@10', 'recall@10', 'recall@100']
-export const pctColors = {
-  mean: '#94a3b8',
-  p50: '#0d9488',
-  p25: '#f59e0b',
-  p10: '#f87171',
-  p75: '#34d399',
-  p90: '#10b981',
+export const pctRoles = {
+  mean: 'statMean',
+  p50: 'statP50',
+  p25: 'statP25',
+  p10: 'statP10',
+  // p75 and p90 are pinned at 100 here, so they get the same muted grey as the mean
+  p75: 'statMuted',
+  p90: 'statMuted',
 }
 
 <BarChart
@@ -55,28 +56,28 @@ export const pctColors = {
     {
       name: 'mean',
       values: [52.5, 56.3, 76.5],
-      color: pctColors.mean,
+      role: 'statMean',
       text: ['52.5', '56.3', '76.5'],
       textPosition: 'outside',
     },
     {
       name: 'median (p50)',
       values: [55.4, 50.0, 100.0],
-      color: pctColors.p50,
+      role: 'statP50',
       text: ['55.4', '50.0', '100'],
       textPosition: 'outside',
     },
     {
       name: 'p25',
       values: [21.9, 13.7, 50.0],
-      color: pctColors.p25,
+      role: 'statP25',
       text: ['21.9', '13.7', '50.0'],
       textPosition: 'outside',
     },
     {
       name: 'p10 (floor)',
       values: [0.0, 0.0, 12.6],
-      color: pctColors.p10,
+      role: 'statP10',
       text: ['0.0', '0.0', '12.6'],
       textPosition: 'outside',
     },
@@ -143,13 +144,13 @@ A saturated percentile can't show a gain. NDCG@10's p90 is already at 100, so a 
 Subtracting one run's percentiles from the other's answers a different question: did the whole distribution shift?
 
 export const deltaCats = ['mean', 'p10', 'p25', 'p50', 'p75', 'p90']
-export const deltaColors = [
-  pctColors.mean,
-  pctColors.p10,
-  pctColors.p25,
-  pctColors.p50,
-  pctColors.p75,
-  pctColors.p90,
+export const deltaRoles = [
+  pctRoles.mean,
+  pctRoles.p10,
+  pctRoles.p25,
+  pctRoles.p50,
+  pctRoles.p75,
+  pctRoles.p90,
 ]
 
 <BarChart
@@ -164,7 +165,7 @@ export const deltaColors = [
     {
       name: 'Δ recall@10',
       values: [2.16, 0.0, 3.6, 10.0, 0.0, 0.0],
-      colors: deltaColors,
+      roles: deltaRoles,
       text: ['+2.2', '+0.0', '+3.6', '+10.0', '+0.0', '+0.0'],
       textPosition: 'outside',
     },

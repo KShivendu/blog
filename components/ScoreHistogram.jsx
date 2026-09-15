@@ -1,5 +1,7 @@
+import { useTheme } from 'next-themes'
 import { useEffect, useState } from 'react'
 import BarChart from './BarChart'
+import { vizPalette } from '../lib/viz-palette'
 
 // Per-query score distribution for the relevance-tail post, drawn as a <BarChart>
 // so it reads as the same system as every other chart here. One view per metric.
@@ -49,19 +51,12 @@ const catsFor = (label) => [
 // scores live 0..1 in the data and are reported x100 everywhere a human reads them
 const s100 = (v, d = 1) => (v * 100).toFixed(d)
 
-const BASE = { zero: '#f87171', one: '#10b981', mid: '#94a3b8' }
+// Palette comes from lib/viz-palette: percentiles share one ordered hue, status
+// colours are reserved, and the mean is neutral ink because it's the claim under
+// test rather than another series. Light/dark are separate validated steps.
+const PALETTE = { light: vizPalette(false), dark: vizPalette(true) }
 
-const COLORS = {
-  zero: '#f87171', // found nothing
-  one: '#10b981', // perfect
-  mid: '#94a3b8',
-  mean: '#f59e0b', // the mean, and the bucket it falls in
-  p50: '#0d9488',
-  p25: '#8b5cf6',
-  p10: '#f87171',
-}
-
-function buildView(rows, stats, mdef) {
+function buildView(rows, stats, mdef, C) {
   const n = rows.length
   const buckets = CATS.map(() => [])
   for (const r of rows) {
@@ -105,10 +100,10 @@ function buildView(rows, stats, mdef) {
   // [40,50)/[50,60) seam and read as belonging to neither bar. Several stats in one
   // bucket fan out across the band instead of stacking on one line.
   const wanted = [
-    { v: st.p10, label: `p10 ${s100(st.p10)}`, color: COLORS.p10 },
-    { v: st.p25, label: `p25 ${s100(st.p25)}`, color: COLORS.p25 },
-    { v: st.p50, label: `p50 ${s100(st.p50)}`, color: COLORS.p50 },
-    { v: st.mean, label: `mean ${s100(st.mean)}`, color: COLORS.mean, strong: true },
+    { v: st.p10, label: `p10 ${s100(st.p10)}`, color: C.p10 },
+    { v: st.p25, label: `p25 ${s100(st.p25)}`, color: C.p25 },
+    { v: st.p50, label: `p50 ${s100(st.p50)}`, color: C.p50 },
+    { v: st.mean, label: `mean ${s100(st.mean)}`, color: C.mean, solid: true },
   ]
   const byBucket = new Map()
   for (const w of wanted) {
@@ -151,13 +146,9 @@ function buildView(rows, stats, mdef) {
         name: 'queries',
         values: counts,
         colors: CATS.map((_, i) =>
-          i === 0
-            ? COLORS.zero
-            : i === CATS.length - 1
-            ? COLORS.one
-            : i === meanIdx
-            ? COLORS.mean
-            : COLORS.mid
+          // the mean's bucket is not highlighted: the marker line already says where it
+          // is, and an ink-bright bar would out-shout the failure bucket
+          i === 0 ? C.bad : i === CATS.length - 1 ? C.good : C.neutral
         ),
         // Label only the two towers. Ten more numbers across the middle is noise, and
         // the gridlines already give the scale; hover has the exact count.
@@ -206,7 +197,7 @@ const ZERO_IDX = 5
 // `compare` mode answers "how much does a query change", not "how did the summary move".
 // Those are different questions: the delta of the medians is +10.0 on recall@10, while
 // the median of the deltas is 0, because 460 of 599 queries never move at all.
-function buildCompareView(rows, stats, mdef) {
+function buildCompareView(rows, stats, mdef, C) {
   const n = rows.length
   const enKey = `${mdef.key}_en`
   const deltas = rows.map((r) => r[enKey] - r[mdef.key])
@@ -271,18 +262,16 @@ function buildCompareView(rows, stats, mdef) {
       { at: D_CATS.length, label: '+100' },
     ],
     markers: [
-      { at: at(q(10)), label: `p10 ${fmt(q(10))}`, color: COLORS.p10, side: 'left' },
-      { at: at(meanD), label: `mean ${fmt(meanD)}`, color: COLORS.mean, strong: true, row: 1 },
-      { at: at(q(90)), label: `p90 ${fmt(q(90))}`, color: COLORS.p50, row: 2 },
+      { at: at(q(10)), label: `p10 ${fmt(q(10))}`, color: C.p10, side: 'left' },
+      { at: at(meanD), label: `mean ${fmt(meanD)}`, color: C.mean, solid: true, row: 1 },
+      { at: at(q(90)), label: `p90 ${fmt(q(90))}`, color: C.p50, row: 2 },
     ],
     series: [
       {
         name: 'queries',
         values: counts,
-        color: BASE.mid,
-        colors: D_CATS.map((_, i) =>
-          i < ZERO_IDX ? BASE.zero : i === ZERO_IDX ? BASE.mid : BASE.one
-        ),
+        color: C.neutral,
+        colors: D_CATS.map((_, i) => (i < ZERO_IDX ? C.bad : i === ZERO_IDX ? C.neutral : C.good)),
         text: counts.map((c) => (c ? `${c}` : '')),
         textPosition: 'outside',
         notes: buckets.map((b, i) => {
@@ -303,6 +292,10 @@ function buildCompareView(rows, stats, mdef) {
 
 export default function ScoreHistogram({ compare = false }) {
   const [data, setData] = useState(null)
+  const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  const C = PALETTE[mounted && resolvedTheme === 'dark' ? 'dark' : 'light']
 
   useEffect(() => {
     let live = true
@@ -318,7 +311,9 @@ export default function ScoreHistogram({ compare = false }) {
   if (!data) return <div style={{ minHeight: 420, margin: '1.5rem 0' }} />
 
   const views = METRICS.map((mdef) =>
-    compare ? buildCompareView(data.rows, data.stats, mdef) : buildView(data.rows, data.stats, mdef)
+    compare
+      ? buildCompareView(data.rows, data.stats, mdef, C)
+      : buildView(data.rows, data.stats, mdef, C)
   )
 
   // No shared valueMax: recall@100's 351-query tower would squash the other two views
