@@ -131,22 +131,29 @@ series={[
 from the `gray` scale in `tailwind.config.js`. Import it rather than inlining the
 neutrals again.
 
+## Seeing it
+
+`/charts` renders every chart type and every palette role on one page, both
+themes. Swatches print their contrast against the current surface and turn red
+under 3:1, so the deliberate exceptions stay visible rather than becoming folklore.
+Check a palette change there before hunting through posts.
+
 ## What is still to migrate
 
-The infrastructure is done and the two shared charts use it. These don't yet:
+Done: the two shared charts, the `token-search` post and its four components.
+That post now has zero hex literals and one meaning per colour.
 
-1. **`DecadeFacets`, `VocabHistogram`, `ZipfSpiral`** share one inline trio,
-   `{ word: '#94a3b8', r50k: '#38bdf8', o200k: '#10b981' }`. Emerald, sky and slate,
-   unrelated to the palette. `#94a3b8` vs `#38bdf8` is 11.6 dE, under the floor, and
-   all three are under 3:1 on white (2.56, 2.14, 2.54). They want `series[0..2]`.
-2. **`PostingCurves`** needs the families-of-two treatment described above, which
-   also fixes the two colours that currently mean two things each.
-3. **Eight animation components** inline their own chrome. Mechanical swap to
-   `chartChrome`.
-4. **The posts.** 344 hex literals. `token-storage-extra.mdx` (198),
+Left:
+
+1. **Eight animation components** (`CoordinatedOmission`, `SpladeVsIF`,
+   `SimilarityGate`, `TokenCompressionPipeline`, `TokenSearchAnalyzer`,
+   `StemExpandHero`, `LoadModelAnimated`, `TokenCompressionAnimated`) inline their
+   own copy of the chrome neutrals. Mechanical swap to `chartChrome`.
+2. **The remaining posts**, about 320 hex literals. `token-storage-extra.mdx` (198),
    `embedding-layers.mdx` (83) and `model-db.mdx` (34) are most of it. Worth doing
-   per post when that post is next edited rather than in one pass, because each one
-   needs its charts looked at afterwards.
+   per post when that post is next edited rather than in one pass, because each
+   one needs its charts looked at afterwards, in both themes.
 
-Items 1 and 2 change published charts, so they want a visual check in both themes
-before committing.
+The `token-search` migration is the worked example for item 2. The useful part was
+not the mechanical swap: it was reading the post's charts together first to find
+what each colour actually meant, which is how the two collisions surfaced.
