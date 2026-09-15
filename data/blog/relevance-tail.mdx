@@ -27,7 +27,6 @@ Observations:
 
 - 119 queries score exactly 0 and 129 score exactly 100. That's **41% of the eval** parked on the two end bars, and the mean is neither of them.
 - Only **43 of 599** queries land within 5 of the mean (52.5), so it describes a query that mostly doesn't exist.
-- p10 is **0.0**, which means the entire bottom tenth of the eval sits inside that one red bar.
 - Switch to recall@10 and the split sharpens: **63%** of queries at the two ends, 13 near the mean.
 
 ## The mean hides the reality
@@ -92,7 +91,7 @@ Observations:
 
 ## It hides your improvements, too
 
-The mean also hides your gains. Take a real improvement: plain word BM25, then apply a Porter stemmer and a stopword list (`word_en`). It moves mean recall@10 by **+2.2**, a bump you'd squint at.
+Take a real improvement: plain word BM25, then apply a Porter stemmer and a stopword list (`word_en`). It moves mean recall@10 by **+2.2**, a bump you'd squint at.
 
 That +2.2 could be every query gaining 2.2, or a few gaining a lot while the rest sit still, or some gaining a lot while others lose just as much. Per 1000 queries it's the third:
 
@@ -215,6 +214,6 @@ Mean alone can't capture a distribution. We realised this for latency decades ag
 
 ## Key Takeaways
 
-- **A good average can hide queries that find nothing.** A mean of 50 could be every query scoring 50, or half the queries scoring 100 and half scoring 0.
-- **The mean hides gains, too.** Adding a stemmer + stopwords moves mean recall@10 by a forgettable +2.2, while its median jumps 50 → 60 (+10.0, 4.6×).
-- **Report p50 and p25 next to the mean.** For relevance, higher is better, so the tail that hurts is the low end. p25 is the mirror of p90/p99 latency.
+- A good average can hide queries that find nothing. A mean of 50 could be every query scoring 50, or half the queries scoring 100 and half scoring 0.
+- It hides your gains too. Adding a stemmer and stopwords moves mean recall@10 by a forgettable +2.2, while its median jumps 50 → 60.
+- Report p50 and p25 next to the mean. Higher is better for relevance, so the tail that hurts is the low end, and p25 is the mirror of p90/p99 latency.
