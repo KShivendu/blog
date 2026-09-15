@@ -7,6 +7,7 @@ import Footer from './Footer'
 import MobileNav from './MobileNav'
 import ThemeSwitch from './ThemeSwitch'
 import FontPicker from './FontPicker'
+import MatrixName from './MatrixName'
 
 const LayoutWrapper = ({ children }) => {
   return (
@@ -20,9 +21,10 @@ const LayoutWrapper = ({ children }) => {
                   <Logo />
                 </div>
                 {typeof siteMetadata.headerTitle === 'string' ? (
-                  <div className="hidden h-6 text-xl font-semibold tracking-tight sm:block">
-                    {siteMetadata.headerTitle}
-                  </div>
+                  <MatrixName
+                    text={siteMetadata.headerTitle}
+                    className="hidden h-6 text-xl font-semibold tracking-tight sm:block"
+                  />
                 ) : (
                   siteMetadata.headerTitle
                 )}
