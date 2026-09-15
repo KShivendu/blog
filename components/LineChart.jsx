@@ -449,10 +449,17 @@ function ChartImpl({
   const esc = (str) => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;')
 
   const CATS = colorsFor(isDark)
-  // `color: 'accent'` opts a series into the theme-aware brand green
-  // (#047857 light / #34d399 dark) — legible in both themes without hardcoding.
+  const VP = vizPalette(isDark)
+  // A series may name a palette ROLE instead of a hex, the same way BarChart does:
+  // `role: 'series0'` gets the slot validated for the current surface. Static charts
+  // written in mdx can't follow the theme on their own, so this is how they do it.
+  // `color: 'accent'` stays as a shorthand for the brand green.
   const colorOf = (s, i) =>
-    s.color === 'accent' ? (isDark ? '#34d399' : '#047857') : s.color || CATS[i % CATS.length]
+    s.color === 'accent'
+      ? isDark
+        ? '#34d399'
+        : '#047857'
+      : s.color || (s.role && VP[s.role]) || CATS[i % CATS.length]
 
   // ── Build SVG layers ─────────────────────────────────────────────────────
   const gridLayer = []

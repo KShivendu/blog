@@ -1,11 +1,19 @@
 /* eslint-disable react/display-name */
 import { useEffect, useState } from 'react'
+import { useTheme } from 'next-themes'
+import { vizPalette } from '../lib/viz-palette'
 
 // Per-term frequency histogram: one bar per vocabulary term, its surface string
 // written vertically below the bar. Horizontally scrollable so the long tail fits.
 // Data (top-N terms per tokenizer) is loaded from `src` at runtime, not inlined.
 
-const COLORS = { word: '#94a3b8', r50k: '#38bdf8', o200k: '#10b981' }
+// word is the baseline being measured against, so it takes the muted grey. r50k and
+// o200k are the same thing at two vocabulary sizes, so they are one hue with the
+// second step rather than two unrelated colours. See chart-style.md.
+const colorsFor = (dark) => {
+  const P = vizPalette(dark)
+  return { word: P.muted, r50k: P.seriesAlt[0], o200k: P.series[0] }
+}
 const NAMES = { word: 'word', r50k: 'r50k tokens', o200k: 'o200k tokens' }
 
 // make whitespace / control tokens visible
@@ -14,6 +22,11 @@ const show = (t) => (t === '' ? '∅' : t.replace(/ /g, '␣').replace(/\n/g, '�
 export default function VocabHistogram({ src, barHeight = 200, barWidth = 18, labelSpace = 150 }) {
   const [data, setData] = useState(null)
   const [tok, setTok] = useState('word')
+  // Colour has to follow the theme, so it's resolved at render, not module load.
+  const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  const COLORS = colorsFor(mounted && resolvedTheme === 'dark')
 
   useEffect(() => {
     let live = true

@@ -53,20 +53,20 @@ export const plBuckets = [
 ]
 export const plFmt = (x) =>
   x >= 1e6 ? (x / 1e6).toFixed(1) + 'M' : x >= 1e3 ? Math.round(x / 1e3) + 'k' : '' + Math.round(x)
-export const plBar = (pct, total, color, ex) => ({
+export const plBar = (pct, total, role, ex) => ({
   categories: plBuckets,
   series: [
     {
       name: 'v',
       values: pct,
-      colors: plBuckets.map(() => color),
+      roles: plBuckets.map(() => role),
       text: pct.map((x) => ((x / 100) * total >= 500 ? plFmt((x / 100) * total) : '')),
       textPosition: 'outside',
       notes: ex && ex.map((e) => 'e.g. ' + e),
     },
   ],
 })
-export const plMethod = (vocab, totalPost, terms, post, color, ex) => {
+export const plMethod = (vocab, totalPost, terms, post, role, ex) => {
   const sub = `${plFmt(vocab)} distinct terms, ${plFmt(
     totalPost
   )} posting entries · doc-frequency buckets, 12 NanoBEIR (52k docs)`
@@ -79,7 +79,7 @@ export const plMethod = (vocab, totalPost, terms, post, color, ex) => {
       valueLabel: 'posting entries per bucket: the traversal cost (bar = share, label = raw count)',
       valueMax: 94,
       valueTicks: [0, 20, 40, 60, 80],
-      ...plBar(post, totalPost, color, ex),
+      ...plBar(post, totalPost, role, ex),
     },
     {
       label: 'distinct terms',
@@ -89,7 +89,7 @@ export const plMethod = (vocab, totalPost, terms, post, color, ex) => {
         'distinct terms per bucket: the vocabulary shape (bar = share, label = raw count)',
       valueMax: 62,
       valueTicks: [0, 20, 40, 60],
-      ...plBar(terms, vocab, color, ex),
+      ...plBar(terms, vocab, role, ex),
     },
   ]
 }
@@ -105,7 +105,7 @@ export const plMethod = (vocab, totalPost, terms, post, color, ex) => {
         4718038,
         [53.5, 11.9, 12.0, 6.8, 7.3, 4.4, 2.3, 1.2, 0.4, 0.1, 0.0],
         [1.7, 0.7, 1.4, 1.6, 4.0, 7.7, 12.2, 19.7, 20.0, 14.5, 16.6],
-        '#94a3b8',
+        'muted',
         [
           'itam, dap12, overproduce, bc1, sines',
           'cd33, cytopenias, methylomes, gsc, quasispecies',
@@ -128,7 +128,7 @@ export const plMethod = (vocab, totalPost, terms, post, color, ex) => {
         3325192,
         [57.1, 11.8, 11.3, 6.1, 6.3, 3.7, 1.9, 1.2, 0.6, 0.1, 0.0],
         [2.0, 0.8, 1.4, 1.6, 3.8, 6.9, 11.2, 22.6, 31.7, 16.7, 1.4],
-        '#64748b',
+        'mutedAlt',
         [
           'itam, dap12, bc1, retroposit, yh',
           'cd33, quasispeci, ankylos, spondyl, psoriat',
@@ -151,7 +151,7 @@ export const plMethod = (vocab, totalPost, terms, post, color, ex) => {
         5851068,
         [17.2, 8.5, 14.7, 13.5, 20.6, 14.8, 6.6, 2.9, 0.9, 0.2, 0.1],
         [0.2, 0.2, 0.7, 1.3, 4.8, 10.4, 14.1, 19.0, 18.4, 14.1, 16.7],
-        '#f87171',
+        'bad',
         [
           'Likelihood, Dot, megl, ostics, pane',
           'PIT, nof, PEC, MAR, templ',
@@ -175,7 +175,7 @@ export const plMethod = (vocab, totalPost, terms, post, color, ex) => {
         5257744,
         [17.5, 8.0, 12.2, 11.4, 19.4, 16.5, 8.8, 4.4, 1.4, 0.3, 0.1],
         [0.2, 0.2, 0.4, 0.8, 3.3, 8.5, 13.8, 21.1, 20.3, 14.9, 16.6],
-        '#10b981',
+        'series0',
         [
           'yh, megl, ostics, uego, sio',
           'produce, nof, poly, nim, substr',
@@ -198,7 +198,7 @@ export const plMethod = (vocab, totalPost, terms, post, color, ex) => {
         9571605,
         [49.4, 11.6, 11.6, 7.3, 7.9, 3.8, 1.4, 1.2, 1.4, 1.1, 3.2],
         [0.1, 0.0, 0.0, 0.1, 0.1, 0.2, 0.2, 0.8, 2.4, 6.4, 89.8],
-        '#7dd3fc',
+        'seriesAlt1',
         [
           'δa, 5β, ﬁe, bζ, 1γ',
           '9w, pα, a², 8z, bα',
@@ -221,7 +221,7 @@ export const plMethod = (vocab, totalPost, terms, post, color, ex) => {
         17851206,
         [45.3, 11.6, 12.0, 6.1, 7.6, 5.1, 3.2, 2.9, 2.5, 2.4, 1.3],
         [0.1, 0.1, 0.1, 0.1, 0.3, 0.6, 1.3, 3.7, 10.0, 30.4, 53.4],
-        '#38bdf8',
+        'series1',
         [
           'vs1, zfn, itx, tx3, b27',
           'd33, xyk, vl1, gg1, p75',
@@ -246,12 +246,49 @@ Observations:
 2. **Word is a pile of singletons.** **53%** (**78k**) of its terms appear in one document, lists too short to rank. Subwords are shared, so normalized drops to **17%**, the same content in fewer, longer lists, where a query term lands on its document.
 3. **Stemming barely lengthens lists.** Elasticsearch's `word+stem` stays **57%** (**65k** of 114k) singletons, since it only merges already-rare forms. Subword tokenization is the one thing here that fundamentally lengthens the lists.
 
+Buckets hide the shape inside each bar, so here's the same index as a continuous curve. Sort every term by document frequency and plot it: each analyzer becomes one line, and the area under that line **is** its posting entries, so the traversal cost is the shape rather than a stack of shares.
+
+<PostingCurves />
+
+Char bigram sits on a plateau at **35,390 documents out of 51,677** all the way to rank ~300, then falls off a cliff. In the histogram that was one bar. Here it reads as a ledge. Word's curve drops to the `df=1` floor at rank 51,386 and runs flat along it for the remaining **65%** of its vocabulary, terms that can never separate two documents. Normalized BPE reaches that floor only at **74%** of a vocabulary less than a third the size.
+
+Switch to **by token ID** for something the bars can't show at all. Words and char n-grams have no numeric ID, but a BPE token does, and BPE assigns IDs in merge order, which tracks frequency in the tokenizer's _own_ training corpus. Plot doc frequency against that ID on NanoBEIR, a corpus the tokenizer never saw, and the ordering holds: above ID 256 it decays from ~3,400 documents down to ~9 at the top of r50k's 50k vocabulary, and from ~2,200 to ~5 across o200k's 200k. Spearman ρ = **-0.59** for r50k against **-0.34** for o200k, because most of o200k's vocabulary is non-English tokens that never fire here.
+
+The trough on the left is worth reading closely. Below ID 256 there are no merges at all, only BPE's single-byte fallback, and it splits in two: IDs up to ~95 are printable ASCII (`c`, `e`, `t`, each in 1,000–3,000 of the 52k documents, since almost every document contains the letter `e`), while IDs ~96–255 are lone non-ASCII bytes, not valid UTF-8 on their own, appearing in 2 to 165 documents. Merge order starts at 256 and doc frequency jumps straight back to ~3,400 with `at`, `it`, and `␣f`. Those 256 tokens are a rounding error against a 30k–48k vocabulary, so cutting them moves ρ by only 0.001. The trough shows up in the curve without doing much to the correlation.
+
+So the ID is already a rarity estimate, available before you have a single corpus statistic. Feeding that prior to BM25 as a weight on top of local IDF is worth about +0.006 NDCG@10 (CI [-0.006, +0.016], 9 wins / 3 losses), so the ordering is real but there's no retrieval gain to collect from it.
+
+The loose ordering isn't inherent, though, and [token-storage](/blog/token-storage) already has the fix. That post's **`+freq`** trick relabels every token by its descending-frequency rank, so the most-used token becomes ID 0, purely so a variable-length integer codec can pack the IDs smaller. Switch the chart to **by +freq rank** and the same remap does something for search: the jagged curve straightens into a monotone slide from 47,396 documents down to the `df=1` floor, and the byte trough disappears because the byte tokens sort into their actual place.
+
+The table here is built **held out**, on 4M tokens of that post's C4 prose corpus and applied to NanoBEIR unchanged, which is what a deployed static rank table is. At the head the transfer is exact: the table's top eight ranks (`␣the`, `␣and`, `␣to`, `␣of`, `␣a`, `␣in`, `␣is`, `␣for`) are the same eight terms as this corpus's eight highest document frequencies, for both tokenizers, just shuffled slightly within the set (`␣to` is the table's rank 3 but only 6th by document frequency here). Across the whole vocabulary it tightens the ordering for both tokenizers, most for the one whose raw IDs were worst:
+
+| ordering                            | r50k      | o200k     |
+| ----------------------------------- | --------- | --------- |
+| raw BPE ID (merge order)            | -0.59     | -0.34     |
+| **+freq, held-out C4 table**        | **-0.77** | **-0.81** |
+| +freq, table rebuilt on this corpus | -0.99     | -0.99     |
+
+o200k goes from the worst ordering to the best, because its raw IDs are the ones scrambled by the 200k multilingual vocabulary while its frequency ranks are not.
+
+The gap from -0.81 to -0.99 isn't the tokens the table never saw, which was my first guess. Those are **11,052 of 48,157** index terms, 23% of the vocabulary, but they carry only **0.7% of the postings**: they're rare in NanoBEIR too, so parking them at the tail happens to be about right, and the correlation over just that group is -0.04, no information either way. Only **3** of this corpus's 2,000 most frequent terms are missing from the table at all. Restricting to the terms it _did_ see gives a **worse** ρ of **-0.75**, so the headline -0.81 is slightly flattered by that correctly-parked tail.
+
+The real gap is mis-ranking terms it has seen, and the misses are the domain vocabulary you'd guess:
+
+| term        | documents here | rank here | rank in the C4 table |
+| ----------- | -------------- | --------- | -------------------- |
+| `␣receptor` | 545            | 1,617     | 19,133               |
+| `␣mediated` | 488            | 1,838     | 21,884               |
+| `␣vitro`    | 476            | 1,904     | 24,329               |
+| `␣rebut`    | 577            | 1,526     | 28,753               |
+
+General web prose has little use for `␣vitro` or `␣mediated`, and NanoBEIR is largely biomedical and scientific (`␣rebut` is ArguAna's debate text). The table puts them 10-20k ranks too low, which is exactly the mismatch [token-storage flags for compression](/blog/token-storage#limitations), showing up here as ranking error instead of lost bytes. Which is the argument for [doing the remap in the tokenizer itself](/blog/token-storage#how-can-the-ai-community-and-the-ai-labs-help), where every downstream index inherits a table built on something much broader than one corpus.
+
 ### What one search actually reads
 
 How many posting entries a single query traverses, in a real 2,953-doc index. Toggle the query (log scale, since the bars span four orders of magnitude):
 
 export const qcCats = ['word', 'normalized', 'char bigram', 'char trigram']
-export const qcColors = ['#94a3b8', '#10b981', '#7dd3fc', '#38bdf8']
+export const qcRoles = ['muted', 'series0', 'seriesAlt1', 'series1']
 export const qcView = (label, vals) => ({
   label,
   categories: qcCats,
@@ -259,7 +296,7 @@ export const qcView = (label, vals) => ({
     {
       name: 'postings',
       values: vals,
-      colors: qcColors,
+      roles: qcRoles,
       text: vals.map((x) => x.toLocaleString()),
       textPosition: 'outside',
     },
@@ -299,22 +336,22 @@ export const engCats = [
   'normalized BPE · o200k',
   'word-tuple BPE',
 ]
-export const engColors = [
-  '#94a3b8',
-  '#64748b',
-  '#38bdf8',
-  '#f87171',
-  '#f87171',
-  '#10b981',
-  '#10b981',
-  '#a78bfa',
+export const engRoles = [
+  'muted',
+  'mutedAlt',
+  'series1',
+  'bad',
+  'bad',
+  'series0',
+  'series0',
+  'series2',
 ]
 export const engOpac = [1, 1, 1, 0.5, 1, 0.5, 1, 1]
 export const engFmt = (v, d) => v.map((x) => x.toFixed(d))
 export const engView = (values, text) => ({
   categories: engCats,
   series: [
-    { name: 'value', values, colors: engColors, opacities: engOpac, text, textPosition: 'outside' },
+    { name: 'value', values, roles: engRoles, opacities: engOpac, text, textPosition: 'outside' },
   ],
 })
 export const engMean = [0.5259, 0.5446, 0.5241, 0.4242, 0.418, 0.5201, 0.5219, 0.5259]
@@ -325,7 +362,7 @@ export const engZero = [19.9, 17.2, 20.7, 31.7, 31.1, 20.5, 19.9, 19.9]
 <BarChart
   orientation="horizontal"
   title="BM25 quality: words vs BPE token IDs (12 NanoBEIR datasets, 599 queries)"
-  subtitle="BPE rows split r50k / o200k · red = naive break, green = normalized fix, purple = control · toggle the metric →"
+  subtitle="BPE rows split r50k / o200k by opacity · red = naive break, green = normalized fix, amber = control · toggle the metric →"
   categories={engCats}
   views={[
     {
@@ -364,7 +401,7 @@ Observations (toggle the metric, the story is in the tail, not the mean):
 
 1. **Normalized BPE (green) ties plain word-BM25, both tokenizers.** 0.522 / 0.520 vs word's 0.526, medians on top. Normalizing before you tokenize is the whole fix.
 2. **Naive BPE (red) breaks on the tail.** The ten-point mean drop undersells it: p25 collapses to **0.000** and the zero-rate jumps to **31%** vs word's **20%**, half again as many queries returning nothing.
-3. **The word-tuple control (purple) is identical to plain word.** Keep each word as one term equal to its token-ID tuple and nothing moves. The token-ID _representation_ is irrelevant, only decomposing words into subwords changes quality.
+3. **The word-tuple control (amber) is identical to plain word.** Keep each word as one term equal to its token-ID tuple and nothing moves. The token-ID _representation_ is irrelevant, only decomposing words into subwords changes quality.
 
 <details>
 <summary>Is this custom BM25 legit? (validated against Lucene, Tantivy + Elasticsearch)</summary>
@@ -408,11 +445,36 @@ Against a pre-registered ±0.01 equivalence margin the CI straddles zero but isn
 
 </details>
 
-## Why does normalized BPE match a word analyzer?
+## Why normalized BPE gets close to a word index
 
-Because bagging subwords gives you **stemming-like matching for free**. `tokenization` and `tokenize` share the `token` subword, `running` and `runner` share `run`-ish pieces. Two words a Porter stemmer would collapse to one stem tend to share a subword token, so BM25 sees partial overlap where a plain word index sees none.
+Normalization means split into words, then encode each one alone with a leading space: `enc.encode(" " + word)`. So `storage` is always `[ storage]`, in a query or mid-sentence.
 
-I checked this directly instead of assuming it: across the corpus vocabulary, two words in the same Porter-stem class share a subword **68–112× more often than two random words**, but only ~4–5% of the time in absolute terms. So it's a **partial** stemmer, exactly what the retrieval numbers show.
+That one rule makes it a word index. `storage` is a single token, so matching the token is matching the word:
+
+```
+query  storage       ->  [ storage]
+doc    ...storage...  ->  [ storage]        same token, matches
+```
+
+Most words are single tokens, so most matches are exactly word matches. Keep each word's tokens as one term instead of bagging them and you score **0.526**, identical to word.
+
+Bagging the subwords adds the one thing a word index can't do: a split word shares a piece with a shorter relative.
+
+```
+query  token            ->  [ token]
+doc    ...tokenization  ->  [ token][ization]    shares [ token], partial match
+```
+
+`token` and `tokenization` are different words, so a word index scores them zero, but they share `[ token]`. Free stemming, no stemmer.
+
+It's flaky, though, because the split is up to BPE, not the stem. `civilization` is one whole token, so it matches neither `civil` nor `civilize`. And in r50k, `normalize` and `denormalize` share only `[ize]`, the suffix every -ize verb carries, and miss the real stem:
+
+```
+civil -> [ civil]            civilize -> [ civil][ize]          civilization -> [ civilization]
+normalize -> [ normal][ize]  denormalize -> [ den][ormal][ize]  share only [ize]
+```
+
+That sharing fires only about **4%** of the time (details below), real but weak. So normalized BPE ties word on the median query. o200k ties on the hard queries too, but only because it barely splits anything. r50k really splits words, and gives up about **0.02** at the weak-query quartile (p25 0.202 vs word's 0.219).
 
 <details>
 <summary>How I measured the free-stemming effect, plus a second check that it really is stemming</summary>
@@ -433,9 +495,7 @@ Second check: if the gains come from stemming-like matching, the queries where n
 
 </details>
 
-This is **char n-gram retrieval**: subword indexing does the same decomposition, and [McNamee & Mayfield (2004)](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7) showed it recovers morphology without a stemmer. Not new to BPE, but on the model's own tokens it's a language-agnostic analyzer you already have (no stopword list, stemmer, or segmenter), on the same vocabulary the model reads, writes, and [stores](/blog/token-storage). And unlike a stemmer's hard merge, subword tokens are a knob you can _weight_. That, plus un-fragmenting rare words, closes the −0.02 gap below.
-
-The tie holds at every depth, not just rank 10. Normalized BPE tracks plain word from 5 to 1000, so there's no hidden wider net. The lone exception is char 4-grams, which reach more documents but rank them deep:
+This is char n-gram retrieval ([McNamee & Mayfield, 2004](https://link.springer.com/chapter/10.1007/978-3-540-30222-3_7)) on the model's own tokens. Unlike a stemmer's hard merge, subword tokens are a knob you can _weight_, and that plus un-fragmenting rare words closes the −0.02 gap to Porter below. The match also holds at every depth, so there's no hidden wider net. The exception is char 4-grams, wider but deeper:
 
 <details>
 <summary>The lone exception: char n-grams cast a wider, deeper net</summary>
@@ -449,9 +509,9 @@ export const rd = {
   norm: [0.528, 0.615, 0.677, 0.729, 0.756, 0.792, 0.851, 0.882],
 }
 export const depths = [5, 10, 20, 50, 100, 200, 500, 1000]
-export const rdSeries = (name, color, key, dashed) => ({
+export const rdSeries = (name, role, key, dashed) => ({
   name,
-  color,
+  role,
   dashed: dashed || false,
   points: depths.map((k, i) => [k, rd[key][i]]),
 })
@@ -476,10 +536,10 @@ export const rdSeries = (name, color, key, dashed) => ({
   yTipDecimals={3}
   height={420}
   series={[
-    rdSeries('word', '#94a3b8', 'word'),
-    rdSeries('word + Porter', '#64748b', 'word_en', true),
-    rdSeries('char 4-gram', '#38bdf8', 'char4'),
-    rdSeries('normalized BPE (o200k)', '#10b981', 'norm'),
+    rdSeries('word', 'muted', 'word'),
+    rdSeries('word + Porter', 'mutedAlt', 'word_en', true),
+    rdSeries('char 4-gram', 'series1', 'char4'),
+    rdSeries('normalized BPE (o200k)', 'series0', 'norm'),
   ]}
 />
 
@@ -503,39 +563,150 @@ export const rdSeries = (name, color, key, dashed) => ({
 
 ## Closing the stemming gap, token-natively
 
-The base ties plain word but sits **−0.02 below Porter** (loses 10 of 12, ns). I traced about **three-quarters of that to stemming**. Two token-native fixes recover it, neither a hard stem-merge:
+Normalized token-BM25 already matches a plain word index. A Porter-stemmed analyzer still edges it by about **0.02**, small enough that the benchmark can't call it significant, but consistent across 10 of the 12 datasets. Most of that gap is stemming. The analyzer collapses `race`/`racing`/`raced` into one term, and the token index keeps them apart. Two token-native fixes close it, and neither one stems the documents:
 
-**Fix 1: stop fragmenting rare words.** BPE splits `belvidere` into `bel·vid·ere`, and BM25 adds each subword's IDF independently, so a rare word draws **1.3–2.3× the IDF it deserves**. Score each _word_ once instead: key it by the whole word's token-ID tuple, or group its subwords under one word-level IDF plus a coverage term (GroupCov).
+**Fix 1: stop fragmenting rare words.** A rare word like `belvidere` (in 10 docs) splits into `[ bel][vid][ere]`, and BM25 scores each piece on its own IDF:
 
-**Fix 2: stem by expansion, not merging.** A classic analyzer runs Porter over _both_ sides, hard-merging `race`/`races`/`racing` in the document index. Token-natively the index stays pure token IDs, and stemming moves query-side: expand each query word to its stem-group variants and max-score the set, weighting each by attestation (`df_variant / (df_variant + k·df_word)`) so a common variant is trusted and a coincidental one damped. This is the [SPLADE](/blog/if-splade) view: stemming is weighted expansion with clean candidates, and Porter's groups are clean enough to weight hard.
+```
+belvidere    word  df 10    IDF 8.50   (its own IDF, one rare hit)
+  [ bel]     token df 223   IDF 5.44   also in 102 other words
+  vid        token df 46    IDF 7.01   also in 16 other words
+  ere        token df 203   IDF 5.54   also in 100 other words
+  sum of the three piece IDFs = 17.99  ->  2.1x too much
+```
 
-Stack both, plus a stopword list that turns load-bearing once words are un-fragmented, and the gap closes:
+Two things go wrong. The word punches **2.1x above its weight** (17.99 vs its real 8.50), so one rare word drowns out the rest of the query. And its pieces leak. ` bel` and `ere` each appear in ~100 unrelated words, so a `belvidere` query hands partial credit to documents that never mention it. The fix is to score each word once, keyed by its whole token tuple `( bel, vid, ere)` so it carries a single IDF. There is no word index here, just a table from the token tuple to its IDF (which is only that tuple's own document frequency), so the tokens are the whole key.
 
-export const gapCats = [
-  'word + Porter',
-  'normalized token',
-  'word-tuple + expansion',
-  'GroupCov + expansion',
-]
-export const gapColors = ['#64748b', '#10b981', '#10b981', '#10b981']
-export const gapFmt = (v, d) => v.map((x) => x.toFixed(d))
-export const gapView = (values, text) => ({
-  categories: gapCats,
-  series: [{ name: 'v', values, colors: gapColors, text, textPosition: 'outside' }],
+<details>
+<summary>word-tuple vs GroupCov, concretely</summary>
+
+Both give a word one IDF instead of summing its pieces. They differ on whether a document that shares only _some_ of the pieces earns anything. Take `tokenization` = `( token, ization)`.
+
+**word-tuple** keys the table by the whole tuple. A document matches `tokenization` only if it contains that exact word. A document about `token` or `tokenized` scores zero, they are different tuples, even though all three share the ` token` piece. Clean, but it throws away the subword partial-matching that gave normalized BPE its free stemming.
+
+**GroupCov** keeps the same single word-IDF and adds a coverage term, so it scores a document on two things:
+
+- **exact hit**: does the document contain the whole word `tokenization`? Full tf credit.
+- **coverage**: what fraction of the word's _characters_ do its matched pieces cover? A partial match earns `0.6 · coverage²`, always sub-linear.
+
+Coverage counts pieces by their character span, not one vote each. `tokenization` splits into ` token` (5 chars) and `ization` (7), so 12 total. A document that has `token` or `tokens` but never `tokenization` covers 5/12 = 0.42 of it, earning `0.6 · 0.42² =` **0.10** of soft-tf, against **1.6** for an exact hit (1.0 tf plus `0.6 · 1²`). That share is the free stemming word-tuple threw away, but at a sixteenth of a real match, so an accidentally shared piece can never outweigh one.
+
+On real data this is the free stemming in action. In NanoNFCorpus the one-word query `antinutrients` never appears in the corpus verbatim, so exact word-tuple matching finds nothing and the relevant document sits unranked. That document says `antinutritional`, which shares the `antinutr` stem with the query (` ant`, `inut`, `r`, so 8 of the word's 13 characters, coverage 0.62). GroupCov scores that overlap and lifts the document from unranked to **rank 1**. A second document shares only the ` ant` prefix through `antitumour` (0.23 coverage) and earns almost nothing, so the damped bonus rewards the real stem match and shrugs off the bare `anti-` prefix. That is why GroupCov edges word-tuple (0.531 vs 0.528) and keeps the subword overlap the multilingual result leans on.
+
+</details>
+
+Which un-fragmentation wins? All of them beat the fragmented baseline, GroupCov by the most:
+
+export const f1Cats = ['normalized token (baseline)', 'max_idf', 'word-tuple', 'GroupCov']
+export const f1Roles = ['muted', 'muted', 'series2', 'series0']
+export const f1Fmt = (v, d) => v.map((x) => x.toFixed(d))
+export const f1View = (values, text) => ({
+  categories: f1Cats,
+  series: [{ name: 'v', values, roles: f1Roles, text, textPosition: 'outside' }],
 })
 
 <BarChart
   orientation="horizontal"
-  title="Closing the stemming gap: token-native fixes reach a Porter-stemmed analyzer"
-  subtitle="12 NanoBEIR (599 queries) · green = token-native, gray = word + Porter target · toggle the metric →"
-  categories={gapCats}
+  title="Fix 1: which un-fragmentation?"
+  subtitle="12 NanoBEIR (599 queries) · GroupCov wins, max_idf is the cheap shortcut · toggle the metric →"
+  categories={f1Cats}
   views={[
     {
       label: 'mean',
       valueLabel: 'NDCG@10 mean (higher is better)',
       valueMax: 0.58,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
-      ...gapView([0.5446, 0.5219, 0.5454, 0.5471], gapFmt([0.5446, 0.5219, 0.5454, 0.5471], 4)),
+      ...f1View([0.5216, 0.5251, 0.5277, 0.5312], f1Fmt([0.5216, 0.5251, 0.5277, 0.5312], 3)),
+    },
+    {
+      label: 'p50',
+      default: true,
+      valueLabel: 'NDCG@10 p50, the median query (higher is better)',
+      valueMax: 0.62,
+      valueTicks: [0, 0.2, 0.4, 0.6],
+      ...f1View([0.5503, 0.5585, 0.5585, 0.5803], f1Fmt([0.5503, 0.5585, 0.5585, 0.5803], 3)),
+    },
+    {
+      label: 'p25',
+      valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
+      valueMax: 0.3,
+      valueTicks: [0, 0.1, 0.2, 0.3],
+      ...f1View([0.2178, 0.2131, 0.234, 0.2274], f1Fmt([0.2178, 0.2131, 0.234, 0.2274], 3)),
+    },
+    {
+      label: 'zero-rate',
+      valueLabel: 'zero-rate %, queries returning nothing (lower is better)',
+      valueMax: 22,
+      valueTicks: [0, 5, 10, 15, 20],
+      ...f1View([19.9, 20.0, 19.7, 19.5], f1Fmt([19.9, 20.0, 19.7, 19.5], 1)),
+    },
+  ]}
+/>
+
+Observations:
+
+1. **Un-fragmenting lifts the mean from 0.522 to 0.531, with GroupCov the winner.** word-tuple (0.528) is close behind. Both replace the baseline's summed subword IDFs with the whole word's own IDF, and GroupCov adds a coverage term for partial subword matches on top.
+2. **max_idf is the cheap shortcut that under-delivers.** Capping a word's IDF at its rarest subword needs no word-df, but a word is always rarer than any of its pieces, so it under-weights the multi-token words that are most of the vocab. It recovers only half the gain (0.525) and dents the tail. Its p25 (0.213) drops below even the baseline, and it loses where rare terms carry the query (SciFact −0.027, NQ −0.013), while helping a little on common-word sets. Can you estimate the missing IDF from the subtokens instead? Mostly no, and the exception is instructive:
+
+<details>
+<summary>Can you skip the tuple table and read the IDF off a bigram table? (yes for two pieces)</summary>
+
+The over-count is not arbitrary, it is exactly mutual information. For a word `(a, b)` in a corpus of `N` docs, dropping smoothing, `sum_IDF − real_IDF = log(N·word_df / (df_a·df_b))`, the PMI of the two pieces. The sum assumes the pieces are independent, and PMI corrects for how tightly they bond, so `real_IDF = sum_IDF − PMI(pieces)`. max_idf is a blunt stand-in for that PMI.
+
+The clean way to estimate the PMI is the **fragmentation bigram**: a word-start token followed by a continuation piece, `token → #ization`, read straight off the token stream (the leading-space marker flags word-starts, so no segmentation is needed). Count only those. A pair of two word-starts like `new → york` is two separate words, not a fragmentation, so it never counts. For a two-piece word the fragmentation bigram **is** the word, so its count equals `word_df` and the IDF comes back exact: `voting`+`machines` (real IDF 9.94) returns 9.94, `kapoor` (7.54) returns 7.54. No word term, just a bigram lookup.
+
+It stops at two pieces. For a longer word you would need the full fragmentation n-gram `a → b → c`, and counting that exact sequence is just the tuple table itself. A pairwise chain of bigrams over-counts instead, because the inner bigram `b → c` also fires inside every other word containing `bc` (pooled 52k-doc corpus):
+
+<div style={{overflowX: 'auto'}}>
+
+| pieces | true bonding (sum − real) | MAE max_idf | MAE fragmentation-bigram PMI |
+| -----: | ------------------------: | ----------: | ---------------------------: |
+|      2 |                       2.1 |        2.14 |                     **0.38** |
+|      3 |                       5.8 |        2.41 |                         2.45 |
+|      4 |                      11.2 |        2.37 |                         5.70 |
+|     5+ |                      21.4 |        2.07 |                        10.24 |
+
+</div>
+
+The bigram is exact at two pieces and already loses to plain max_idf by three. The exact estimator for an n-piece word is its n-gram, which is just un-fragmentation, so there is no general subtoken-side shortcut. But for the common two-piece word, the IDF really is a bigram lookup away.
+
+</details>
+
+**Fix 2: stem by expansion, not merging.** `race` is `[ race]` and `racing` is `[ racing]`, different single tokens that share nothing, so a query `racing` scores a doc that says `race` at zero, same as a word index. A classic analyzer fixes this by running Porter over _both_ sides, hard-merging `race`/`races`/`racing`/`raced` all into the single stem `race` in the document index. Token-natively I never stem the documents. Fix 1 keys the index by whole words (each a token-ID tuple), so up front I stem those word-terms and bucket them by stem. At query time `racing` pulls up its bucket and weights each sibling by how common it is, `df_variant / (df_variant + 0.5·df_query)`:
+
+```
+query word  racing   df 285   weight 1.00
+  variant   race     df 648   weight 0.82
+  variant   races    df 149   weight 0.51
+  variant   raced    df  23   weight 0.14
+(racer/racers are a different Porter stem, so not in this bucket)
+(df across the pooled 51,677-doc corpus)
+```
+
+Then for each document, `racing`'s score is the single best variant that document contains, `weight × BM25(variant, doc)`, taking the max so the same stem never double-counts. A doc with `race` but not `racing` scores `0.82 × BM25(race)`, most of what `race` itself would earn, instead of zero. A common variant like `race` is trusted almost fully, a rare one like `raced` barely moves the score. That trust is only safe because the candidates are real stem-mates. A fuzzy lookalike list would drop `rack` into the bucket, and 0.8 weight on `rack` floods a `race` query with rock-climbing docs. The weighting earns its keep: drop it and give every variant full credit (weight 1), and the score falls to **0.525**, below un-fragmentation alone, because rare and tangential stem-mates now match at full strength. That's the [SPLADE](/blog/if-splade) view: stemming is weighted expansion with clean candidates.
+
+With un-fragmentation in place, stem-expansion (Fix 2) plus the stopword list it enables closes the gap to Porter:
+
+export const f2Cats = ['word + Porter (target)', 'GroupCov (Fix 1)', '+ stem-expansion (Fix 2)']
+export const f2Roles = ['mutedAlt', 'seriesAlt0', 'series0']
+export const f2Fmt = (v, d) => v.map((x) => x.toFixed(d))
+export const f2View = (values, text) => ({
+  categories: f2Cats,
+  series: [{ name: 'v', values, roles: f2Roles, text, textPosition: 'outside' }],
+})
+
+<BarChart
+  orientation="horizontal"
+  title="Fix 2: stem by expansion reaches Porter"
+  subtitle="12 NanoBEIR (599 queries) · expansion on the Fix-1 winner, gray = word + Porter target · toggle the metric →"
+  categories={f2Cats}
+  views={[
+    {
+      label: 'mean',
+      valueLabel: 'NDCG@10 mean (higher is better)',
+      valueMax: 0.58,
+      valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
+      ...f2View([0.5446, 0.5312, 0.5468], f2Fmt([0.5446, 0.5312, 0.5468], 3)),
     },
     {
       label: 'p50',
@@ -543,32 +714,31 @@ export const gapView = (values, text) => ({
       valueLabel: 'NDCG@10 p50, the median query (higher is better)',
       valueMax: 0.65,
       valueTicks: [0, 0.2, 0.4, 0.6],
-      ...gapView([0.5915, 0.5503, 0.6083, 0.6051], gapFmt([0.5915, 0.5503, 0.6083, 0.6051], 4)),
+      ...f2View([0.5915, 0.5803, 0.6051], f2Fmt([0.5915, 0.5803, 0.6051], 3)),
     },
     {
       label: 'p25',
       valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
       valueMax: 0.35,
       valueTicks: [0, 0.1, 0.2, 0.3],
-      ...gapView([0.264, 0.218, 0.281, 0.237], gapFmt([0.264, 0.218, 0.281, 0.237], 3)),
+      ...f2View([0.2641, 0.2274, 0.2372], f2Fmt([0.2641, 0.2274, 0.2372], 3)),
     },
     {
       label: 'zero-rate',
       valueLabel: 'zero-rate %, queries returning nothing (lower is better)',
       valueMax: 22,
       valueTicks: [0, 5, 10, 15, 20],
-      ...gapView([17.2, 19.9, 16.9, 17.7], gapFmt([17.2, 19.9, 16.9, 17.7], 1)),
+      ...f2View([17.2, 19.5, 17.7], f2Fmt([17.2, 19.5, 17.7], 1)),
     },
   ]}
 />
 
 Observations:
 
-1. **Both recipes reach `word_en` (0.545).** Word-tuple + expansion **0.545**, GroupCov **0.547**, and every per-query bootstrap CI against the stemmer straddles zero, a **statistical tie**. (The per-dataset split, word-tuple loses 9/12 and GroupCov wins 7/12, is the argmax of a ~7-variant sweep on these same sets, so read it as a tie, not an edge.)
-2. **The firm win is vs the token baseline, not Porter.** Both clear zero against plain normalized token-BM25 (word-tuple **+0.023**, CI [+0.001, +0.045]). Reaching Porter reads as a tie only because Porter-vs-plain is itself within noise here.
-3. **The tail agrees.** Word-tuple + expansion even _edges_ the stemmer there: **16.9% zero-rate vs 17.2%**, p25 0.28 vs 0.26. Soft expansion rescues failing queries as well as Porter's hard merge. (p10 is a flat 0.000 for every method, the shared hard floor.)
+1. **Expansion lifts the Fix-1 winner past Porter on the body.** GroupCov's **0.531** rises to **0.547** with stem-expansion (+0.016), over word+Porter's 0.545 on the mean and median (p50 0.605 vs 0.592). The firm win is the **+0.025** over the token baseline. Reaching Porter itself reads as a tie.
+2. **The weighting makes expansion work, and the tail still favors Porter.** Drop the attestation weighting (shown above) and expansion turns net-negative. Porter keeps the weak-query tail (p25 0.264 vs 0.237), so this closes the gap, it doesn't beat the stemmer. That tie is also the argmax of a ~7-variant sweep on these 12 sets, so read it as a tie, not an edge.
 
-I'd ship GroupCov: it un-fragments the rare words that hurt precision while keeping the subword partial-matching the multilingual result depends on. Expansion candidates are Porter-grouped, so this half stays English-only. Config-free comes with the multilingual post.
+GroupCov is the un-fragmentation I'd ship: it keeps the subword partial-matching the multilingual result depends on, unlike collapsing each word to one atomic term. The expansion candidates are Porter-grouped, so this half stays English-only. Config-free comes with the multilingual post.
 
 ### Dropping the stopword list, too
 
@@ -584,11 +754,11 @@ export const stopCats = [
   'NLTK stoplist',
   'word + Porter',
 ]
-export const stopColors = ['#94a3b8', '#10b981', '#64748b', '#64748b']
+export const stopRoles = ['muted', 'series0', 'mutedAlt', 'mutedAlt']
 export const stopFmt = (v, d) => v.map((x) => x.toFixed(d))
 export const stopView = (values, text) => ({
   categories: stopCats,
-  series: [{ name: 'v', values, colors: stopColors, text, textPosition: 'outside' }],
+  series: [{ name: 'v', values, roles: stopRoles, text, textPosition: 'outside' }],
 })
 
 <BarChart
@@ -669,7 +839,7 @@ export const fhMass = {
   r50k: [0.01, 0.03, 0.15, 0.44, 2.28, 5.99, 9.69, 13.91, 14.44, 12.08, 40.96],
   o200k: [0.11, 0.11, 0.37, 0.69, 2.69, 6.26, 9.41, 13.16, 13.76, 10.84, 42.61],
 }
-export const fhColor = { word: '#94a3b8', r50k: '#38bdf8', o200k: '#10b981' }
+export const fhRole = { word: 'muted', r50k: 'seriesAlt0', o200k: 'series0' }
 export const fhDS = (tok, data, unit) => ({
   label: unit,
   categories: fhBuckets,
@@ -677,7 +847,7 @@ export const fhDS = (tok, data, unit) => ({
     {
       name: unit,
       values: data[tok],
-      color: fhColor[tok],
+      role: fhRole[tok],
       text: data[tok].map((v) => v + '%'),
       textPosition: 'outside',
     },
