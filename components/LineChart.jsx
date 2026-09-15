@@ -25,6 +25,8 @@ import { useTheme } from 'next-themes'
  *   yTipDecimals number  decimal places for the y value in the tooltip
  *                        (default 2; raise for fine-grained metrics like NDCG)
  *   height     number   SVG height in px (default 440); width fills container
+ *   onViewChange  (index) => void   called when the reader picks a view, so a
+ *              caption or surrounding copy can change with it.
  *   series     Array of {
  *       name        string
  *       color       string       CSS colour (falls back to a palette)
@@ -33,6 +35,16 @@ import { useTheme } from 'next-themes'
  *       showLine    boolean       default true (set false for a scatter/markers-
  *                                 only series with no connecting line)
  *       showMarkers boolean       default true (set false for smooth fit lines)
+ *       band        Array<[x, lo, hi]>  optional translucent ribbon drawn behind
+ *                                 the line, in the series colour — e.g. a
+ *                                 p25/p75 spread around a median. Its x values
+ *                                 need not match `points`; lo/hi enter the
+ *                                 y-domain so the ribbon can't overflow the plot.
+ *       bandOpacity number        fill opacity for the ribbon (default 0.13)
+ *       notes       Array<string> optional per-point text shown in the tooltip
+ *                                 only, never drawn on the plot — for example
+ *                                 tokens on a dense curve where `text` would
+ *                                 print hundreds of labels
  *       width       number        line width (default 2, dashed → 1.5)
  *       points      Array<[x, y]> the data; series may have different lengths
  *       text        Array<string> optional per-point label drawn next to the
@@ -43,7 +55,8 @@ import { useTheme } from 'next-themes'
  *                                 'right' (default 'top right')
  *       textPosition  string      single fallback placement for all points
  *   }
- *   views      Array of { label, series, yLabel, yScale, yTicks, yUnit,
+ *   views      Array of { label, series, title, xLabel, xScale, xTicks, xMin, xMax,
+ *              yLabel, yScale, yTicks, yUnit,
  *              yMin, yMax, yTipDecimals, datasets }   optional on-theme
  *              toggle (top right) switching the whole y-axis + series set
  *              while keeping the shared x-axis in place — e.g. one chart,
@@ -246,15 +259,15 @@ function markerNode(shape, x, y, s, color, key, opts = {}) {
 }
 
 function ChartImpl({
-  title,
-  xLabel,
+  title: titleProp,
+  xLabel: xLabelProp,
   yLabel: yLabelProp,
-  xScale = 'linear',
+  xScale: xScaleProp = 'linear',
   yScale: yScaleProp = 'linear',
-  xTicks,
+  xTicks: xTicksProp,
   yTicks: yTicksProp,
-  xMin,
-  xMax,
+  xMin: xMinProp,
+  xMax: xMaxProp,
   yMin: yMinProp,
   yMax: yMaxProp,
   xUnit = '',
@@ -263,6 +276,7 @@ function ChartImpl({
   height = 440,
   series: seriesProp = [],
   views,
+  onViewChange,
 }) {
   const { theme, resolvedTheme } = useTheme()
   const isDark = (resolvedTheme || theme) === 'dark'
@@ -320,6 +334,14 @@ function ChartImpl({
     activeDatasets && activeDatasets.length
       ? activeDatasets[Math.min(datasetIdx, activeDatasets.length - 1)]
       : null
+  // A view may also re-label the x axis: two views can plot the same series
+  // against different x meanings (rank vs token ID), not just different metrics.
+  const title = activeView?.title ?? titleProp
+  const xLabel = activeView?.xLabel ?? xLabelProp
+  const xScale = activeView?.xScale ?? xScaleProp
+  const xTicks = activeView?.xTicks ?? xTicksProp
+  const xMin = activeView?.xMin ?? xMinProp
+  const xMax = activeView?.xMax ?? xMaxProp
   const yLabel = activeView?.yLabel ?? yLabelProp
   const yScale = activeView?.yScale ?? yScaleProp
   const yTicks = activeView?.yTicks ?? yTicksProp
@@ -401,6 +423,9 @@ function ChartImpl({
   const xVals = []
   const yVals = []
   series.forEach((s) => (s.points || []).forEach(([x, y]) => (xVals.push(x), yVals.push(y))))
+  series.forEach((s) =>
+    (s.band || []).forEach(([x, lo, hi]) => (xVals.push(x), yVals.push(lo), yVals.push(hi)))
+  )
   if (xTicks) normTicks(xTicks).forEach((t) => xVals.push(t.v))
   if (yTicks) normTicks(yTicks).forEach((t) => yVals.push(t.v))
 
@@ -488,6 +513,9 @@ function ChartImpl({
   })
 
   const seriesLayer = []
+  // Ribbons live in their own layer so a later series' band can't paint over
+  // an earlier series' line.
+  const bandLayer = []
   const markerLayer = []
   const labelLayer = []
   // Invisible, oversized hit-targets drawn ON TOP of the crosshair overlay so
@@ -518,6 +546,28 @@ function ChartImpl({
     const showMarkers = s.showMarkers !== false
     const pts = (s.points || []).filter(([x, y]) => x != null && y != null)
     if (!pts.length) return
+
+    // Ribbon first, so the median line and its markers sit on top of it.
+    const band = (s.band || []).filter(
+      ([x, lo, hi]) => x != null && lo != null && hi != null && (yScale !== 'log' || lo > 0)
+    )
+    if (band.length > 1) {
+      const clampY = (v) => Math.min(Math.max(yS(v), m.t), m.t + ph)
+      const up = band.map(([x, , hi]) => `${xS(x).toFixed(1)} ${clampY(hi).toFixed(1)}`)
+      const down = band
+        .slice()
+        .reverse()
+        .map(([x, lo]) => `${xS(x).toFixed(1)} ${clampY(lo).toFixed(1)}`)
+      bandLayer.push(
+        <path
+          key={`band${si}`}
+          d={'M' + up.join(' L') + ' L' + down.join(' L') + ' Z'}
+          fill={c}
+          fillOpacity={s.bandOpacity != null ? s.bandOpacity : 0.13}
+          stroke="none"
+        />
+      )
+    }
 
     if (showLine && pts.length > 1) {
       const d = 'M' + pts.map(([x, y]) => `${xS(x).toFixed(1)} ${yS(y).toFixed(1)}`).join(' L')
@@ -558,10 +608,14 @@ function ChartImpl({
             r={9}
             fill="transparent"
             style={{ cursor: 'pointer' }}
-            onPointerEnter={(e) => onMarkerHover(e, [x, y], py, s.name, (s.text || [])[pi])}
-            onPointerMove={(e) => onMarkerHover(e, [x, y], py, s.name, (s.text || [])[pi])}
+            onPointerEnter={(e) =>
+              onMarkerHover(e, [x, y], py, s.name, (s.notes || s.text || [])[pi])
+            }
+            onPointerMove={(e) =>
+              onMarkerHover(e, [x, y], py, s.name, (s.notes || s.text || [])[pi])
+            }
             onPointerLeave={onCrosshairLeave}
-            onClick={(e) => onMarkerClick(e, [x, y], py, s.name, (s.text || [])[pi])}
+            onClick={(e) => onMarkerClick(e, [x, y], py, s.name, (s.notes || s.text || [])[pi])}
           />
         )
       })
@@ -623,13 +677,25 @@ function ChartImpl({
     // row is bolded and highlighted.
     const rows = visSeries
       .map(({ s, c }) => {
-        const pt = (s.points || []).find(([x]) => x === ux)
-        return pt && pt[1] != null ? { s, c, y: pt[1] } : null
+        const pi = (s.points || []).findIndex(([x]) => x === ux)
+        const pt = pi < 0 ? null : s.points[pi]
+        return pt && pt[1] != null
+          ? { s, c, y: pt[1], note: (s.notes || [])[pi], band: (s.band || [])[pi] }
+          : null
       })
       .filter(Boolean)
       .sort((a, b) => b.y - a.y)
-      .map(({ s, c, y }) => {
+      .map(({ s, c, y, note, band }) => {
         const isNear = s.name === nearest
+        // Only the nearest row carries its note and spread, so a six-series
+        // crosshair doesn't turn into a wall of text.
+        const extra =
+          isNear && (note || band)
+            ? `<div style="margin:2px 0 1px 15px;color:rgba(255,255,255,0.6);font-size:0.9em">` +
+              (band ? `p25\u2013p75 ${esc(fmtTipY(band[1]))}\u2013${esc(fmtTipY(band[2]))}` : '') +
+              (note ? `${band ? '<br>' : ''}e.g. ${esc(note)}` : '') +
+              `</div>`
+            : ''
         return (
           `<div style="display:flex;align-items:center;gap:6px;margin-top:3px;` +
           `padding:${isNear ? '2px 4px' : '0'};margin-left:${isNear ? '-4px' : '0'};` +
@@ -642,7 +708,8 @@ function ChartImpl({
           `<span style="flex:1 1 auto;font-weight:${isNear ? 700 : 400};` +
           `color:${isNear ? '#fff' : 'rgba(255,255,255,0.75)'}">${esc(s.name)}</span>` +
           `<b style="color:#fff;margin-left:10px;font-size:${isNear ? '1.05em' : '1em'}">` +
-          `${esc(fmtTipY(y))}</b></div>`
+          `${esc(fmtTipY(y))}</b></div>` +
+          extra
         )
       })
       .join('')
@@ -671,7 +738,7 @@ function ChartImpl({
           const d = dx * dx + dy * dy
           if (d < bd) {
             bd = d
-            best = { x, y, name: s.name, label: (s.text || [])[pi] }
+            best = { x, y, name: s.name, label: (s.notes || s.text || [])[pi] }
           }
         })
       })
@@ -694,7 +761,7 @@ function ChartImpl({
       const dy = Math.abs(yS(s.points[pi][1]) - rawY)
       if (dy < bdy) {
         bdy = dy
-        best = { x: ux, y: s.points[pi][1], name: s.name, label: (s.text || [])[pi] }
+        best = { x: ux, y: s.points[pi][1], name: s.name, label: (s.notes || s.text || [])[pi] }
       }
     })
     return best || { x: ux, y: null, name: null }
@@ -968,6 +1035,7 @@ function ChartImpl({
                       type="button"
                       onClick={() => {
                         setViewIdx(i)
+                        onViewChange && onViewChange(i)
                         setActiveX(null)
                         lockedRef.current = false
                         lockedPtRef.current = null
@@ -1035,6 +1103,7 @@ function ChartImpl({
           />
           <line x1={m.l} y1={m.t} x2={m.l} y2={m.t + ph} stroke={C.axis} />
           <line x1={m.l} y1={m.t + ph} x2={m.l + pw} y2={m.t + ph} stroke={C.axis} />
+          {bandLayer}
           {seriesLayer}
           {markerLayer}
           {labelLayer}
