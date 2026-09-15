@@ -84,9 +84,10 @@ export const pctColors = {
   ]}
 />
 
-p10 is 0.0 for both NDCG@10 and recall@10: over 10% of queries score a hard zero while the mean sits near 53. Two subtler things:
+Observations:
 
-- On recall@100 the typical query is perfect (p50 = 100), but a tail flooring at p10 = 12.6 pulls the mean to 76.5, a number no real query got.
+- p10 is **0.0** on both NDCG@10 and recall@10, so over 10% of queries score a hard zero while the mean sits near 53.
+- On recall@100 the typical query is perfect (p50 = 100), but a tail flooring at p10 = 12.6 pulls the mean to **76.5**, a number no real query got.
 - The mean's error flips sign between metrics. It overstates recall@10's median (56.3 vs 50.0) and understates NDCG@10's (52.5 vs 55.4), so you can't correct for it in your head.
 
 ## It hides your improvements, too
@@ -110,7 +111,7 @@ Observations:
 - The median Δ is **0** on all three metrics. The typical query is untouched.
 - NDCG@10 moves the most queries and is the least one-sided: **172 wins against 133 losses**, p10 Δ **−11.7**.
 - recall@100 is the safest, **84 wins against 32 losses**.
-- The extremes are real queries. `who sang here i go again` goes 100 → 0, and `Which colors can one use to fill out a check in the US?` goes 0 → 100.
+- Some queries swing the whole way, 100 → 0 and 0 → 100 (hover a bar to see which).
 
 Reported properly, that run is:
 
@@ -171,7 +172,12 @@ export const deltaColors = [
   ]}
 />
 
-The mean smears the gain across every query (**+2.2**); the median reads it where the queries can actually move (**+10.0**, 4.6×). p10, p75 and p90 sit at +0.0 because they're saturated. The pattern holds across metrics:
+Observations:
+
+- The mean smears the gain across every query (**+2.2**); the median reads it where the queries can actually move (**+10.0**, 4.6×).
+- p10, p75 and p90 all sit at +0.0 because they're saturated, p10 at 0 and the other two at 100.
+
+The pattern holds across metrics:
 
 | metric     | mean Δ | where it shows up                                                         |
 | ---------- | -----: | ------------------------------------------------------------------------- |
@@ -179,7 +185,7 @@ The mean smears the gain across every query (**+2.2**); the median reads it wher
 | NDCG@10    |   +1.9 | p25 / p50 / p75 all move ~2× the mean (+3.7 to +4.5)                      |
 | recall@100 |   +2.8 | median already 100, so the gain lands in **p25: 50 → 63 (+12.6, 4.5×)**   |
 
-The gain shows up wherever the live mass sits, and the informative percentile moves 2-5× the mean.
+The gain lands wherever the live mass is, and that percentile moves 2-5× the mean.
 
 </details>
 
@@ -197,7 +203,7 @@ Improving a system and reporting one need different things.
 
 To improve it, start with real queries and why they ranked what they did. Then the shape of the distribution. Summary numbers come last.
 
-To report it, print p50 and p25 next to the mean. Three numbers, and you can see the typical query and the weak tail. The mean alone shows neither.
+To report it, print p50 and p25 next to the mean. Three numbers is still few enough to remember and compare, and you get the typical query and the weak tail.
 
 Zero-rate and win/tie/loss come out of the same per-query scores if you want them. Win/tie/loss earns its keep when you're comparing two of your own runs, since it needs a baseline scored on the same queries.
 
