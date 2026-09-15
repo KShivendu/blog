@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useTheme } from 'next-themes'
 import LineChart from './LineChart'
+import { vizPalette } from '../lib/viz-palette'
 
 /*
  * PostingCurves: the posting-list size distribution as a continuous curve
@@ -36,20 +38,26 @@ import LineChart from './LineChart'
 
 const DATA_URL = '/static/data/token-search-curves.json'
 
-// Colours track the posting-list bar chart and VocabHistogram in the same post.
-// char bigram is deepened from that chart's #7dd3fc, which is legible as a wide
-// bar fill but too pale for a 2px line on white.
-const RANK_SERIES = [
-  ['word', 'word', '#94a3b8'],
-  ['word+stem', 'word+stem', '#64748b'],
-  ['naive_o200k', 'naive', '#f87171'],
-  ['norm_o200k', 'normalized', '#10b981'],
-  ['char2', 'char bigram', '#0891b2'],
-  ['char3', 'char trigram', '#38bdf8'],
+// One colour means one thing across the whole post. The old list broke that twice:
+// #38bdf8 was "char trigram" here and "r50k" in the chart below, and #10b981 was
+// both "normalized" and "o200k". Roles keep the two charts consistent.
+//
+// Six lines are three families of two: the word baselines take the greys, the BPE
+// pair takes green with naive on the reserved red because it is the one that
+// fails, and the char n-grams take blue. See chart-style.md.
+const seriesFor = (P) => [
+  ['word', 'word', P.muted],
+  ['word+stem', 'word+stem', P.mutedAlt],
+  ['naive_o200k', 'naive', P.bad],
+  ['norm_o200k', 'normalized', P.series[0]],
+  ['char2', 'char bigram', P.seriesAlt[1]],
+  ['char3', 'char trigram', P.series[1]],
 ]
-const ID_SERIES = [
-  ['r50k', 'r50k (50k)', '#38bdf8'],
-  ['o200k', 'o200k (200k)', '#10b981'],
+// r50k and o200k are one tokenizer at two vocabulary sizes, so they are one hue
+// with its second step rather than two unrelated colours.
+const idSeriesFor = (P) => [
+  ['r50k', 'r50k (50k)', P.seriesAlt[0]],
+  ['o200k', 'o200k (200k)', P.series[0]],
 ]
 const LOG_TICKS = [
   [1, '1'],
@@ -68,6 +76,11 @@ export default function PostingCurves({ height = 460 }) {
   // LineChart owns the view toggle, but the caption differs per view, so mirror
   // the selection here and let one set of buttons drive both.
   const [view, setView] = useState(0)
+  // Colour follows the theme, so it resolves at render rather than module load.
+  const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  const P = vizPalette(mounted && resolvedTheme === 'dark')
 
   useEffect(() => {
     let live = true
@@ -85,13 +98,15 @@ export default function PostingCurves({ height = 460 }) {
   if (!data || !data.rank) return <div style={{ minHeight: height + 90, margin: '1.5rem 0' }} />
   const byId = data.by_id
 
-  const rankSeries = RANK_SERIES.filter(([k]) => data.rank[k]).map(([k, name, color]) => ({
-    name,
-    color,
-    showMarkers: false,
-    width: 2,
-    points: data.rank[k].points,
-  }))
+  const rankSeries = seriesFor(P)
+    .filter(([k]) => data.rank[k])
+    .map(([k, name, color]) => ({
+      name,
+      color,
+      showMarkers: false,
+      width: 2,
+      points: data.rank[k].points,
+    }))
 
   // One dataset per tokenizer treatment, each holding both vocab sizes, so the
   // r50k / o200k contrast stays side by side while naive/normalized swaps.
@@ -99,8 +114,9 @@ export default function PostingCurves({ height = 460 }) {
     ['norm', 'naive']
       .map((mode) => ({
         label: mode === 'norm' ? 'normalized' : 'naive',
-        series: ID_SERIES.filter(([enc]) => byId[ordering]?.[`${mode}_${enc}`]).map(
-          ([enc, name, color]) => {
+        series: idSeriesFor(P)
+          .filter(([enc]) => byId[ordering]?.[`${mode}_${enc}`])
+          .map(([enc, name, color]) => {
             const c = byId[ordering][`${mode}_${enc}`]
             return {
               name: `${name} · ρ=${rho(c)}`,
@@ -111,8 +127,7 @@ export default function PostingCurves({ height = 460 }) {
               band: c.band,
               notes: c.examples,
             }
-          }
-        ),
+          }),
       }))
       .filter((d) => d.series.length)
 
