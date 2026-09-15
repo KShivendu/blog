@@ -1,7 +1,7 @@
 import dynamic from 'next/dynamic'
 import { useRef, useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
-import { vizPalette } from '../lib/viz-palette'
+import { chartChrome, vizPalette } from '../lib/viz-palette'
 
 /*
  * BarChart — hand-rolled SVG bar chart for the blog.
@@ -125,34 +125,6 @@ import { vizPalette } from '../lib/viz-palette'
 
 const VIEW_W = 760
 
-// Teletype-v2 neutrals + faint plot gridline — mirrors LineChart's palette so
-// the two chart types read as one system.
-function palette(isDark) {
-  return isDark
-    ? {
-        ink: '#dde6e0',
-        muted: '#8a968e',
-        grid: '#141922',
-        axis: '#38473e',
-        tip: '#0a0f0d',
-        border: '#1e2822',
-        card: '#0d1310',
-        accent: '#34d399',
-        accentInk: '#08110c',
-      }
-    : {
-        ink: '#14161a',
-        muted: '#5f6570',
-        grid: '#eef1f6',
-        axis: '#c8cfc9',
-        tip: '#14161a',
-        border: '#e0e4e1',
-        card: '#ffffff',
-        accent: '#047857',
-        accentInk: '#ffffff',
-      }
-}
-
 function niceLinearTicks(lo, hi, count = 5) {
   const span = hi - lo || 1
   const step0 = span / count
@@ -241,7 +213,7 @@ function ChartImpl({
 }) {
   const { theme, resolvedTheme } = useTheme()
   const isDark = (resolvedTheme || theme) === 'dark'
-  const C = palette(isDark)
+  const C = chartChrome(isDark)
 
   const tipRef = useRef(null)
   const [activeCat, setActiveCat] = useState(null)
