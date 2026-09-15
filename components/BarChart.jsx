@@ -1,6 +1,7 @@
 import dynamic from 'next/dynamic'
 import { useRef, useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
+import { vizPalette } from '../lib/viz-palette'
 
 /*
  * BarChart — hand-rolled SVG bar chart for the blog.
@@ -84,13 +85,15 @@ import { useTheme } from 'next-themes'
  *                `at` space as `markers`). For a histogram of buckets whose
  *                labels are the bin edges, five ticks read far better than one
  *                rotated label per bar. Settable per view.
- *   markers      Array<{ at, label, color, strong }>   reference lines drawn
+ *   markers      Array<{ at, label, color, solid }>   reference lines drawn
  *                across the plot at a FRACTIONAL category index (`at`): 0 is the
  *                left edge of the first band, N the right edge of the last, 6.3
  *                is 30% into the seventh band. Lets a continuous statistic (a
  *                mean, a percentile) be placed on a categorical axis of buckets.
- *                `strong` draws it solid and bold instead of dashed. Settable
- *                per view (view.markers wins over the top-level prop).
+ *                Dashed by default; `solid` drops the dash for a marker that
+ *                shouldn't read as an estimate. Every marker keeps the same
+ *                weight, so none of them outranks the bars. Settable per view
+ *                (view.markers wins over the top-level prop).
  *
  * ── Example: horizontal single-series with an All/Focus toggle ───────────────
  *   <BarChart
@@ -349,7 +352,15 @@ function ChartImpl({
     if (tipRef.current) tipRef.current.style.opacity = '0'
   }
 
-  const colorOf = (s, ci) => (s.colors ? s.colors[ci] : s.color) || C.accent
+  // A series may name a palette ROLE instead of a hex: `role` for the whole series,
+  // `roles` for one per bar. Static charts written in mdx can't follow the theme on
+  // their own, so `role: 'statP50'` gets them the step validated for the current
+  // surface.
+  const VP = vizPalette(isDark)
+  const colorOf = (s, ci) =>
+    (s.colors ? s.colors[ci] : s.color) ||
+    (s.roles ? VP[s.roles[ci]] : s.role && VP[s.role]) ||
+    C.accent
   const opacityOf = (s, ci) => {
     const o = s.opacities ? s.opacities[ci] : s.opacity
     return o == null ? 1 : o
@@ -969,9 +980,9 @@ function ChartImpl({
           x2={x2}
           y2={y2}
           stroke={col}
-          strokeWidth={mk.strong ? 1.6 : 1}
-          strokeDasharray={mk.strong ? '' : '3 3'}
-          opacity={mk.strong ? 1 : 0.8}
+          strokeWidth={1}
+          strokeDasharray={mk.solid ? '' : '3 3'}
+          opacity={0.9}
         />
       )
       if (mk.label) {
@@ -987,7 +998,7 @@ function ChartImpl({
             y={horizontal ? p - 5 : m.t + 11 + (mk.row || 0) * 11}
             textAnchor={horizontal ? 'start' : flip ? 'end' : 'start'}
             fontSize={fTick}
-            fontWeight={mk.strong ? '700' : '400'}
+            fontWeight="400"
             fill={col}
             fontFamily="var(--font-mono, ui-monospace, monospace)"
           >
@@ -1050,10 +1061,12 @@ function ChartImpl({
     )
   }
 
+  const roleColor = (s) => (s.role && VP[s.role]) || (s.roles && VP[s.roles[0]]) || null
+
   const legendSwatch = (s, si) => {
     // An explicit `color` wins over `colors[0]`: a series that paints one bucket red for
     // emphasis shouldn't advertise red as its identity in the legend.
-    const c = s.color || (s.colors && s.colors[0]) || C.accent
+    const c = roleColor(s) || s.color || (s.colors && s.colors[0]) || C.accent
     return (
       <span
         style={{
