@@ -141,6 +141,19 @@ function trim(v) {
   return +v.toFixed(2) + ''
 }
 
+// Ink for text sitting ON a filled swatch: near-black over a light fill, near-white
+// over a dark one. Uses WCAG relative luminance, so it flips at the point where the
+// two candidates trade places rather than at a guessed midpoint.
+function readableOn(hex) {
+  const h = hex.replace('#', '')
+  const lin = (v) => {
+    const c = parseInt(v, 16) / 255
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  }
+  const L = 0.2126 * lin(h.slice(0, 2)) + 0.7152 * lin(h.slice(2, 4)) + 0.0722 * lin(h.slice(4, 6))
+  return L > 0.36 ? '#0a0f0d' : '#fbfcfb'
+}
+
 // Composite a colour drawn at `op` opacity over background `bg` (both #hex).
 function blend(hex, op, bg) {
   const rd = (h) => {
@@ -963,15 +976,39 @@ function ChartImpl({
         const lw = String(mk.label).length * fTick * 0.62
         const wantLeft = mk.side === 'left'
         const flip = !horizontal && (wantLeft ? p - lw > m.l : p + lw > m.l + pw)
+        // The label rides a pill filled with the marker's own colour. It reads as
+        // one object with the line, and the text only has to contrast with the
+        // pill, so a step that is pale against the card is still legible here.
+        const tx = horizontal ? m.l + 6 : p + (flip ? -5 : 5)
+        // Rows step by the pill's own height: the label used to be bare text, so 11px
+        // was enough, and a pill on row 1 now runs into the one above it.
+        const rowStep = fTick + 7
+        const ty = horizontal ? p - 5 : m.t + 11 + (mk.row || 0) * rowStep
+        const anchor = horizontal ? 'start' : flip ? 'end' : 'start'
+        const padX = 4
+        const boxW = lw + padX * 2
+        const boxH = fTick + 5
+        const boxX = anchor === 'start' ? tx - padX : tx - boxW + padX
+        markerLayer.push(
+          <rect
+            key={`mkb${i}`}
+            x={boxX}
+            y={ty - fTick + 1}
+            width={boxW}
+            height={boxH}
+            rx={2.5}
+            fill={col}
+          />
+        )
         markerLayer.push(
           <text
             key={`mkl${i}`}
-            x={horizontal ? m.l + 6 : p + (flip ? -5 : 5)}
-            y={horizontal ? p - 5 : m.t + 11 + (mk.row || 0) * 11}
-            textAnchor={horizontal ? 'start' : flip ? 'end' : 'start'}
+            x={tx}
+            y={ty}
+            textAnchor={anchor}
             fontSize={fTick}
-            fontWeight="400"
-            fill={col}
+            fontWeight="600"
+            fill={readableOn(col)}
             fontFamily="var(--font-mono, ui-monospace, monospace)"
           >
             {mk.label}
