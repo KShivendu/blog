@@ -11,7 +11,7 @@ authors: ['kshivendu']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Any serious team tracks latency as p50, p90, p99. Reporting just "our average latency is 40ms" is naive, because it hides the p99 150ms tail that's hurting users. Yet we report search relevance as a single average NDCG all the time, and somehow that's normal. Relevance has a tail too, and the average hides it.
+Any serious team tracks latency as p50, p90, p99. Reporting just "our average latency is 40ms" is naive, because it hides the p99 150ms tail that's hurting users. Yet we report search relevance as a single average NDCG all the time, and somehow that's normal. Relevance has a tail too, but the average hides it.
 
 ## Distribution vs average
 
@@ -214,6 +214,6 @@ Mean alone can't capture a distribution. We realised this for latency decades ag
 
 ## Key Takeaways
 
-- A good average can hide queries that find nothing. A mean of 50 could be every query scoring 50, or half the queries scoring 100 and half scoring 0.
-- It hides your gains too. Adding a stemmer and stopwords moves mean recall@10 by a forgettable +2.2, while its median jumps 50 → 60.
-- Report p50 and p25 next to the mean. Higher is better for relevance, so the tail that hurts is the low end, and p25 is the mirror of p90/p99 latency.
+- **A good average can hide queries that find nothing.** A mean of 50 could be every query scoring 50, or half the queries scoring 100 and half scoring 0.
+- **It hides your gains too.** Adding a stemmer and stopwords moves mean recall@10 by a forgettable +2.2, while its median jumps 50 → 60.
+- **Report p50 and p25 next to the mean.** Higher is better for relevance, so the tail that hurts is the low end, and p25 is the mirror of p90/p99 latency.
