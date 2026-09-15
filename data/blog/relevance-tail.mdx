@@ -11,7 +11,7 @@ authors: ['kshivendu']
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Any serious team tracks latency as p50, p90, p99. Reporting just "our average latency is 40ms" is naive, because it hides the p99 150ms tail that's hurting users. Yet we report search relevance as a single average NDCG all the time, and somehow that's normal. Relevance has a tail too, but the average hides it.
+Any serious team tracks latency as p50, p90, p99. Reporting just "our average latency is 40ms" is naive, because it hides the p99 150ms tail that's hurting real users. Yet we report search relevance as a single average NDCG all the time, and somehow that's normal. Relevance has a tail too, but the average hides it.
 
 ## Distribution vs average
 
@@ -91,17 +91,17 @@ Observations:
 
 ## It hides your improvements, too
 
-Take a real improvement: plain word BM25, then apply a Porter stemmer and a stopword list (`word_en`). It moves mean recall@10 by **+2.2**, a bump you'd squint at.
+Take a real improvement: plain word BM25, then apply a Porter stemmer and a stopword list (`word_en`). It moves mean NDCG@10 by **+1.9**, a bump you'd squint at.
 
-A +2.2 mean could be every query gaining 2.2. Here it's three different groups:
+A +1.9 mean could be every query gaining 1.9. Here it's three different groups:
 
-- **460** of the 599 queries don't move at all
-- **79** improve, by 32 on average
-- **60** get worse, by 20 on average
+- **294** of the 599 queries don't move at all
+- **172** improve, by 19.5 on average
+- **133** get worse, by 16.7 on average
 
-`(79 × 32 − 60 × 20) / 599 = +2.2`
+`(172 × 19.5 − 133 × 16.7) / 599 = +1.9`
 
-So report percentiles of Δ, not the Δ of percentiles. Subtracting two summaries says recall@10's median gained +10.0. Asking each query how far it moved says it gained **0**.
+So report percentiles of Δ, not the Δ of percentiles. Subtracting two summaries says NDCG@10's median gained +3.7. Asking each query how far it moved says it gained **0**.
 
 <ScoreHistogram compare />
 
@@ -135,7 +135,7 @@ Splitting the mean into what was gained and what was given back:
 
 Every mean here is a small difference between two larger numbers. NDCG@10 gives back two thirds of what it wins, recall@100 a quarter. Same-looking gains, different trades.
 
-A saturated percentile can't show a gain. recall@10's p75 and p90 are already at 100, so a better method moves them +0.0. The 43% of queries already at 100 have no room left to improve, and they dilute the mean.
+A saturated percentile can't show a gain. NDCG@10's p90 is already at 100, so a better method moves it +0.0. The 22% of queries already scoring 100 have no room left to improve, and they dilute the mean.
 
 <details>
 <summary>The Δ of percentiles, across six statistics and all three metrics</summary>
@@ -215,5 +215,5 @@ Mean alone can't capture a distribution. We realised this for latency decades ag
 ## Key Takeaways
 
 - **A good average can hide queries that find nothing.** A mean of 50 could be every query scoring 50, or half the queries scoring 100 and half scoring 0.
-- **It hides your gains too.** Adding a stemmer and stopwords moves mean recall@10 by a forgettable +2.2, while its median jumps 50 → 60.
+- **It hides your gains too.** Adding a stemmer and stopwords moves mean NDCG@10 by a forgettable +1.9, while 133 of 599 queries actually get worse.
 - **Report p50 and p25 next to the mean.** Higher is better for relevance, so the tail that hurts is the low end. p25 is the relevance equivalent of p90/p99 latency.
