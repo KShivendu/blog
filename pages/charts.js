@@ -6,17 +6,10 @@ import LineChart from '@/components/LineChart'
 import { vizPalette, chartChrome } from '@/lib/viz-palette'
 
 /**
- * Local chart gallery: every chart type and every palette role on one page, so a
- * colour or layout change can be checked in both themes without hunting through
- * posts. Reachable at /charts when running `npm run dev`.
- *
- * getStaticProps 404s this in production, so it ships with the repo but never
- * with the site.
+ * Chart gallery: every chart type and every palette role on one page, so a colour
+ * or layout change can be checked in both themes without hunting through posts.
+ * Doubles as the visual companion to chart-style.md.
  */
-export async function getStaticProps() {
-  if (process.env.NODE_ENV === 'production') return { notFound: true }
-  return { props: {} }
-}
 
 // WCAG relative luminance, for the contrast column in the swatch table.
 const lum = (hex) => {
@@ -106,7 +99,6 @@ export default function ChartGallery() {
     <>
       <Head>
         <title>Chart gallery</title>
-        <meta name="robots" content="noindex, nofollow" />
       </Head>
 
       <div className="mx-auto max-w-[980px] py-8">
