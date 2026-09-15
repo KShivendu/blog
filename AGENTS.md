@@ -44,22 +44,32 @@ explanation in plain prose, and check it rendered rather than assuming.
 **Finish every example you start.** Never name a transformation or comparison and leave
 the values out.
 
-## Chart colour
+## Charts
 
-`lib/viz-palette.js` is the only place a chart colour is defined. A chart names a
-ROLE and gets the step validated for the surface it's drawn on, so it follows the
-theme. Never write a hex into an `.mdx` or a component.
+Full guide: `chart-style.md`. Read it before touching a chart. The minimum bar:
 
-- `role: 'statP50'` colours a whole series; `roles: [...]` colours one bar each.
-- Three kinds of role, and they don't mix. ORDERED (`statP10/P25/P50`) is one hue
-  stepped by lightness, only for values that have an order. IDENTITY (`series[0..3]`)
-  is fixed slots, never cycled, because the order is the colourblind-safety
-  mechanism. POLARITY (`bad` / `neutral` / `good`) is reserved; don't spend it on
-  identity.
-- `statMean` and `statMuted` are grey on purpose. The mean and any pinned statistic
-  are furniture, not a fourth colour.
-- Check any new colour with `python3 scripts/color-check.py`. Floors: OKLab dE >= 15
-  between things a reader must tell apart, contrast >= 3:1 against the surface.
+**A chart never picks a colour.** It names a role and `lib/viz-palette.js` returns the
+value validated for the surface it's drawn on. `role: 'statP50'` colours a series,
+`roles: [...]` colours one bar each. Never write a hex into an `.mdx`: a static hex
+can't follow the theme.
+
+**Three kinds of role, and they don't mix.** ORDERED (`statP10/P25/P50`) is one hue
+stepped by lightness, only for values that have an order. IDENTITY (`series[0..3]`,
+`seriesAlt[0..3]`) is fixed slots assigned in order, never cycled, because the order is
+what keeps them apart under deutan and protan vision. POLARITY (`bad`/`neutral`/`good`)
+is reserved; a chart that paints its third series red has told the reader something
+false.
+
+**Five or more series means families, not more hues.** Six categorical colours can't all
+clear the separation floor. Six lines are usually three families of two, which is three
+hues with `seriesAlt` as the second step inside each.
+
+**The mean is grey**, and so is any statistic pinned where it can't move. Markers all
+carry the same weight; nothing outranks the bars.
+
+**Measure, don't eyeball.** `python3 scripts/color-check.py sep|contrast|oklch`. Floors
+are dE 15 between things a reader must tell apart and 3:1 against the surface. A value
+may fall short when the mark carries its own text label, and the file has to say so.
 
 ## Investigating experiments (IMPORTANT)
 
