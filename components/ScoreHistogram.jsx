@@ -4,9 +4,12 @@ import BarChart from './BarChart'
 // Per-query score distribution for the relevance-tail post, drawn as a <BarChart>
 // so it reads as the same system as every other chart here. One view per metric.
 //
-// The exact-0 and exact-1.0 buckets are broken out of the 0.1-wide bins on purpose:
-// a query that found nothing is a different animal from one that scored 0.04, and
-// those two towers are what the mean is hiding.
+// The exact-0 and exact-100 buckets are broken out of the 10-wide bins on purpose:
+// a query that found nothing is a different animal from one that scored 4, and those
+// two towers are what the mean is hiding.
+//
+// Scores are stored 0..1 and shown x100, the way IR papers report NDCG. The y axis is
+// query COUNTS, not percentages, so the two axes can't be mistaken for each other.
 //
 // Data: dist_hist.py --dump (per-query ndcg@10 / recall@10 / recall@100).
 
@@ -18,22 +21,33 @@ const METRICS = [
   { key: 'r100', stat: 'recall@100', label: 'recall@100' },
 ]
 
-// np.histogram bins are half-open on the RIGHT, so [.5,.6) is where the
-// exactly-0.500 queries land. Label them that way rather than "(.5,.6]".
+// np.histogram bins are half-open on the RIGHT, so [50,60) is where the exactly-50
+// queries land. Label them that way rather than "(50,60]".
 const EDGES = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
 const MID_LABELS = [
-  '(0,.1)',
-  '[.1,.2)',
-  '[.2,.3)',
-  '[.3,.4)',
-  '[.4,.5)',
-  '[.5,.6)',
-  '[.6,.7)',
-  '[.7,.8)',
-  '[.8,.9)',
-  '[.9,1)',
+  '(0,10)',
+  '[10,20)',
+  '[20,30)',
+  '[30,40)',
+  '[40,50)',
+  '[50,60)',
+  '[60,70)',
+  '[70,80)',
+  '[80,90)',
+  '[90,100)',
 ]
-const CATS = ['=0', ...MID_LABELS, '=1.0']
+const CATS = ['=0', ...MID_LABELS, '=100']
+
+// Tooltip headers say which metric the bucket belongs to, so a hovered bar reads
+// "NDCG@10 = [10,20)" rather than a bare interval.
+const catsFor = (label) => [
+  `${label} = 0`,
+  ...MID_LABELS.map((b) => `${label} = ${b}`),
+  `${label} = 100`,
+]
+
+// scores live 0..1 in the data and are reported x100 everywhere a human reads them
+const s100 = (v, d = 1) => (v * 100).toFixed(d)
 
 const BASE = { zero: '#f87171', one: '#10b981', mid: '#94a3b8' }
 
@@ -70,7 +84,7 @@ function buildView(rows, stats, mdef) {
     meanIdx = 1 + (i < 0 ? EDGES.length - 1 : i)
   }
 
-  const pct = buckets.map((b) => Math.round((b.length / n) * 1000) / 10)
+  const counts = buckets.map((b) => b.length)
   const nearMean = rows.filter((r) => Math.abs(r[mdef.key] - st.mean) <= 0.05).length
 
   // Where does a statistic sit on a bucketed axis? Proportional placement puts p50 =
@@ -88,10 +102,10 @@ function buildView(rows, stats, mdef) {
     return 1 + (i < 0 ? EDGES.length - 1 : i)
   }
   const wanted = [
-    { v: st.p10, label: `p10 ${st.p10.toFixed(2)}`, color: COLORS.p10 },
-    { v: st.p25, label: `p25 ${st.p25.toFixed(2)}`, color: COLORS.p25 },
-    { v: st.p50, label: `p50 ${st.p50.toFixed(2)}`, color: COLORS.p50 },
-    { v: st.mean, label: `mean ${st.mean.toFixed(3)}`, color: COLORS.mean, strong: true },
+    { v: st.p10, label: `p10 ${s100(st.p10)}`, color: COLORS.p10 },
+    { v: st.p25, label: `p25 ${s100(st.p25)}`, color: COLORS.p25 },
+    { v: st.p50, label: `p50 ${s100(st.p50)}`, color: COLORS.p50 },
+    { v: st.mean, label: `mean ${s100(st.mean)}`, color: COLORS.mean, strong: true },
   ]
   const byBucket = new Map()
   for (const w of wanted) {
@@ -110,31 +124,33 @@ function buildView(rows, stats, mdef) {
     })
   }
 
-  // Five ticks placed by SCORE instead of one label per bar. The =0 and =1.0 bars
-  // each hold a full slot, so the axis is linear across the ten interior bins with a
-  // slot of padding at either end: 0.50 lands on the [.4,.5)/[.5,.6) edge and 0.25
-  // through the middle of [.2,.3), which is where those scores sit among the bars.
+  // Five ticks placed by SCORE instead of one label per bar. The =0 and =100 bars each
+  // hold a full slot, so the axis is linear across the ten interior bins with a slot of
+  // padding at either end: 50 lands on the [40,50)/[50,60) edge and 25 through the
+  // middle of [20,30), which is where those scores sit among the bars.
   const catTicks = [
     { at: 0.5, label: '0' },
-    { at: at(0.25), label: '0.25' },
-    { at: at(0.5), label: '0.50' },
-    { at: at(0.75), label: '0.75' },
-    { at: CATS.length - 0.5, label: '1.0' },
+    { at: at(0.25), label: '25' },
+    { at: at(0.5), label: '50' },
+    { at: at(0.75), label: '75' },
+    { at: CATS.length - 0.5, label: '100' },
   ]
 
   return {
     label: mdef.label,
     title: `Per-query ${mdef.label}: the distribution the mean stands on`,
+    valueLabel: 'queries',
+    catLabel: `${mdef.label} (x100)`,
     subtitle:
-      `${n} queries, 12 NanoBEIR datasets · mean ${st.mean.toFixed(3)} · ` +
-      `p50 ${st.p50.toFixed(3)} · p25 ${st.p25.toFixed(3)} · p10 ${st.p10.toFixed(3)}`,
-    categories: CATS,
+      `${n} queries, 12 NanoBEIR datasets · mean ${s100(st.mean)} · ` +
+      `p50 ${s100(st.p50)} · p25 ${s100(st.p25)} · p10 ${s100(st.p10)}`,
+    categories: catsFor(mdef.label),
     catTicks,
     markers,
     series: [
       {
-        name: '% of queries',
-        values: pct,
+        name: 'queries',
+        values: counts,
         colors: CATS.map((_, i) =>
           i === 0
             ? COLORS.zero
@@ -144,14 +160,14 @@ function buildView(rows, stats, mdef) {
             ? COLORS.mean
             : COLORS.mid
         ),
-        text: pct.map((p) => (p >= 0.05 ? p.toFixed(p >= 10 ? 0 : 1) : '')),
+        text: counts.map((c) => (c ? `${c}` : '')),
         textPosition: 'outside',
         notes: buckets.map((b, i) => {
           const cnt = `${b.length} of ${n} queries`
           if (i === meanIdx) {
-            return `${cnt} — the mean (${st.mean.toFixed(
-              3
-            )}) lands in this bar; only ${nearMean} queries score within ±0.05 of it`
+            return `${cnt}. The mean (${s100(
+              st.mean
+            )}) lands in this bar, and only ${nearMean} queries score within 5 of it`
           }
           if (i === 0) {
             return `${cnt} returned nothing relevant, e.g. ${b[0]?.ds}: ${b[0]?.q.slice(0, 70)}…`
@@ -167,28 +183,28 @@ function buildView(rows, stats, mdef) {
 }
 
 // Per-query delta buckets, symmetric around an exact-zero spike. Bucketing the CHANGE
-// keeps the paired information: a query that went 1.0 -> 0.0 is a different event from
-// one that never moved, and a net-zero bucket can hide 30 arrivals against 30 departures.
+// keeps the paired information: a query that went 100 -> 0 is a different event from one
+// that never moved, and a net-zero bucket can hide 30 arrivals against 30 departures.
 const D_NEG = [-1.0, -0.5, -0.3, -0.2, -0.1, 0]
 const D_POS = [0, 0.1, 0.2, 0.3, 0.5, 1.0]
 const D_CATS = [
-  '−1..−.5',
-  '−.5..−.3',
-  '−.3..−.2',
-  '−.2..−.1',
-  '−.1..0',
+  '−100..−50',
+  '−50..−30',
+  '−30..−20',
+  '−20..−10',
+  '−10..0',
   '=0',
-  '0..+.1',
-  '+.1..+.2',
-  '+.2..+.3',
-  '+.3..+.5',
-  '+.5..+1',
+  '0..+10',
+  '+10..+20',
+  '+20..+30',
+  '+30..+50',
+  '+50..+100',
 ]
 const ZERO_IDX = 5
 
 // `compare` mode answers "how much does a query change", not "how did the summary move".
-// Those are different questions: the delta of the medians is +0.100 on recall@10, while
-// the median of the deltas is +0.000, because 460 of 599 queries never move at all.
+// Those are different questions: the delta of the medians is +10.0 on recall@10, while
+// the median of the deltas is 0, because 460 of 599 queries never move at all.
 function buildCompareView(rows, stats, mdef) {
   const n = rows.length
   const enKey = `${mdef.key}_en`
@@ -222,7 +238,8 @@ function buildCompareView(rows, stats, mdef) {
   const st = stats[mdef.stat]
   const stEn = stats[`${mdef.stat}|word_en`]
   const meanD = stEn.mean - st.mean
-  const fmt = (v) => (v >= 0 ? `+${v.toFixed(3)}` : v.toFixed(3))
+  // deltas are reported x100 too, so +0.0191 reads as +1.9
+  const fmt = (v) => (v >= 0 ? `+${(v * 100).toFixed(1)}` : (v * 100).toFixed(1))
 
   // A delta's position on this axis: the zero spike owns a whole slot, so the negative
   // buckets sit left of it and the positive ones right, each slot one bucket wide.
@@ -239,17 +256,18 @@ function buildCompareView(rows, stats, mdef) {
   return {
     label: mdef.label,
     title: `${mdef.label}: how much each query actually changed`,
-    valueLabel: '% of queries',
+    valueLabel: 'queries',
+    catLabel: `change in ${mdef.label} (x100)`,
     subtitle:
       `${win} improved, ${loss} got worse, ${n - win - loss} never moved · ` +
       `mean Δ ${fmt(meanD)} but median Δ ${fmt(q(50))} · p10 Δ ${fmt(q(10))}`,
-    categories: D_CATS,
+    categories: D_CATS.map((b) => (b === '=0' ? 'no change' : `Δ ${mdef.label} = ${b}`)),
     catTicks: [
-      { at: 0, label: '−1.0' },
-      { at: 4, label: '−0.1' },
+      { at: 0, label: '−100' },
+      { at: 4, label: '−10' },
       { at: ZERO_IDX + 0.5, label: 'no change' },
-      { at: 7, label: '+0.1' },
-      { at: D_CATS.length, label: '+1.0' },
+      { at: 7, label: '+10' },
+      { at: D_CATS.length, label: '+100' },
     ],
     markers: [
       { at: at(q(10)), label: `p10 ${fmt(q(10))}`, color: COLORS.p10, side: 'left' },
@@ -258,8 +276,8 @@ function buildCompareView(rows, stats, mdef) {
     ],
     series: [
       {
-        name: '% of queries',
-        values: counts.map((c) => Math.round((c / n) * 1000) / 10),
+        name: 'queries',
+        values: counts,
         color: BASE.mid,
         colors: D_CATS.map((_, i) =>
           i < ZERO_IDX ? BASE.zero : i === ZERO_IDX ? BASE.mid : BASE.one
@@ -274,7 +292,7 @@ function buildCompareView(rows, stats, mdef) {
           if (i === ZERO_IDX) return `${b.length} queries scored exactly the same either way`
           return (
             `${b.length} queries, e.g. ${pick.r.ds}: ${pick.r.q.slice(0, 60)}… ` +
-            `(${pick.r[mdef.key].toFixed(2)} → ${pick.r[enKey].toFixed(2)})`
+            `(${s100(pick.r[mdef.key])} → ${s100(pick.r[enKey])})`
           )
         }),
       },
@@ -302,14 +320,8 @@ export default function ScoreHistogram({ compare = false }) {
     compare ? buildCompareView(data.rows, data.stats, mdef) : buildView(data.rows, data.stats, mdef)
   )
 
-  // No shared valueMax: recall@100's 59% tower would squash the other two views into
-  // the bottom third. Each view scales to its own data; the % labels carry the compare.
-  return (
-    <BarChart
-      orientation="vertical"
-      valueLabel="% of queries"
-      valueUnit={compare ? '' : '%'}
-      views={views}
-    />
-  )
+  // No shared valueMax: recall@100's 351-query tower would squash the other two views
+  // into the bottom third. Each view scales to its own data, and the counts on each bar
+  // carry the comparison.
+  return <BarChart orientation="vertical" valueLabel="queries" views={views} />
 }

@@ -75,6 +75,10 @@ import { useTheme } from 'next-themes'
  *   }>
  *   views        Array<{ label, categories, series }>   toggle datasets. The
  *                first is shown by default. Renders on-theme segmented buttons.
+ *   catLabel     string    axis title for the CATEGORY axis (vertical charts only;
+ *                horizontal already reads its categories down the left gutter).
+ *                Pairs with catTicks: the ticks say 0/25/50, the label says what
+ *                those numbers are. Settable per view.
  *   catTicks     Array<{ at, label }>   replaces the per-category labels with a
  *                small set of axis ticks at FRACTIONAL category indices (same
  *                `at` space as `markers`). For a histogram of buckets whose
@@ -230,6 +234,7 @@ function ChartImpl({
   views,
   markers,
   catTicks,
+  catLabel,
 }) {
   const { theme, resolvedTheme } = useTheme()
   const isDark = (resolvedTheme || theme) === 'dark'
@@ -461,6 +466,7 @@ function ChartImpl({
     (hasScaleRow ? 26 : 0)
   const catLabelFont = mobile ? 12 : 10.5
   const rCatTicks = resolved.catTicks ?? catTicks
+  const rCatLabel = resolved.catLabel ?? catLabel
   // Font sizes, scaled up a touch on mobile.
   const fTick = mobile ? 13 : 10
   const fBarTxt = mobile ? 12 : 10
@@ -490,8 +496,8 @@ function ChartImpl({
     // extra bottom room for angled category labels; plain axis ticks need far less
     m = rCatTicks
       ? mobile
-        ? { t: topPad, r: 14, b: 46, l: 42 }
-        : { t: topPad, r: 18, b: 52, l: 58 }
+        ? { t: topPad, r: 14, b: rCatLabel ? 64 : 46, l: 42 }
+        : { t: topPad, r: 18, b: rCatLabel ? 70 : 52, l: 58 }
       : mobile
       ? { t: topPad, r: 14, b: 86, l: 42 }
       : { t: topPad, r: 18, b: 96, l: 58 }
@@ -1335,6 +1341,18 @@ function ChartImpl({
               fontFamily="var(--font-mono, ui-monospace, monospace)"
             >
               {rValueLabel}
+            </text>
+          )}
+          {rCatLabel && !horizontal && (
+            <text
+              x={m.l + pw / 2}
+              y={m.t + ph + 38}
+              textAnchor="middle"
+              fontSize={fAxisTitle}
+              fill={C.ink}
+              fontFamily="var(--font-mono, ui-monospace, monospace)"
+            >
+              {rCatLabel}
             </text>
           )}
           {rValueLabel && !horizontal && (
