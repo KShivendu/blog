@@ -15,9 +15,9 @@ Any serious team tracks latency as p50, p90, p99. Reporting just "our average la
 
 ## Distribution vs average
 
-I ran a plain word-BM25 baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries). Instead of averaging each metric, I pooled the per-query scores and read the percentiles. The mean NDCG@10 is **52.5**, which _feels_ respectable, as if every query comes back roughly half-right. In reality, they range from perfect to nothing: one in five queries retrieves nothing relevant in the top 10, and the average buries every one.
+I ran a plain word-BM25 baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries). Instead of averaging each metric, I calculated percentiles over the per-query scores. The mean NDCG@10 is **52.5**, which _feels_ respectable, as if every query comes back roughly half-right. In reality, they range from perfect to nothing: one in five queries retrieves nothing relevant in the top 10, and the average buries every one.
 
-(Every score here is ×100, the way IR papers report NDCG. A mean of 52.5 reads better than 0.525, and a +2.2 gain looks like something where +0.022 looks like rounding.)
+(Every score here is ×100, the way IR papers report NDCG. A mean of 52.5 reads better than 0.525, and a +2.2 gain reads as a real change where +0.022 reads as rounding.)
 
 Let's look at the distribution.
 
@@ -25,9 +25,9 @@ Let's look at the distribution.
 
 Observations:
 
-- 119 queries score exactly 0 and 129 score exactly 100. That's **41% of the eval** parked on the two end bars, and the mean is neither of them.
-- Only **43 of 599** queries land within 5 of the mean (52.5), so it describes a query that mostly doesn't exist.
-- Switch to recall@10 and the split sharpens: **63%** of queries at the two ends, 13 near the mean.
+- 119 queries score exactly 0 and 129 score exactly 100. That's **41% of all queries** sitting at the two ends, and the mean is neither.
+- Only **43 of 599** queries land within 5 of the mean (52.5), so it describes a query that barely exists.
+- Switch to recall@10 and it gets worse: **63%** of queries at the two ends, 13 near the mean.
 
 ## The mean hides the reality
 
@@ -86,20 +86,20 @@ export const pctColors = {
 Observations:
 
 - p10 is **0.0** on both NDCG@10 and recall@10, so over 10% of queries score a hard zero while the mean sits near 53.
-- On recall@100 the typical query is perfect (p50 = 100), but a tail flooring at p10 = 12.6 pulls the mean to **76.5**, a number no real query got.
+- On recall@100 the typical query is perfect (p50 = 100), but a tail that bottoms out at p10 = 12.6 pulls the mean to **76.5**, a number no real query got.
 - The mean's error flips sign between metrics. It overstates recall@10's median (56.3 vs 50.0) and understates NDCG@10's (52.5 vs 55.4), so you can't correct for it in your head.
 
 ## It hides your improvements, too
 
 Take a real improvement: plain word BM25, then apply a Porter stemmer and a stopword list (`word_en`). It moves mean recall@10 by **+2.2**, a bump you'd squint at.
 
-That +2.2 could be every query gaining 2.2, or a few gaining a lot while the rest sit still, or some gaining a lot while others lose just as much. Per 1000 queries it's the third:
+A +2.2 mean could be every query gaining 2.2. Here it's three different groups:
 
-- **768** don't move at all
-- **132** improve, by 32 on average
-- **100** get worse, by 20 on average
+- **460** of the 599 queries don't move at all
+- **79** improve, by 32 on average
+- **60** get worse, by 20 on average
 
-`(132 × 32 − 100 × 20) / 1000 = +2.2`
+`(79 × 32 − 60 × 20) / 599 = +2.2`
 
 So report percentiles of Δ, not the Δ of percentiles. Subtracting two summaries says recall@10's median gained +10.0. Asking each query how far it moved says it gained **0**.
 
@@ -123,7 +123,7 @@ Reported properly, that run is:
 
 The mean is the smallest number in that Δ column, and p25 moves 2.4× as far.
 
-Add **win/tie/loss: 172/294/133**. It needs a baseline scored on the same queries, which is why it rarely gets reported. 56% of the queries that moved got better, and +1.9 doesn't say that.
+Then there's **win/tie/loss: 172/294/133**. It needs a baseline scored on the same queries, which is why it rarely gets reported. 56% of the queries that moved got better, and +1.9 doesn't say that.
 
 Splitting the mean into what was gained and what was given back:
 
@@ -135,7 +135,7 @@ Splitting the mean into what was gained and what was given back:
 
 Every mean here is a small difference between two larger numbers. NDCG@10 gives back two thirds of what it wins, recall@100 a quarter. Same-looking gains, different trades.
 
-A saturated percentile can't show a gain. recall@10's p75 and p90 are already at 100, so a better method moves them +0.0, and the 43% of queries already scoring 100 have no headroom to lift the mean with.
+A saturated percentile can't show a gain. recall@10's p75 and p90 are already at 100, so a better method moves them +0.0. The 43% of queries already at 100 have no room left to improve, and they dilute the mean.
 
 <details>
 <summary>The Δ of percentiles, across six statistics and all three metrics</summary>
@@ -184,7 +184,7 @@ The pattern holds across metrics:
 | NDCG@10    |   +1.9 | p25 / p50 / p75 all move ~2× the mean (+3.7 to +4.5)                      |
 | recall@100 |   +2.8 | median already 100, so the gain lands in **p25: 50 → 63 (+12.6, 4.5×)**   |
 
-The gain lands wherever the live mass is, and that percentile moves 2-5× the mean.
+The gain lands wherever the queries still have room to move, and that percentile shifts 2-5× as far as the mean.
 
 </details>
 
@@ -194,7 +194,7 @@ Latency and relevance are the same problem pointed at opposite tails. For latenc
 
 Report p25, not p10. p10 pins at 0 once more than 10% of queries fail, and 20% do here, so it can't show the tail moving. p25 is 21.9 on NDCG@10 and still moves when the method changes.
 
-I timed this BM25 baseline at **3.2ms p50, 7.2ms p90**. Nobody would report only the 4.4ms mean, because the p90 is the request a real user is waiting on. p25 relevance is that same user. We just forget to report it.
+I timed this BM25 baseline at **3.2ms p50, 7.2ms p90**. Nobody would report only the 4.4ms mean, because the p90 is the request a real user is waiting on. A p25 relevance score is that same user's search. We just forget to report it.
 
 ## So what should we report instead?
 
@@ -216,4 +216,4 @@ Mean alone can't capture a distribution. We realised this for latency decades ag
 
 - **A good average can hide queries that find nothing.** A mean of 50 could be every query scoring 50, or half the queries scoring 100 and half scoring 0.
 - **It hides your gains too.** Adding a stemmer and stopwords moves mean recall@10 by a forgettable +2.2, while its median jumps 50 → 60.
-- **Report p50 and p25 next to the mean.** Higher is better for relevance, so the tail that hurts is the low end, and p25 is the mirror of p90/p99 latency.
+- **Report p50 and p25 next to the mean.** Higher is better for relevance, so the tail that hurts is the low end. p25 is the relevance equivalent of p90/p99 latency.
