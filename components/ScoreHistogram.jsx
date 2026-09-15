@@ -103,7 +103,7 @@ function buildView(rows, stats, mdef, C) {
     { v: st.p10, label: `p10 ${s100(st.p10)}`, color: C.p10 },
     { v: st.p25, label: `p25 ${s100(st.p25)}`, color: C.p25 },
     { v: st.p50, label: `p50 ${s100(st.p50)}`, color: C.p50 },
-    { v: st.mean, label: `mean ${s100(st.mean)}`, color: C.mean, solid: true },
+    { v: st.mean, label: `mean ${s100(st.mean)}`, color: C.mean },
   ]
   const byBucket = new Map()
   for (const w of wanted) {
@@ -263,7 +263,7 @@ function buildCompareView(rows, stats, mdef, C) {
     ],
     markers: [
       { at: at(q(10)), label: `p10 ${fmt(q(10))}`, color: C.p10, side: 'left' },
-      { at: at(meanD), label: `mean ${fmt(meanD)}`, color: C.mean, solid: true, row: 1 },
+      { at: at(meanD), label: `mean ${fmt(meanD)}`, color: C.mean, row: 1 },
       { at: at(q(90)), label: `p90 ${fmt(q(90))}`, color: C.p50, row: 2 },
     ],
     series: [
