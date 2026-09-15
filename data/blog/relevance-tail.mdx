@@ -109,7 +109,7 @@ Observations:
 
 - The median Δ is **0** on all three metrics. The typical query is untouched.
 - NDCG@10 moves the most queries and is the least one-sided: **172 wins against 133 losses**, p10 Δ **−11.7**.
-- recall@100 is the safest, **84 wins against 32 losses**. Even so, a stemmer is a #[trade](ECS stems to ec, so the only distinctive term in one ClimateFEVER query stops being distinctive and it drops 33 → 0).
+- recall@100 is the most #[forgiving](it only asks whether a relevant doc landed anywhere in the top 100, so a doc can slip 90 places and still count) metric and yet we see **84 wins against 32 losses**. So even a stemmer that's considered helpful can #[hurt](ECS stems to ec, so the only distinctive term in one ClimateFEVER query stops being distinctive and it drops 33 → 0) at times.
 - Some queries swing the whole way, 100 → 0 and 0 → 100 (hover a bar to see which).
 
 Reported properly, that run is:
@@ -214,6 +214,6 @@ Mean alone can't capture a distribution. We realised this for latency decades ag
 
 ## Key Takeaways
 
-- **A good average can hide queries that find nothing.** A mean of 50 could be every query scoring 50, or half the queries scoring 100 and half scoring 0.
+- **A good average can hide queries that are hurting real users.** A mean of 50 could be every query scoring 50, or half the queries scoring 100 and half scoring 0.
 - **It hides your gains too.** Adding a stemmer and stopwords moves mean NDCG@10 by a forgettable +1.9, while 133 of 599 queries actually get worse.
 - **Report p50 and p25 next to the mean.** Higher is better for relevance, so the tail that hurts is the low end. p25 is the relevance equivalent of p90/p99 latency.
