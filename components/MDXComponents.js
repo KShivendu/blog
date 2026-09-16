@@ -18,6 +18,7 @@ import TokenCompressionPipeline from './TokenCompressionPipeline'
 import TokenCompressionAnimated from './TokenCompressionAnimated'
 import TokenSearchAnalyzer from './TokenSearchAnalyzer'
 import RegexChopper from './RegexChopper'
+import RegexFilterPipeline from './RegexFilterPipeline'
 import QueryShapes from './QueryShapes'
 import StemExpandHero from './StemExpandHero'
 import SimilarityGate from './SimilarityGate'
@@ -56,6 +57,7 @@ export const MDXComponents = {
   TokenCompressionAnimated,
   TokenSearchAnalyzer,
   RegexChopper,
+  RegexFilterPipeline,
   QueryShapes,
   StemExpandHero,
   SimilarityGate,

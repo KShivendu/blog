@@ -17,9 +17,13 @@ In [Token Search](/blog/token-search) I ran BM25 over BPE token IDs and it match
 
 Three results, and only one of them is the one I expected.
 
-<RegexChopper />
+Every method here does the same two things: chop the text into pieces and remember which documents each piece appeared in. Then it chops the query the same way, looks up its pieces, and runs the real regex on whatever survives. Watch it happen on 60 real documents:
 
-Every method above does the same two things: chop the text into pieces and remember which documents each piece appeared in. Then it chops the query the same way, looks up its pieces, and runs the real regex on whatever survives. The only thing that separates them is the chopping.
+<RegexFilterPipeline />
+
+The only thing separating the methods is how they chop. Here is the same line of Python under all three:
+
+<RegexChopper />
 
 ## The benchmark needs no labels
 
