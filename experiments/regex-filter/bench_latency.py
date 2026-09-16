@@ -38,7 +38,10 @@ def pct(xs, p):
 
 def main():
     all_docs = json.load(open(f"{DATA}/docs_test.json"))
-    pats = [p for p, _ in json.load(open(f"{DATA}/patterns.json"))]
+    PATFILE = os.environ.get("PATTERNS", "patterns.json")
+    pats = [p for p, _ in json.load(open(f"{DATA}/{PATFILE}"))]
+    if "agent" in PATFILE:   # plain grep is BRE: \| \( \) are metacharacters
+        pats = [x.replace(r"\|", "|").replace(r"\(", "(").replace(r"\)", ")") for x in pats]
     rng = random.Random(0)
     pats = rng.sample(pats, N_PATTERNS)
     plans = []
