@@ -5,7 +5,7 @@ date: '2026-09-16'
 lastmod: '2026-09-16'
 tags: ['search', 'internals', 'information-retrieval', 'nlp']
 draft: true
-summary: 'TopK filters regex with content-defined sparse character grams. I benchmarked that against the BM25 token postings from Token Search on 4,000 CodeSearchNet Python functions and 400 regexes mined from real re.compile calls, with exact ground truth and a recall check that caught three soundness bugs in my own code. Token unigram plus bigram postings match a dense trigram index on candidate count in every query class, at 1.41M postings against sparse grams 4.56M, a 3.25x storage win. The predicted 5.2x latency win on sub-word literals did not appear. And 53.5% of real regexes have no literal any of these indexes can use.'
+summary: 'TopK filters regex with content-defined sparse character grams. I benchmarked that against the BM25 token postings from Token Search on 4,000 CodeSearchNet Python functions and 400 regexes mined from real re.compile calls, with exact ground truth and a recall check that caught three soundness bugs in my own code. Token unigram plus bigram postings match a dense trigram index on candidate count in every query class, at 1.41M postings against sparse grams 4.56M, a 3.25x storage win. The predicted 5.2x latency win on sub-word literals did not appear. Sparse grams also cost 3.0x more to build and run 2x slower per query for identical candidates. And 53.5% of real regexes have no literal any of these indexes can use, which caps every method at 2.1x over a full scan even though the filterable slice reaches 36x to 50x.'
 authors: ['kshivendu']
 ---
 
@@ -107,6 +107,57 @@ Observations:
 - **Sparse grams win sub-word literals by 1.2x against 1.3x**, the only place any method separates, and the margin is one notch of the median rather than anything a user would feel.
 - **Word-aligned alone is 145.9x on sub-word**, which is what a filter looks like when it almost always falls back and the few constraints it does find are weak.
 
+## Build time, latency, and how they scale
+
+Candidate count is the input to latency rather than latency itself, so I measured the rest: build time, end-to-end query time, and QPS across five corpus sizes from 500 to 8,000 documents. End-to-end means filter time plus running the real regex on whatever the filter returned, and every method verifies with the same `re` engine so that half is directly comparable.
+
+Build time in seconds, and the fitted exponent against corpus size:
+
+| index              | 500 | 1,000 | 2,000 | 4,000 |    8,000 |    growth |
+| ------------------ | --: | ----: | ----: | ----: | -------: | --------: |
+| dense trigram      | 0.1 |   0.1 |   0.4 |   0.8 |      1.5 | O(N^1.17) |
+| TopK sparse grams  | 0.5 |   1.3 |   3.2 |   6.9 | **12.8** | O(N^1.18) |
+| token word-aligned | 0.1 |   0.3 |   0.7 |   1.7 |      2.9 | O(N^1.17) |
+| token + bigram     | 0.4 |   0.6 |   1.3 |   2.6 |  **4.3** | O(N^0.93) |
+
+Observations:
+
+- **Sparse grams cost 12.8 s to build against token plus bigram's 4.3 s at 8,000 documents**, so 3.0x more, and 8.5x more than a dense trigram index. Selecting grams means walking every gram length from 3 to 16 at every byte position, where the other three make one pass.
+- **Everything is close to linear**, which is what an inverted index should do, and the postings confirm it: dense trigram O(N^1.06), sparse O(N^1.07), token plus bigram O(N^1.08).
+
+Now the query side. The aggregate first, over all 150 patterns:
+
+| method              |  500 | 1,000 | 2,000 | 4,000 | 8,000 |
+| ------------------- | ---: | ----: | ----: | ----: | ----: |
+| full scan p50 ms    | 0.31 |  0.73 |  1.70 |  3.49 |  6.60 |
+| dense trigram       | 0.12 |  0.26 |  0.64 |  1.40 |  2.63 |
+| TopK sparse         | 0.24 |  0.38 |  0.65 |  1.34 |  2.44 |
+| token + bigram      | 0.11 |  0.26 |  0.64 |  1.46 |  2.83 |
+| **speedup vs scan** | 1.8x |  1.9x |  2.3x |  2.4x |  2.1x |
+
+Observations:
+
+- **Every index lands at 2.1x to 2.4x over a full scan, and no better.** TopK report 55.3x. The difference is not the index, it is that 53.5% of these patterns cannot be filtered at all and every method scans the corpus for them, which caps the achievable mean no matter how good the filter is.
+- **p90 is the same story louder.** At 8,000 documents full scan p90 is 259.96 ms and token plus bigram is 152.66 ms, a 1.7x gap, because the 90th percentile query is one of the unfilterable ones.
+
+The filterable 46.5% on its own, which is the slice TopK's number describes:
+
+| method              |   500 | 1,000 | 2,000 | 4,000 |    8,000 |
+| ------------------- | ----: | ----: | ----: | ----: | -------: |
+| full scan p50 ms    |  0.22 |  0.53 |  1.26 |  2.72 |     4.91 |
+| dense trigram       |  0.01 |  0.02 |  0.04 |  0.09 | **0.19** |
+| TopK sparse         |  0.19 |  0.23 |  0.27 |  0.38 | **0.40** |
+| token + bigram      |  0.01 |  0.03 |  0.04 |  0.10 | **0.20** |
+| QPS, token + bigram | 4,956 | 1,694 |   726 |   288 |      146 |
+| QPS, TopK sparse    | 2,628 | 1,367 |   692 |   283 |      154 |
+| QPS, full scan      |   135 |    50 |    16 |     7 |        4 |
+
+Observations:
+
+- **Speedups reach 36.5x to 50.0x once the unfilterable queries are excluded**, peaking at 50.0x for dense trigram at 2,000 documents. That is the same order as TopK's 55.3x, which is the sanity check I wanted: the two numbers describe the same slice of traffic.
+- **Token plus bigram is 2x faster than sparse grams per query**, 0.20 ms against 0.40 ms at 8,000 documents. Both return identical candidate sets, so verification time is identical and the whole gap is the filter step. Sparse has to generate every selected gram of the query literal before it can look anything up.
+- **Sparse gram filter time is nearly flat in corpus size**, O(N^0.29) against token plus bigram's O(N^0.97), because its per-query cost is dominated by that fixed gram-generation step rather than by posting traversal. I would not extrapolate a crossover from this, since the flatness is mostly my implementation's fixed overhead rather than a property of the algorithm.
+
 ## The prediction that broke
 
 Before running this I modelled `/keniz/` and predicted token plus bigram would beat sparse grams **5.2x** on sub-word literals, on the reasoning that `ken`, `eni` and `niz` can appear scattered through a document without being adjacent, so a trigram index admits `kennel ... genie ... organize` while a bigram index requires contiguity. That model assumed dense trigrams would return **8x** the true matches. Measured, they return **1.3x**.
@@ -196,4 +247,6 @@ python experiments/regex-filter/report.py          # per-class breakdown
 - **I predicted a 5.2x sub-word win and got none.** The model assumed dense trigrams return 8x the true matches and they return 1.3x, because the median mined literal is 6 characters and four ANDed trigrams are already nearly exact. The adjacency argument is sound and describes a case this workload barely contains.
 - **53.5% of real regexes have no literal any of these indexes can use**, so they scan everything under every method. That fallback rate deserves to sit next to any speedup number, and it overstates the case for a code-search product whose users type identifiers.
 - **Word-aligned token filtering alone covers 15.2% of patterns and is unsound on code until the per-word normalisation runs at index time as well as query time.** The bigram index and the vocab sidecar are what make the approach work, not an extra on top of it.
+- **Speedup depends entirely on which queries you count.** Over all patterns every index is 2.1x to 2.4x faster than a full scan, because the unfilterable half drags the mean down. Over the filterable 46.5% the same indexes reach 36.5x to 50.0x, the same order as TopK's 55.3x. Quoting either number without the other is misleading.
+- **Token plus bigram is cheaper on both sides of the ledger.** 3.0x faster to build than sparse grams (4.3 s against 12.8 s at 8,000 documents) and 2x faster per filterable query (0.20 ms against 0.40 ms), for candidate sets that are identical.
 - **The recall check earned its place.** It caught three bugs in my own literal extractor, including `"" in "?*"` evaluating to `True` and quietly truncating every literal, none of which showed up as an obviously wrong number.

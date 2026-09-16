@@ -5,7 +5,7 @@ date: '2026-09-16'
 lastmod: '2026-09-16'
 tags: ['search', 'internals', 'information-retrieval', 'nlp']
 draft: true
-summary: 'TopK filters regex with content-defined sparse character grams, an index that runs 3.75x the size of the corpus. Token Search already keys its postings by BPE token IDs, which cover four bytes each instead of half a byte, so the same filter fits in 0.96x the corpus. Adding a token-bigram index and a 2 MB static sidecar over the vocabulary buys exact adjacency and sub-word literals: 3.9x smaller than sparse grams, a tie on word-aligned patterns, 5.2x faster on sub-word ones. The same structure does not transfer to fuzzy search, where a one-character typo leaves 39% of words sharing zero tokens with their correct spelling.'
+summary: 'TopK filters regex with content-defined sparse character grams, an index that runs 3.75x the size of the corpus. Token Search already keys its postings by BPE token IDs, which cover four bytes each instead of half a byte, so the same filter fits in 0.96x the corpus. Adding a token-bigram index and a 2 MB static sidecar over the vocabulary buys exact adjacency and sub-word literals: 3.9x smaller than sparse grams and a tie on word-aligned patterns. I later benchmarked this and the storage win held at a measured 3.25x, while the predicted sub-word latency win did not appear at all. The same structure does not transfer to fuzzy search, where a one-character typo leaves 39% of words sharing zero tokens with their correct spelling.'
 authors: ['kshivendu']
 ---
 
@@ -15,7 +15,9 @@ In [Token Search](/blog/token-search) I ran BM25 on the model's own BPE token ID
 
 [TopK's sparse-gram post](https://www.topk.io/blog/20260814-fast-regex-search-sparse-grams) is the state of the art here. They hash character bigrams with CRC32, select a gram when its two boundary bigrams outweigh every bigram in its interior, compile the regex into a boolean expression over those grams, and verify survivors with the real regex. The selection rule is content-defined, so a gram picked from a query string is guaranteed to be picked from any document containing it.
 
-Short version of what I found: token postings do the same job in **a quarter of the storage**, tie on the common case, and win 5.2x on sub-word literals once you add a bigram index. The same idea fails on fuzzy search, and the failure is measurable rather than a matter of taste.
+Short version of what I found: token postings do the same job in **a quarter of the storage**, tie on the common case, and should win on sub-word literals once you add a bigram index. The same idea fails on fuzzy search, and the failure is measurable rather than a matter of taste.
+
+**Read this next to [the benchmark](/blog/token-search-regex).** I built the experiment this post asks for. The storage argument held, 3.25x measured against 3.9x modelled. The sub-word latency argument did not: it rests on dense trigrams returning 8x the true matches, and measured they return 1.3x. Every latency figure below is a model, and the one marked 5.2x is now known to be wrong. I have left them in place so the reasoning and its failure are both readable.
 
 This post is a design dump, not a finished result. Every number below comes from a script in `experiments/regex-filter/`, and I say which one.
 
@@ -227,12 +229,12 @@ Observations:
 
 Latency, against a 27 s full-scan baseline:
 
-| query                                      |      TopK |     token |       ratio |
-| ------------------------------------------ | --------: | --------: | ----------: |
-| word-aligned `/colou?r of the (sky\|sea)/` |     89 ms |    104 ms |       0.85x |
-| rare literal `/belvidere/`                 |   `<1 ms` |   `<1 ms` |         tie |
-| sub-word `/keniz/`                         |    162 ms |     31 ms |    **5.2x** |
-| wildcard `/[a-z]{3}[0-9]+/`                | 20 s scan | 12 s scan | 1.7x on I/O |
+| query                                          |      TopK |     token |         ratio |
+| ---------------------------------------------- | --------: | --------: | ------------: |
+| word-aligned `/colou?r of the (sky\|sea)/`     |     89 ms |    104 ms |         0.85x |
+| rare literal `/belvidere/`                     |   `<1 ms` |   `<1 ms` |           tie |
+| sub-word `/keniz/` (modelled, since disproven) |    162 ms |     31 ms | ~~5.2x~~ 1.0x |
+| wildcard `/[a-z]{3}[0-9]+/`                    | 20 s scan | 12 s scan |   1.7x on I/O |
 
 Observations:
 
@@ -337,7 +339,7 @@ Three more flaws in my approach that the doc exposes:
 What this post contributes back, all of it inside Appendix A:
 
 - **Appendix A has a factual error.** It says of the TopK approach that "adjacency is encoded inside the longer gram." Only with probability `2/((n-1)(n-2))`, so 1 time in 6 for a 5-character literal. That is why I measure an 8x false-positive rate on `/keniz/`.
-- **If Qdrant builds that feature, build the bigram index and not sparse grams.** 19 GB against 75 GB, exact adjacency instead of probabilistic, and 5.2x on sub-word literals.
+- **If Qdrant builds that feature, build the bigram index and not sparse grams.** 19 GB against 75 GB, and measured, 3.25x fewer postings for identical candidate counts. The adjacency argument is real but did not pay, since the median mined literal is 6 characters and four ANDed trigrams are already near-exact.
 - **The virtual trigram index makes a document-trigram index unnecessary**, 2 MB plus a bigram index against ~50 GB.
 - **Caveat C4 has a conditional escape.** "FST is immutable, so there are two code paths" and "a latency cliff: the same query is fast on optimised segments and slow on a freshly written one." A fixed BPE vocabulary is known before any data arrives, so that FST is built once at collection creation, never merged, one code path, no cliff, and shared across fields rather than 45 MB each. This only works if terms are tokens, which breaks fuzzy, so it is an option for a token-native index alongside the word one, not a fix to the doc's design.
 - **Caveat C10 has a measured middle answer.** The doc asks whether fuzzy variants share the original term's rarity and recommends sharing, scaled by edit distance. [Token Search's expansion weighting](/blog/token-search#closing-the-stemming-gap-token-natively) is a fitted version of exactly that: weight each variant by `df_variant / (df_variant + k * df_word)`, so a well-attested variant passes through and a rare coincidental one is damped, tested against Porter on 12 NanoBEIR sets.
@@ -385,7 +387,7 @@ python experiments/regex-filter/napkin.py            # storage and latency model
 ## Key Takeaways
 
 - **Token postings filter regex in 0.96x the corpus size where TopK's sparse grams take 3.75x**, a 3.9x gap that comes entirely from a posting covering 4 bytes instead of half a byte. Latency ties on word-aligned patterns because fetch and verify dominate at 100 ms while traversal is 4 ms.
-- **The only measured latency win is adjacency.** A token-bigram index costs 1.59x the unigram postings and makes `/keniz/` 5.2x faster, because TopK's sparse grams only carry adjacency 1 time in 6 for a 5-character literal and fall back to trigrams otherwise.
+- **The adjacency argument did not survive measurement.** I predicted a token-bigram index would make `/keniz/` 5.2x faster, on the model that dense trigrams return 8x the true matches. They return 1.3x, so there was nothing for adjacency to remove. See [the benchmark](/blog/token-search-regex).
 - **The bigram index prunes sub-word arm enumeration by 670x to 236,907x**, and the prune is sound rather than heuristic, since a pair that never occurs adjacently in the corpus cannot occur in any document of it.
 - **The same structure fails on fuzzy search.** 39% of one-character typos share zero BPE tokens with the correct word, against 0% for char trigrams on words of 6 characters or more. BPE is a compression code and compression codes desync on one symbol.
 - **Char trigrams have their own hole, at short words.** 41.5% of edit-1 typos on 3-letter words share zero trigrams, which is why the Qdrant design doc picks an FST over vocabulary trigrams and why that call is right.
