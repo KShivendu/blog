@@ -38,6 +38,7 @@ const LANES = {
     bit: (t, i) => t[1 + i] === '1',
     sound: true,
     verdict: 'All 4 found. 6 lookups.',
+    unit: 'chunks:',
     note: 'Slide along one character at a time and require every chunk. Sound, and it needs six lookups.',
   },
   naive: {
@@ -45,6 +46,7 @@ const LANES = {
     pieces: ['\u00b7get', '_user'],
     bit: (t, i) => t[7 + i] === '1',
     sound: false,
+    unit: 'tokens:',
     verdict: 'Only 2 of 4 found. Unusable.',
     note: 'Look the query\u2019s own tokens up and nothing else. Two lookups, and it drops real matches.',
   },
@@ -52,6 +54,8 @@ const LANES = {
     label: 'tokens + adjacency',
     pieces: ['get', 'et_', 't_u', '_us', 'use', 'ser'],
     bit: (t, i) => t[1 + i] === '1',
+    unit: 'chunks:',
+    resolve: true,
     sound: true,
     verdict: 'All 4 found, from the BM25 index.',
     note: 'Ask which documents hold each chunk, answered by the tokens that contain it plus the token pairs that spell it across a boundary. Same result as the first lane, no separate index.',
@@ -291,6 +295,7 @@ export default function RegexFilterPipeline() {
               marginTop: 9,
             }}
           >
+            <span style={{ fontSize: 10.5, color: C.muted, marginRight: 2 }}>{L.unit}</span>
             {L.pieces.map((pc, k) => {
               const used = stage > 3 || k < done
               const now = k === activeIdx && stage === 3
@@ -316,6 +321,27 @@ export default function RegexFilterPipeline() {
           </div>
         )}
       </div>
+
+      {L.resolve && stage >= 3 && (
+        <div style={{ padding: '9px 16px 0' }}>
+          <div
+            style={{
+              fontSize: 10.5,
+              color: C.muted,
+              lineHeight: 1.7,
+              borderLeft: `2px solid ${C.border}`,
+              paddingLeft: 9,
+            }}
+          >
+            The chunks are the query unit, the token index is the storage. Each chunk is answered by{' '}
+            <span style={{ fontFamily: MONO, color: C.ink }}>tokens whose text contains it</span> or{' '}
+            <span style={{ fontFamily: MONO, color: C.ink }}>
+              token pairs that spell it across a boundary
+            </span>
+            , so there is no chunk index to store.
+          </div>
+        </div>
+      )}
 
       {/* the corpus */}
       <div style={{ padding: '12px 16px 0' }}>
