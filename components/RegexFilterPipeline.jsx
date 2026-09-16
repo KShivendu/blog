@@ -38,13 +38,23 @@ const LANES = {
     bit: (t, i) => t[1 + i] === '1',
     sound: true,
     verdict: 'All 4 found. 6 lookups.',
+    note: 'Slide along one character at a time and require every chunk. Sound, and it needs six lookups.',
   },
-  token: {
-    label: 'BPE tokens',
-    pieces: ['·get', '_user'],
+  naive: {
+    label: 'tokens alone (broken)',
+    pieces: ['\u00b7get', '_user'],
     bit: (t, i) => t[7 + i] === '1',
     sound: false,
-    verdict: 'Only 2 of 4 found. 2 lookups, wrong answer.',
+    verdict: 'Only 2 of 4 found. Unusable.',
+    note: 'Look the query\u2019s own tokens up and nothing else. Two lookups, and it drops real matches.',
+  },
+  bigram: {
+    label: 'tokens + adjacency',
+    pieces: ['get', 'et_', 't_u', '_us', 'use', 'ser'],
+    bit: (t, i) => t[1 + i] === '1',
+    sound: true,
+    verdict: 'All 4 found, from the BM25 index.',
+    note: 'Ask which documents hold each chunk, answered by the tokens that contain it plus the token pairs that spell it across a boundary. Same result as the first lane, no separate index.',
   },
 }
 
@@ -68,7 +78,7 @@ export default function RegexFilterPipeline() {
   const C = chartChrome(dark)
   const P = vizPalette(dark)
 
-  const [lane, setLane] = useState('trigram')
+  const [lane, setLane] = useState('bigram')
   const [progress, setProgress] = useState(0)
   const [playing, setPlaying] = useState(true)
   const [inView, setInView] = useState(false)
@@ -190,7 +200,7 @@ export default function RegexFilterPipeline() {
                 padding: '4px 9px',
                 cursor: 'pointer',
                 border: `1px solid ${C.border}`,
-                borderRight: idx === 1 ? `1px solid ${C.border}` : 'none',
+                borderRight: idx === 2 ? `1px solid ${C.border}` : 'none',
                 background: k === lane ? C.ink : 'transparent',
                 color: k === lane ? C.card : C.muted,
               }}
@@ -372,6 +382,7 @@ export default function RegexFilterPipeline() {
               </span>
               <span style={{ color: L.sound ? P.good : P.bad, fontWeight: 600 }}>{L.verdict}</span>
             </div>
+            <div style={{ color: C.muted, marginBottom: !L.sound ? 6 : 0 }}>{L.note}</div>
             {!L.sound && (
               <div style={{ color: C.muted }}>
                 The two it misses are real documents:
