@@ -290,7 +290,7 @@ I claimed earlier in this investigation that shared trigrams never hit zero. Tha
 
 Observations:
 
-- **At length 3, 41.5% of edit-1 typos share zero trigrams.** `cat` and `at` share only `at$` out of 4 distinct padded trigrams, so a "share at least 2" cutoff misses a real neighbour.
+- **This table is wrong, and the error is mine.** I padded each word with a single `$` on either side. A q-gram needs `q-1` padding characters, which is what makes the first and last gram depend on only the first and last character. With correct padding `cat` and `at` share 2 (`at$`, `t$$`) rather than 1, `cat` and `cot` share 2 rather than 0, and the zero-overlap rate is **0.0% at every word length from 3 upward**. There is no short-word hole. I have left the bad table above so the mistake is visible rather than quietly removed.
 - **From length 6 up the floor holds absolutely**, minimum 2 shared and a 0.0% miss rate at either cutoff. The q-gram count filter is sound on long words and unsound on short ones, which is exactly where a threshold cannot save you.
 
 ### The version that does work
@@ -328,7 +328,7 @@ I read [the Qdrant lexical search design doc](https://github.com/qdrant/qdrant) 
 
 The doc scopes mine out explicitly in Appendix A: "Not covered by this foundation: regex over full document text (code search). That needs document n-grams, a boolean planner, and a verification pass."
 
-Where we do collide, the doc is right and I was wrong. Its Foundation 1 weighs an FST against vocabulary trigrams and picks the FST, rejecting trigrams on fuzzy recall with the `cat` versus `at` counterexample. My stratified table above is that rejection, measured: 41.5% zero-overlap at length 3. A Levenshtein automaton has no threshold and no misses by construction.
+Where we do collide, the doc picks an FST over vocabulary trigrams, rejecting trigrams on fuzzy recall with the `cat` versus `at` counterexample. I first reported that my numbers confirmed it, and they did not: that measurement used one padding character instead of `q-1`, and with correct padding `cat` and `at` share 2 trigrams rather than 1. A "share at least 2" cutoff finds it. The FST is still the better call, since 2 of 7 is an uncomfortably thin margin and a Levenshtein automaton has no threshold to tune at all, but the argument is about margin rather than about a hole.
 
 Three more flaws in my approach that the doc exposes:
 
@@ -390,5 +390,5 @@ python experiments/regex-filter/napkin.py            # storage and latency model
 - **The adjacency argument did not survive measurement.** I predicted a token-bigram index would make `/keniz/` 5.2x faster, on the model that dense trigrams return 8x the true matches. They return 1.3x, so there was nothing for adjacency to remove. See [the benchmark](/blog/token-search-regex).
 - **The bigram index prunes sub-word arm enumeration by 670x to 236,907x**, and the prune is sound rather than heuristic, since a pair that never occurs adjacently in the corpus cannot occur in any document of it.
 - **The same structure fails on fuzzy search.** 39% of one-character typos share zero BPE tokens with the correct word, against 0% for char trigrams on words of 6 characters or more. BPE is a compression code and compression codes desync on one symbol.
-- **Char trigrams have their own hole, at short words.** 41.5% of edit-1 typos on 3-letter words share zero trigrams, which is why the Qdrant design doc picks an FST over vocabulary trigrams and why that call is right.
+- **The short-word hole I reported does not exist.** It came from padding each word with one character instead of `q-1`. Corrected, the zero-overlap rate is 0.0% at every length from 3 characters up, so the Qdrant doc's FST choice rests on margin rather than on trigrams failing outright.
 - **Do pattern matching in character space and use tokens for storage and postings.** The two things Token Search contributes to fuzzy are a dictionary bounded at 200k and a trie path-compressed 4x, not the token representation itself.
