@@ -312,17 +312,32 @@ Observations:
 
 ### What one identity per word would buy
 
-If a word has a single id regardless of context, a whole-word search needs two token lookups and no adjacency index at all. Measured over 3,000 documents and 300 mined agent patterns:
+If a word has a single id regardless of context, a whole-word search needs two token lookups instead of resolving six chunks. Measured over 3,000 documents and 300 mined agent patterns:
 
-| lookup path                         |                      recall |
-| ----------------------------------- | --------------------------: |
-| whole-word literal, 2 token lookups | **2,999 / 2,999 = 100.00%** |
-| substring literal, same path        |      3,166 / 5,225 = 60.59% |
+| lookup path                        |        recall | filter time | candidates |
+| ---------------------------------- | ------------: | ----------: | ---------: |
+| chunk resolution, what ships today |         sound |     32.5 us |    57 mean |
+| whole-word, 2 token lookups        | 2,999 / 2,999 | **24.1 us** |    44 mean |
+| substring literal, same 2 lookups  | 3,166 / 5,225 |             |            |
 
 Observations:
 
-- **Whole-word lookup is clean, and substring lookup is not.** ISBPE fixes the spacing problem and cannot fix the substring problem, because a piece of a word is still a different token from the word containing it. Searching `test` and expecting to find it inside `pytest` still needs the chunk path.
-- **79.4% of the mined agent patterns have literals that are entirely word runs**, so roughly four queries in five could take the cheap route, and the adjacency index they would skip is 68% of the postings at 128,000 documents.
+- **The filter gets 1.35x faster and returns 23% fewer candidates**, but the filter is roughly 30 us of a 190 us query. The rest is fetching candidates and running the real regex. End to end that is about 4%, which is close to noise.
+- **It saves no storage, which is where I had this wrong.** I first wrote that whole-word queries could skip the adjacency index, 68% of the postings. They cannot. 20.6% of agent patterns are substring searches that need it, so the index gets built either way and simply goes unread more often. An index you build and do not read costs exactly what it cost before.
+- **ISBPE fixes the spacing problem and not the substring problem.** A piece of a word is still a different token from the word containing it, so `test` inside `datestamp` (which chops to `dat` and `estamp`) still needs the adjacency index to cover the seam.
+
+The better argument for ISBPE here is not the regex filter at all. [Token Search](/blog/token-search#the-fix-normalize-before-you-tokenize) needs a normalisation step, `enc.encode(" " + word)`, purely because `The` and `the` and `·the` are three different terms under BPE. ISBPE makes them one by construction, so the step goes away:
+
+| index over 3,000 Python files             |      terms |    postings |
+| ----------------------------------------- | ---------: | ----------: |
+| BPE, raw                                  |     23,468 |     383,218 |
+| BPE, normalised per word                  |     13,019 |     241,223 |
+| ISBPE dual, word tokens, no normalisation | **13,189** | **211,498** |
+
+Observations:
+
+- **ISBPE reaches the normalised term count without the normalisation**, 13,189 against 13,019, and holds 12% fewer postings. The preprocessing step exists to paper over a property of the tokenizer, and a tokenizer that lacks the property does not need the paper.
+- **Read the percentages loosely.** The vocabularies are not matched, 32,768 against 200,000, so the sizes are confounded even though the structural point is not.
 
 <details>
 <summary>Two bugs this shook out, one mine and one in the pretokenizer</summary>
@@ -363,7 +378,7 @@ python experiments/regex-filter/report.py          # per-class breakdown
 - **I predicted a 5.2x sub-word win and got none.** The model assumed dense trigrams return 8x the true matches and they return 1.3x, because the median mined literal is 6 characters and four ANDed trigrams are already nearly exact. The adjacency argument is sound and describes a case this workload barely contains.
 - **53.5% of real regexes have no literal any of these indexes can use**, so they scan everything under every method. That fallback rate deserves to sit next to any speedup number, and it overstates the case for a code-search product whose users type identifiers.
 - **Word-aligned token filtering alone covers 15.2% of patterns and is unsound on code until the per-word normalisation runs at index time as well as query time.** The bigram index and the vocab sidecar are what make the approach work, not an extra on top of it.
-- **The tokenizer is a correctness decision.** A filter needs the pieces to reassemble into the original text, and WordPiece and SentencePiece fail that on every one of 400 code documents, changing 47,281 and 87,986 characters respectively. BPE round-trips but gives a word five identities depending on what precedes it, which is why the adjacency index exists. ISBPE dual is the only one I tested with both properties, and it takes whole-word lookup to 100.00% on 2,999 occurrences.
+- **The tokenizer is a correctness decision.** A filter needs the pieces to reassemble into the original text, and WordPiece and SentencePiece fail that on every one of 400 code documents, changing 47,281 and 87,986 characters respectively. That rules both out, whatever they do for retrieval quality. BPE round-trips but gives a word five identities depending on what precedes it, which is why the adjacency index exists, and ISBPE removes that by construction while staying lossless. The regex speedup from doing so is about 4% end to end and it saves no storage, so the real case for it is that it deletes Token Search's normalisation step rather than anything it does here.
 - **The trigram advantage does not decay at scale.** I predicted that on a bigger corpus four ANDed trigrams would lose their edge and TopK's longer grams would start paying off. Across a 16x sweep the sparse-gram advantage went from +0.049 to +0.040 percentage points, shrinking rather than growing, while its build cost rose to 9.2x a dense trigram index.
 - **Who writes the regex matters more than which index you pick.** Patterns mined from `re.compile` calls in source are 48.2% filterable, and real coding-agent `grep` searches are 96.3%. That one swap moves every index from 2.1x over a full scan to 11.4x, because agents search for identifiers where source-code regexes describe shapes.
 - **Against a plain dense trigram index the win is narrow, and it is about marginal cost.** Token plus bigram is 1.43x smaller in total postings, 2.94x slower to build, and tied on query time at 0.20 ms against 0.19 ms. The argument that survives is marginal: the token unigram index already exists to serve BM25, so adding regex costs 1,547,278 postings for the bigram index where a trigram index costs 3,514,896 from scratch, 2.27x more. Without an existing token index, dense trigram is the better choice.
