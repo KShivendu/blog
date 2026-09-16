@@ -1,25 +1,44 @@
 ---
-title: 'Stop Storing Your WordPiece Index'
-subtitle: 'Every piece posting rebuilds exactly from the word postings you already have'
+title: 'The Index You Never Rebuild'
+subtitle: 'Start on BM25 over wordpiece tokens, switch on a neural sparse model without touching the postings'
 date: '2026-09-15'
 lastmod: '2026-09-15'
 tags: ['search', 'internals', 'nlp', 'information-retrieval']
 draft: true
-summary: 'A word index and a wordpiece index over the same corpus look like two data structures. They are one. The tokenizer already tells you which pieces a word contains, so a word posting that says doc 7 holds tokenization three times also says doc 7 holds token three times. I rebuilt all 217,815 piece posting lists from the word postings across 13 NanoBEIR corpora and every one came out identical, which drops 5,593,439 postings from the index. The reverse direction, pieces back to words, is the hard one, and it needs either positions or a bound that overshoots by 1.145x.'
+summary: 'Pick a tokenizer and an analyzer on day one and every posting list you write is stuck with both, so adding a neural sparse model two years later means reindexing the corpus. Index only the wordpiece tokens each document actually contains and that migration goes away. BM25 runs on those postings immediately, the surface word and its stem family derive from them exactly, and a neural model later re-weights the same terms in place. Over 13 NanoBEIR collections and 649 queries, the word channel is worth +1.29 NDCG@10 points and the stem family +3.21 over plain wordpiece BM25, and putting a model on the query side alone is worth +2.20 with no reindex at all.'
 authors: ['kshivendu']
 ---
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-I was building a retrieval system that scores a query at three levels: the wordpiece, the surface word, and the stem family. My first version stored three posting lists, one per level, which came to 15,510,447 postings against the 5,069,947 of a plain word index, so **3.06x**. That felt wrong, so I checked whether it had to be that way.
+A search index starts with two decisions you make before you have seen a single query: which tokenizer splits the text, and which analyzer normalises it. Lowercase, a stopword list, Porter for English, a segmenter for Chinese. Both decisions get baked into every posting list you write, so changing either one later means reading every document again. Then a neural sparse model arrives, [SPLADE](https://huggingface.co/naver/splade-v3) or an OpenSearch neural sparse encoder, and it emits weights over `bert-base-uncased` wordpieces while your index is keyed by Porter stems. The model cannot score a term it cannot name, so you rebuild.
 
-It does not. Two of the three levels are arithmetic on the first one. I store the word postings, and I rebuild every one of the **217,815** piece posting lists at query time, exactly, with no approximation anywhere. Same numbers as a materialised piece index, byte for byte.
+There is a starting point that survives all of it: index only the wordpiece tokens each document actually contains. BM25 runs on those postings on day one, with no stemmer, no stopword list and no per-language analyzer. The surface word and its stem family are arithmetic on the same postings, so those two extra channels cost no extra index. And when you are ready for the model, it speaks the same vocabulary, so it updates the weights on terms you already have and adds expansion terms into posting lists that already exist. Nothing is rebuilt.
 
-All numbers below are over 13 #[NanoBEIR](small subsampled stand-ins for the BEIR retrieval benchmarks) [corpora](https://huggingface.co/collections/zeta-alpha-ai/nanobeir-66e1a0af21dfd93e620cd9f6), 56,723 documents and 649 queries, on `bert-base-uncased` WordPiece. Quality is NDCG@10, which rates the top ten results from 0 to 1 by how close they sit to the ideal ranking. On this benchmark a couple of hundredths is a solid win and a few thousandths is near the noise floor, and I report the median and the weak-query quartile next to the mean because [the mean hides where a change helps](/blog/relevance-tail).
+All numbers below are over 13 #[NanoBEIR](small subsampled stand-ins for the BEIR retrieval benchmarks) [collections](https://huggingface.co/collections/zeta-alpha-ai/nanobeir-66e1a0af21dfd93e620cd9f6), 56,723 documents and 649 queries, on `bert-base-uncased` WordPiece. Quality is NDCG@10, which rates the top ten results from 0 to 1 by how close they sit to the ideal ranking, and I report it multiplied by 100 throughout, so **54.12 means an NDCG@10 of 0.5412**. On this benchmark a couple of points is a solid win and a few tenths of a point is near the noise floor. Every fitted weight is held out leave-one-collection-out, so no arm sees its own test collection, and I report the median and the weak-query quartile next to the mean because [the mean hides where a change helps](/blog/relevance-tail).
 
-## A word already knows its pieces
+## Three stages, one set of postings
 
-A subword tokenizer is a fixed function from a string to a list of piece ids. It looks at no documents and no statistics. So the moment you know a word, you know its pieces:
+```
+  what you store, once:
+
+    piece       documents that contain it
+    token       d7:3   d19:1   d88:1   d204:3
+    ##ization   d7:2   d19:1           d204:3
+    ...
+
+  stage 1   a BM25 weight per piece                          a formula
+  stage 2   + the surface word and its stem family,
+            read back off those same lists                   arithmetic
+  stage 3   + a model's weight per piece, and its
+            expansion terms into lists already open          a model
+```
+
+Each stage keeps the vocabulary and the posting lists of the one before it. What changes is the weight attached to a posting, and at the last stage, which documents appear in a list.
+
+## Stage 1: BM25 over the pieces the document has
+
+WordPiece is a fixed function from a string to a list of piece ids. It reads no documents and computes no statistics, so it is the same function on the day you index and two years later:
 
 ```
 tokenization  ->  token  ##ization
@@ -27,155 +46,209 @@ tokens        ->  token  ##s
 tokenizer     ->  token  ##izer
 ```
 
-Now read a word posting. If it says _doc 7 contains `tokenization` three times_, then doc 7 contains `token` three times and `##ization` three times, from that word alone. Other words in doc 7 contribute their own pieces. Sum over all of them and you have the piece posting list:
+Every document becomes the multiset of pieces it contains, and a posting exists only where the count is nonzero. That is the whole index. BM25 scores it the usual way, an IDF per piece, term-frequency saturation and length normalisation, and it never learns that `token` and `##ization` came from one word.
 
-```
-for each word w containing piece p:
-    for each (doc, tf) in wordpostings[w]:
-        acc[doc] += count_of_p_inside_w * tf
-```
+In [Token Search](/blog/token-search) I ran BM25 over tiktoken's BPE token IDs, where it matched a plain word analyzer and reached a Porter-stemmed one with two token-native fixes. The tokenizer here is `bert-base-uncased` WordPiece instead, because that is the vocabulary the neural sparse models emit. Plain wordpiece BM25 scores **54.12** over the 649 queries.
 
-`count_of_p_inside_w` handles the case where a piece repeats inside one word, so `bookkeeper` splitting into `book ##ke ##eper` is not a problem, and neither is a word whose pieces collide. The only thing you need alongside the word postings is a map from piece to the words that contain it, and that map holds **682,238** entries and no document ids at all, so it sits with the vocabulary, alongside the tokenizer itself.
+The index it builds is the larger of the two you could have chosen:
 
-## The rebuild is exact
-
-I built the piece index directly, built it again by derivation, and compared posting list against posting list for all 217,815 piece types across all 13 corpora. Every one matched.
-
-| structure                   | (doc, term) postings | vs word index |
-| --------------------------- | -------------------- | ------------- |
-| word index (what I store)   | 5,069,947            | 1.00x         |
-| piece index (what I derive) | 5,593,439            | 1.10x         |
-| stem index                  | 4,847,061            | 0.96x         |
+| structure       | (doc, term) postings | vs word index |
+| --------------- | -------------------- | ------------- |
+| word index      | 5,069,947            | 1.00x         |
+| wordpiece index | 5,593,439            | 1.10x         |
+| stem index      | 4,847,061            | 0.96x         |
 
 Observations:
 
-- **The piece index is the bigger one.** 5,593,439 postings against 5,069,947, because splitting words into pieces spreads one document's terms across more posting lists. Storing both is 2.10x the word index alone, and storing word plus stem is 1.96x.
-- **The vocabulary moves the other way.** 217,815 piece types against 355,067 word types. Fewer, longer posting lists is exactly the shape that makes them expensive to store and cheap to derive.
-- **Derivation costs one extra pass.** Rebuilding every piece in the corpus reads 5,723,573 postings, which is 1.1x a single scan of the word index.
+- **Pieces cost 10% more postings than words.** 5,593,439 against 5,069,947, because splitting a word spreads one document's occurrences across more posting lists.
+- **The vocabulary moves the other way.** 217,815 piece types against 355,067 word types across the 13 collections. Fewer, longer posting lists is the shape that makes them expensive to store and cheap to derive.
+- **Storing two of them roughly doubles the index.** Word plus piece together is 2.10x the word index and word plus stem 1.96x, which is the cost the next section removes.
 
-## Going backwards is the hard direction
+## Stage 2: the word and its family are arithmetic on those postings
 
-The other direction is the one most people would reach for first, since a wordpiece index is what a model-native pipeline hands you. Reconstruct words from pieces and you can drop the word index instead. It works, but it has a trap in it.
+A word posting and a piece posting hold the same information counted two ways, and the tokenizer is the conversion table. Going from words to pieces is a sum:
 
-A short word's piece sequence can be a prefix of a longer word's:
+```
+tf_piece(p, d)  =  sum over words v of  count_p(v) * tf_v(d)
+```
+
+If a word posting says doc 7 contains `tokenization` three times, then doc 7 contains `token` three times and `##ization` three times from that word alone. `count_p(v)` is how many times piece `p` occurs inside word `v`, so a word like `bookkeeper` splitting into `book ##ke ##eper` is handled, and so is a word whose pieces repeat. I built the piece index directly, built it again by derivation, and compared list against list: **all 217,815 piece posting lists match exactly**, on every collection.
+
+Going the other way, pieces back to words, is the direction this design needs, and it has a trap in it. A short word's piece sequence can be a prefix of a longer word's:
 
 ```
 token         ->  [token]
 tokenization  ->  [token, ##ization]
 ```
 
-Look up the piece `token` and you find both. Naive adjacency says the word `token` occurs in every document containing `tokenization`, which is false. The fix is one extra condition. The word `w` with `k` pieces occurs at position `p` only when the pieces match at `p` through `p+k-1` **and** the token at `p+k` is not a continuation piece, the ones WordPiece marks with `##`.
+Naive adjacency says the word `token` occurs in every document containing `tokenization`, which is false. The fix is one extra condition: the word `w` with `k` pieces occurs at position `p` only when the pieces match at `p` through `p+k-1` and the token at `p+k` carries no `##` continuation marker. With that check, **all 52,000 word types reconstruct identically** from the positional piece postings. Without it the derivation picks up **83,735** false postings, and the worst single case is the word `un` on Touche2020, which gains **1,565 documents it never appears in**.
 
-That check carries real weight. Without it the derivation picks up **83,735** false postings, and the damage concentrates on exactly the short words you would expect:
+<details>
+<summary>Which words the trailing `##` check saves, per collection</summary>
 
-| corpus     | worst word | false postings it gains |
-| ---------- | ---------- | ----------------------- |
-| Touche2020 | `un`       | +1,565                  |
-| SciFact    | `g`        | +1,220                  |
-| NFCorpus   | `g`        | +965                    |
-| FiQA2018   | `de`       | +998                    |
-| ArguAna    | `en`       | +191                    |
+The damage concentrates on exactly the words you would expect, short ones that are also the first piece of something longer:
 
-Observations:
+| collection | worst word | false postings it gains | false postings in the collection |
+| ---------- | ---------- | ----------------------- | -------------------------------- |
+| Touche2020 | `un`       | +1,565                  | 9,682                            |
+| SciFact    | `g`        | +1,220                  | 18,974                           |
+| NFCorpus   | `g`        | +965                    | 16,177                           |
+| FiQA2018   | `de`       | +998                    | 7,284                            |
+| ArguAna    | `en`       | +191                    | 3,611                            |
 
-- **`un` on Touche2020 is the worst single case.** It is a real word in that corpus, and it is also the first piece of `under`, `until`, `universal` and every other `un`-prefixed word, so naive matching hands it 1,565 documents it never appears in.
-- **Single letters are the other failure mode.** `g` picks up +1,220 on SciFact and +965 on NFCorpus, since a one-piece word is a prefix of everything that starts with that piece.
-- **With the check, it is exact again.** 52,000 word types out of 52,000 reconstruct identically, on every corpus.
+`un` is a real word in Touche2020, and it is also the first piece of `under`, `until`, `universal` and every other `un`-prefixed word. Single letters are the other failure mode: `g` picks up 1,220 false postings on SciFact, because a one-piece word is a prefix of everything that starts with that piece. SciFact and NFCorpus carry the most false postings overall, 18,974 and 16,177, which is what a scientific vocabulary of long rare words does to prefix matching.
 
-## Or drop the positions and take a bound
+</details>
 
-The trailing `##` check needs positions, and positions are what make a piece index expensive. A positional index stores one entry per occurrence instead of one per document, and the corpus holds 10,915,889 piece occurrences. So positions take the piece index from 5,593,439 entries to 10,915,889, **1.95x**.
+So from one stored index you can score three channels: the piece itself, the exact surface word, and the word's stem family. Here is what each one is worth, with all three lists present so the channels are the only thing changing.
 
-You can skip them. Without positions the best you can say is a counting bound: a word cannot occur more often than its rarest piece allows.
-
-```
-tf_word(d)  <=  min over pieces p of  tf_piece(p, d) / count_of_p_inside_w
-```
-
-It overshoots, and how badly depends entirely on which words you ask about.
-
-| population                        | bound       | true        | over by |
-| --------------------------------- | ----------- | ----------- | ------- |
-| every word type in the vocabulary | 11,475,475  | 10,019,577  | 1.145x  |
-| query terms, as actually queried  | 120,823,935 | 120,541,985 | 1.002x  |
-
-**14.5% slack across the index, 0.2% across the words people search for.** Both are right. The second counts a word once per query containing it, so it is weighted the way retrieval actually reads the index. Query words skew common, common words are single-piece or have pieces that rarely leak, and the bound is nearly tight exactly there. The slack piles up on the rare multi-piece tail that queries seldom touch.
-
-That gap is why the retrieval cost is so small:
-
-| arm                           | NDCG@10 | p50    | p25    | zero% | vs positional | W/L   | p      |
-| ----------------------------- | ------- | ------ | ------ | ----- | ------------- | ----- | ------ |
-| word BM25, positional         | 0.5433  | 0.5856 | 0.2201 | 20.2  |               |       |        |
-| word BM25, position-free      | 0.5417  | 0.5958 | 0.2140 | 19.7  | -0.0016       | 37/72 | 0.0010 |
-| piece + family, positional    | 0.5664  | 0.6131 | 0.2904 | 16.9  |               |       |        |
-| piece + family, position-free | 0.5662  | 0.6131 | 0.2766 | 16.9  | -0.0002       | 63/78 | 0.2383 |
-
-Observations:
-
-- **Alone, the bound costs a real amount.** Word BM25 drops 0.0016 and loses 72 queries while winning 37, at p=0.0010. Small on the mean, consistent in sign, and it would show up on a bigger benchmark.
-- **With a family channel present, it costs almost nothing.** 0.5662 against 0.5664, so -0.0002 at 63 wins against 78 losses and p=0.2383. The family channel matches through a different route, so an inflated tf on one piece rarely reaches the top ten on its own.
-- **The weak-query quartile is where it shows.** p25 drops 0.2904 to 0.2766 even though the mean and the median hold. That is where the rare multi-piece words with loose bounds live, and the mean is [hiding it](/blog/relevance-tail).
-
-So the trade is concrete: positions roughly double the piece index to buy back 0.0002 NDCG once you have a stem family, and 0.0016 if you do not.
-
-## What the derived piece channel is actually worth
-
-Storage saved is only interesting if the piece level does something. Here is the ladder, every arm on the same 649 queries, same k1 and b, weights fitted leave-one-dataset-out so no arm sees its own test corpus.
-
-export const ladCats = [
-  'word BM25 (plain)',
-  '+ derived pieces',
-  'word + stem family',
-  '+ derived pieces',
+export const chCats = [
+  'wordpiece BM25',
+  '+ the exact word',
+  '+ the stem family',
+  'all three channels',
 ]
-export const ladRoles = ['muted', 'series2', 'muted', 'series0']
-export const ladFmt = (v, d) => v.map((x) => x.toFixed(d))
-export const ladView = (values, text) => ({
-  categories: ladCats,
-  series: [{ name: 'v', values, roles: ladRoles, text, textPosition: 'outside' }],
+export const chRoles = ['muted', 'seriesAlt0', 'series0', 'mutedAlt']
+export const chFmt = (v, d) => v.map((x) => x.toFixed(d))
+export const chView = (values, text) => ({
+  categories: chCats,
+  series: [{ name: 'v', values, roles: chRoles, text, textPosition: 'outside' }],
 })
 
 <BarChart
   orientation="horizontal"
-  title="What does a derived piece channel add?"
-  subtitle="13 NanoBEIR (649 queries) · pieces pay off once the stem family is there · toggle the metric →"
-  categories={ladCats}
+  title="What the derived channels add to a wordpiece index"
+  subtitle="13 NanoBEIR (649 queries) · bert-base-uncased WordPiece · toggle the metric →"
+  categories={chCats}
   views={[
     {
       label: 'mean',
       default: true,
-      valueLabel: 'NDCG@10 mean (higher is better)',
-      valueMax: 0.6,
-      valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
-      ...ladView([0.5433, 0.5457, 0.5581, 0.567], ladFmt([0.5433, 0.5457, 0.5581, 0.567], 4)),
+      valueLabel: 'NDCG@10 x100, mean (higher is better)',
+      valueMax: 62,
+      valueTicks: [0, 20, 40, 60],
+      ...chView([54.12, 55.41, 57.34, 57.36], chFmt([54.12, 55.41, 57.34, 57.36], 2)),
     },
     {
       label: 'p50',
-      valueLabel: 'NDCG@10 p50, the median query (higher is better)',
-      valueMax: 0.64,
-      valueTicks: [0, 0.2, 0.4, 0.6],
-      ...ladView([0.5856, 0.5873, 0.6131, 0.6131], ladFmt([0.5856, 0.5873, 0.6131, 0.6131], 4)),
+      valueLabel: 'NDCG@10 x100, p50, the median query (higher is better)',
+      valueMax: 66,
+      valueTicks: [0, 20, 40, 60],
+      ...chView([57.28, 61.31, 63.09, 63.09], chFmt([57.28, 61.31, 63.09, 63.09], 2)),
     },
     {
       label: 'p25',
-      valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
-      valueMax: 0.32,
-      valueTicks: [0, 0.1, 0.2, 0.3],
-      ...ladView([0.2201, 0.2346, 0.2641, 0.2904], ladFmt([0.2201, 0.2346, 0.2641, 0.2904], 4)),
+      valueLabel: 'NDCG@10 x100, p25, the weak-query quartile (higher is better)',
+      valueMax: 33,
+      valueTicks: [0, 10, 20, 30],
+      ...chView([21.84, 23.72, 29.61, 28.95], chFmt([21.84, 23.72, 29.61, 28.95], 2)),
+    },
+    {
+      label: 'zero-rate',
+      valueLabel: 'zero-rate %, queries returning nothing relevant (lower is better)',
+      valueMax: 22,
+      valueTicks: [0, 5, 10, 15, 20],
+      ...chView([19.7, 18.5, 16.5, 16.5], chFmt([19.7, 18.5, 16.5, 16.5], 1)),
     },
   ]}
 />
 
 Observations:
 
-- **On a plain word index the pieces barely register.** 0.5433 to 0.5457, so **+0.0024**. Against a stemmed word index the same arm is 0.0125 _behind_, at 123 wins against 151 losses, p=0.1027. Adding pieces to a plain index does not get you to a stemmer.
-- **With the family channel they are worth four times as much.** 0.5581 to **0.5670**, so **+0.0089**, against the stemmed word BM25 baseline of 0.5581. That is 128 wins against 99 losses over 649 queries, p=0.0629, which misses the 0.05 bar. I would call this promising and unproven.
-- **The tail moves most.** p25 goes 0.2641 to 0.2904, a **+0.0263** jump, roughly three times the movement in the mean. The zero-rate falls 17.9% to 16.9%, so it is finding documents on queries that previously returned nothing useful.
-- **Word plus family lands on the same mean as stemmed word BM25**, 0.5581 both, though not the same system: its p25 is 0.2641 against 0.2591 and its zero-rate 17.9% against 17.6%.
+- **The exact word is worth +1.29.** 54.12 to 55.41, at 134 wins to 76 losses, p=0.0001. Scoring the whole word once, on top of its pieces, restores what the split threw away: that `token` and `##ization` in a document came from one word.
+- **The stem family is worth +3.21.** That is the largest single step here, 54.12 to 57.34, at 195 wins to 101 losses and p=0.0000. It is stemming done as query expansion: the query word fans into its family at search time and the best-matching member scores, so the stored pieces stay as they are.
+- **The third channel adds +0.02 on top of the second.** All three together reach 57.36 against the family arm's 57.34, at 198 wins to 100 losses against the wordpiece baseline. Once the family is there, the exact word is nearly redundant with it.
+- **The tail and the zero-rate move furthest.** p25 goes 21.84 to 29.61 with the family channel, roughly 2.4x the movement in the mean, and the share of queries returning nothing relevant falls 19.7% to 16.5%.
 
-## Free on disk, 1.54x per query
+### Against the strongest baseline
 
-Deriving costs nothing on disk and real work on every query. Counting postings touched:
+A wordpiece index is the easy baseline to beat. The honest comparison is against a stemmed word index, which is what a production English analyzer actually gives you, and that is a much harder target. This table is the faithful architecture: word postings stored, piece lists derived at query time, nothing else materialised.
+
+| arm                   | NDCG@10 | p50   | p25   | zero% | vs stemmed | W/L     | p      |
+| --------------------- | ------- | ----- | ----- | ----- | ---------- | ------- | ------ |
+| word BM25, raw forms  | 54.33   | 58.56 | 22.01 | 20.2  | -1.48      | 110/135 | 0.1250 |
+| word BM25, stemmed    | 55.81   | 61.31 | 25.91 | 17.6  | baseline   |         |        |
+| piece + word          | 54.57   | 58.73 | 23.46 | 19.6  | -1.25      | 123/151 | 0.1027 |
+| word + family         | 55.81   | 61.31 | 26.41 | 17.9  | -0.00      | 82/73   | 0.5206 |
+| piece + word + family | 56.70   | 61.31 | 29.04 | 16.9  | +0.88      | 128/99  | 0.0629 |
+
+Observations:
+
+- **Pieces on their own do not reach a stemmer.** Adding the piece channel to a plain word index gives 54.57 against stemmed word BM25's 55.81, so it is 1.25 points behind at 123 wins to 151 losses, p=0.1027.
+- **The full three-channel arm is +0.88 over the stemmed index.** 56.70 against 55.81, at 128 wins to 99 losses and p=0.0629. That misses the 0.05 bar, so it is promising and unproven, and a full-BEIR run is what would settle it.
+- **Word plus family lands on the same mean as the stemmed index.** 55.81 both, while the tail differs: p25 26.41 against 25.91 and zero-rate 17.9% against 17.6%.
+- **Paired against word plus family, the piece channel is worth +0.89.** 105 wins, 86 losses and 458 ties, p=0.1926. It touches only 191 of 649 queries and leaves 458 bit-identical, and among the 191 it moves, the median move is +0.72 and the mean +3.01. Ten queries go from zero to something, four go the other way.
+
+### Where the derived channels lose
+
+The 56.70 arm wins 128 queries against the stemmed index and loses 99, and the 99 have a shape:
+
+```
+-64.4  NQ        8 terms, largest family 5   'what is the meaning of the name von'
+-36.9  MSMARCO   4 terms, largest family 5   'who invented corn flakes'
+-34.1  DBPedia   3 terms, largest family 6   'tango music composers'
+-25.4  DBPedia   4 terms, largest family 6   'living nordic classical composers'
+```
+
+Per collection, the biggest movers in both directions:
+
+| collection   | wins | losses | net NDCG |
+| ------------ | ---- | ------ | -------- |
+| FiQA2018     | 13   | 7      | +3.52    |
+| Touche2020   | 22   | 13     | +1.14    |
+| ClimateFEVER | 12   | 4      | +1.59    |
+| SCIDOCS      | 12   | 12     | -0.96    |
+| DBPedia      | 14   | 21     | -0.69    |
+| ArguAna      | 5    | 7      | -1.25    |
+
+Observations:
+
+- **A short query resting on one rare word loses.** `von` in _what is the meaning of the name von_ is effectively the whole query. Its family and its pieces both dilute that word's own IDF into the family's, the one document that had it exactly drops out of the top ten, and it costs 64.4 points, the largest single loss in the set.
+- **Losers carry more non-word terms.** Losses average 4.49 non-word terms against 2.56 on wins, so punctuation and numerals are being scored as content. Query length alone does not separate them: losses average 26.84 terms, wins 17.88, and ties 30.48.
+- **Family size is flat across wins and losses.** Mean family size 2.45 on wins against 2.39 on losses, largest family 6.07 against 5.98. The stem family is not what separates them, which surprised me, since diluting a rare word into its family was my first guess at the mechanism.
+
+## Positions, or a bound
+
+Reading words back out of piece postings needs the trailing `##` check, and that check needs positions. A positional index stores one entry per occurrence instead of one per document, and the corpus holds 10,915,889 piece occurrences on top of 5,593,439 document entries, so a positional piece index is **3.26x** the word index.
+
+You can skip the positions and take a counting bound instead. A word cannot occur more often than its rarest piece allows:
+
+```
+tf_word(d)  <=  min over pieces p of  tf_piece(p, d) / count_p(w)
+```
+
+It overshoots, and how far depends entirely on which words you ask about:
+
+| population                        | bound       | true        | over by |
+| --------------------------------- | ----------- | ----------- | ------- |
+| every word type in the vocabulary | 11,475,475  | 10,019,577  | 1.145x  |
+| query terms, as actually queried  | 120,823,935 | 120,541,985 | 1.002x  |
+
+Observations:
+
+- **14.5% slack across the index, 0.2% across the words people search for.** Both numbers are correct and they measure different populations, so the one to quote depends on whether you are describing the index or the queries hitting it.
+- **The second row counts a word once per query that contains it.** That is how retrieval actually reads the index, and query words skew common, so their pieces rarely leak into other words.
+- **The slack piles up on the rare multi-piece tail.** Queries seldom touch it, and it is also where the retrieval cost of dropping positions shows up.
+
+That is why the retrieval cost is small:
+
+| arm                           | NDCG@10 | p50   | p25   | zero% | vs positional | W/L   | p      |
+| ----------------------------- | ------- | ----- | ----- | ----- | ------------- | ----- | ------ |
+| word BM25, positional         | 54.33   | 58.56 | 22.01 | 20.2  |               |       |        |
+| word BM25, position-free      | 54.17   | 59.58 | 21.40 | 19.7  | -0.16         | 37/72 | 0.0010 |
+| piece + family, positional    | 56.64   | 61.31 | 29.04 | 16.9  |               |       |        |
+| piece + family, position-free | 56.62   | 61.31 | 27.66 | 16.9  | -0.02         | 63/78 | 0.2383 |
+
+Observations:
+
+- **On its own the bound costs a measurable amount.** Word BM25 drops 0.16 points and loses 72 queries while winning 37, at p=0.0010. Small on the mean, consistent in sign, and it would show up on a bigger benchmark.
+- **With a family channel present it costs 0.02 points.** 56.62 against 56.64, at 63 wins to 78 losses and p=0.2383. The family channel matches through a different route, so an inflated tf on one piece rarely reaches the top ten by itself.
+- **The weak-query quartile is where it still shows.** p25 drops 29.04 to 27.66 while the mean and the median hold, and that is where the rare multi-piece words with loose bounds live.
+- **The price of positions is 1.10x to 3.26x the word index.** That buys back 0.02 points once a stem family is in play, or 0.16 without one.
+
+## What it costs per query
+
+Deriving costs nothing on disk and real work on every query. Counting posting entries touched per query:
 
 | system                          | postings per query | vs word BM25 |
 | ------------------------------- | ------------------ | ------------ |
@@ -186,42 +259,104 @@ Deriving costs nothing on disk and real work on every query. Counting postings t
 
 Observations:
 
-- **The family union is cheap.** 18,106 postings against stemmed BM25's 17,643, so 0.51x of word BM25 and within 3% of a materialised stem index. Unioning a word's family members at query time costs about what reading one merged stem posting list costs.
-- **The piece derivation is the expensive half.** It alone adds 36,259 postings per query, which is another full word-BM25 scan, because a common piece sits inside a thousand different words and each of those is a separate posting list to open.
-- **So the honest framing is a rescore.** At 1.54x the postings for +0.0089 NDCG, I would not run the piece derivation on the full candidate set. Run word plus family first at 0.51x, then derive pieces over the top few hundred.
+- **The family union is cheap.** 18,106 postings against a materialised stem index's 17,643, so 0.51x of word BM25 and within 3% of the index it replaces. Unioning a word's family members at query time costs about what reading one merged stem posting list costs.
+- **The piece derivation is the expensive half.** It alone adds 36,259 postings per query, another full word-BM25 scan, because a common piece sits inside a thousand different words and each of those is a separate posting list to open.
+- **So the piece channel belongs in a rescore.** At 1.54x the postings for +0.89 paired, I would run word plus family first at 0.51x and derive pieces over the top few hundred candidates.
+- **The auxiliary structure is small.** The map from a piece to the words containing it is 682,238 entries and holds no document ids at all, so it sits next to the vocabulary with the tokenizer.
 
-## Where it loses
+## Stage 3: the model re-weights terms you already have
 
-The 0.5670 arm wins 128 queries and loses 99. Those 99 are not scattered evenly.
+Everything so far assigns weights with a formula. A neural sparse model assigns them by learning, and it does the job better: on this benchmark SPLADE's own document weights score **63.36** where BM25 weights on the same documents score 57.09, both with the model running on the query side. The reason to care about the index layout is that the model emits weights over `bert-base-uncased` wordpieces, which is exactly what the postings are keyed by.
 
-| corpus       | wins | losses | net NDCG |
-| ------------ | ---- | ------ | -------- |
-| Touche2020   | 22   | 13     | +0.0114  |
-| DBPedia      | 14   | 21     | -0.0069  |
-| FiQA2018     | 13   | 7      | +0.0352  |
-| SCIDOCS      | 12   | 12     | -0.0096  |
-| ClimateFEVER | 12   | 4      | +0.0159  |
-| ArguAna      | 5    | 7      | -0.0125  |
+The first half of that move needs no reindex at all. Run the model on the query only, keep BM25 weights on the documents, and the query's term weights come from the model:
 
-Reading the worst individual losses, they share a shape:
+export const nhCats = [
+  'pure BM25, no model',
+  "+ model weights on the query's own terms",
+  "+ the model's expansion terms",
+  '+ expansion rescaled by a fitted scalar',
+]
+export const nhRoles = ['muted', 'seriesAlt0', 'series0', 'mutedAlt']
+export const nhFmt = (v, d) => v.map((x) => x.toFixed(d))
+export const nhView = (values, text) => ({
+  categories: nhCats,
+  series: [{ name: 'v', values, roles: nhRoles, text, textPosition: 'outside' }],
+})
 
-```
--0.644  NQ        8 terms, largest family 5   'what is the meaning of the name von'
--0.369  MSMARCO   4 terms, largest family 5   'who invented corn flakes'
--0.341  DBPedia   3 terms, largest family 6   'tango music composers'
--0.254  DBPedia   4 terms, largest family 6   'living nordic classical composers'
-```
+<BarChart
+  orientation="horizontal"
+  title="A model on the query side, BM25 still on the documents"
+  subtitle="13 NanoBEIR (649 queries) · document postings untouched · toggle the metric →"
+  categories={nhCats}
+  views={[
+    {
+      label: 'mean',
+      default: true,
+      valueLabel: 'NDCG@10 x100, mean (higher is better)',
+      valueMax: 62,
+      valueTicks: [0, 20, 40, 60],
+      ...nhView([54.9, 56.23, 57.09, 57.62], nhFmt([54.9, 56.23, 57.09, 57.62], 2)),
+    },
+    {
+      label: 'p25',
+      valueLabel: 'NDCG@10 x100, p25, the weak-query quartile (higher is better)',
+      valueMax: 34,
+      valueTicks: [0, 10, 20, 30],
+      ...nhView([23.72, 26.46, 30.1, 30.1], nhFmt([23.72, 26.46, 30.1, 30.1], 2)),
+    },
+    {
+      label: 'zero-rate',
+      valueLabel: 'zero-rate %, queries returning nothing relevant (lower is better)',
+      valueMax: 22,
+      valueTicks: [0, 5, 10, 15, 20],
+      ...nhView([19.4, 18.0, 16.3, 17.3], nhFmt([19.4, 18.0, 16.3, 17.3], 1)),
+    },
+  ]}
+/>
 
 Observations:
 
-- **Short queries with one rare, load-bearing word lose.** `von` in _what is the meaning of the name von_ is the whole query. Its family and its pieces both dilute that word's own IDF into a family's, and the single document that had it exactly drops out of the top ten. It costs 0.644, the largest single loss in the set.
-- **Losers are longer on average, and it is the non-word terms.** Losses average 26.84 query terms against 17.88 for wins, but ties average 30.48, so length by itself is not the signal. Non-word terms are: 4.49 on losses, 2.56 on wins. Punctuation and numerals are being scored as if they were content.
-- **Family size is flat across wins and losses.** Mean family size 2.45 on wins, 2.39 on losses, largest family 6.07 against 5.98. The stem family is not what separates them, which surprised me, since diluting a rare word into its family was my first guess at the mechanism.
+- **The whole query-side move is worth +2.20 on the paired per-query mean.** 54.90 to 57.09, at 198 wins to 157 losses and p=0.0336, changing the ranking of 55% of the 649 queries. The document postings are the ones I built in stage 1, unchanged.
+- **Re-weighting the query's own terms is the bigger half.** +1.33 comes from terms the query already contained, 54.90 to 56.23, and +0.86 from the expansion terms on top of that, 56.23 to 57.09.
+- **Expansion is what reaches new documents.** The zero-rate goes 19.4% to 18.0% on re-weighting alone, then to 16.3% once the expansion terms are in, because re-weighting can only reorder the documents that already matched a query word.
+- **Rescaling the expansions by one fitted scalar is worth another +0.53.** 57.09 to 57.62, and it trades zero-rate for mean: 17.3% against 16.3%, at the same p25 of 30.10.
+
+The per-collection split behind that mean is wide:
+
+| collection | vs pure BM25 |
+| ---------- | ------------ |
+| NQ         | +6.98        |
+| SciFact    | +6.40        |
+| FEVER      | +5.68        |
+| DBPedia    | +4.26        |
+| ArguAna    | -2.47        |
+| Touche2020 | -3.94        |
+
+Observations:
+
+- **Two of the thirteen collections score better with pure BM25 and no model anywhere.** Touche2020 at -3.94 and ArguAna at -2.47, so switching the model on stays a per-collection decision even when it costs no reindex.
+- **Four collections gain more than 4 points.** NQ +6.98, SciFact +6.40, FEVER +5.68 and DBPedia +4.26.
+- **Both losers hold long queries.** One ArguAna query in this set runs 289 terms, and Touche2020 is an argument-retrieval collection. I have not traced a mechanism in those rows, so read it as a check to run on your own collection.
+
+Turning the model on the document side as well is the step that does add postings, since an expansion term attaches to a document that never contained it. Here is what the document side is made of, with the model on the query side throughout:
+
+| document-side weights                           | NDCG@10   |
+| ----------------------------------------------- | --------- |
+| BM25                                            | 57.09     |
+| the model's true literal weights, expansion cut | 58.67     |
+| the model's full vector, expansion included     | 63.36     |
+| `max(w_splade, 0.31*bm25)`                      | **64.45** |
+
+Observations:
+
+- **The document-side literal ceiling is +1.58.** The model's own weights on the words a document actually contains score 58.67 against BM25's 57.09, so better weighting of literal terms cannot buy more than that.
+- **Half a SPLADE document vector is expansion.** 51.1% of its weight mass sits on terms the document never contained, which is why the literal ceiling is small and why the document side is the half that grows the index.
+- **BM25 keeps its value under the model because it is independent of it.** I tried eleven ways to beat `max(w_splade, 0.31*bm25)` and none of them won, and a perfect literal-weight predictor used as the floor scores 63.36 against that rule's 64.45 at p=0.0039. The closer a floor gets to reproducing the model, the less it adds, and [the floor post](/blog/splade-bm25) has the full accounting.
 
 ## Key Takeaways
 
-- **A wordpiece posting list is derivable from a word one, exactly.** All 217,815 piece types rebuilt identically across 13 corpora, so the 5,593,439 piece postings never have to be stored. The only extra structure is a piece-to-word map of 682,238 entries holding no document ids.
-- **The reverse direction needs positions or a bound.** Reconstructing words from pieces is exact only with a trailing `##` check, which removes 83,735 false postings, `un` alone gaining 1,565 of them on Touche2020. Drop positions and the counting bound overshoots by 1.145x across the whole vocabulary, but only 1.002x over the words queries actually use.
-- **Position-free costs 0.0002 NDCG when a stem family is present**, 0.5662 against 0.5664 at p=0.2383, and 0.0016 without one at p=0.0010. Positions roughly double the piece index, so that is the price list.
-- **The derived piece channel is worth +0.0089 over stemmed word BM25**, 0.5670 against 0.5581 at 128 wins to 99 losses, p=0.0629. Promising and unproven. The tail moves three times as far as the mean, p25 +0.0263.
-- **Derivation is free on disk and costs 1.54x postings per query.** Word plus family runs at 0.51x, so the piece level belongs in a rescore over a few hundred candidates rather than the first pass.
+- **Index the wordpieces each document contains and you never migrate.** BM25 runs on those postings on day one, and a neural sparse model later re-weights the same terms in the same lists, because the model's vocabulary is the tokenizer's vocabulary.
+- **The word and the stem family are derivable, so they cost no index.** All 217,815 piece posting lists rebuild exactly from word postings, and all 52,000 word types rebuild exactly from positional piece postings once a trailing `##` check removes 83,735 false postings, `un` alone gaining 1,565 of them on Touche2020. They cost query time instead: the family union runs at 0.51x the postings of word BM25 and deriving pieces at 1.54x.
+- **The exact word channel is worth +1.29, the stem family +3.21.** Both over plain wordpiece BM25, at p=0.0001 and p=0.0000. Against a stemmed word index, the harder baseline, all three channels give +0.88 at 128 wins to 99 losses and p=0.0629, which is promising and unproven.
+- **Dropping positions costs 0.02 points when a family channel is present.** 56.62 against 56.64 at p=0.2383, and 0.16 points without one at p=0.0010. Positions take the piece index from 1.10x to 3.26x the word index, so that is the price list.
+- **The query-side half of the model needs no reindex at all.** It is worth +2.20 at 198 wins to 157 losses and p=0.0336, of which +1.33 is re-weighting terms the query already had. Two of thirteen collections still prefer pure BM25, Touche2020 at -3.94 and ArguAna at -2.47.
