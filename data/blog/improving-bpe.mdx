@@ -4,7 +4,7 @@ subtitle: 'Stop storing the space, store its absence'
 date: '2026-09-17'
 tags: ['nlp', 'compression', 'tokenization', 'internals']
 draft: false
-summary: 'BPE spends two vocabulary slots on every word, one with a leading space and one without. I mark the absence of a space instead, which frees ~14,000 slots and beats a properly-trained BPE baseline by 9.4% on code and 0.9% on English. Also: the baseline mistake that made my first results look 4x better than they were, and a one-line bug that turned a +9% win into a -31% disaster.'
+summary: 'BPE spends two vocabulary slots on every word, one with a leading space and one without. I mark the absence of a space instead, which frees ~14,000 slots and beats a properly-trained BPE baseline by 9.4% on code and 0.9% on English. Also: the baseline mistake that made my first results look 4x better than they were.'
 authors: ['kshivendu']
 ---
 
@@ -14,7 +14,7 @@ authors: ['kshivendu']
 
 The space is the most predictable character in English text. It sits between almost every pair of words. So why are we storing it at all, let alone twice?
 
-This post is about what happens when you flip it: assume the space, and store only where it's missing. The scheme I ended up with (**ISBPE**, Implicit-Space BPE) beats a properly-trained BPE baseline by **9.4% on code** and **0.9% on English**. Along the way I made a baseline mistake that inflated my first results by about 4x, and wrote a one-line bug that turned the best idea in the project into an apparent disaster. Both are in here, because both were more instructive than the result.
+This post is about what happens when you flip it: assume the space, and store only where it's missing. The scheme I ended up with (**ISBPE**, Implicit-Space BPE) beats a properly-trained BPE baseline by **9.4% on code** and **0.9% on English**. Along the way I made a baseline mistake that inflated my first results by about 4x, and that's in here too, because it was more instructive than the result.
 
 ## First, the baseline mistake that invalidated my early numbers
 
@@ -100,10 +100,11 @@ So **a word never needs a `#` form at all.** On code that frees about 14,000 slo
   valueUnit="×"
   valueMax={2.9}
   valueTicks={[0, 0.5, 1, 1.5, 2, 2.5]}
-  categories={['BPE + gpt2 regex', 'ISBPE single-flag', 'ISBPE dual-flag']}
+  categories={['English (C4)', 'Python code']}
   series={[
-    { name: 'English (C4)', color: '#94a3b8', values: [2.677, 2.685, 2.7] },
-    { name: 'Python code', color: '#0d9488', values: [2.428, 2.611, 2.655] },
+    { name: 'BPE + gpt2 regex', color: '#94a3b8', values: [2.677, 2.428] },
+    { name: 'ISBPE single-flag', color: '#2dd4bf', values: [2.685, 2.611] },
+    { name: 'ISBPE dual-flag', color: '#0d9488', values: [2.7, 2.655] },
   ]}
 />
 
@@ -112,29 +113,6 @@ Observations:
 1. **Dual-flag wins on both corpora**, +9.37% over BPE on code and +0.86% on English. That English number is small, but it's the first time anything I built beat a properly-trained BPE there at all, every earlier version tied it.
 2. **The `get_attraction` failure is gone.** It now tokenizes as `get | #_# | attraction`, three tokens with the word whole, against single-flag's four.
 3. **Code gains 10x more than English**, for the same reason as before: English words nearly all carry a space, so there's nothing for the left-flag to pool.
-
-## The bug that made the best idea look like the worst
-
-My first measurement of dual-flag came back at **-30.69% on code**. I nearly wrote it off.
-
-The tokenizations looked wrong in a specific way. Whitespace runs that single-flag kept whole (`#········`, eight spaces) were shattering into four separate two-space tokens, and mean bytes per token had collapsed from **4.000 to 2.489**. That's not a scheme performing badly, that's a scheme not training.
-
-The cause was one line in the merge loop. BPE training keeps a heap of candidate pairs with lazy deletion, and I re-pushed a pair only when it was **new**:
-
-```python
-if (x, y) not in where or wi not in where[(x, y)]:
-    heapq.heappush(heap, (-pairs[(x, y)], x, y))     # wrong
-```
-
-Lazy deletion pops an entry only when its stored count still matches the live count. So a pair whose count **grows** without being re-pushed gets rejected forever and can never win a merge. That starves the process of exactly the pairs that are becoming frequent. The fix is to push on every count change:
-
-```python
-pairs[(a, b)] += c
-where[(a, b)].add(wi)
-heapq.heappush(heap, (-pairs[(a, b)], a, b))          # every time
-```
-
-The **-30.69%** and the **+9.37%** are the same idea. The only difference was that line. I keep the story because the failure mode was legible if I'd looked at the tokenizations before the aggregate, and I didn't.
 
 ## Does any of this help an LLM?
 
