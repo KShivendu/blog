@@ -1,0 +1,285 @@
+---
+title: 'Improving BPE'
+subtitle: 'Stop storing the space, store its absence'
+date: '2026-09-17'
+tags: ['nlp', 'compression', 'tokenization', 'internals']
+draft: false
+summary: 'BPE spends two vocabulary slots on every word, one with a leading space and one without. I mark the absence of a space instead, which frees ~14,000 slots and beats a properly-trained BPE baseline by 9.4% on code and 0.9% on English. Also: the baseline mistake that made my first results look 4x better than they were, and a one-line bug that turned a +9% win into a -31% disaster.'
+authors: ['kshivendu']
+---
+
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
+
+`the` and `·the` are two different tokens in GPT-2's vocabulary. So are `and` and `·and`, `for` and `·for`, `that` and `·that`. BPE glues the leading space onto the front of a word, so every common word occupies **two** slots, one for when it follows a space and one for when it doesn't. On my 20 MB Python corpus, **45.9% of all 65,536 vocabulary slots** go to pairs like that.
+
+The space is the most predictable character in English text. It sits between almost every pair of words. So why are we storing it at all, let alone twice?
+
+This post is about what happens when you flip it: assume the space, and store only where it's missing. The scheme I ended up with (**ISBPE**, Implicit-Space BPE) beats a properly-trained BPE baseline by **9.4% on code** and **0.9% on English**. Along the way I made a baseline mistake that inflated my first results by about 4x, and wrote a one-line bug that turned the best idea in the project into an apparent disaster. Both are in here, because both were more instructive than the result.
+
+## First, the baseline mistake that invalidated my early numbers
+
+I started by comparing my tokenizer against [r50k](https://github.com/openai/tiktoken), OpenAI's GPT-2 vocabulary, off the shelf. My scheme looked great. It wasn't.
+
+r50k was trained by OpenAI on OpenAI's corpus. My tokenizer was trained on mine. So I was measuring **"trained on your data"** and calling it **"better algorithm."**
+
+|                            | C4, held out |
+| -------------------------- | ------------ |
+| r50k, off the shelf        | 2.622x       |
+| BPE, retrained on my 20 MB | **2.677x**   |
+| my scheme at the time      | 2.685x       |
+
+Retraining BPE on the same corpus moved it from 2.622x to 2.677x, and my apparent +2.4% win shrank to **+0.3%**. Almost the entire gap was corpus fit.
+
+Every number in the rest of this post is against BPE **retrained on the same corpus, at the same vocabulary size (65,536), with the same GPT-2 pretokenization regex and all 256 byte forms pinned**. I verified my regex produces a byte-identical pretoken sequence to the original GPT-2 one over 800 KB of mixed code and prose, and that my HuggingFace construction yields an identical vocabulary to the conventional `ByteLevel(use_regex=True)` build. The baseline gets every advantage I can give it.
+
+Note that this cuts the other way too. If you ever see a tokenizer paper comparing against an off-the-shelf vocabulary on a domain-specific corpus, that's most of the result right there.
+
+## The idea: mark the absence, not the presence
+
+Here's the rule. A space is the **default** separator between tokens and is never stored. Only its absence is marked, with a `#`.
+
+```
+'the cat sat'     ->  the | cat | sat
+'hello . world'   ->  hello | . | world
+'a, b) c: d'      ->  a | #, | b | #) | c | #: | d
+'tokenization'    ->  token | #ization
+```
+
+Decoding is one rule: emit a space before each token unless it's the first one, or it carries a `#`, or the previous token was whitespace.
+
+Two properties I kept deliberately, because I tried dropping them and both were bad:
+
+- **Pretokenization stays GPT-2's regex.** Punctuation, digits and letters never mix in one token, and no token spans a word boundary. I tested removing that barrier: it produces multi-word tokens like `of the ` and gains 19% on English, but I don't want a tokenizer where `of the ` is one symbol.
+- **Every byte stays pinned in every flag combination** before training and can never be evicted. That's what makes byte fallback, and therefore losslessness, structural rather than hoped-for. Earlier I used HuggingFace's WordPiece-style `##` and it silently deleted characters whose `##` form was missing. It invalidated four numbers I'd already written down before I caught it.
+
+### What this buys, and where it doesn't
+
+On English, it buys almost nothing: **2.685x against BPE's 2.677x**, which is 42 tokens apart out of 280,204. On code it's **2.611x against 2.428x**, or +7.5%.
+
+The mechanism for that split is worth understanding, since it explains everything that follows. ISBPE routes three contexts to the same plain form: after a space, after a newline, and at the start of text. BPE splits those between `·word` and bare `word`, so its counts divide and the bare form often loses its slot. That's why BPE shatters `else` into `el|se` at the start of a line. Code is dense with line starts. Prose has almost none, and there every word already has a space in front of it, so BPE's `·word` is a single token too.
+
+Measured tokens saved on code: `else` 518, `raise` 409, `object` 255, `Returns` 173, `assert` 88, `continue` 52.
+
+## The failure that pointed at the real fix
+
+Here's where the first version breaks. A word needs **both** forms to be position-independent, and its counts split by context, so a word that mostly appears after a space only ever earns its plain form:
+
+```
+'get_attraction'   ->  get | #_ | #att | #raction
+```
+
+`attraction` is in the vocabulary. `#attraction` is not, because in prose `attraction` almost always follows a space. So inside `get_attraction` the word shatters.
+
+I tried the obvious fix first, which is to force every string into both forms. That halves the number of distinct strings from 57,966 to 32,768, and it does fix `get_attraction`. It also evicts `reconnaissance`, `Nero`, `Squadron` and `colossal`. Net **-1.9% on C4** and **-4.7% on WikiText**. Wrong trade.
+
+The fix that worked came from asking which side of the boundary should carry the mark.
+
+## Dual-flag: let the left token declare it
+
+Instead of the word carrying `#`, let the thing **before** it say "no space after me". I write that as a trailing `#`:
+
+```
+'lang.split(x)'
+  single-flag   lang | #. | #split | #( | #x | #)
+  dual-flag     lang | #.# | split | #( | #x | #)
+                       ^^^^  ^^^^^
+                       flag   ordinary token
+```
+
+`split` is now the plain token, the same one used in ` split`. Which side carries the flag is decided by what's on the right: **a word on the right means the flag goes left.**
+
+The reason this is exact rather than a heuristic is structural. A word pretoken is ` ?\p{L}++`, which is **maximal**, so the character before a spaceless word can never be a letter. It has to be punctuation, a digit, or one of the seven contraction strings the GPT-2 regex splits off (`'s`, `'t`, `'re`...), and all of those sit on the left where they can carry the flag. I measured the leak before adding that last case: 206 boundaries out of 805,820 on code, all from contractions.
+
+So **a word never needs a `#` form at all.** On code that frees about 14,000 slots and pools **780,827 token occurrences** onto single ids. `format` stops being 1,433 uses in one slot plus 5,740 in another and becomes 7,173 in one.
+
+<BarChart
+  orientation="horizontal"
+  title="Compression vs raw UTF-8, held out, V=65,536, after +freq"
+  subtitle="every tokenizer trained on the same 20 MB, verified lossless before measuring"
+  valueLabel="compression ratio (higher is better)"
+  valueUnit="×"
+  valueMax={2.9}
+  valueTicks={[0, 0.5, 1, 1.5, 2, 2.5]}
+  categories={['BPE + gpt2 regex', 'ISBPE single-flag', 'ISBPE dual-flag']}
+  series={[
+    { name: 'English (C4)', color: '#94a3b8', values: [2.677, 2.685, 2.7] },
+    { name: 'Python code', color: '#0d9488', values: [2.428, 2.611, 2.655] },
+  ]}
+/>
+
+Observations:
+
+1. **Dual-flag wins on both corpora**, +9.37% over BPE on code and +0.86% on English. That English number is small, but it's the first time anything I built beat a properly-trained BPE there at all, every earlier version tied it.
+2. **The `get_attraction` failure is gone.** It now tokenizes as `get | #_# | attraction`, three tokens with the word whole, against single-flag's four.
+3. **Code gains 10x more than English**, for the same reason as before: English words nearly all carry a space, so there's nothing for the left-flag to pool.
+
+## The bug that made the best idea look like the worst
+
+My first measurement of dual-flag came back at **-30.69% on code**. I nearly wrote it off.
+
+The tokenizations looked wrong in a specific way. Whitespace runs that single-flag kept whole (`#········`, eight spaces) were shattering into four separate two-space tokens, and mean bytes per token had collapsed from **4.000 to 2.489**. That's not a scheme performing badly, that's a scheme not training.
+
+The cause was one line in the merge loop. BPE training keeps a heap of candidate pairs with lazy deletion, and I re-pushed a pair only when it was **new**:
+
+```python
+if (x, y) not in where or wi not in where[(x, y)]:
+    heapq.heappush(heap, (-pairs[(x, y)], x, y))     # wrong
+```
+
+Lazy deletion pops an entry only when its stored count still matches the live count. So a pair whose count **grows** without being re-pushed gets rejected forever and can never win a merge. That starves the process of exactly the pairs that are becoming frequent. The fix is to push on every count change:
+
+```python
+pairs[(a, b)] += c
+where[(a, b)].add(wi)
+heapq.heappush(heap, (-pairs[(a, b)], a, b))          # every time
+```
+
+The **-30.69%** and the **+9.37%** are the same idea. The only difference was that line. I keep the story because the failure mode was legible if I'd looked at the tokenizations before the aggregate, and I didn't.
+
+## Does any of this help an LLM?
+
+Compression ratio is the wrong metric for that question, so I measured **bits per byte**: held-out cross-entropy under n-gram models, normalised by the byte count of the same text rather than the token count.
+
+That normalisation is the whole game, and a word-level tokenizer shows why. On C4 it has the **lowest bits per token of anything I measured** (7.880 against ISBPE's 9.285) and the **highest bits per byte** (2.0319 against 2.0013). It looks like the easiest prediction problem and is the worst representation, because it just chops text finer, so each guess is easier and there are more of them. Any tokenizer comparison reported as per-token perplexity is uninterpretable.
+
+### 85% of the compression win does not survive
+
+On code, dual-flag cuts 9.8% of the tokens. Here's what reaches bits per byte:
+
+```
+              tokens     bits/token      = bits/byte
+ISBPE        306,575        7.872           1.8565
+BPE          336,736        7.265           1.8819
+           9.8% fewer    8.4% harder      net -1.35%
+```
+
+In absolute terms: **26.7 KB of saving was available at BPE's per-token rate, and 4.0 KB arrived.** Every merge that removes a token makes the tokens around it rarer, and therefore harder to predict.
+
+I've now measured this cancellation three separate ways with three different kinds of machinery, and it lands in the same place every time:
+
+- tokenizer against a static entropy coder: **80-90%** cancellation, stable across four corpora
+- tokenizer against a language model: **85%**
+- inside one tokenizer family, trading between two variants: a linear frontier, no free point anywhere on it
+
+So if someone quotes you a token-count improvement as a training result, divide by about seven.
+
+### The context trap, which reversed my conclusion
+
+Measured with an order-3 n-gram, single-flag beat dual-flag on bits per byte by 0.72%, and I wrote that up as "single-flag is the better choice for LLM training."
+
+That was wrong, and the objection that killed it is obvious in hindsight. An order-3 n-gram sees **two tokens** of context. Dual-flag's cost is that `.` and `.#` become separate conditioning contexts, and a two-token model is maximally exposed to that, since it has nothing else to go on. A transformer sees thousands of tokens and can recover the relationship from elsewhere in the window.
+
+I pushed the n-gram to order 6 and the gap stopped moving, but the model also stopped improving (its tuned interpolation weight fell to 0.10 by order 6, meaning it was backing off 90% of the time). So the n-gram couldn't answer the question either way.
+
+Compressing the token stream with general-purpose long-range coders, which match repeats at arbitrary distance, flips the sign:
+
+| model          | context    | verdict                |
+| -------------- | ---------- | ---------------------- |
+| order-6 n-gram | 5 tokens   | dual **+0.72%** worse  |
+| xz             | whole file | dual **-3.51%** better |
+| bz2            | whole file | dual **-2.12%** better |
+| zlib           | whole file | dual **-2.36%** better |
+
+The mechanism is that dual-flag does two things at once. Words get one id instead of two, so the id stream carries longer literal repeats, which long-range models feed on. Punctuation splits into more forms, which makes local conditional distributions sparser, which is all a five-token model can see. **Short-context models see only the cost. Long-context models see the benefit.**
+
+I'd still rather have a training run than three compressors. LZ rewards literal repetition and a transformer also generalises, so this probably understates dual-flag again.
+
+## Things that didn't work
+
+<details>
+<summary>Capitalisation handling, four different ways, all lost</summary>
+
+`Attraction` and `attraction` are two slots. Capital-initial entries are **35.5% of the English vocabulary**. So: mark the capital and share the lowercase form. I built it four ways.
+
+**A marker token**, `<CAP> attraction`. Frees 23,253 slots on English but grows the stream **13.04%**, since English capitalises 13% of its tokens and each one costs a whole extra token. Rejected on arithmetic before building.
+
+**A case flag inside the token id**, zero extra tokens. Lost 0.24% on code. The reason is that it eliminates nothing: `the` and `The` still need two ids, because an id has to determine its output bytes. It only adds a dimension, taking combinations per string from 4 to 12, and distinct strings held fell from 58,517 to 49,456.
+
+**Case flag plus camelCase splitting**, so `fireEvent` becomes `fire` + `Event`. Fixes the cases the flag version missed (`XMLParser` becomes `XML# | parser^` instead of three all-caps fragments) and still loses 0.95%. Splitting at case boundaries stops the vocabulary from ever learning `XMLParser` as one entry, and on code those compounds are worth more than the sharing.
+
+**A mergeable marker token**, so that `<CAP>+the` can merge into a single `The` slot built on top of the existing `the`. This is the best of the four designs and it's adaptive, since frequent capitals earn a merged slot and rare ones consume no vocabulary. It still lost 6.30%, because `<CAP>` was emitted unmerged **401,589 times, 8.79% of the stream**. English capitalisation is a fat tail of proper nouns, and a marker only pays for words frequent enough to earn a slot, which are exactly the words that were already cheap to store directly.
+
+The rule that came out of all four: **a flag pays when it removes a form from the vocabulary, and costs when it only adds a dimension to the id.** The dual-flag `#` removed word forms outright. Case flags remove nothing.
+
+</details>
+
+<details>
+<summary>Unigram vocabulary selection, which lost in-domain and won out-of-domain</summary>
+
+Greedy BPE merging commits early. A [SentencePiece](https://github.com/google/sentencepiece)-style Unigram model instead seeds a large candidate set and prunes it to maximise corpus likelihood, so it can weigh globally whether a slot is better spent on `sql` or `#sql`.
+
+It lost in-domain: 2.568x against greedy's 2.609x on code, and 2.668x against 2.685x on C4.
+
+But it's the only construction I built that **beat BPE on a domain it wasn't trained on**: 1.728x against BPE's 1.672x on Python from an English vocabulary, +3.36%. Given how much of this project died on domain transfer, that row may matter more than the three it lost.
+
+Caveat: I used hard Viterbi EM and pruned by expected count rather than SentencePiece's exact leave-one-out loss, so this tests "Unigram with count-based pruning", not Unigram.
+
+</details>
+
+<details>
+<summary>Segmentation choice, worth 0.21%</summary>
+
+When a word can't be one token, there are usually several ways to cut it. I counted: **67.7% of unit occurrences have two or more valid segmentations**, and 23.7% have more than 20.
+
+BPE doesn't choose, it replays merges in rank order, which is greedy and not minimal. So I ran the dynamic program for the minimum number of pieces. Headroom: **0.210%**. BPE already agrees with optimal **99.1%** of the time.
+
+Where it disagrees it's badly wrong, which the 0.21% hides:
+
+```
+'rationale'     r #ation #ale         ->  rational #e
+'inbetweens'    in #b #etw #e #ens    ->  inbetween #s
+'isHorizontal'  isH #oriz #ont #al    ->  is #Horizon #tal
+```
+
+I tried idf as the criterion, on the theory that a retrieval index wants discriminative pieces. It fails twice. As an objective it's degenerate, since maximising a sum of positive `-log P` terms rewards having more pieces and collapses to one piece per byte (+294% tokens). As a tie-break among minimum-piece segmentations it's free but picks **worse** pieces, `isH | orizon | tal` over `is | Horizon | tal`. Rarity is not meaningfulness, and `orizon` is rare precisely because it's a nonsense fragment.
+
+What works is scoring a piece by how often it appears as a standalone word elsewhere in the corpus. `Horizon` does, `orizon` never does. That's free in tokens and lifts real-word pieces from 89.0% to 89.4%.
+
+</details>
+
+## A free fix for a GPT-2 wart
+
+One thing fell out of this that's worth taking regardless of everything above.
+
+```
+pretokens of  b'test'   ->   [b'b', b"'t", b'est', b"'"]
+```
+
+GPT-2's regex offers the contraction `'(?:[sdmt]|ll|ve|re)` as a **standalone** alternative, so it fires inside quoted strings and eats the first letter of the word. `test` then exists nowhere in the document, and no lookup over word tokens can find it.
+
+A lookbehind doesn't help, since the character before the quote (`b`) is a letter. [o200k](https://github.com/openai/tiktoken) doesn't fix it either, it attaches the contraction as a word suffix and gives `b't | est | '`. What works is requiring the contraction not to be followed by another letter:
+
+```
+'(?:[sdmt]|ll|ve|re)   ->   '(?:[sdmt]|ll|ve|re)(?!\p{L})
+```
+
+`don't` still matches. `b'test'` falls through to punctuation and `test` comes out whole. Pretoken **counts are identical** on 20 MB of code and of C4, only 206 and 34 boundaries move respectively, and compression changes by +0.004% and -0.007%. The one behaviour change is that `don'ts` becomes `don | ' | ts` instead of `don | 't | s`, at the same token count.
+
+For compression that's noise. For a token-level index it's a silent recall hole on exactly the identifiers people search for.
+
+## What I'd actually use
+
+I packaged the implementation as a small library with both modes:
+
+```python
+from isbpe import ISBPE
+
+tok = ISBPE(mode="dual").train(corpus_bytes, vocab_size=65536)
+ids = tok.encode("self.fireEvent")
+tok.decode(ids)                      # exact bytes back, always
+
+tok.explain("self.fireEvent")
+# self.fireEvent -> self | #.# | fire | #Event
+```
+
+`mode="dual"` is the one to use, and the contraction fix is the default pattern. Losslessness is verified on three corpora plus 2,000 random byte strings per mode, and the packaged library reproduces the numbers in this post to the token.
+
+The honest limitation: a custom tokenizer produces ids no existing model can read. If your reader is an LLM, you need the lab to ship the vocabulary, and until then any custom scheme means decoding and re-encoding at the boundary. For a storage or retrieval layer where you control both ends, that constraint doesn't apply.
+
+## Key Takeaways
+
+- **Marking the absence of a space beats storing it.** ISBPE dual-flag reaches **2.655x on code** and **2.700x on English** against a retrained BPE baseline's 2.428x and 2.677x, and it wins on long-range bits per byte too.
+- **Retrain your baseline on your own corpus.** Comparing against an off-the-shelf vocabulary made my first result look about 4x bigger than it was, and almost all of that gap was corpus fit rather than algorithm.
+- **Compression and predictability are substitutes, not additive wins.** 85% of a token-count improvement cancels by the time it reaches bits per byte, measured three separate ways. Divide token-count claims by roughly seven before reading them as training results.
+- **Short-context proxies can give you the wrong sign.** An order-3 n-gram said one variant was better for LLMs. Three long-range coders said the opposite, and the n-gram was the one measuring its own sparsity.
+- **A flag pays only when it removes a form from the vocabulary.** The space flag deleted a form per word and won. Four separate capitalisation schemes only added a dimension to the id, and all four lost.
