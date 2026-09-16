@@ -101,7 +101,8 @@ def make_token_full_resolver(vtri, universe):
     """Virtual char-trigram index: 'docs containing trigram g' resolved through
     the vocab sidecar plus token-bigram adjacency, never stored per document."""
     def f(lit):
-        gs = {lit[i : i + 3] for i in range(len(lit) - 2)}
+        b = lit.encode("utf-8", "replace")
+        gs = {b[i : i + 3] for i in range(len(b) - 2)}
         if not gs:
             return None
         out = universe
@@ -157,35 +158,40 @@ def main():
           f"({time.time()-t0:.0f}s)", flush=True)
 
     # virtual trigram map: vocab sidecar (single token) + bigram boundary
+    # Everything below works in BYTES, not characters. BPE is a byte-level
+    # code, so a multi-byte UTF-8 character can be split across two tokens and
+    # decoding a token to str turns the partial character into U+FFFD. Walking
+    # that reconstruction drops real documents: measured at 26 leaked postings
+    # over 1,500 docs, all of them box-drawing characters.
     V = vocab_strings()
-    side = build_vocab_sidecar(V, 3)
-    print(f"  vocab sidecar   {len(side):>9,} terms  {postings(side):>12,} postings "
-          f"(static, not corpus)", flush=True)
+    side = defaultdict(set)
+    for i in range(ENC.n_vocab):
+        try:
+            bs = ENC.decode_single_token_bytes(i)
+        except Exception:
+            continue
+        for j in range(len(bs) - 2):
+            side[bs[j : j + 3]].add(i)
+    print(f"  vocab sidecar   {len(side):>9,} terms (static, byte-level)", flush=True)
+
     vtri = defaultdict(set)
-    for g, tids in side.items():
-        s = set()
+    for g, tids in side.items():          # case 1: the chunk sits inside one token
+        s_ = set()
         for t in tids:
-            s |= uni.get(t, set())
-        if s:
-            vtri[g] |= s
-    # Boundary-crossing trigrams. Walking the token stream (rather than the
-    # bigram index) is required for soundness: a trigram can span THREE tokens
-    # when the middle one is a single character, e.g. "[" "0" "]" in names[0],
-    # and a pair-only derivation silently drops those documents.
-    for d, t in enumerate(docs):
+            s_ |= uni.get(t, set())
+        if s_:
+            vtri[g] |= s_
+    for d, t in enumerate(docs):          # case 2: the chunk crosses a boundary
         ids = ENC.encode(t, disallowed_special=())
-        parts = [V.get(i) or ENC.decode([i]) for i in ids]
-        flat = "".join(parts)
-        off, pos = [], 0
-        for s_ in parts:
-            pos += len(s_)
-            off.append(pos)            # char offset just after each token
-        for o in off[:-1]:
-            for k in (o - 2, o - 1):
+        parts = [ENC.decode_single_token_bytes(i) for i in ids]
+        flat = b"".join(parts)
+        pos = 0
+        for part in parts[:-1]:
+            pos += len(part)
+            for k in (pos - 2, pos - 1):
                 if 0 <= k <= len(flat) - 3:
                     vtri[flat[k : k + 3]].add(d)
-    print(f"  virtual trigram {len(vtri):>9,} terms (derived, not stored)  "
-          f"({time.time()-t0:.0f}s)\n", flush=True)
+    print(f"  virtual trigram {len(vtri):>9,} terms (derived, byte-level)\n", flush=True)
 
     methods = {
         "dense trigram": make_trigram_resolver(tri, universe),
