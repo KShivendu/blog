@@ -1,0 +1,199 @@
+---
+title: 'Regex Without a Regex Index'
+subtitle: 'Token postings filter regex as well as a trigram index at a third of the storage, and the fallback rate is the number nobody quotes'
+date: '2026-09-16'
+lastmod: '2026-09-16'
+tags: ['search', 'internals', 'information-retrieval', 'nlp']
+draft: true
+summary: 'TopK filters regex with content-defined sparse character grams. I benchmarked that against the BM25 token postings from Token Search on 4,000 CodeSearchNet Python functions and 400 regexes mined from real re.compile calls, with exact ground truth and a recall check that caught three soundness bugs in my own code. Token unigram plus bigram postings match a dense trigram index on candidate count in every query class, at 1.41M postings against sparse grams 4.56M, a 3.25x storage win. The predicted 5.2x latency win on sub-word literals did not appear. And 53.5% of real regexes have no literal any of these indexes can use.'
+authors: ['kshivendu']
+---
+
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
+
+In [Token Search](/blog/token-search) I ran BM25 over BPE token IDs and it matched a Porter-stemmed English analyzer. Those postings are keyed by token ID, and a token covers about four bytes where a character gram covers half of one. So a fair question is whether the same index can answer `/colou?r of the (sky|sea)/` without building a second one.
+
+[TopK's sparse-gram post](https://www.topk.io/blog/20260814-fast-regex-search-sparse-grams) is the reference point. They weight character bigrams with CRC32, select a gram when both boundary bigrams outweigh every interior one, compile the regex into a boolean expression over grams, and verify survivors with the real regex. I wanted to know what token postings cost against that, so I built both and measured.
+
+Three results, and only one of them is the one I expected.
+
+## The benchmark needs no labels
+
+Filter quality is candidate-set size, and ground truth is whether the regex actually matches, which Python computes exactly. So this needs no human judgments at all, unlike the NanoBEIR runs in Token Search.
+
+- **Documents.** 4,000 Python functions from [CodeSearchNet](https://github.com/github/CodeSearchNet), 5.7 MB.
+- **Queries.** 400 regexes sampled from 2,998 usable ones mined out of `re.compile`, `re.search`, `re.match` and friends in the **train** split, so the patterns are ones developers wrote and the documents they run against are disjoint from where they came.
+- **Ground truth.** `re.search(pattern, doc)` over every pair.
+- **The check that matters.** Recall must be exactly 1.000. A filter that drops a matching document is a wrong answer, not a tuning choice.
+
+Four methods, all required to be sound:
+
+```
+  dense trigram        every 3-char window -> doc ids
+  TopK sparse          CRC32 content-defined gram selection, n = 3..16
+  token word-aligned   whole words inside the literal, Token Search normalisation
+  token + bigram       token unigram + bigram + a 2 MB static vocab sidecar
+```
+
+## The recall check caught three bugs, all mine
+
+I want to show these before the results, because the first run looked fine and was wrong.
+
+**Bug 1. Every literal lost its last character.** `'magnet'` came out as `magne` and `'torrent'` as `torren`. The cause is that my parser tested `if q in "?*"` where `q` is the next character, and at the end of a string `q` is `""`. In Python `"" in "?*"` is `True`, so the final character always looked like it carried an optional quantifier.
+
+**Bug 2. Group syntax read as text.** I treated `(` as a one-character skip, so `(?P<protocol>[a-z]+)://` had `P<protocol>` parsed as required literal text. Worse, `(?<!\\)%` is a negative lookbehind, where the body is **forbidden** rather than required, and I was requiring it. Nine patterns leaked on every method, which is the tell that the bug was in the shared literal extractor rather than in any index.
+
+**Bug 3. Quantifiers read as text.** After `\d` breaks a literal run, the following `{1,2}` got parsed character by character, yielding a required literal `1,2`. So `(?P<hour>\d{1,2}):(?P<minute>\d{2,2})` demanded text that need not appear, and found 18 documents where 38 match.
+
+There was also a fourth, and it is the one with a design lesson in it.
+
+**The word-aligned method was unsound on code until the index changed.** Token Search's normalisation encodes each word alone with a fixed leading space, `enc.encode(" " + word)`. I applied that on the query side and left the index on raw tokenisation. For the literal `</pre>` the safe word run is `pre`, and the query encodes `" pre"`, but in the document `pre` follows `/` and BPE tokenises it differently, so the true match was not in the candidate set. The normalisation has to run at **index** time too. Once I built a second index that way, the leak closed.
+
+That is a general point about token-native filtering rather than a bug in this script. The leading-space trick assumes words are space-delimited, and in code they mostly are not.
+
+After the fixes, every method is sound:
+
+```
+  dense trigram        400/400
+  TopK sparse          400/400
+  token word-aligned   400/400
+  token + bigram       400/400
+```
+
+## Index size is the clear win
+
+| index                      |   terms |      postings |          vs sparse |
+| -------------------------- | ------: | ------------: | -----------------: |
+| dense trigram              |  59,629 |     1,971,086 |      2.31x smaller |
+| TopK sparse grams          | 694,707 |     4,560,012 |              1.00x |
+| token unigram              |  26,907 |       511,965 |                    |
+| token bigram               | 281,153 |       893,244 |                    |
+| **token unigram + bigram** | 308,060 | **1,405,209** |  **3.25x smaller** |
+| vocab 3-gram sidecar       |  63,245 |       695,371 | static, not corpus |
+
+Observations:
+
+- **Token unigram plus bigram is 3.25x smaller than sparse grams**, 1.41M postings against 4.56M, and my [napkin model](/blog/regex-token-search) predicted 3.9x at 10M documents from the 4-bytes-per-posting argument alone. Same direction, and the measured number is the one I would quote.
+- **Sparse grams are 2.31x larger than a dense trigram index, not smaller.** Their `E[grams] ~= 2L` counts bytes, and since selection probability at length 3 is exactly 1, every trigram is indexed and the longer grams roughly double it. Sparsity is measured against dense-all-lengths, so it buys selectivity rather than size.
+- **The vocab sidecar does not scale with the corpus.** 695,371 postings over the fixed 200k `o200k_base` vocabulary, about 2 MB, built once from the tokenizer and never rebuilt on ingest.
+
+## Selectivity is a three-way tie
+
+Mean percentage of the corpus handed to the verifier, so lower is better.
+
+| class        |   n | true matches | dense trigram | TopK sparse | token word-aligned | token + bigram |
+| ------------ | --: | -----------: | ------------: | ----------: | -----------------: | -------------: |
+| word-aligned |  59 |           30 |          0.8% |        0.8% |               7.5% |           0.8% |
+| sub-word     | 123 |           19 |          5.8% |        5.8% |              98.4% |           5.8% |
+| alternation  |   4 |            1 |          0.1% |        0.1% |             100.0% |           0.1% |
+| no-literal   | 214 |         1404 |        100.0% |      100.0% |             100.0% |         100.0% |
+
+Observations:
+
+- **Token plus bigram matches the dense trigram index to the decimal in every class**, 0.8% and 5.8% and 0.1%, which is the design working as intended. It resolves "does this document contain trigram `g`" through the vocab sidecar and token adjacency instead of storing a trigram posting list, so it should land on the same candidates, and it does.
+- **Sparse grams buy nothing measurable here.** Same three numbers, at 3.25x the storage.
+- **Word-aligned token filtering alone is not usable on code.** 7.5% of the corpus against 0.8%, and 98.4% of sub-word patterns get no constraint from it at all. The bigram index and the sidecar are load-bearing, not an optimisation.
+
+False positives, as median candidates divided by true matches, where 1.0x is a perfect filter:
+
+| class        |   n | dense trigram | TopK sparse | token word-aligned | token + bigram |
+| ------------ | --: | ------------: | ----------: | -----------------: | -------------: |
+| word-aligned |   6 |          1.0x |        1.0x |               4.1x |           1.0x |
+| sub-word     |  24 |          1.3x |    **1.2x** |             145.9x |           1.3x |
+| alternation  |   1 |          1.3x |        1.3x |            1333.3x |           1.3x |
+
+Observations:
+
+- **Sparse grams win sub-word literals by 1.2x against 1.3x**, the only place any method separates, and the margin is one notch of the median rather than anything a user would feel.
+- **Word-aligned alone is 145.9x on sub-word**, which is what a filter looks like when it almost always falls back and the few constraints it does find are weak.
+
+## The prediction that broke
+
+Before running this I modelled `/keniz/` and predicted token plus bigram would beat sparse grams **5.2x** on sub-word literals, on the reasoning that `ken`, `eni` and `niz` can appear scattered through a document without being adjacent, so a trigram index admits `kennel ... genie ... organize` while a bigram index requires contiguity. That model assumed dense trigrams would return **8x** the true matches. Measured, they return **1.3x**.
+
+So the assumption was wrong by about six times, and the conclusion built on it was wrong with it. I went back to the rows to find out why.
+
+| class        |   n | mean literal len | p50 | min | max |
+| ------------ | --: | ---------------: | --: | --: | --: |
+| word-aligned |  59 |             14.4 |  12 |   3 |  41 |
+| sub-word     | 123 |              7.6 |   6 |   3 |  47 |
+
+Observations:
+
+- **The median sub-word literal is 6 characters, not 5**, and 38 of 123 run to 8 or more. A 6-character literal yields 4 trigrams, and ANDing 4 trigram posting lists over 4,000 documents is already close to exact, which leaves the adjacency constraint nothing to remove.
+- **My 8x figure came from a 5-character literal in isolation**, which is the shortest case that still clears a trigram index and therefore the most favourable one I could have picked. Real mined literals are longer, and a `%s` template or a full error string like `Cannot compile filter '(.*)': syntax error` is nothing like `keniz`.
+
+The adjacency argument is still correct about what it describes. It just describes a case that barely occurs in this workload, so it does not carry a latency claim.
+
+## The number nobody quotes
+
+|                    | patterns with a usable constraint |
+| ------------------ | --------------------------------: |
+| dense trigram      |                 186 / 400 = 46.5% |
+| TopK sparse grams  |                 186 / 400 = 46.5% |
+| token + bigram     |                 186 / 400 = 46.5% |
+| token word-aligned |                  61 / 400 = 15.2% |
+
+**53.5% of these regexes must read every document, under every method.** They pin down no text of three characters or more, so there is no key any index can look up:
+
+```
+  no usable literal              has one
+  '\s+'                          'magnet'            -> magnet
+  '\d+'                          'tower[0-9]+/'      -> tower
+  '[-/]'                         'https?://'         -> http AND ://
+  '(.)([A-Z][a-z]+)'             '\\.drep$'          -> drep
+  '>(.+)<'                       'page=[0-9]+'       -> page=
+  '[A-Z][^A-Z]*'                 '__version__ = ...' -> __version__ =
+```
+
+Note `https?://` gives `http` and `://` but never `https://`. The `s` sits under `?`, so a matching document need not contain it, and a sound filter may only require characters guaranteed to be present. `>(.+)<` gives nothing for a duller reason: `>` and `<` are one character each, below the three a trigram needs.
+
+<details>
+<summary>Why 53.5% overstates it for a code-search product</summary>
+
+These patterns come from `re.compile` calls in Python source, so many are string-processing utilities rather than search queries. Nobody opens a code search box and types `\s+` to find a whitespace run, but plenty of programs call `re.split(r'\s+', line)`.
+
+So read 53.5% as the rate for regexes in the wild, and expect a product's query log to skew more literal-heavy, because a person searching a codebase is usually looking for a name they already know. I did not have a real code-search query log to check that against, which is the main thing I would want before quoting a fallback number to anyone.
+
+The direction of the bias is knowable even without that log. Mined patterns have a median sub-word literal of 6 characters and a mean of 7.6, and a search query built around an identifier like `tokenize_and_filter` is far longer than that, which makes it both more filterable and more selective.
+
+</details>
+
+## What I would build
+
+Ordered by measured value rather than by how interesting it is.
+
+1. **Word-aligned literals on the existing unigram postings, with the normalisation applied at index time.** No new storage. It only covers 15.2% of patterns on its own, so it is a starting point rather than a feature.
+2. **The token bigram index**, at 893,244 postings against the unigram's 511,965. This is what lifts coverage from 15.2% to 46.5% and selectivity from 7.5% to 0.8%. It is the only item here that changes the numbers.
+3. **The 2 MB vocab sidecar**, static, built from the tokenizer at startup, which turns a sub-word literal into a candidate token set.
+4. **Skip sparse grams.** They cost 3.25x the storage and returned identical candidate counts in every class.
+
+What I would not claim from this run: any latency number. Candidate count is the input to latency, and the two are only proportional once you fix a fetch path, a verifier and a machine. I measured the input.
+
+## Limitations
+
+- **4,000 documents is small.** Trigram AND is more selective on a small corpus because posting lists are short, so the 1.3x false-positive figure will rise with scale and the adjacency argument may recover some ground. This is the single thing I would rerun first, at 1M documents.
+- **One corpus, one language.** Python functions from CodeSearchNet. Natural-language documents have different token-boundary behaviour, and CJK has [no word boundaries at all](/blog/token-search#the-real-payoff-one-analyzer-every-language), where the leading-space normalisation has nothing to hold onto.
+- **Mined regexes are not search queries.** Covered above, and it biases the fallback rate upward.
+- **My literal extractor is conservative by design.** It skips any group containing alternation and every lookaround, so it under-uses some patterns. That direction is safe, since dropping a constraint costs candidates and inventing one costs correctness, but a better extractor would improve all four methods together.
+- **Pure-Python indexes, Python `set` postings.** Sizes are posting counts rather than bytes on disk, and a real encoder would compress the four differently, most likely in token postings' favour since their lists are longer and their gaps smaller.
+
+## Reproducing
+
+```
+python experiments/regex-filter/build_dataset.py   # corpus + mined patterns
+python experiments/regex-filter/test_indexes.py    # sparse-gram soundness tests
+python experiments/regex-filter/evaluate.py        # all four methods, exact ground truth
+python experiments/regex-filter/report.py          # per-class breakdown
+```
+
+`test_indexes.py` checks the two properties everything rests on: that my vectorised sparse-gram selection agrees with brute force on 400/400 random strings, and that `covering(q)` is a subset of `all(d)` on 400/400 random embeddings, which is the no-false-negatives guarantee.
+
+## Key Takeaways
+
+- **Token unigram plus bigram postings filter regex as well as a dense trigram index at a third of the storage of sparse grams.** 1.41M postings against 4.56M, and identical mean candidate counts in all four query classes. The storage gap comes from a posting covering four bytes instead of half of one.
+- **Sparse grams bought nothing measurable on this workload.** Same candidates, 3.25x the index, and they are 2.31x larger than the dense trigram index they are meant to improve on.
+- **I predicted a 5.2x sub-word win and got none.** The model assumed dense trigrams return 8x the true matches and they return 1.3x, because the median mined literal is 6 characters and four ANDed trigrams are already nearly exact. The adjacency argument is sound and describes a case this workload barely contains.
+- **53.5% of real regexes have no literal any of these indexes can use**, so they scan everything under every method. That fallback rate deserves to sit next to any speedup number, and it overstates the case for a code-search product whose users type identifiers.
+- **Word-aligned token filtering alone covers 15.2% of patterns and is unsound on code until the per-word normalisation runs at index time as well as query time.** The bigram index and the vocab sidecar are what make the approach work, not an extra on top of it.
+- **The recall check earned its place.** It caught three bugs in my own literal extractor, including `"" in "?*"` evaluating to `True` and quietly truncating every literal, none of which showed up as an obviously wrong number.
