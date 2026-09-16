@@ -130,7 +130,10 @@ def classify(pat, groups):
 def main():
     t0 = time.time()
     docs = json.load(open(f"{DATA}/docs_test.json"))[:N_DOCS]
-    pats = [p for p, _ in json.load(open(f"{DATA}/patterns.json"))]
+    PATFILE = os.environ.get("PATTERNS", "patterns.json")
+    pats = [p for p, _ in json.load(open(f"{DATA}/{PATFILE}"))]
+    if "agent" in PATFILE:   # plain grep is BRE: \| \( \) are metacharacters
+        pats = [x.replace(r"\|", "|").replace(r"\(", "(").replace(r"\)", ")") for x in pats]
     universe = frozenset(range(len(docs)))
     nb = sum(len(d) for d in docs)
     print(f"corpus: {len(docs):,} docs, {nb/1e6:.1f} MB", flush=True)
@@ -165,14 +168,22 @@ def main():
             s |= uni.get(t, set())
         if s:
             vtri[g] |= s
-    for (a, b), ds in bi.items():
-        sa, sb = V.get(a), V.get(b)
-        if not sa or not sb:
-            continue
-        j = sa + sb
-        lo, hi = max(0, len(sa) - 2), min(len(j) - 2, len(sa))
-        for k in range(lo, hi + 1):
-            vtri[j[k : k + 3]] |= ds
+    # Boundary-crossing trigrams. Walking the token stream (rather than the
+    # bigram index) is required for soundness: a trigram can span THREE tokens
+    # when the middle one is a single character, e.g. "[" "0" "]" in names[0],
+    # and a pair-only derivation silently drops those documents.
+    for d, t in enumerate(docs):
+        ids = ENC.encode(t, disallowed_special=())
+        parts = [V.get(i) or ENC.decode([i]) for i in ids]
+        flat = "".join(parts)
+        off, pos = [], 0
+        for s_ in parts:
+            pos += len(s_)
+            off.append(pos)            # char offset just after each token
+        for o in off[:-1]:
+            for k in (o - 2, o - 1):
+                if 0 <= k <= len(flat) - 3:
+                    vtri[flat[k : k + 3]].add(d)
     print(f"  virtual trigram {len(vtri):>9,} terms (derived, not stored)  "
           f"({time.time()-t0:.0f}s)\n", flush=True)
 
