@@ -5,7 +5,7 @@ date: '2026-09-16'
 lastmod: '2026-09-16'
 tags: ['search', 'internals', 'information-retrieval', 'nlp']
 draft: true
-summary: 'TopK filters regex with content-defined sparse character grams. I benchmarked that against the BM25 token postings from Token Search on 4,000 CodeSearchNet Python functions and 400 regexes mined from real re.compile calls, with exact ground truth and a recall check that caught three soundness bugs in my own code. Token unigram plus bigram postings match a dense trigram index on candidate count in every query class, at 1.41M postings against sparse grams 4.56M, a 3.25x storage win. The predicted 5.2x latency win on sub-word literals did not appear. Sparse grams also cost 3.0x more to build and run 2x slower per query for identical candidates. And 53.5% of real regexes have no literal any of these indexes can use, which caps every method at 2.1x over a full scan even though the filterable slice reaches 36x to 50x.'
+summary: 'TopK filters regex with content-defined sparse character grams. I benchmarked that against the BM25 token postings from Token Search on 4,000 CodeSearchNet Python functions and 400 regexes mined from real re.compile calls, with exact ground truth and a recall check that caught three soundness bugs in my own code. Token unigram plus bigram postings match a dense trigram index on candidate count in every query class, at 1.41M postings against sparse grams 4.56M, a 3.25x storage win. The predicted 5.2x latency win on sub-word literals did not appear. Sparse grams also cost 3.0x more to build and run 2x slower per query for identical candidates. And who writes the query decides everything: 53.5% of regexes mined from source code have no literal any index can use, capping every method at 2.1x over a full scan, while real coding-agent searches are 96.3% filterable and lift the same indexes to 11.4x.'
 authors: ['kshivendu']
 ---
 
@@ -16,6 +16,10 @@ In [Token Search](/blog/token-search) I ran BM25 over BPE token IDs and it match
 [TopK's sparse-gram post](https://www.topk.io/blog/20260814-fast-regex-search-sparse-grams) is the reference point. They weight character bigrams with CRC32, select a gram when both boundary bigrams outweigh every interior one, compile the regex into a boolean expression over grams, and verify survivors with the real regex. I wanted to know what token postings cost against that, so I built both and measured.
 
 Three results, and only one of them is the one I expected.
+
+<RegexChopper />
+
+Every method above does the same two things: chop the text into pieces and remember which documents each piece appeared in. Then it chops the query the same way, looks up its pieces, and runs the real regex on whatever survives. The only thing that separates them is the chopping.
 
 ## The benchmark needs no labels
 
@@ -221,6 +225,42 @@ Ordered by measured value rather than by how interesting it is.
 
 What I would not claim from this run: any latency number. Candidate count is the input to latency, and the two are only proportional once you fix a fetch path, a verifier and a machine. I measured the input.
 
+## Who writes the query decides everything
+
+Every number above uses regexes mined from `re.compile` calls in Python source. Those are string-processing utilities rather than searches, and nobody greps a repo for `\s+`. So I went and found the searches that coding agents actually run, by pulling `grep` invocations out of published [OpenHands](https://huggingface.co/datasets/nebius/SWE-rebench-openhands-trajectories) and [SWE-agent](https://huggingface.co/datasets/nebius/SWE-agent-trajectories) trajectories. 1,079 distinct patterns from 2,400 agent runs.
+
+<QueryShapes />
+
+| minimum literal |        agent queries | human `re.compile` |
+| --------------- | -------------------: | -----------------: |
+| 3 characters    | **96.3%** filterable |              48.2% |
+| 4 characters    |                90.9% |              39.0% |
+| 8 characters    |                53.1% |              20.7% |
+
+Observations:
+
+- **The fallback rate collapses from 51.8% to 3.7%.** Agents search for identifiers, so `GetEdk2RelativePathFromAbsolutePath` and `default_parameter_values` and `class Barrier|class WireCut`, where a person writing `re.compile` is describing a shape like `(.)([A-Z][a-z]+)`.
+- **Their literals run longer too**, a median of 9 characters against 7.
+
+That one swap moves the aggregate speedup over a full scan from **2.1x to 11.4x** at 8,000 documents, for all three indexes. The old ceiling was never the index, it was the half of the query set that no index can help.
+
+| aggregate speedup vs full scan | human queries | agent queries |
+| ------------------------------ | ------------: | ------------: |
+| dense trigram                  |          2.1x |     **11.4x** |
+| TopK sparse grams              |          2.1x |     **11.4x** |
+| token + bigram                 |          2.0x |     **10.7x** |
+
+Observations:
+
+- **A 3.7% fallback rate still costs half the available speedup.** The filterable slice alone reaches 24x, and the aggregate lands at 11.4x, because each unfilterable query costs about 24x more than a filtered one. The fallback rate punches well above its share.
+- **The three indexes stay tied.** Realistic queries raise the whole field rather than separating it.
+
+### The agent queries found a bug the human ones hid
+
+`names\[0\]` leaked under token plus bigram: 7 matching documents, 0 candidates returned. The cause is a gap I had identified in the design and not guarded. I derived boundary-crossing trigrams from the token-bigram index, which only sees pairs, but a trigram can span **three** tokens when the middle one is a single character. `names[0]` tokenises with `[`, `0` and `]` as separate tokens, so the trigram `[0]` belongs to no pair and the documents holding it were dropped.
+
+Human patterns never had the punctuation density to trigger it. The fix is to derive the boundary trigrams by walking the token stream instead, which is sound for any token length. That is the second time realistic data has caught a soundness bug that clean-looking numbers hid.
+
 ## Limitations
 
 - **4,000 documents is small.** Trigram AND is more selective on a small corpus because posting lists are short, so the 1.3x false-positive figure will rise with scale and the adjacency argument may recover some ground. This is the single thing I would rerun first, at 1M documents.
@@ -247,6 +287,7 @@ python experiments/regex-filter/report.py          # per-class breakdown
 - **I predicted a 5.2x sub-word win and got none.** The model assumed dense trigrams return 8x the true matches and they return 1.3x, because the median mined literal is 6 characters and four ANDed trigrams are already nearly exact. The adjacency argument is sound and describes a case this workload barely contains.
 - **53.5% of real regexes have no literal any of these indexes can use**, so they scan everything under every method. That fallback rate deserves to sit next to any speedup number, and it overstates the case for a code-search product whose users type identifiers.
 - **Word-aligned token filtering alone covers 15.2% of patterns and is unsound on code until the per-word normalisation runs at index time as well as query time.** The bigram index and the vocab sidecar are what make the approach work, not an extra on top of it.
+- **Who writes the regex matters more than which index you pick.** Patterns mined from `re.compile` calls in source are 48.2% filterable, and real coding-agent `grep` searches are 96.3%. That one swap moves every index from 2.1x over a full scan to 11.4x, because agents search for identifiers where source-code regexes describe shapes.
 - **Against a plain dense trigram index the win is narrow, and it is about marginal cost.** Token plus bigram is 1.43x smaller in total postings, 2.94x slower to build, and tied on query time at 0.20 ms against 0.19 ms. The argument that survives is marginal: the token unigram index already exists to serve BM25, so adding regex costs 1,547,278 postings for the bigram index where a trigram index costs 3,514,896 from scratch, 2.27x more. Without an existing token index, dense trigram is the better choice.
 - **Sparse grams lose to dense trigrams too, by more than they lose to token postings.** Dense trigram beats them 2.28x on postings, 8.70x on build time and 2.11x on query time, against token plus bigram's 3.25x, 2.95x and 2.00x. Nothing about the token representation is what defeats sparse gram selection.
 - **Speedup depends entirely on which queries you count.** Over all patterns every index is 2.1x to 2.4x faster than a full scan, because the unfilterable half drags the mean down. Over the filterable 46.5% the same indexes reach 36.5x to 50.0x, the same order as TopK's 55.3x. Quoting either number without the other is misleading.

@@ -17,6 +17,8 @@ import SpladeVsIF from './SpladeVsIF'
 import TokenCompressionPipeline from './TokenCompressionPipeline'
 import TokenCompressionAnimated from './TokenCompressionAnimated'
 import TokenSearchAnalyzer from './TokenSearchAnalyzer'
+import RegexChopper from './RegexChopper'
+import QueryShapes from './QueryShapes'
 import StemExpandHero from './StemExpandHero'
 import SimilarityGate from './SimilarityGate'
 import CompressionWidget from './CompressionWidget'
@@ -30,6 +32,10 @@ import LoadModelAnimated from './LoadModelAnimated'
 import CoordinatedOmission from './CoordinatedOmission'
 import ScoreHistogram from './ScoreHistogram'
 import { ClosedLoopChart, OpenLoopChart, BadHarnessChart } from './LoadTestCharts'
+import WordpieceSplit from './WordpieceSplit'
+import ThreeChannels from './ThreeChannels'
+import PieceDerivation from './PieceDerivation'
+import WeightHandoff from './WeightHandoff'
 import Term from './Term'
 
 export const MDXComponents = {
@@ -49,6 +55,8 @@ export const MDXComponents = {
   TokenCompressionPipeline,
   TokenCompressionAnimated,
   TokenSearchAnalyzer,
+  RegexChopper,
+  QueryShapes,
   StemExpandHero,
   SimilarityGate,
   CompressionWidget,
@@ -64,6 +72,10 @@ export const MDXComponents = {
   ClosedLoopChart,
   OpenLoopChart,
   BadHarnessChart,
+  WordpieceSplit,
+  ThreeChannels,
+  PieceDerivation,
+  WeightHandoff,
   Term,
   wrapper: ({ components, layout, ...rest }) => {
     const Layout = require(`../layouts/${layout}`).default
