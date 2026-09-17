@@ -1,84 +1,114 @@
 ---
 title: 'Finding and working at an early stage startup'
 date: '2022-03-16'
-lastmod: '2022-06-21'
+lastmod: '2026-09-17'
 tags: ['side-project', 'profession', 'branding']
 draft: true
-summary: ''
+summary: 'How to pick an early stage startup, how to get in, and the pay and equity traps to avoid. Everything I learnt from doing it myself.'
 images: ['/static/images/blogs/productivity.jpg']
 authors: ['kshivendu']
 ---
 
-This is going to be long post but I'm gonna put almost all my learnings here. I'll try to keep it updated as I learn more. So please dare to read it till the end. I hope it helps you in some way.
+A lot of my college juniors ask me the same questions, and I keep seeing them repeat the same mistakes. So I decided to write all of it down in one place.
 
-One of my mentors once told me that growth of working at a company is a step function of the funding rounds. So let's divide companies based on funding stages
+Everything below is what I've learnt about finding and working at early stage startups, mostly in the Indian market. I'll keep updating it as I learn more. This will be a long post but I hope it helps you in some way.
 
-## Funding stages:
+> Looking for TL;DR? Skip to [key takeaways](#key-takeaways)
 
-- Pre-seed: Raised upto 150k, 2-4 people team, Little to no users
-- Seed: Raised upto 3-5M$, 5-15 people team, Few users (including unpaid) but no clarity of long term revenue
-- Series A: Raised 10-30M$, 20-100 people team, Good number of users with some clarity of revenue and PMF (product market fit)
+## Is this path for you
 
-Anything beyond this (i.e. Series B, C, ..., IPO) shouldn't be called an early stage startup. They should be called scale-ups or MNCs.
-
-I'd personally advice freshers to avoid joining anything that's before Series A. There will be little to no mentorship (which you need in your early career irrespective of how good you think you're). But if you're really confident about the product and the team, give it a shot.
-
-## Why consider the startup engineer path?
+You'll probably like it if:
 
 - You want to grow fast and see the larger picture of the tech and possibly the business.
-- You want to consider starting your own company in the future.
+- You want to consider starting your own company in future.
 - You cannot sit idle and do nothing. You live by the impact of your work and that's what drives you.
-- And most importantly, you're willing to take (calculated) risks, work hard, and possibly getting not-the-highest pay in the early years of your career because you trust in compounding nature of knowledge and money. This can feel extra difficult the moment your friends are making a little more than you while also having a better "work-life balance". But remember, you're playing the long-term game here. If you don't wish to do this, you don't need to read further.
+- You're willing to take calculated risks, work hard, and possibly not get the highest pay in the early years of your career, because you trust in the compounding nature of knowledge and money.
 
-Having said this, I'd say there are few good teams at MNCs where you can get to learn a lot - but it's just that in a big company you generally have less say in the team/product you work with. And if you want to join an MNC, try to see if you can join a new product because the reason why most teams in MNCs are slow is because the core tech is mostly already built and most of the effort goes into adding small features, maintaining, or selling it to more customers. Adding to this, Amazon is an MNC with many teams which make you grow almost like a startup - you may consider that if you want something in between. But I personally don't like their culture based on what I know from my friends.
+That last one is the real filter. It feels extra difficult the moment your friends are making a little more than you while also having a better "work-life balance". You're playing the long-term game here. If you don't wish to do this, you don't need to read further.
 
-To add, you can always switch between the two (but you need match their expectations in terms of skills and prove it well in the interview). I have seen people who have worked at startups for several years and then switched to MNCs ([Aprit Bhayani](https://www.linkedin.com/in/arpitbhayani/) is a great example but some of my batchmates have done the same) and vice-versa ([Shobhit Gupta](https://www.linkedin.com/in/shobhitgupta10/) from my time at FamPay who joined after working at WhatsApp, Uber, etc).
+Having said this, there are a few good teams at MNCs where you can learn a lot. It's just that in a big company you generally have less say in the team or product you work with. If you do want to join an MNC, see if you can join a new product, because the reason most MNC teams are slow is that the core tech is already built and most of the effort goes into adding small features, maintaining, or selling it to more customers. Amazon is an MNC with many teams that make you grow almost like a startup, so you may consider that if you want something in between. But I personally don't like their culture based on what I know from my friends.
 
-## Building a good profile:
+You can always switch between the two, as long as you match their expectations in terms of skills and prove it in the interview. I have seen people work at startups for several years and then switch to MNCs ([Arpit Bhayani](https://www.linkedin.com/in/arpitbhayani/) is a great example, and so have some of my batchmates), and I've seen the reverse too ([Shobhit Gupta](https://www.linkedin.com/in/shobhitgupta10/) joined FamPay while I was there, after WhatsApp, Uber, and others).
 
-Disclaimer: These are general advices that can help you build a good profile but you don't need to do all of them.
+## Which funding stage to join
 
-- Be good with system design. I'd suggest watching videso of ByteByteGo, Hussein Nasser, and Arpit Bhayani for this. Furthermore, these are some of the important topics:
+One of my mentors once told me that growth of working at a company is a step function of the funding rounds. So let's divide companies based on funding stages. Rough bands, so treat them as approximate:
 
-  1. Databases (very important):
-     - Must know: Schemas, Normalization, Indexes, Joins, ACID properties (esp. Isolation), SQL vs NoSQL
-     - Good to know: Sharding, Partitioning, Replication, Transactions, CAP theorem
-  2. Networking:
-     - Must know: TCP vs UDP, HTTP vs HTTPS, DNS, What happens when you type a google.com in the browser
-     - Good to know: RPC vs gRPC, Load Balancing, Reverse proxy
-  3. Operating systems:
-     - Must know: Processes vs Threads, Concurrency vs Parallelism
-     - Good to know: Scheduling, Deadlocks, Virtualization of memory, Paging
-  4. Object oriented design:
-     - Must know: Inheritance, SOLID principles
-     - Good to know: Design patterns
+| Stage    | Raised      | Team size     | Users and revenue                                             |
+| -------- | ----------- | ------------- | ------------------------------------------------------------- |
+| Pre-seed | up to $150k | 2-4 people    | Little to no users                                            |
+| Seed     | $3-5M       | 5-15 people   | Few users (including unpaid), no clarity on long term revenue |
+| Series A | $10-30M     | 20-100 people | Good number of users, some clarity on revenue and PMF         |
 
-- Be decent with DSA but you don't need to be super good. Generally speaking, the smaller the startup, the easier the DSA round (infact, many startups don't ask DSA at all - search for "India" in this [list](https://github.com/poteto/hiring-without-whiteboards)). Being good enough with Medium level questions of arrays & hashmap, two pointers, linked list, stacks, backtracking, bit manipulation, and common tree/graph/dp questions is sufficient for most startups. Remember competitive programming is very different from DSA. Codeforces/Codechef is competitive programming while DSA is Leetcode. I'd suggest refer [Neetcode](https://neeetcode.com/) for DSA and solve 150 questions from that. Each of them have a dedicated solution video which is great.
-- Try to crack internships while you're still in college - the more the better for the long run.
-- Try to maintain a good Github profile. Apart from building and contributing to projects, you can write blogs like me using Github. It will help you think better, reflect, and improve your github commit history.
-- Google Summer of Code or contributions to popular open source projects is very helpful in getting interviews at good startups. Many internship/job positions explicitly mention that you get a preference if you have a good open source profile.
-- Prepare a Good CV that highlights your internships, projects, and achievements.
+Anything beyond this (Series B, C, and up to IPO) shouldn't be called an early stage startup. Those are scale-ups or MNCs.
 
-## Pitfalls to avoid:
+I'd personally advise freshers to avoid joining anything before Series A. There will be little to no mentorship, which you need in your early career irrespective of how good you think you are. A 4-person company doesn't have any to spare. But if you're really confident about the product and the team, give it a shot.
 
-- Be very critical about the startup you're joining. It's very easy to get carried away by the hype and the "vision" of the company (Especially for startups that are before Series B funding). Do your research and talk to people who have worked there. Ask them about the culture, the work, the team, the founders, the vision, the funding, the growth, the pay, the perks, the work-life balance, etc. Unfortunately, most startups are a mess, pay very low, and don't grow fast enough. Prevention is better than cure.
-- You don't have to cross all the boxes out of my advices. I always say, `P(getting a job) = P(skills >= threshold for job) * P(luck)`. Here luck means set of questions thrown at you, your confidence, your health, interviewer's style, etc. It's really hard to control the luck part, so you must keep continously upskilling (so you almost always cross threshold) and keep giving interviews (so you increase your chances of getting lucky).
-- Never settle for less payscale because founders promise "growth" and stocks that are "worth" millions of dollars.
-  - Always be well paid (especially your base pay in case of startups) throughout your career because when you're looking for a job change, almost all the companies ask for your current payscale and give raise on that. If your current payscale is low, most companies will try to lowball you.
-  - Join a startup with the expectation that your stocks won't materialize and all you'll get is base pay + high rate compounding of skills. It's the growth that you're after, not the million $ stocks. If stocks materialize, that's great, but don't bet on it.
-  - When I say you should join a startup for growth, I really mean it. **Not all startups grow equally well/fast. It's very important that you join a company that is growing fast so you can grow with it as well**. You can stay in touch with people at other good startups and assess if yours is actually a good one. Join local tech meetups and make friends who work at the best startups.
-- Notice period must be `<=2 Month` (ideal is `1 month`). Anything more than that can hinder you from leaving if the company didn't turn out to be what you hoped for.
-- Having said this, I'd strongly suggest you to be loyal to your company if you believe it's actually a good one. No company is perfect. Startups are far from perfect and you need to fire-fight every day.
+## How to judge a startup before you sign
 
-## Extra suggestions:
+Most startups are a mess, pay very low, and don't grow fast enough. Prevention is better than cure, so be very critical about the one you're joining. It's very easy to get carried away by the hype and the "vision", especially before Series B. Do your research and talk to people who have worked there.
 
-- Prefer companies with a serial founder and look at how their previous company did and what their ex-employees are doing now. There are exception to this if you believe the founder is young but really smart, kind, and has a good vision.
-  - Special note: Don't fall for pedigree college/companies of the founders (IITs, IIMs, FAANG, etc). I can assure you it doesn't increase chances of success in most cases.
-- Try to find good mentors along the way. Look upto people who are 5-10 years (anything more is hard to relate, anything less won't give you much insights) ahead of you and stay in touch with them. Ideally, these should be the people like whom you want to be in the future. For me, [Valentin Lorentz](https://github.com/progval) (My GSoC Mentor), [Vinod Bollini](https://www.linkedin.com/in/vinodb) (Startup founder), [Nirant Kalsiwal](https://www.linkedin.com/in/nirant/) (NLP / Search Engineer), [Andrey Vasnetsov](https://www.linkedin.com/in/andrey-vasnetsov-75268897/) (Qdrant, CTO) have been great inspirations and they have helped me a lot in my journey. I'm really grateful to them.
+I'd judge it on three things:
 
-## Some interesting profiles:
+- **The team.** Who left in the last year and why. Culture and work-life balance answers are honest only from people who have already left.
+- **The money.** How much runway is left, whether revenue is real and growing, and what the pay bands look like.
+- **The founders.** What they built before, and what their ex-employees are doing now.
 
-- Nirant Kalsiwal
-- Aprit Bhayani
-- CTOs of [Pocket.fm](https://www.linkedin.com/in/prateek-dixit-08a80939/)
-- Shobhit Gupta
+On founders specifically, prefer a serial founder and look at how their previous company did. There are exceptions if you believe the founder is young but really smart, kind, and has a good vision. Note that you shouldn't fall for the pedigree college or company of the founders (IITs, IIMs, FAANG). I can assure you it doesn't increase chances of success in most cases.
+
+When I say you should join a startup for growth, I really mean it. **Not all startups grow equally well or fast. It's very important that you join a company that is growing fast so you can grow with it as well.** Staying at a flat startup gets you the startup pay without the startup growth. Stay in touch with people at other good startups and assess if yours is actually a good one. Join local tech meetups and make friends who work at the best ones.
+
+## Building a profile that gets you interviews
+
+These are general advices that can help you build a good profile. You don't need to do all of them.
+
+**Be good with system design.** I'd suggest watching videos of ByteByteGo, Hussein Nasser, and Arpit Bhayani. The topics that come up most:
+
+| Area                       | Must know                                                                              | Good to know                                                   |
+| -------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Databases (most important) | Schemas, normalization, indexes, joins, ACID properties (esp. isolation), SQL vs NoSQL | Sharding, partitioning, replication, transactions, CAP theorem |
+| Networking                 | TCP vs UDP, HTTP vs HTTPS, DNS, what happens when you type google.com in the browser   | RPC vs gRPC, load balancing, reverse proxy                     |
+| Operating systems          | Processes vs threads, concurrency vs parallelism                                       | Scheduling, deadlocks, virtual memory, paging                  |
+| Object oriented design     | Inheritance, SOLID principles                                                          | Design patterns                                                |
+
+**Be decent with DSA, you don't need to be super good.** Generally speaking, the smaller the startup, the easier the DSA round. Many startups don't ask DSA at all, search for "India" in this [list](https://github.com/poteto/hiring-without-whiteboards). Being good enough with medium level questions on arrays and hashmaps, two pointers, linked lists, stacks, backtracking, bit manipulation, and common tree/graph/DP questions is sufficient for most startups. Note that competitive programming is very different from DSA. Codeforces and CodeChef are competitive programming, Leetcode is DSA. I'd suggest referring to [Neetcode](https://neetcode.io/) and solving the 150 questions there, each has a dedicated solution video which is great.
+
+**Crack internships while you're still in college.** The more the better for the long run.
+
+**Maintain a good GitHub profile.** Apart from building and contributing to projects, you can write blogs like me using GitHub. It will help you think better, reflect, and improve your commit history at the same time.
+
+**Do open source.** Google Summer of Code or contributions to popular projects is very helpful in getting interviews at good startups. Many internship and job postings explicitly mention a preference for a good open source profile.
+
+**Prepare a CV that highlights your internships, projects, and achievements.**
+
+You don't have to tick every box above. I always say `P(getting a job) = P(skills >= threshold for job) * P(luck)`, where luck means the set of questions thrown at you, your confidence, your health, the interviewer's style. It's really hard to control the luck part, so keep continuously upskilling (so you almost always cross the threshold) and keep giving interviews (so you increase your chances of getting lucky).
+
+## Money, stocks, and the notice period
+
+Never settle for a lower payscale because founders promise "growth" and stocks that are "worth" millions of dollars.
+
+- **Always be well paid, especially your base pay.** When you're looking for a job change, almost all companies ask for your current payscale and give a raise on top of it. If your current payscale is low, most companies will try to lowball you. The damage follows you into every future offer.
+- **Assume your stocks won't materialize.** Join expecting base pay plus a high compounding rate of skills. It's the growth you're after. If the stocks materialize that's great, but don't bet on it.
+- **Notice period must be `<=2 months`, ideally `1 month`.** Anything more can stop you from leaving if the company doesn't turn out to be what you hoped for.
+
+Having said all this, I'd strongly suggest being loyal to your company if you believe it's actually a good one. No company is perfect. Startups are far from perfect and you need to fire-fight every day.
+
+## Find mentors 5-10 years ahead of you
+
+Look up to people who are 5-10 years ahead of you and stay in touch with them. Any more than that and it's hard to relate, any less and you won't get many insights. Ideally these should be people like whom you want to be in future.
+
+For me, [Valentin Lorentz](https://github.com/progval) (my GSoC mentor), [Vinod Bollini](https://www.linkedin.com/in/vinodb) (startup founder), [Nirant Kalsiwal](https://www.linkedin.com/in/nirant/) (NLP and search engineer), and [Andrey Vasnetsov](https://www.linkedin.com/in/andrey-vasnetsov-75268897/) (CTO, Qdrant) have been great inspirations and have helped me a lot in my journey. I'm really grateful to them.
+
+Some other profiles worth following:
+
+- [Arpit Bhayani](https://www.linkedin.com/in/arpitbhayani/), for the startup to MNC path and his system design content
+- [Shobhit Gupta](https://www.linkedin.com/in/shobhitgupta10/), for the MNC to startup path
+- [Prateek Dixit](https://www.linkedin.com/in/prateek-dixit-08a80939/), CTO of Pocket.fm
+
+## Key Takeaways
+
+- **Your growth is a step function of the company's funding rounds.** Pick a company that is actually raising and growing, because a flat startup gives you the startup pay without the startup growth.
+- **As a fresher, skip anything before Series A unless you're sure about the team.** Mentorship is the one thing you can't get back later, and a 4-person company has none to spare.
+- **Negotiate base pay as if the equity is worth zero.** Your next offer is anchored on your current one, so a low base follows you for years.
+- **`P(getting a job) = P(skills >= threshold) * P(luck)`.** You only control the first term, so keep upskilling and keep interviewing.
+- **Find mentors 5-10 years ahead of you.** Closer and they haven't seen enough yet, further and the advice stops transferring.
