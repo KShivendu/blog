@@ -178,7 +178,13 @@ function heightAt(p) {
   return H_PHASE3
 }
 
-export default function TokenCompressionAnimated() {
+/*
+ * `palette` overrides any of the colour roles below. The site's own are green
+ * for the token path and amber for LZ4; a deck with different branding can
+ * retint without forking 1,000 lines. Unspecified roles keep the site default,
+ * and the light/dark split still applies underneath.
+ */
+export default function TokenCompressionAnimated({ palette }) {
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
@@ -269,20 +275,22 @@ export default function TokenCompressionAnimated() {
   }, [shouldPlay])
 
   const MONO = 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)'
-  const accent = dark ? '#34d399' : '#047857'
-  const accentInk = dark ? '#08110c' : '#ffffff'
-  const bg = dark ? '#0d1310' : '#ffffff'
-  const divider = dark ? '#1e2822' : '#e0e4e1'
-  const textMain = dark ? '#dde6e0' : '#14161a'
-  const textMuted = dark ? '#8a968e' : '#5f6570'
-  const byteFill = dark ? 'rgba(255,255,255,0.04)' : '#f0f2f0'
-  const byteStroke = dark ? '#38473e' : '#c8cfc9'
-  const byteText = dark ? '#8a968e' : '#5f6570'
-  const tokFill = dark ? 'rgba(52,211,153,0.12)' : 'rgba(4,120,87,0.10)'
-  const tokStroke = accent
-  const tokText = dark ? '#6ee7b7' : '#065f46'
-  const lz4Accent = dark ? '#f59e0b' : '#b45309'
-  const lz4Fill = dark ? 'rgba(245,158,11,0.12)' : 'rgba(180,83,9,0.10)'
+  const P = palette || {}
+  const pick = (k, d, l) => P[k] ?? (dark ? d : l)
+  const accent = pick('accent', '#34d399', '#047857')
+  const accentInk = pick('accentInk', '#08110c', '#ffffff')
+  const bg = pick('bg', '#0d1310', '#ffffff')
+  const divider = pick('divider', '#1e2822', '#e0e4e1')
+  const textMain = pick('textMain', '#dde6e0', '#14161a')
+  const textMuted = pick('textMuted', '#8a968e', '#5f6570')
+  const byteFill = pick('byteFill', 'rgba(255,255,255,0.04)', '#f0f2f0')
+  const byteStroke = pick('byteStroke', '#38473e', '#c8cfc9')
+  const byteText = pick('byteText', '#8a968e', '#5f6570')
+  const tokFill = pick('tokFill', 'rgba(52,211,153,0.12)', 'rgba(4,120,87,0.10)')
+  const tokStroke = P.tokStroke ?? accent
+  const tokText = pick('tokText', '#6ee7b7', '#065f46')
+  const lz4Accent = pick('lz4Accent', '#f59e0b', '#b45309')
+  const lz4Fill = pick('lz4Fill', 'rgba(245,158,11,0.12)', 'rgba(180,83,9,0.10)')
 
   const tokInfo = TOKENIZER_INFO[preset.tokenizer]
   const lz4Ratio = preset.raw / preset.lz4
