@@ -1,5 +1,5 @@
 import dynamic from 'next/dynamic'
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useMemo } from 'react'
 import { useTheme } from 'next-themes'
 import { chartChrome, vizPalette } from '../lib/viz-palette'
 
@@ -227,10 +227,18 @@ function ChartImpl({
   markers,
   catTicks,
   catLabel,
+  chrome,
 }) {
   const { theme, resolvedTheme } = useTheme()
   const isDark = (resolvedTheme || theme) === 'dark'
-  const C = chartChrome(isDark)
+  /**
+   * `chrome` shallow-merges over chartChrome(isDark), so a caller can retheme the
+   * furniture -- most usefully `accent`/`accentInk`, which colour the active
+   * view/dataset toggle. The site's own charts are green; a deck or a page with a
+   * different brand can pass its own without forking the component. Only the keys
+   * given are overridden, and the light/dark base still applies underneath.
+   */
+  const C = useMemo(() => ({ ...chartChrome(isDark), ...(chrome || {}) }), [isDark, chrome])
 
   const tipRef = useRef(null)
   const [activeCat, setActiveCat] = useState(null)
