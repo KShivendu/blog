@@ -197,6 +197,26 @@ const ZERO_IDX = 5
 // `compare` mode answers "how much does a query change", not "how did the summary move".
 // Those are different questions: the delta of the medians is +10.0 on recall@10, while
 // the median of the deltas is 0, because 460 of 599 queries never move at all.
+// Reference lines that land on the same spot become one pill listing every
+// statistic that shares it, e.g. "p25 p50 +0.0". Stacking identical pills would
+// read as three findings instead of one.
+function mergeMarkers(specs, at, fmt) {
+  const groups = []
+  for (const sp of specs) {
+    const pos = at(sp.v)
+    const g = groups.find((x) => Math.abs(x.pos - pos) < 1e-6)
+    if (g) g.names.push(sp.name)
+    else groups.push({ pos, names: [sp.name], color: sp.color, v: sp.v })
+  }
+  return groups.map((g, i) => ({
+    at: g.pos,
+    label: `${g.names.join(' ')} ${fmt(g.v)}`,
+    color: g.color,
+    row: i,
+    side: i === 0 ? 'left' : undefined,
+  }))
+}
+
 function buildCompareView(rows, stats, mdef, C) {
   const n = rows.length
   const enKey = `${mdef.key}_en`
@@ -261,11 +281,23 @@ function buildCompareView(rows, stats, mdef, C) {
       { at: 7, label: '+10' },
       { at: D_CATS.length, label: '+100' },
     ],
-    markers: [
-      { at: at(q(10)), label: `p10 ${fmt(q(10))}`, color: C.p10, side: 'left' },
-      { at: at(meanD), label: `mean ${fmt(meanD)}`, color: C.mean, row: 1 },
-      { at: at(q(90)), label: `p90 ${fmt(q(90))}`, color: C.p50, row: 2 },
-    ],
+    // On recall@100 the tie block runs from about p5 to p86, so p10 and p50 land on
+    // the same spot. Coincident markers merge into one pill rather than stacking two
+    // identical ones, which makes that collapse the thing you see.
+    // p90 wears the second grey: it's a reference bound, and the argument is about
+    // the low tail. Using the ramp's p50 green here would clash with the median.
+    markers: mergeMarkers(
+      [
+        { v: q(10), name: 'p10', color: C.p10 },
+        { v: meanD, name: 'mean', color: C.mean },
+        // p50 sits below the mean: the two land within a bucket of each other on
+        // every metric, so the row order is what keeps their pills apart.
+        { v: q(50), name: 'p50', color: C.p50 },
+        { v: q(90), name: 'p90', color: C.mutedAlt },
+      ],
+      at,
+      fmt
+    ),
     series: [
       {
         name: 'queries',
