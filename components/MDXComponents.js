@@ -32,6 +32,7 @@ import StaticPipeline from './StaticPipeline'
 import LoadModelAnimated from './LoadModelAnimated'
 import CoordinatedOmission from './CoordinatedOmission'
 import ScoreHistogram from './ScoreHistogram'
+import QueryExplorer from './QueryExplorer'
 import { ClosedLoopChart, OpenLoopChart, BadHarnessChart } from './LoadTestCharts'
 import WordpieceSplit from './WordpieceSplit'
 import ThreeChannels from './ThreeChannels'
@@ -71,6 +72,7 @@ export const MDXComponents = {
   LoadModelAnimated,
   CoordinatedOmission,
   ScoreHistogram,
+  QueryExplorer,
   ClosedLoopChart,
   OpenLoopChart,
   BadHarnessChart,
