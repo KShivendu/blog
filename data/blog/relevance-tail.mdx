@@ -102,7 +102,7 @@ A +1.9 mean could be every query gaining 1.9 or it could be divided into groups:
 
 `(172 × 19.5 − 133 × 16.7) / 599 = +1.9`
 
-Let's look at the distribution of changes Δ
+So let's calculate the Δ for each query and look at that distribution:
 
 <ScoreHistogram compare />
 
@@ -113,7 +113,7 @@ The median Δ is **0** on all three metrics. So let's read the queries instead:
 - Even recall@100, the most #[forgiving](it only asks whether a relevant doc landed anywhere in the top 100, so a doc can slip 90 places and still count) metric here, hits 0 on 4 queries. One asks which state generates the most solar power, and the stemmer cuts "generates" down to #[gener](Porter gives that same stem to general, generally, generic, generous and generation), a stem it now shares with half the dictionary.
 - **9 queries** fell from a real NDCG@10 score to exactly 0 like this. A stemmer and a stoplist are textbook practice, and they still broke these queries outright.
 
-Percentiles stop helping here. p25 of the change is **0** too, since 294 of the 599 queries never moved. Zero-rate is the one summary that still moves, 19.9% of queries scored 0 before and 17.2% after.
+The zero-rate improved too, **19.9%** of queries scored 0 before and **17.2%** after.
 
 <details>
 <summary>Three more ways to slice the same run</summary>
