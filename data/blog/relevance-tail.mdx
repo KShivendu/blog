@@ -186,28 +186,21 @@ Report p25, not p10. p10 pins at 0 once more than 10% of queries fail, and 20% d
 
 I timed this BM25 baseline at **3.2ms p50, 7.2ms p90**. Nobody would report only the 4.4ms mean, because the p90 is the request a real user is waiting on. A p25 relevance score is that same user's search. We just forget to report it.
 
-## So what should we report instead?
+## So what should we actually track?
 
-Improving a system and reporting one need different things.
+The queries are the real thing. Everything else in this post is a way of finding them faster.
 
-To improve it, start with real queries and why they ranked what they did. Then the shape of the distribution. Summary numbers come last. This run is why I put them in that order. Every percentile of Δ came out at 0, and only the queries told me what had broken.
+A search engineer should be able to name the queries their system fails on, the same way they can name a failing test. Those queries are the artifact. The distribution, the percentiles and the mean are all proxies for them.
 
-To report it, print p50 and p25 next to the mean. Three numbers is still few enough to remember and compare, and you get the typical query and the weak tail.
+- **The distribution** shows you where to look. A spike at 0 means go read the zeros.
+- **Win/tie/loss** shows you what a change moved, so it's what I reach for when comparing two of my own runs. It stops at what moved, so you still end up reading the queries it flags.
+- **p50, p25 and the mean** are for communicating. Three numbers fit in a message and compare across runs.
 
-Zero-rate and win/tie/loss come out of the same per-query scores if you want them. Win/tie/loss is the one to add when you're comparing two of your own runs, since it needs a baseline scored on the same queries.
-
-What each one buys you, and where it stops:
-
-| what you read          | what it tells you                     | where it stops                      |
-| ---------------------- | ------------------------------------- | ----------------------------------- |
-| mean                   | one number you can compare            | hides both tails                    |
-| percentiles            | the weak tail, in absolute terms      | goes flat when you measure a change |
-| win/tie/loss           | how many queries moved, and which way | says nothing about why              |
-| the queries themselves | why                                   | doesn't fit on a dashboard          |
+Your golden set is probably small. Mine is 599 queries and most teams have fewer. That's small enough to treat like a test suite. A query that used to work and now returns nothing is a regression, and you want to see it by name, not as a mean that moved by 1.9.
 
 > **Beyond search:** any eval with graded per-item scores, an LLM judge's rubric, a similarity score, a per-query metric, hides its tail in the mean the same way.#[\*](Binary pass/fail evals are the exception: there the mean already tells you everything.)
 
-Mean alone can't capture a distribution. We realised this for latency decades ago. Search relevance deserves the same.
+Mean alone can't capture a distribution. We realised this for latency decades ago, and search relevance deserves the same. Then go read the queries.
 
 (This fell out of benchmarking [token search](/blog/token-search), where I was macro-averaging NDCG across datasets and realised the average was quietly deciding my conclusions for me.)
 
@@ -217,3 +210,4 @@ Mean alone can't capture a distribution. We realised this for latency decades ag
 - **It hides your gains too.** Adding a stemmer and stopwords moves mean NDCG@10 by a forgettable +1.9, while 133 of 599 queries actually get worse.
 - **Report p50 and p25 next to the mean.** Higher is better for relevance, so the tail that hurts is the low end. p25 is the relevance equivalent of p90/p99 latency.
 - **Percentiles stop moving once you measure a change.** 294 of the 599 queries didn't move, so p25 and p50 of the Δ both came out at 0. Win/tie/loss, the zero-rate and the queries themselves are what showed me the damage.
+- **Track your golden queries like test cases.** Mine is 599 queries and most sets are smaller. A query that used to work and now returns nothing is a regression you should see by name, not as a mean that moved by 1.9.
