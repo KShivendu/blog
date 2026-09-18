@@ -37,9 +37,16 @@ precise version back even if it costs words. When one correctness error is flagg
 the rest of the same pass for the same class of mistake.
 
 **Glossary tooltips are `#[phrase](explanation)`.** The remark plugin scans plain text
-nodes only, so the explanation cannot contain backticks (they become `inlineCode` nodes
-and split the pattern) or parentheses (the regex stops at the first one). Write the
-explanation in plain prose, and check it rendered rather than assuming.
+nodes only, so the explanation cannot contain backticks, `**bold**` or parentheses.
+Markdown turns the first two into their own nodes before the plugin runs, which splits
+the pattern, and the regex stops at the first parenthesis. All three fail silently,
+leaving the literal `#[...](...)` on the page, so check it rendered rather than assuming.
+
+**When an explanation needs markup, write the component directly:**
+`<Term def="Porter gives that **same** stem">gener</Term>`. `<Term>` renders `**bold**`,
+`` `code` `` and `_italics_` inside the explanation itself, so this path has no
+restriction. Parentheses are fine here too. Keep `#[]()` for the plain ones, which is
+most of them.
 
 **Finish every example you start.** Never name a transformation or comparison and leave
 the values out.
