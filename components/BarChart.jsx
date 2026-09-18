@@ -294,10 +294,8 @@ function ChartImpl({
   const activeView =
     views && views.length ? views[Math.min(viewIdx, views.length - 1)] : { categories, series }
   const activeDatasets = activeView.datasets
-  const activeDataset =
-    activeDatasets && activeDatasets.length
-      ? activeDatasets[Math.min(datasetIdx, activeDatasets.length - 1)]
-      : null
+  const nDatasets = activeDatasets ? activeDatasets.length : 0
+  const activeDataset = nDatasets ? activeDatasets[Math.min(datasetIdx, nDatasets - 1)] : null
   const activeVariants = activeDataset?.variants
   // Same mobile-Focus-default idea as the view-level one above, but for
   // charts where All/Focus is a nested variant instead of a top-level view
