@@ -115,16 +115,20 @@ The median Δ is **0** on all three metrics. However let's look at the reality:
 - recall@100 is the most #[forgiving](it only asks whether a relevant doc landed anywhere in the top 100, so a doc can slip 90 places and still count) metric and still shows **84 wins against 32 losses**. On 4 of those the score fell to **0**, so every relevant doc was pushed past rank 100. One asks which state generates the most solar power, and the stemmer cuts "generates" down to #[gener](Porter gives that same stem to general, generally, generic, generous and generation), a stem it now shares with half the dictionary.
 - Queries swing the other way too, 0 → 100 (hover a bar to see which).
 
-Reported properly, that run is:
+Percentiles did the work in the first half of this post. Against a change they go flat:
 
-| NDCG@10   |  word | word_en |        Δ |
-| --------- | ----: | ------: | -------: |
-| mean      |  52.5 |    54.5 |     +1.9 |
-| p50       |  55.4 |    59.2 |     +3.7 |
-| p25       |  21.9 |    26.4 | **+4.5** |
-| zero-rate | 19.9% |   17.2% |  −2.7 pp |
+| NDCG@10 | word | word_en | Δ of the percentile | percentile of the Δ |
+| ------- | ---: | ------: | ------------------: | ------------------: |
+| mean    | 52.5 |    54.5 |                +1.9 |                +1.9 |
+| p50     | 55.4 |    59.2 |                +3.7 |            **+0.0** |
+| p25     | 21.9 |    26.4 |                +4.5 |                +0.0 |
+| p10     |  0.0 |     0.0 |                +0.0 |               −11.7 |
 
-The mean is the smallest number in that Δ column, and p25 moves 2.4× as far.
+The mean is the only row where those two columns agree, since the mean of the differences is the difference of the means. Every other statistic answers a different question depending on which one I compute.
+
+294 of the 599 queries never moved, so every percentile in the middle of the Δ distribution is 0 by construction. On recall@100, where 483 never move, even p10 comes out at 0, and the mean is the only summary left with a number in it.
+
+Zero-rate still moves, 19.9% of queries scored 0 before and 17.2% after. Past that I had to count the queries that hit zero and read them.
 
 Then there's **win/tie/loss: 172/294/133**. It needs a baseline scored on the same queries, which is why it rarely gets reported. 56% of the queries that moved got better, and +1.9 doesn't say that.
 
@@ -158,7 +162,7 @@ export const deltaRoles = [
 <BarChart
   orientation="horizontal"
   title="One improvement, six ways to measure it: recall@10, word → word_en"
-  subtitle="how far each statistic moved. the gain lives in p25/p50; p10, p75 and p90 are saturated"
+  subtitle="how far each statistic moved. the gain lives in p25/p50, and p10, p75 and p90 are saturated"
   valueLabel="move in recall@10 (Δ)"
   valueMax={12}
   valueTicks={[0, 3, 6, 9, 12]}
@@ -176,16 +180,16 @@ export const deltaRoles = [
 
 Observations:
 
-- The mean smears the gain across every query (**+2.2**); the median reads it where the queries can actually move (**+10.0**, 4.6×).
+- The mean smears the gain across every query (**+2.2**). The median reads it where the queries can actually move (**+10.0**, 4.6×).
 - p10, p75 and p90 all sit at +0.0 because they're saturated, p10 at 0 and the other two at 100.
 
 The pattern holds across metrics:
 
-| metric     | mean Δ | where it shows up                                                         |
-| ---------- | -----: | ------------------------------------------------------------------------- |
-| recall@10  |   +2.2 | median jumps **50 → 60**, a **+10.0 move (4.6×)**; p75, p90 pinned at 100 |
-| NDCG@10    |   +1.9 | p25 / p50 / p75 all move ~2× the mean (+3.7 to +4.5)                      |
-| recall@100 |   +2.8 | median already 100, so the gain lands in **p25: 50 → 63 (+12.6, 4.5×)**   |
+| metric     | mean Δ | where it shows up                                                                       |
+| ---------- | -----: | --------------------------------------------------------------------------------------- |
+| recall@10  |   +2.2 | median jumps **50 → 60**, a **+10.0 move (4.6×)**, while p75 and p90 stay pinned at 100 |
+| NDCG@10    |   +1.9 | p25 / p50 / p75 all move ~2× the mean (+3.7 to +4.5)                                    |
+| recall@100 |   +2.8 | median already 100, so the gain lands in **p25: 50 → 63 (+12.6, 4.5×)**                 |
 
 The gain lands wherever the queries still have room to move, and that percentile shifts 2-5× as far as the mean.
 
@@ -203,11 +207,20 @@ I timed this BM25 baseline at **3.2ms p50, 7.2ms p90**. Nobody would report only
 
 Improving a system and reporting one need different things.
 
-To improve it, start with real queries and why they ranked what they did. Then the shape of the distribution. Summary numbers come last.
+To improve it, start with real queries and why they ranked what they did. Then the shape of the distribution. Summary numbers come last. This run is why I put them in that order. Every percentile of Δ came out at 0, and only the queries told me what had broken.
 
 To report it, print p50 and p25 next to the mean. Three numbers is still few enough to remember and compare, and you get the typical query and the weak tail.
 
-Zero-rate and win/tie/loss come out of the same per-query scores if you want them. Win/tie/loss earns its keep when you're comparing two of your own runs, since it needs a baseline scored on the same queries.
+Zero-rate and win/tie/loss come out of the same per-query scores if you want them. Win/tie/loss is the one to add when you're comparing two of your own runs, since it needs a baseline scored on the same queries.
+
+What each one buys you, and where it stops:
+
+| what you read          | what it tells you                     | where it stops                      |
+| ---------------------- | ------------------------------------- | ----------------------------------- |
+| mean                   | one number you can compare            | hides both tails                    |
+| percentiles            | the weak tail, in absolute terms      | goes flat when you measure a change |
+| win/tie/loss           | how many queries moved, and which way | says nothing about why              |
+| the queries themselves | why                                   | doesn't fit on a dashboard          |
 
 > **Beyond search:** any eval with graded per-item scores, an LLM judge's rubric, a similarity score, a per-query metric, hides its tail in the mean the same way.#[\*](Binary pass/fail evals are the exception: there the mean already tells you everything.)
 
@@ -220,3 +233,4 @@ Mean alone can't capture a distribution. We realised this for latency decades ag
 - **A good average can hide queries that are hurting real users.** A mean of 50 could be every query scoring 50, or half the queries scoring 100 and half scoring 0.
 - **It hides your gains too.** Adding a stemmer and stopwords moves mean NDCG@10 by a forgettable +1.9, while 133 of 599 queries actually get worse.
 - **Report p50 and p25 next to the mean.** Higher is better for relevance, so the tail that hurts is the low end. p25 is the relevance equivalent of p90/p99 latency.
+- **Percentiles stop moving once you measure a change.** 294 of the 599 queries didn't move, so p25 and p50 of the Δ both came out at 0. Win/tie/loss, the zero-rate and the queries themselves are what showed me the damage.
