@@ -79,6 +79,8 @@ Observations:
 - recall@100's median is pinned at 100 before and after, so it reads **+0.0** while p25 moves **+12.6**.
 - recall@10 is the other way round, the median jumps **+10.0** while p25 moves **+3.6**. Neither percentile wins every time, which is why I report both.
 
+I believe that the industry and academia should start reporting p50/p25 along with the mean. It's very effective.
+
 The next easiest thing you can measure is win/loss/tie counts:
 
 | metric     | win | tie | loss |   mean Δ |
@@ -87,9 +89,9 @@ The next easiest thing you can measure is win/loss/tie counts:
 | recall@10  |  79 | 460 |   60 |     +2.2 |
 | recall@100 |  84 | 483 |   32 | **+2.8** |
 
-The three mean deltas look alike. The counts behind them don't. NDCG@10 moves 305 queries to land +1.9, and recall@100 moves 116 to land +2.8. recall@100 is also the most one-sided, **72%** of the queries that moved got better, against 56% on NDCG@10.
+Three similar-looking gains, three different changes underneath. One moved a lot of queries in both directions to land there. Another moved far fewer, almost all of them upward. You'd ship those with different confidence, and the mean gives you no way to tell them apart.
 
-Win/loss/tie needs a baseline scored on the same queries, which is the only reason it isn't reported more often.
+Note that there's a drawback compared to reporting percentiles. Win/loss/tie needs a baseline scored on the same queries, so you can't quote it on its own the way you can quote a p25.
 
 Now if you wanna go deeper, you should look at the exact changes in your metrics per query.
 
