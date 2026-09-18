@@ -113,18 +113,7 @@ The median Δ is **0** on all three metrics. So let's read the queries instead:
 - Even recall@100, the most #[forgiving](it only asks whether a relevant doc landed anywhere in the top 100, so a doc can slip 90 places and still count) metric here, hits 0 on 4 queries. One asks which state generates the most solar power, and the stemmer cuts "generates" down to #[gener](Porter gives that same stem to general, generally, generic, generous and generation), a stem it now shares with half the dictionary.
 - **9 queries** fell from a real NDCG@10 score to exactly 0 like this. A stemmer and a stoplist are textbook practice, and they still broke these queries outright.
 
-Here's the part that surprised me. Percentiles carried the first half of this post, and on a change they say almost nothing. There are two ways to compute them, and they disagree:
-
-| NDCG@10 | word | word_en | subtract the two | ask each query |
-| ------- | ---: | ------: | ---------------: | -------------: |
-| mean    | 52.5 |    54.5 |             +1.9 |           +1.9 |
-| p50     | 55.4 |    59.2 |             +3.7 |       **+0.0** |
-| p25     | 21.9 |    26.4 |             +4.5 |           +0.0 |
-| p10     |  0.0 |     0.0 |             +0.0 |          −11.7 |
-
-Subtract the two medians and it looks like the median gained +3.7. Ask each query how far it moved and the typical query gained **0**, since 294 of them never moved at all. The mean is the only row where both ways agree.
-
-Zero-rate still moves, 19.9% of queries scored 0 before and 17.2% after. Past that I had to count the queries that hit zero and read them.
+Percentiles stop helping here. p25 of the change is **0** too, since 294 of the 599 queries never moved. Zero-rate is the one summary that still moves, 19.9% of queries scored 0 before and 17.2% after.
 
 <details>
 <summary>Three more ways to slice the same run</summary>
