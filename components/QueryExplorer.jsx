@@ -38,6 +38,17 @@ const S = {
   small: { font: `11px ${MONO}` },
   body: { fontSize: '12px', lineHeight: 1.45 },
   term: { padding: '0 3px', borderRadius: '2px', background: 'transparent' },
+  // fixed-width so the ranks line up into a column you can scan
+  rank: {
+    font: `11px ${MONO}`,
+    border: '1px solid',
+    borderRadius: '2px',
+    padding: '0 5px',
+    flex: 'none',
+    minWidth: '18px',
+    textAlign: 'center',
+  },
+  doc: { display: 'flex', gap: '8px', alignItems: 'baseline', marginBottom: '3px' },
 }
 
 export default function QueryExplorer() {
@@ -81,13 +92,22 @@ export default function QueryExplorer() {
           </span>
         </div>
         {r.docs.slice(0, DOCS_SHOWN).map((d, i) => (
-          <div
-            key={i}
-            style={{ ...S.body, color: d.relevant ? C.ink : C.muted, marginBottom: '3px' }}
-          >
-            {d.relevant && <strong style={{ color: P.good }}>[relevant] </strong>}
-            {d.text.slice(0, SNIPPET)}
-            {d.text.length > SNIPPET && '…'}
+          <div key={i} style={S.doc}>
+            <span
+              style={{
+                ...S.rank,
+                color: d.relevant ? P.good : C.muted,
+                borderColor: d.relevant ? P.good : C.border,
+              }}
+            >
+              {i + 1}
+            </span>
+            {/* only the judged-relevant doc earns its text; the rest are position */}
+            <span style={{ ...S.body, color: d.relevant ? C.ink : C.muted }}>
+              {d.relevant
+                ? d.text.slice(0, SNIPPET) + (d.text.length > SNIPPET ? '…' : '')
+                : 'other result'}
+            </span>
           </div>
         ))}
       </div>

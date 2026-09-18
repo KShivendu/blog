@@ -55,15 +55,16 @@ def top_docs(corpus, qrels, qid, query, analyze, n=TOP_N):
     bm = BM25([analyze(t) for _, t in items], idf_mode="lucene", k1=1.5, b=0.75)
     scored = sorted(bm.score(analyze(query)).items(), key=lambda kv: kv[1], reverse=True)[:n]
     rel = qrels.get(qid, {})
-    return [
-        {
-            "id": doc_ids[i],
-            "text": corpus[doc_ids[i]].strip().replace("\n", " ")[:240],
-            "score": round(sc, 2),
-            "relevant": bool(rel.get(doc_ids[i], 0)),
-        }
-        for i, sc in scored
-    ]
+    out = []
+    for i, sc in scored:
+        is_rel = bool(rel.get(doc_ids[i], 0))
+        doc = {"id": doc_ids[i], "score": round(sc, 2), "relevant": is_rel}
+        # the component prints a rank and a placeholder for everything else, so only
+        # the judged-relevant document's text is worth shipping to the browser
+        if is_rel:
+            doc["text"] = corpus[doc_ids[i]].strip().replace("\n", " ")[:240]
+        out.append(doc)
+    return out
 
 
 def main():
