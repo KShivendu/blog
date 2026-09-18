@@ -13,7 +13,7 @@ authors: ['kshivendu']
 
 Any serious team tracks latency as p50, p90, p99. Reporting just "our average latency is 40ms" is naive, because it hides the p99 150ms tail that's hurting real users. Yet we report search relevance as a single average NDCG all the time, and somehow that's normal. Relevance has a tail too, but the average hides it.
 
-## Distribution vs average
+## Average can't represent the distribution
 
 I ran a plain word-BM25 baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries). Instead of averaging each metric, I calculated percentiles over the per-query scores. The mean NDCG@10 is **52.5**, which _feels_ respectable, as if every query comes back roughly half-right. In reality, they range from perfect to nothing: one in five queries retrieves nothing relevant in the top 10, and the average buries every one.
 
@@ -183,6 +183,51 @@ The gain lands wherever the queries still have room to move, and that percentile
 Latency and relevance are the same problem pointed at opposite tails. For latency, higher is worse, so you watch the high end: p90, p99. For relevance, higher is better, so the tail that hurts is the low end. That's the **relevance tail**: the weaker half of your queries, which you read at p25.
 
 Report p25, not p10. p10 pins at 0 once more than 10% of queries fail, and 20% do here, so it can't show the tail moving. p25 is 21.9 on NDCG@10 and still moves when the method changes.
+
+Here is the same stemmer run read three ways. Toggle the statistic:
+
+export const tailCats = ['NDCG@10', 'recall@10', 'recall@100']
+export const tailFmt = (v) => v.map((x) => x.toFixed(1))
+export const tailView = (label, w, en) => ({
+  label,
+  title: `${label} before and after the stemmer`,
+  categories: tailCats,
+  series: [
+    {
+      name: 'word',
+      role: 'muted',
+      values: w,
+      text: tailFmt(w),
+      textPosition: 'outside',
+    },
+    {
+      name: 'word_en',
+      role: 'series0',
+      values: en,
+      text: tailFmt(en),
+      textPosition: 'outside',
+    },
+  ],
+})
+
+<BarChart
+  orientation="horizontal"
+  subtitle="plain word BM25 vs word + Porter stemmer + stopword list, 599 queries"
+  valueLabel="score (higher is better)"
+  valueMax={112}
+  valueTicks={[0, 25, 50, 75, 100]}
+  views={[
+    tailView('p25', [21.9, 13.7, 50.0], [26.4, 17.3, 62.6]),
+    tailView('p50', [55.4, 50.0, 100.0], [59.2, 60.0, 100.0]),
+    tailView('mean', [52.5, 56.3, 76.5], [54.5, 58.5, 79.3]),
+  ]}
+/>
+
+Observations:
+
+- The mean moves least on all three metrics (**+1.9**, **+2.2**, **+2.8**). Whichever percentile you pick, it moves further.
+- recall@100's median is pinned at 100 before and after, so it reads **+0.0** while p25 moves **+12.6**.
+- recall@10 is the other way round, the median jumps **+10.0** while p25 moves **+3.6**. Neither percentile wins every time, which is why I report both.
 
 I timed this BM25 baseline at **3.2ms p50, 7.2ms p90**. Nobody would report only the 4.4ms mean, because the p90 is the request a real user is waiting on. A p25 relevance score is that same user's search. We just forget to report it.
 
