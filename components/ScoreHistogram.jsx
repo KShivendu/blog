@@ -197,26 +197,6 @@ const ZERO_IDX = 5
 // `compare` mode answers "how much does a query change", not "how did the summary move".
 // Those are different questions: the delta of the medians is +10.0 on recall@10, while
 // the median of the deltas is 0, because 460 of 599 queries never move at all.
-// Reference lines that land on the same spot become one pill listing every
-// statistic that shares it, e.g. "p25 p50 +0.0". Stacking identical pills would
-// read as three findings instead of one.
-function mergeMarkers(specs, at, fmt) {
-  const groups = []
-  for (const sp of specs) {
-    const pos = at(sp.v)
-    const g = groups.find((x) => Math.abs(x.pos - pos) < 1e-6)
-    if (g) g.names.push(sp.name)
-    else groups.push({ pos, names: [sp.name], color: sp.color, v: sp.v })
-  }
-  return groups.map((g, i) => ({
-    at: g.pos,
-    label: `${g.names.join(' ')} ${fmt(g.v)}`,
-    color: g.color,
-    row: i,
-    side: i === 0 ? 'left' : undefined,
-  }))
-}
-
 function buildCompareView(rows, stats, mdef, C) {
   const n = rows.length
   const enKey = `${mdef.key}_en`
@@ -238,41 +218,12 @@ function buildCompareView(rows, stats, mdef, C) {
   const win = deltas.filter((d) => d > 1e-9).length
   const loss = deltas.filter((d) => d < -1e-9).length
 
-  // Linear-interpolated percentile, matching numpy, so the chart and the prose that
-  // quotes these numbers can't drift apart.
-  const sorted = [...deltas].sort((a, b) => a - b)
-  const q = (p) => {
-    const i = (p / 100) * (sorted.length - 1)
-    const lo = Math.floor(i)
-    const hi = Math.ceil(i)
-    return sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo)
-  }
-  const st = stats[mdef.stat]
-  const stEn = stats[`${mdef.stat}|word_en`]
-  const meanD = stEn.mean - st.mean
-  // deltas are reported x100 too, so +0.0191 reads as +1.9
-  const fmt = (v) => (v >= 0 ? `+${(v * 100).toFixed(1)}` : (v * 100).toFixed(1))
-
-  // A delta's position on this axis: the zero spike owns a whole slot, so the negative
-  // buckets sit left of it and the positive ones right, each slot one bucket wide.
-  const at = (x) => {
-    const i = bucketOf(x)
-    if (i === ZERO_IDX) return ZERO_IDX + 0.5
-    const edges = x < 0 ? D_NEG : D_POS
-    const j = x < 0 ? i : i - 6
-    const lo = edges[j]
-    const hi = edges[j + 1]
-    return i + (hi === lo ? 0.5 : (x - lo) / (hi - lo))
-  }
-
   return {
     label: mdef.label,
     title: `${mdef.label}: how much each query actually changed`,
     valueLabel: 'queries',
     catLabel: `change in ${mdef.label} (x100)`,
-    subtitle:
-      `${win} improved, ${loss} got worse, ${n - win - loss} never moved · ` +
-      `mean Δ ${fmt(meanD)} but median Δ ${fmt(q(50))} · p10 Δ ${fmt(q(10))}`,
+    subtitle: `${win} improved, ${loss} got worse, ${n - win - loss} never moved`,
     categories: D_CATS.map((b) => (b === '=0' ? 'no change' : `Δ ${mdef.label} = ${b}`)),
     catTicks: [
       { at: 0, label: '−100' },
@@ -281,23 +232,6 @@ function buildCompareView(rows, stats, mdef, C) {
       { at: 7, label: '+10' },
       { at: D_CATS.length, label: '+100' },
     ],
-    // On recall@100 the tie block runs from about p5 to p86, so p10 and p50 land on
-    // the same spot. Coincident markers merge into one pill rather than stacking two
-    // identical ones, which makes that collapse the thing you see.
-    // p90 wears the second grey: it's a reference bound, and the argument is about
-    // the low tail. Using the ramp's p50 green here would clash with the median.
-    markers: mergeMarkers(
-      [
-        { v: q(10), name: 'p10', color: C.p10 },
-        { v: meanD, name: 'mean', color: C.mean },
-        // p50 sits below the mean: the two land within a bucket of each other on
-        // every metric, so the row order is what keeps their pills apart.
-        { v: q(50), name: 'p50', color: C.p50 },
-        { v: q(90), name: 'p90', color: C.mutedAlt },
-      ],
-      at,
-      fmt
-    ),
     series: [
       {
         name: 'queries',
