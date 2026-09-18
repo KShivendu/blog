@@ -190,7 +190,7 @@ I timed this BM25 baseline at **3.2ms p50, 7.2ms p90**. Nobody would report only
 
 The queries are the real thing. Everything else in this post is a way of finding them faster.
 
-A search engineer should be able to name the queries their system fails on, the same way they can name a failing test. That list is the result of your eval. The distribution, the percentiles and the mean are summaries of it.
+A search engineer should be able to tell you what kinds of queries their system fails on. In this run it was song titles made of stopwords, and queries whose one distinctive word gets stemmed into a common one. That's the real result of an eval. The distribution, the percentiles and the mean are summaries of it.
 
 - **The distribution** shows you where to look. A spike at 0 means go read the zeros.
 - **Win/tie/loss** shows you what a change moved, so it's what I reach for when comparing two of my own runs. It stops at what moved, so you still end up reading the queries it flags.
