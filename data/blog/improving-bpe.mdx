@@ -3,7 +3,7 @@ title: 'Improving BPE'
 subtitle: 'Stop storing the space, store its absence'
 date: '2026-09-17'
 tags: ['nlp', 'compression', 'tokenization', 'internals']
-draft: false
+draft: true
 summary: 'BPE spends two vocabulary slots on every word, one with a leading space and one without. I mark the absence of a space instead, which frees ~14,000 slots and beats a properly-trained BPE baseline by 9.4% on code and 0.9% on English. Also: the baseline mistake that made my first results look 4x better than they were.'
 authors: ['kshivendu']
 ---
