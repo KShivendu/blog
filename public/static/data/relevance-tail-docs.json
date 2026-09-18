@@ -1,0 +1,286 @@
+{
+ "queries": [
+  {
+   "ds": "MSMARCO",
+   "qid": "1049867",
+   "q": "who sang here i go again",
+   "note": "the stoplist deletes here, i and again, so only sang and go reach the index",
+   "runs": {
+    "word": {
+     "terms": [
+      "who",
+      "sang",
+      "here",
+      "i",
+      "go",
+      "again"
+     ],
+     "docs": [
+      {
+       "id": "7946528",
+       "text": "For other uses, see Here I Go Again (disambiguation). Here I Go Again is a song by British rock band Whitesnake. Originally released on their 1982 album, Saints & Sinners, the song was re-recorded for their eponymous 1987 album Whitesnake. ",
+       "score": 23.11,
+       "relevant": true
+      },
+      {
+       "id": "65352",
+       "text": "kgb answers \u00bb Arts & Entertainment \u00bb Music Artists & Songs \u00bb Who sang the song never say never again, the theme to a James Bond movie. The theme song to the 1983 James Bond film 'Never Say Never Again' was performed by American singer Lani ",
+       "score": 17.47,
+       "relevant": false
+      },
+      {
+       "id": "456120",
+       "text": "To be neither here nor there of no consequence attested from 1580s. Here we go again as a sort of verbal roll of the eyes is attested from 1950. Noun phrase here and now this present life is from 1829.",
+       "score": 16.48,
+       "relevant": false
+      },
+      {
+       "id": "1334388",
+       "text": "Julie Tawny Kitaen /k\u026a\u02c8te\u026a. \u0259n/ is an American actress and media personality. She became famous in the 1980s for appearing in several hard rock videos for the band Whitesnake, including the hit Here I Go Again. Kitaen was married to Whitesn",
+       "score": 15.6,
+       "relevant": false
+      },
+      {
+       "id": "4630972",
+       "text": "I am Scott Edwards, the bass player on the original version of I Will Survive sang by Gloria Gaynor. The original writer of this song was Dino Fekaris who co-produced this song with Freddie Perren.",
+       "score": 15.56,
+       "relevant": false
+      }
+     ]
+    },
+    "word_en": {
+     "terms": [
+      "sang",
+      "go"
+     ],
+     "docs": [
+      {
+       "id": "8828449",
+       "text": "Celine C\u00e9line, dion who was no stranger to movie songs in the, 1990s  Sang My Heart Will Go , on the'film s signature song written By James horner And Will. Jennings at, First cameron did not want a song sung over the'film s ending, credits",
+       "score": 10.21,
+       "relevant": false
+      },
+      {
+       "id": "2872904",
+       "text": "Michael McDonald sang backup and played keyboards on the track. McDonald would go on to write several other songs for Loggins (and vice versa). The Gospel singer Kirk Franklin rewrote this song as Declaration (This is It). for his 2007 albu",
+       "score": 10.04,
+       "relevant": false
+      },
+      {
+       "id": "3791271",
+       "text": "Frank Sinatra sang it in 1979. A more recent, probably more popular version was recorded in 1989 by Harry Connick Jr. for the soundtrack to the film When Harry Met Sally.. \u2026 It's a great version.",
+       "score": 7.56,
+       "relevant": false
+      },
+      {
+       "id": "4630972",
+       "text": "I am Scott Edwards, the bass player on the original version of I Will Survive sang by Gloria Gaynor. The original writer of this song was Dino Fekaris who co-produced this song with Freddie Perren.",
+       "score": 7.56,
+       "relevant": false
+      },
+      {
+       "id": "8798058",
+       "text": "The Beatles released a popular version of this song in 1965 that reached #47 on the US Hot 100. It was one of their few songs where drummer Ringo Starr - a fan of country music - sang lead, and it became his showcase song.",
+       "score": 7.1,
+       "relevant": false
+      }
+     ]
+    }
+   },
+   "relevantTotal": 1,
+   "ndcg10": 100.0,
+   "ndcg10_en": 0.0
+  },
+  {
+   "ds": "NQ",
+   "qid": "test115",
+   "q": "who appoints the members of the given branch in the united states",
+   "note": "the stemmer cuts united states down to unit state",
+   "runs": {
+    "word": {
+     "terms": [
+      "who",
+      "appoints",
+      "the",
+      "members",
+      "of",
+      "the",
+      "given",
+      "branch",
+      "in",
+      "the",
+      "united",
+      "states"
+     ],
+     "docs": [
+      {
+       "id": "doc4147",
+       "text": "While most executive agencies have a single director, administrator, or secretary appointed by the President of the United States, independent agencies (in the narrower sense of being outside presidential control) almost always have a commi",
+       "score": 17.69,
+       "relevant": true
+      },
+      {
+       "id": "doc223538",
+       "text": "The Vice President of the United States (informally referred to as VPOTUS, or Veep) is a constitutional officer in the legislative branch of the federal government of the United States as the President of the Senate under Article I, Section",
+       "score": 16.46,
+       "relevant": false
+      },
+      {
+       "id": "doc2107033",
+       "text": "Officers of the United States in the executive branch are numerous; but some examples include: the Secretary of Defense, the Attorney General, the Administrator of the Environmental Protection Agency, the Director of National Intelligence, ",
+       "score": 15.97,
+       "relevant": false
+      },
+      {
+       "id": "doc32937",
+       "text": "Article One describes the Congress, the legislative branch of the federal government. Section 1, reads, \"All legislative powers herein granted shall be vested in a Congress of the United States, which shall consist of a Senate and House of ",
+       "score": 15.49,
+       "relevant": false
+      },
+      {
+       "id": "doc1927002",
+       "text": "The President of the United States has the authority to nominate members of the cabinet to the United States Senate for confirmation under Article II, Section II, Clause II of the United States Constitution.",
+       "score": 15.27,
+       "relevant": false
+      }
+     ]
+    },
+    "word_en": {
+     "terms": [
+      "appoint",
+      "member",
+      "given",
+      "branch",
+      "unit",
+      "state"
+     ],
+     "docs": [
+      {
+       "id": "doc2212270",
+       "text": "Currently, in every state, an election by the people is the method employed for the choice of the members of the Electoral College; however, any state remains free to change its manner of appointing its slate of members of the Electoral Col",
+       "score": 17.38,
+       "relevant": false
+      },
+      {
+       "id": "doc223538",
+       "text": "The Vice President of the United States (informally referred to as VPOTUS, or Veep) is a constitutional officer in the legislative branch of the federal government of the United States as the President of the Senate under Article I, Section",
+       "score": 16.95,
+       "relevant": false
+      },
+      {
+       "id": "doc3668",
+       "text": "The judicial branch is headed by the Chief Justice of the Supreme Court of Puerto Rico, currently Maite Oronoz Rodr\u00edguez. Members of the judicial branch are appointed by the governor with the advice and consent of the Senate.",
+       "score": 16.81,
+       "relevant": false
+      },
+      {
+       "id": "doc1745418",
+       "text": "Political leaders have at their disposal a great deal of patronage, in the sense that they make decisions on the appointment of officials inside and outside government (for example on quangos in the UK). Patronage is therefore a recognized ",
+       "score": 16.15,
+       "relevant": false
+      },
+      {
+       "id": "doc1400520",
+       "text": "The federal judiciary of the United States is one of the three co-equal branches of the federal government of the United States organized under the United States Constitution and laws of the federal government. Article III of the Constituti",
+       "score": 15.99,
+       "relevant": false
+      }
+     ]
+    }
+   },
+   "relevantTotal": 1,
+   "ndcg10": 100.0,
+   "ndcg10_en": 0.0
+  },
+  {
+   "ds": "MSMARCO",
+   "qid": "1028652",
+   "q": "who invented corn flakes",
+   "note": "the stemmer folds invented, invents and invention onto one term, which helps here",
+   "runs": {
+    "word": {
+     "terms": [
+      "who",
+      "invented",
+      "corn",
+      "flakes"
+     ],
+     "docs": [
+      {
+       "id": "1800205",
+       "text": "11. Honey corn flakes have the nutritional value of both honey and corn flakes. As explained above, corn flakes are rich in calcium, protein, and mineral. Honey is also a source for niacin, riboflavin, thiamin, vitamin B6, vitamin B12.",
+       "score": 18.96,
+       "relevant": false
+      },
+      {
+       "id": "4765788",
+       "text": "Kelloggs Corn Flakes\u00ae cereal is the Original & Best\u00ae cereal. Every bite of these crispy, golden flakes is just as delicious as the first. You'll be on your way to a great day when you pour a bowl of Kellogg's Corn Flakes\u00ae cereal into your b",
+       "score": 16.84,
+       "relevant": false
+      },
+      {
+       "id": "7344853",
+       "text": "Nutrition of Corn Flakes. One cup of Corn Flakes contains about 100 calories, none of which are derived from fat. Per serving, this fat-free cereal holds: 200mg of sodium. 2g of protein. 24g of carbohydrates (1g of fiber and 2.7g of added s",
+       "score": 15.84,
+       "relevant": false
+      },
+      {
+       "id": "7833608",
+       "text": "John Harvey Kellogg is best known for the invention of the famous breakfast cereal, Corn Flakes, in 1878. Originally, he called this cereal Granula, which he later changed to Granola in 1881. However, due to patent rights, he had to once ag",
+       "score": 15.74,
+       "relevant": true
+      },
+      {
+       "id": "6714731",
+       "text": "In popcorn jargon, a popped kernel of corn is known as a flake.. Two shapes of flakes are commercially important. Butterfly or snowflake flakes are irregular in shape and have a number of protruding wings. Mushroom flakes are largely ball-s",
+       "score": 15.34,
+       "relevant": false
+      }
+     ]
+    },
+    "word_en": {
+     "terms": [
+      "invent",
+      "corn",
+      "flake"
+     ],
+     "docs": [
+      {
+       "id": "7833608",
+       "text": "John Harvey Kellogg is best known for the invention of the famous breakfast cereal, Corn Flakes, in 1878. Originally, he called this cereal Granula, which he later changed to Granola in 1881. However, due to patent rights, he had to once ag",
+       "score": 20.45,
+       "relevant": true
+      },
+      {
+       "id": "1800205",
+       "text": "11. Honey corn flakes have the nutritional value of both honey and corn flakes. As explained above, corn flakes are rich in calcium, protein, and mineral. Honey is also a source for niacin, riboflavin, thiamin, vitamin B6, vitamin B12.",
+       "score": 18.23,
+       "relevant": false
+      },
+      {
+       "id": "4661403",
+       "text": "(1997) reported steam flaking improved ME values for sorghum and corn by 20.5% and 15.1%, respectively. Although the response (on a percentage basis) to flaking is higher from flaking sorghum, flaked corn remains superior to flaked sorghum ",
+       "score": 17.28,
+       "relevant": false
+      },
+      {
+       "id": "4765788",
+       "text": "Kelloggs Corn Flakes\u00ae cereal is the Original & Best\u00ae cereal. Every bite of these crispy, golden flakes is just as delicious as the first. You'll be on your way to a great day when you pour a bowl of Kellogg's Corn Flakes\u00ae cereal into your b",
+       "score": 16.86,
+       "relevant": false
+      },
+      {
+       "id": "6714731",
+       "text": "In popcorn jargon, a popped kernel of corn is known as a flake.. Two shapes of flakes are commercially important. Butterfly or snowflake flakes are irregular in shape and have a number of protruding wings. Mushroom flakes are largely ball-s",
+       "score": 15.82,
+       "relevant": false
+      }
+     ]
+    }
+   },
+   "relevantTotal": 1,
+   "ndcg10": 43.1,
+   "ndcg10_en": 100.0
+  }
+ ]
+}
