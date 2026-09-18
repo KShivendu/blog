@@ -442,13 +442,22 @@ function ChartImpl({
 
   // Linear keeps its original max (unchanged for existing usages); log spans the
   // provided floor→ceiling, defaulting from the ticks/data.
+  // Marker pills stack downward from the top of the PLOT, and bars grow up to fill
+  // it, so moving the plot down moves the bars with it and changes nothing. The
+  // headroom has to come from the value axis: each extra row of pills buys the
+  // tallest bar another 10% of ceiling to stop short of.
+  const mkRows = (resolved?.markers ?? markers ?? []).reduce(
+    (max, mk) => Math.max(max, (mk.row || 0) + 1),
+    0
+  )
+  const mkHeadroom = 1.12 + Math.max(0, mkRows - 1) * 0.1
   const vMax = isLog
     ? rValueMax != null
       ? rValueMax
       : Math.max(dataMax || 1, ...tickVals)
     : rValueMax != null
     ? rValueMax
-    : (dataMax || 1) * 1.12
+    : (dataMax || 1) * mkHeadroom
   const vMin = isLog
     ? rValueMin != null
       ? rValueMin
