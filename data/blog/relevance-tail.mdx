@@ -17,7 +17,7 @@ Any serious team tracks latency as p50, p90, p99. Reporting just "our average la
 
 I ran a plain word-BM25 baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries). Instead of averaging each metric, I calculated percentiles over the per-query scores. The mean NDCG@10 is **52.5**, which _feels_ respectable, as if every query comes back roughly half-right. In reality, they range from perfect to nothing: one in five queries retrieves nothing relevant in the top 10, and the average buries every one.
 
-(Every score here is ×100, the way IR papers report NDCG. A mean of 52.5 reads better than 0.525, and a +2.2 gain reads as a real change where +0.022 reads as rounding.)
+(Note: Every score here is ×100, the way IR papers report NDCG. A mean of 52.5 reads better than 0.525, and a +2.2 gain reads as a real change where +0.022 reads as rounding.)
 
 Let's look at the distribution.
 
@@ -25,7 +25,7 @@ Let's look at the distribution.
 
 Observations:
 
-- 119 queries score exactly 0 and 129 score exactly 100. That's **41% of all queries** sitting at the two ends, and the mean is neither.
+- 119/599 queries score exactly 0 and 129/599 score exactly 100 on ndcg@10. That's **41% of all queries** sitting at the two extreme ends.
 - Only **43 of 599** queries land within 5 of the mean (52.5), so it describes a query that barely exists.
 - Switch to recall@10 and it gets worse: **63%** of queries at the two ends, 13 near the mean.
 
@@ -90,47 +90,44 @@ Observations:
 - On recall@100 the typical query is perfect (p50 = 100), but a tail that bottoms out at p10 = 12.6 pulls the mean to **76.5**, a number no real query got.
 - The mean's error flips sign between metrics. It overstates recall@10's median (56.3 vs 50.0) and understates NDCG@10's (52.5 vs 55.4), so you can't correct for it in your head.
 
-## It hides your improvements, too
+## Understanding impact of your changes
 
 Take a real improvement: plain word BM25, then apply a Porter stemmer and a stopword list (`word_en`). It moves mean NDCG@10 by **+1.9**, a bump you'd squint at.
 
-A +1.9 mean could be every query gaining 1.9. Here it's three different groups:
+A +1.9 mean could be every query gaining 1.9 or it could be divided into groups:
 
-- **294** of the 599 queries don't move at all
-- **172** improve, by 19.5 on average
-- **133** get worse, by 16.7 on average
+- **294** of 599 queries tie
+- **172** get +19.5 on average
+- **133** get −16.7 on average
 
 `(172 × 19.5 − 133 × 16.7) / 599 = +1.9`
 
-So report percentiles of Δ, not the Δ of percentiles. Subtracting two summaries says NDCG@10's median gained +3.7. Asking each query how far it moved says it gained **0**.
+Let's look at the distribution of changes Δ
 
 <ScoreHistogram compare />
 
-The median Δ is **0** on all three metrics. However let's look at the reality:
+The median Δ is **0** on all three metrics. So let's read the queries instead:
 
-- `who sang here i go again` went from a perfect **1.0 to 0** on NDCG@10. "Here I Go Again" is a song title made of stopwords, so the stoplist deletes it and we only ever query the index for `sang go`.
-- `who appoints the members of the given branch in the united states` also went **1.0 to 0**. The stemmer cuts `united states` down to `unit state`, so unrelated stuff gets ranked too.
-- What's most surprising is that **stemmer and stopwords are considered standard but it's clear even they hurt some queries**. There's no free lunch. You must look into your data/distribution
-- **9 queries** dropped from a real NDCG@10 score to exactly 0 like that, while NDCG@10 overall shows **172 wins against 133 losses** and a p10 Δ of **−11.7**.
-- recall@100 is the most #[forgiving](it only asks whether a relevant doc landed anywhere in the top 100, so a doc can slip 90 places and still count) metric and still shows **84 wins against 32 losses**. On 4 of those the score fell to **0**, so every relevant doc was pushed past rank 100. One asks which state generates the most solar power, and the stemmer cuts "generates" down to #[gener](Porter gives that same stem to general, generally, generic, generous and generation), a stem it now shares with half the dictionary.
-- Queries swing the other way too, 0 → 100 (hover a bar to see which).
+- `who sang here i go again` went from a perfect **100 to 0** on NDCG@10. "Here I Go Again" is a song title made of stopwords, so the stoplist deletes it and we only ever query the index for `sang go`.
+- `who appoints the members of the given branch in the united states` also went **100 to 0**. The stemmer cuts `united states` down to `unit state`, so unrelated stuff gets ranked too.
+- Even recall@100, the most #[forgiving](it only asks whether a relevant doc landed anywhere in the top 100, so a doc can slip 90 places and still count) metric here, hits 0 on 4 queries. One asks which state generates the most solar power, and the stemmer cuts "generates" down to #[gener](Porter gives that same stem to general, generally, generic, generous and generation), a stem it now shares with half the dictionary.
+- **9 queries** fell from a real NDCG@10 score to exactly 0 like this. A stemmer and a stoplist are textbook practice, and they still broke these queries outright.
 
-Percentiles did the work in the first half of this post. Against a change they go flat:
+Here's the part that surprised me. Percentiles carried the first half of this post, and on a change they say almost nothing. There are two ways to compute them, and they disagree:
 
-| NDCG@10 | word | word_en | Δ of the percentile | percentile of the Δ |
-| ------- | ---: | ------: | ------------------: | ------------------: |
-| mean    | 52.5 |    54.5 |                +1.9 |                +1.9 |
-| p50     | 55.4 |    59.2 |                +3.7 |            **+0.0** |
-| p25     | 21.9 |    26.4 |                +4.5 |                +0.0 |
-| p10     |  0.0 |     0.0 |                +0.0 |               −11.7 |
+| NDCG@10 | word | word_en | subtract the two | ask each query |
+| ------- | ---: | ------: | ---------------: | -------------: |
+| mean    | 52.5 |    54.5 |             +1.9 |           +1.9 |
+| p50     | 55.4 |    59.2 |             +3.7 |       **+0.0** |
+| p25     | 21.9 |    26.4 |             +4.5 |           +0.0 |
+| p10     |  0.0 |     0.0 |             +0.0 |          −11.7 |
 
-The mean is the only row where those two columns agree, since the mean of the differences is the difference of the means. Every other statistic answers a different question depending on which one I compute.
-
-294 of the 599 queries never moved, so every percentile in the middle of the Δ distribution is 0 by construction. On recall@100, where 483 never move, even p10 comes out at 0, and the mean is the only summary left with a number in it.
+Subtract the two medians and it looks like the median gained +3.7. Ask each query how far it moved and the typical query gained **0**, since 294 of them never moved at all. The mean is the only row where both ways agree.
 
 Zero-rate still moves, 19.9% of queries scored 0 before and 17.2% after. Past that I had to count the queries that hit zero and read them.
 
-Then there's **win/tie/loss: 172/294/133**. It needs a baseline scored on the same queries, which is why it rarely gets reported. 56% of the queries that moved got better, and +1.9 doesn't say that.
+<details>
+<summary>Three more ways to slice the same run</summary>
 
 Splitting the mean into what was gained and what was given back:
 
@@ -143,9 +140,6 @@ Splitting the mean into what was gained and what was given back:
 Every mean here is a small difference between two larger numbers. NDCG@10 gives back two thirds of what it wins, recall@100 a quarter. Same-looking gains, different trades.
 
 A saturated percentile can't show a gain. NDCG@10's p90 is already at 100, so a better method moves it +0.0. The 22% of queries already scoring 100 have no room left to improve, and they dilute the mean.
-
-<details>
-<summary>The Δ of percentiles, across six statistics and all three metrics</summary>
 
 Subtracting one run's percentiles from the other's answers a different question: did the whole distribution shift?
 
