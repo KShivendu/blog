@@ -192,13 +192,13 @@ I timed this BM25 baseline at **3.2ms p50, 7.2ms p90**. Nobody would report only
 
 ## So what should we actually track?
 
-The queries are the real thing. Everything else in this post is a way of finding them faster.
+Print p50 and p25 next to the mean. That's the change most teams still haven't made, and it costs a line over scores you already have.
 
-A search engineer should be able to tell you what kinds of queries their system fails on. In this run it was song titles made of stopwords, and queries whose one distinctive word gets stemmed into a common one. That's the real result of an eval. The distribution, the percentiles and the mean are summaries of it.
+Past that, the queries are the real thing, and everything else here is a way of finding them faster. A search engineer should be able to tell you what kinds of queries their system fails on. In this run it was song titles made of stopwords, and queries whose one distinctive word gets stemmed into a common one. That's the real result of an eval.
 
+- **p50 and p25** are the two to add first. Three numbers still fit in a message and compare across runs, and the gap between them is the tail the mean hides.
 - **The distribution** shows you where to look. A spike at 0 means go read the zeros.
 - **Win/tie/loss** shows you what a change moved, so it's what I reach for when comparing two of my own runs. It stops at what moved, so you still end up reading the queries it flags.
-- **p50, p25 and the mean** are for communicating. Three numbers fit in a message and compare across runs.
 
 Your golden set is probably small. Mine is 599 queries and most teams have fewer. That's small enough to treat like a test suite. A query that used to work and now returns nothing is a regression, and you want to see it by name, not as a mean that moved by 1.9.
 
