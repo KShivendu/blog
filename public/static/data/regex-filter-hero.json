@@ -4,136 +4,28 @@
   "seed_query": "get_user\\w*",
   "docs": [
     {
-      "label": "def season(self):",
-      "text": "def season(self):\n        \"\"\"\n        Returns the year ID of the season in which this game took place.\n        Useful for week 17 January games.\n\n        :returns: An int representing the year of the season.\n        \"\"\"\n        date = self.date()\n        return date.year - 1 if date.month <= 3 else date.year"
+      "label": "def _stderr_raw(self, s):",
+      "text": "def _stderr_raw(self, s):\n        \"\"\"Writes the string to stdout\"\"\"\n        print(s, end='', file=sys.stderr)\n        sys.stderr.flush()"
     },
     {
-      "label": "def display_json(*objs, **kwargs):",
-      "text": "def display_json(*objs, **kwargs):\n    \"\"\"Display the JSON representation of an object.\n\n    Note that not many frontends support displaying JSON.\n\n    Parameters\n    ----------\n    objs : tuple of objects\n        The Python objects to display, or if raw=True raw json data to\n        display.\n    raw : bool\n        Are the data objects raw data or Python objects that need to be\n        formatted before display? [default: False]\n    \"\"\"\n    raw = kwargs.pop('raw',False)\n    if raw:\n        for obj in objs:\n            publish_json(obj)\n    else:\n        display(*objs, include=['text/plain','application/json'])"
-    },
-    {
-      "label": "def _initialize_master_working_set():",
-      "text": "def _initialize_master_working_set():\n    \"\"\"\n    Prepare the master working set and make the ``require()``\n    API available.\n\n    This function has explicit effects on the global state\n    of pkg_resources. It is intended to be invoked once at\n    the initialization of this module.\n\n    Invocation by other packages is unsupported and done\n    at their own risk.\n    \"\"\"\n    working_set = WorkingSet._build_master()\n    _declare_state('object', working_set=working_set)\n\n    require = working_set.require\n    iter_entry_points = working_set.iter_entry_points\n    add_activation_listener = working_set.subscribe\n    run_script = working_set.run_script\n    # backward compatibility\n    run_main = ru"
-    },
-    {
-      "label": "def _overview_group(self):",
-      "text": "def _overview_group(self):\n        \"\"\"Direct link to the overview group\"\"\"\n        if self._overview_group_ is None:\n            self._overview_group_ = self._all_create_or_get_groups('overview')[0]\n        return self._overview_group_"
-    },
-    {
-      "label": "def utc_epoch():",
-      "text": "def utc_epoch():\n    \"\"\"\n    Gets the epoch in the users timezone\n    :return:\n    \"\"\"\n\n    # pendulum utcnow() is not used as that sets a TimezoneInfo object\n    # instead of a Timezone. This is not pickable and also creates issues\n    # when using replace()\n    d = dt.datetime(1970, 1, 1)\n    d = d.replace(tzinfo=utc)\n\n    return d"
-    },
-    {
-      "label": "def parse(file_path, content=None):",
-      "text": "def parse(file_path, content=None):\n        \"\"\"\n        Create a PythonFile object with specified file_path and content.\n        If content is None then, it is loaded from the file_path method.\n        Otherwise, file_path is only used for reporting errors.\n        \"\"\"\n        try:\n            if content is None:\n                with open(file_path) as f:\n                    content = f.read()\n            py_tree = RedBaron(content)\n            return RedbaronPythonFile(file_path, py_tree)\n        except Exception as ex:\n            # Trim parsing error message to only include failure location\n            msg = str(ex)\n            marker = \"<---- here\\n\"\n            marker_pos = msg.find(mar"
-    },
-    {
-      "label": "def name_session(self, name):",
-      "text": "def name_session(self, name):\n        \"\"\"Give the current session a name in the history database.\"\"\"\n        with self.db:\n            self.db.execute(\"UPDATE sessions SET remark=? WHERE session==?\",\n                            (name, self.session_number))"
-    },
-    {
-      "label": "def get_resolved_names(self, type_name: TypeName) ->...",
-      "text": "def get_resolved_names(self, type_name: TypeName) -> list:\n        \"\"\"\n        Use self.resolution to subsitute type_name.\n        Allow to instanciate polymorphic type ?1, ?toto\n        \"\"\"\n        if not isinstance(type_name, TypeName):\n            raise Exception(\"Take a TypeName as parameter not a %s\"\n                            % type(type_name))\n        rnames = []\n        for name in type_name.components:\n            if name not in self.resolution:\n                raise Exception(\"Unknown type %s in a EvalCtx\" % name)\n            rname = self.resolution[name]\n            if rname is not None:\n                rname = rname().show_name()\n            else:\n                rname = name\n  "
+      "label": "def _pre_image_append(self, msg, prompt_number):",
+      "text": "def _pre_image_append(self, msg, prompt_number):\n        \"\"\" Append the Out[] prompt  and make the output nicer\n\n        Shared code for some the following if statement\n        \"\"\"\n        self.log.debug(\"pyout: %s\", msg.get('content', ''))\n        self._append_plain_text(self.output_sep, True)\n        self._append_html(self._make_out_prompt(prompt_number), True)\n        self._append_plain_text('\\n', True)"
     },
     {
       "label": "def _choi_to_superop(data, input_dim, output_dim):",
       "text": "def _choi_to_superop(data, input_dim, output_dim):\n    \"\"\"Transform Choi to SuperOp representation.\"\"\"\n    shape = (input_dim, output_dim, input_dim, output_dim)\n    return _reshuffle(data, shape)"
     },
     {
-      "label": "def log_init(outlog, log_level=logging.INFO):",
-      "text": "def log_init(outlog, log_level=logging.INFO):\n    \"\"\"logging start\"\"\"\n\n    # clear old root logger handlers\n    logging.getLogger(\"gseapy\").handlers = []\n    # init a root logger\n    logging.basicConfig(level    = logging.DEBUG,\n                        format   = 'LINE %(lineno)-4d: %(asctime)s [%(levelname)-8s] %(message)s',\n                        filename = outlog,\n                        filemode = 'w')\n\n    # define a Handler which writes INFO messages or higher to the sys.stderr\n    console = logging.StreamHandler()\n    console.setLevel(log_level)\n    # set a format which is simpler for console use\n    formatter = logging.Formatter('%(asctime)s %(message)s')\n    # tell the handler to u"
-    },
-    {
-      "label": "def get_conn(self):",
-      "text": "def get_conn(self):\n        \"\"\"\n        Opens a ssh connection to the remote host.\n\n        :rtype: paramiko.client.SSHClient\n        \"\"\"\n\n        self.log.debug('Creating SSH client for conn_id: %s', self.ssh_conn_id)\n        client = paramiko.SSHClient()\n        if not self.allow_host_key_change:\n            self.log.warning('Remote Identification Change is not verified. '\n                             'This wont protect against Man-In-The-Middle attacks')\n            client.load_system_host_keys()\n        if self.no_host_key_check:\n            self.log.warning('No Host Key Verification. This wont protect '\n                             'against Man-In-The-Middle attacks')\n            # Defa"
-    },
-    {
-      "label": "def trigger_dag(dag_id):",
-      "text": "def trigger_dag(dag_id):\n    \"\"\"\n    Trigger a new dag run for a Dag with an execution date of now unless\n    specified in the data.\n    \"\"\"\n    data = request.get_json(force=True)\n\n    run_id = None\n    if 'run_id' in data:\n        run_id = data['run_id']\n\n    conf = None\n    if 'conf' in data:\n        conf = data['conf']\n\n    execution_date = None\n    if 'execution_date' in data and data['execution_date'] is not None:\n        execution_date = data['execution_date']\n\n        # Convert string datetime into actual datetime\n        try:\n            execution_date = timezone.parse(execution_date)\n        except ValueError:\n            error_message = (\n                'Given execution date, {},"
-    },
-    {
-      "label": "def encrypt(self, key_name, plaintext, authenticated...",
-      "text": "def encrypt(self, key_name, plaintext, authenticated_data=None):\n        \"\"\"\n        Encrypts a plaintext message using Google Cloud KMS.\n\n        :param key_name: The Resource Name for the key (or key version)\n                         to be used for encyption. Of the form\n                         ``projects/*/locations/*/keyRings/*/cryptoKeys/**``\n        :type key_name: str\n        :param plaintext: The message to be encrypted.\n        :type plaintext: bytes\n        :param authenticated_data: Optional additional authenticated data that\n                                   must also be provided to decrypt the message.\n        :type authenticated_data: bytes\n        :return: The base 64 encode"
-    },
-    {
-      "label": "def wrap(text, indent='    '):",
-      "text": "def wrap(text, indent='    '):\n    \"\"\"Wrap text to terminal width with default indentation\"\"\"\n    wrapper = textwrap.TextWrapper(\n        width=int(os.environ.get('COLUMNS', 80)),\n        initial_indent=indent,\n        subsequent_indent=indent\n    )\n    return '\\n'.join(wrapper.wrap(text))"
-    },
-    {
-      "label": "def set_version(self, new_version: str):",
-      "text": "def set_version(self, new_version: str):\n        \"\"\"\n        Set the version for this given file.\n\n        :param new_version: The new version string to set.\n        \"\"\"\n\n        try:\n            f = open(self.file_path, 'r')\n            lines = f.readlines()\n            f.close()\n        except Exception as e:\n            print(str(e))\n            return\n\n        for idx, line in enumerate(lines):\n            if self.magic_line in line:\n                start = len(self.magic_line)\n                end = len(line) - self.strip_end_chars\n\n                start_str = line[0:start]\n                end_str = line[end:]\n                lines[idx] = start_str + new_version + end_str\n\n        try:\n "
-    },
-    {
-      "label": "def expand_env_var(env_var):",
-      "text": "def expand_env_var(env_var):\n    \"\"\"\n    Expands (potentially nested) env vars by repeatedly applying\n    `expandvars` and `expanduser` until interpolation stops having\n    any effect.\n    \"\"\"\n    if not env_var:\n        return env_var\n    while True:\n        interpolated = os.path.expanduser(os.path.expandvars(str(env_var)))\n        if interpolated == env_var:\n            return interpolated\n        else:\n            env_var = interpolated"
-    },
-    {
-      "label": "def submit_task(self, job, indices=None):",
-      "text": "def submit_task(self, job, indices=None):\n        \"\"\"Submit a task to any of a subset of our targets.\"\"\"\n        if indices:\n            loads = [self.loads[i] for i in indices]\n        else:\n            loads = self.loads\n        idx = self.scheme(loads)\n        if indices:\n            idx = indices[idx]\n        target = self.targets[idx]\n        # print (target, map(str, msg[:3]))\n        # send job to the engine\n        self.engine_stream.send(target, flags=zmq.SNDMORE, copy=False)\n        self.engine_stream.send_multipart(job.raw_msg, copy=False)\n        # update load\n        self.add_job(idx)\n        self.pending[target][job.msg_id] = job\n        # notify Hub\n        content = dict(msg_"
-    },
-    {
-      "label": "def bootstrap_repl(which_ns: str) -> types.ModuleType:",
-      "text": "def bootstrap_repl(which_ns: str) -> types.ModuleType:\n    \"\"\"Bootstrap the REPL with a few useful vars and returned the\n    bootstrapped module so it's functions can be used by the REPL\n    command.\"\"\"\n    repl_ns = runtime.Namespace.get_or_create(sym.symbol(\"basilisp.repl\"))\n    ns = runtime.Namespace.get_or_create(sym.symbol(which_ns))\n    repl_module = importlib.import_module(\"basilisp.repl\")\n    ns.add_alias(sym.symbol(\"basilisp.repl\"), repl_ns)\n    ns.refer_all(repl_ns)\n    return repl_module"
-    },
-    {
-      "label": "def get_conn(self):",
-      "text": "def get_conn(self):\n        \"\"\"\n        Returns a mssql connection object\n        \"\"\"\n        conn = self.get_connection(self.mssql_conn_id)\n        conn = pymssql.connect(\n            server=conn.host,\n            user=conn.login,\n            password=conn.password,\n            database=self.schema or conn.schema,\n            port=conn.port)\n        return conn"
-    },
-    {
-      "label": "def remove_child(self, rhs):",
-      "text": "def remove_child(self, rhs):\n        \"\"\"Remove a given child element, specified by name or as element.\"\"\"\n        if type(rhs) is XMLElement:\n            lib.lsl_remove_child(self.e, rhs.e)\n        else:\n            lib.lsl_remove_child_n(self.e, rhs)"
-    },
-    {
-      "label": "def readString(self, st):",
-      "text": "def readString(self, st):\n        \"\"\"Parse a WFS capabilities document, returning an\n        instance of WFSCapabilitiesInfoset\n\n        string should be an XML capabilities document\n        \"\"\"\n        if not isinstance(st, str) and not isinstance(st, bytes):\n            raise ValueError(\"String must be of type string or bytes, not %s\" % type(st))\n        return etree.fromstring(st)"
-    },
-    {
-      "label": "def object_info(**kw):",
-      "text": "def object_info(**kw):\n    \"\"\"Make an object info dict with all fields present.\"\"\"\n    infodict = dict(izip_longest(info_fields, [None]))\n    infodict.update(kw)\n    return infodict"
-    },
-    {
-      "label": "def center_eigenvalue_diff(mat):",
-      "text": "def center_eigenvalue_diff(mat):\n    \"\"\"Compute the eigvals of mat and then find the center eigval difference.\"\"\"\n    N = len(mat)\n    evals = np.sort(la.eigvals(mat))\n    diff = np.abs(evals[N/2] - evals[N/2-1])\n    return diff"
-    },
-    {
-      "label": "def get_tunnel(self, remote_port, remote_host=\"local...",
-      "text": "def get_tunnel(self, remote_port, remote_host=\"localhost\", local_port=None):\n        \"\"\"\n        Creates a tunnel between two hosts. Like ssh -L <LOCAL_PORT>:host:<REMOTE_PORT>.\n\n        :param remote_port: The remote port to create a tunnel to\n        :type remote_port: int\n        :param remote_host: The remote host to create a tunnel to (default localhost)\n        :type remote_host: str\n        :param local_port:  The local port to attach the tunnel to\n        :type local_port: int\n\n        :return: sshtunnel.SSHTunnelForwarder object\n        \"\"\"\n\n        if local_port:\n            local_bind_address = ('localhost', local_port)\n        else:\n            local_bind_address = ('localhost',)"
-    },
-    {
-      "label": "def leave(self, node):",
-      "text": "def leave(self, node):\n        \"\"\"walk on the tree from <node>, getting callbacks from handler\"\"\"\n        method = self.get_callbacks(node)[1]\n        if method is not None:\n            method(node)"
-    },
-    {
-      "label": "def parse_manifest(cls, session, url, timeout=60, pv...",
-      "text": "def parse_manifest(cls, session, url, timeout=60, pvswf=None, is_akamai=False,\n                       **request_params):\n        \"\"\"Parses a HDS manifest and returns its substreams.\n\n        :param url: The URL to the manifest.\n        :param timeout: How long to wait for data to be returned from\n                        from the stream before raising an error.\n        :param is_akamai: force adding of the akamai parameters\n        :param pvswf: URL of player SWF for Akamai HD player verification.\n        \"\"\"\n        # private argument, should only be used in recursive calls\n        raise_for_drm = request_params.pop(\"raise_for_drm\", False)\n\n        if not request_params:\n            request_"
-    },
-    {
-      "label": "def shell_channel(self):",
-      "text": "def shell_channel(self):\n        \"\"\"Get the REQ socket channel object to make requests of the kernel.\"\"\"\n        if self._shell_channel is None:\n            self._shell_channel = self.shell_channel_class(self.context,\n                                                         self.session,\n                                                         (self.ip, self.shell_port))\n        return self._shell_channel"
-    },
-    {
-      "label": "def get_conn(self):",
-      "text": "def get_conn(self):\n        \"\"\"\n        Returns a mysql connection object\n        \"\"\"\n        conn = self.get_connection(self.mysql_conn_id)\n        conn_config = {\n            \"user\": conn.login,\n            \"passwd\": conn.password or '',\n            \"host\": conn.host or 'localhost',\n            \"db\": self.schema or conn.schema or ''\n        }\n\n        if not conn.port:\n            conn_config[\"port\"] = 3306\n        else:\n            conn_config[\"port\"] = int(conn.port)\n\n        if conn.extra_dejson.get('charset', False):\n            conn_config[\"charset\"] = conn.extra_dejson[\"charset\"]\n            if (conn_config[\"charset\"]).lower() == 'utf8' or\\\n                    (conn_config[\"charset\"]"
-    },
-    {
-      "label": "def x_is_greater_than(self, test_ordinate):",
-      "text": "def x_is_greater_than(self, test_ordinate):\r\n        \"\"\" Comparison for x coordinate\"\"\"\r\n        self._is_coordinate(test_ordinate)\r\n        if self.x > test_ordinate.x:\r\n            return True\r\n        else:\r\n            return False"
-    },
-    {
-      "label": "def abi_encode_args(method, args):",
-      "text": "def abi_encode_args(method, args):\n    \"encode args for method: method_id|data\"\n    assert issubclass(method.im_class, NativeABIContract), method.im_class\n    m_abi = method.im_class._get_method_abi(method)\n    return zpad(encode_int(m_abi['id']), 4) + abi.encode_abi(m_abi['arg_types'], args)"
-    },
-    {
-      "label": "def get_all_permissions_views(self):",
-      "text": "def get_all_permissions_views(self):\n        \"\"\"\n        Returns a set of tuples with the perm name and view menu name\n        \"\"\"\n        perms_views = set()\n        for role in self.get_user_roles():\n            perms_views.update({(perm_view.permission.name, perm_view.view_menu.name)\n                                for perm_view in role.permissions})\n        return perms_views"
-    },
-    {
       "label": "def send_message(self, text, user_ids, thread_id=None):",
       "text": "def send_message(self, text, user_ids, thread_id=None):\n    \"\"\"\n    :param self: bot\n    :param text: text of message\n    :param user_ids: list of user_ids for creating group or one user_id for send to one person\n    :param thread_id: thread_id\n    \"\"\"\n    user_ids = _get_user_ids(self, user_ids)\n    if not isinstance(text, str) and isinstance(user_ids, (list, str)):\n        self.logger.error('Text must be an string, user_ids must be an list or string')\n        return False\n\n    if self.reached_limit('messages'):\n        self.logger.info(\"Out of messages for today.\")\n        return False\n\n    self.delay('message')\n    urls = self.extract_urls(text)\n    item_type = 'link' if urls else 'text'\n"
     },
     {
-      "label": "def _get_conn_params(self):",
-      "text": "def _get_conn_params(self):\n        \"\"\"\n        one method to fetch connection params as a dict\n        used in get_uri() and get_connection()\n        \"\"\"\n        conn = self.get_connection(self.snowflake_conn_id)\n        account = conn.extra_dejson.get('account', None)\n        warehouse = conn.extra_dejson.get('warehouse', None)\n        database = conn.extra_dejson.get('database', None)\n        region = conn.extra_dejson.get(\"region\", None)\n        role = conn.extra_dejson.get('role', None)\n\n        conn_config = {\n            \"user\": conn.login,\n            \"password\": conn.password or '',\n            \"schema\": conn.schema or '',\n            \"database\": self.database or database or '',\n   "
+      "label": "def import_modules(self):",
+      "text": "def import_modules(self):\n        \"\"\"Import customer's service module.\"\"\"\n        modules = self.get_modules()\n        log.info(\"import service modules: \" + str(modules))\n        try:\n            for module in modules:\n                __import__(module)\n        except ImportError as error:\n            raise ImportModulesError(error.msg)"
+    },
+    {
+      "label": "def utc_epoch():",
+      "text": "def utc_epoch():\n    \"\"\"\n    Gets the epoch in the users timezone\n    :return:\n    \"\"\"\n\n    # pendulum utcnow() is not used as that sets a TimezoneInfo object\n    # instead of a Timezone. This is not pickable and also creates issues\n    # when using replace()\n    d = dt.datetime(1970, 1, 1)\n    d = d.replace(tzinfo=utc)\n\n    return d"
     },
     {
       "label": "def get_user_roles(self, user=None):",
@@ -141,107 +33,71 @@
     },
     {
       "label": "def get_conn(self):",
-      "text": "def get_conn(self):\n        \"\"\"Returns a connection object\"\"\"\n        db = self.get_connection(self.presto_conn_id)\n        reqkwargs = None\n        if db.password is not None:\n            reqkwargs = {'auth': HTTPBasicAuth(db.login, db.password)}\n        return presto.connect(\n            host=db.host,\n            port=db.port,\n            username=db.login,\n            source=db.extra_dejson.get('source', 'airflow'),\n            protocol=db.extra_dejson.get('protocol', 'http'),\n            catalog=db.extra_dejson.get('catalog', 'hive'),\n            requests_kwargs=reqkwargs,\n            schema=db.schema)"
+      "text": "def get_conn(self):\n        \"\"\"\n        Returns verticaql connection object\n        \"\"\"\n        conn = self.get_connection(self.vertica_conn_id)\n        conn_config = {\n            \"user\": conn.login,\n            \"password\": conn.password or '',\n            \"database\": conn.schema,\n            \"host\": conn.host or 'localhost'\n        }\n\n        if not conn.port:\n            conn_config[\"port\"] = 5433\n        else:\n            conn_config[\"port\"] = int(conn.port)\n\n        conn = connect(**conn_config)\n        return conn"
     },
     {
-      "label": "def read_if_vcf(params):",
-      "text": "def read_if_vcf(params):\n    \"\"\"\n    Checks if input is VCF and reads in appropriately if it is\n    \"\"\"\n    ref = None\n    aln = params.aln\n    fixed_pi = None\n    if hasattr(params, 'aln') and params.aln is not None:\n        if any([params.aln.lower().endswith(x) for x in ['.vcf', '.vcf.gz']]):\n            if not params.vcf_reference:\n                print(\"ERROR: a reference Fasta is required with VCF-format alignments\")\n                return -1\n            compress_seq = read_vcf(params.aln, params.vcf_reference)\n            sequences = compress_seq['sequences']\n            ref = compress_seq['reference']\n            aln = sequences\n\n            if not hasattr(params, 'gtr') or params.gt"
+      "label": "def _get_conn_params(self):",
+      "text": "def _get_conn_params(self):\n        \"\"\"\n        one method to fetch connection params as a dict\n        used in get_uri() and get_connection()\n        \"\"\"\n        conn = self.get_connection(self.snowflake_conn_id)\n        account = conn.extra_dejson.get('account', None)\n        warehouse = conn.extra_dejson.get('warehouse', None)\n        database = conn.extra_dejson.get('database', None)\n        region = conn.extra_dejson.get(\"region\", None)\n        role = conn.extra_dejson.get('role', None)\n\n        conn_config = {\n            \"user\": conn.login,\n            \"password\": conn.password or '',\n            \"schema\": conn.schema or '',\n            \"database\": self.database or database or '',\n   "
     },
     {
-      "label": "def _pre_image_append(self, msg, prompt_number):",
-      "text": "def _pre_image_append(self, msg, prompt_number):\n        \"\"\" Append the Out[] prompt  and make the output nicer\n\n        Shared code for some the following if statement\n        \"\"\"\n        self.log.debug(\"pyout: %s\", msg.get('content', ''))\n        self._append_plain_text(self.output_sep, True)\n        self._append_html(self._make_out_prompt(prompt_number), True)\n        self._append_plain_text('\\n', True)"
+      "label": "def get_conn(self):",
+      "text": "def get_conn(self):\n        \"\"\"\n        Returns a mysql connection object\n        \"\"\"\n        conn = self.get_connection(self.mysql_conn_id)\n        conn_config = {\n            \"user\": conn.login,\n            \"passwd\": conn.password or '',\n            \"host\": conn.host or 'localhost',\n            \"db\": self.schema or conn.schema or ''\n        }\n\n        if not conn.port:\n            conn_config[\"port\"] = 3306\n        else:\n            conn_config[\"port\"] = int(conn.port)\n\n        if conn.extra_dejson.get('charset', False):\n            conn_config[\"charset\"] = conn.extra_dejson[\"charset\"]\n            if (conn_config[\"charset\"]).lower() == 'utf8' or\\\n                    (conn_config[\"charset\"]"
+    },
+    {
+      "label": "def get_all_permissions_views(self):",
+      "text": "def get_all_permissions_views(self):\n        \"\"\"\n        Returns a set of tuples with the perm name and view menu name\n        \"\"\"\n        perms_views = set()\n        for role in self.get_user_roles():\n            perms_views.update({(perm_view.permission.name, perm_view.view_menu.name)\n                                for perm_view in role.permissions})\n        return perms_views"
     },
     {
       "label": "def _has_role(self, role_name_or_list):",
       "text": "def _has_role(self, role_name_or_list):\n        \"\"\"\n        Whether the user has this role name\n        \"\"\"\n        if not isinstance(role_name_or_list, list):\n            role_name_or_list = [role_name_or_list]\n        return any(\n            [r.name in role_name_or_list for r in self.get_user_roles()])"
     },
     {
-      "label": "def last_lock(self):",
-      "text": "def last_lock(self):\n        \"highest lock on height\"\n        rs = list(self.rounds)\n        assert len(rs) < 2 or rs[0] > rs[1]  # FIXME REMOVE\n        for r in self.rounds:  # is sorted highest to lowest\n            if self.rounds[r].lock is not None:\n                return self.rounds[r].lock"
-    },
-    {
-      "label": "def get_uri(self):",
-      "text": "def get_uri(self):\n        \"\"\"\n        override DbApiHook get_uri method for get_sqlalchemy_engine()\n        \"\"\"\n        conn_config = self._get_conn_params()\n        uri = 'snowflake://{user}:{password}@{account}/{database}/'\n        uri += '{schema}?warehouse={warehouse}&role={role}'\n        return uri.format(**conn_config)"
+      "label": "def readString(self, st):",
+      "text": "def readString(self, st):\n        \"\"\"Parse a WFS capabilities document, returning an\n        instance of WFSCapabilitiesInfoset\n\n        string should be an XML capabilities document\n        \"\"\"\n        if not isinstance(st, str) and not isinstance(st, bytes):\n            raise ValueError(\"String must be of type string or bytes, not %s\" % type(st))\n        return etree.fromstring(st)"
     },
     {
       "label": "def _set_env_from_extras(self, extras):",
       "text": "def _set_env_from_extras(self, extras):\n        \"\"\"\n        Sets the environment variable `GOOGLE_APPLICATION_CREDENTIALS` with either:\n\n        - The path to the keyfile from the specified connection id\n        - A generated file's path if the user specified JSON in the connection id. The\n            file is assumed to be deleted after the process dies due to how mkstemp()\n            works.\n\n        The environment variable is used inside the gcloud command to determine correct\n        service account to use.\n        \"\"\"\n        key_path = self._get_field(extras, 'key_path', False)\n        keyfile_json_str = self._get_field(extras, 'keyfile_dict', False)\n\n        if not key_path and not ke"
     },
     {
-      "label": "def _stderr_raw(self, s):",
-      "text": "def _stderr_raw(self, s):\n        \"\"\"Writes the string to stdout\"\"\"\n        print(s, end='', file=sys.stderr)\n        sys.stderr.flush()"
+      "label": "def get_conn(self):",
+      "text": "def get_conn(self):\n        \"\"\"Returns a connection object\"\"\"\n        db = self.get_connection(self.presto_conn_id)\n        reqkwargs = None\n        if db.password is not None:\n            reqkwargs = {'auth': HTTPBasicAuth(db.login, db.password)}\n        return presto.connect(\n            host=db.host,\n            port=db.port,\n            username=db.login,\n            source=db.extra_dejson.get('source', 'airflow'),\n            protocol=db.extra_dejson.get('protocol', 'http'),\n            catalog=db.extra_dejson.get('catalog', 'hive'),\n            requests_kwargs=reqkwargs,\n            schema=db.schema)"
     },
     {
-      "label": "def compile_and_exec_form(  # pylint: disable= too-m...",
-      "text": "def compile_and_exec_form(  # pylint: disable= too-many-arguments\n    form: ReaderForm,\n    ctx: CompilerContext,\n    module: types.ModuleType,\n    wrapped_fn_name: str = _DEFAULT_FN,\n    collect_bytecode: Optional[BytecodeCollector] = None,\n) -> Any:\n    \"\"\"Compile and execute the given form. This function will be most useful\n    for the REPL and testing purposes. Returns the result of the executed expression.\n\n    Callers may override the wrapped function name, which is used by the\n    REPL to evaluate the result of an expression and print it back out.\"\"\"\n    if form is None:\n        return None\n\n    if not module.__basilisp_bootstrapped__:  # type: ignore\n        _bootstrap_module(ctx.gen"
+      "label": "def season(self):",
+      "text": "def season(self):\n        \"\"\"\n        Returns the year ID of the season in which this game took place.\n        Useful for week 17 January games.\n\n        :returns: An int representing the year of the season.\n        \"\"\"\n        date = self.date()\n        return date.year - 1 if date.month <= 3 else date.year"
+    },
+    {
+      "label": "def get_uri(self):",
+      "text": "def get_uri(self):\n        \"\"\"\n        override DbApiHook get_uri method for get_sqlalchemy_engine()\n        \"\"\"\n        conn_config = self._get_conn_params()\n        uri = 'snowflake://{user}:{password}@{account}/{database}/'\n        uri += '{schema}?warehouse={warehouse}&role={role}'\n        return uri.format(**conn_config)"
     },
     {
       "label": "def copy_expert(self, sql, filename, open=open):",
       "text": "def copy_expert(self, sql, filename, open=open):\n        \"\"\"\n        Executes SQL using psycopg2 copy_expert method.\n        Necessary to execute COPY command without access to a superuser.\n\n        Note: if this method is called with a \"COPY FROM\" statement and\n        the specified input file does not exist, it creates an empty\n        file and no data is loaded, but the operation succeeds.\n        So if users want to be aware when the input file does not exist,\n        they have to check its existence by themselves.\n        \"\"\"\n        if not os.path.isfile(filename):\n            with open(filename, 'w'):\n                pass\n\n        with open(filename, 'r+') as f:\n            with closi"
     },
     {
-      "label": "def calculate_pair_to_kern_mapping(",
-      "text": "def calculate_pair_to_kern_mapping(\n        measurer: text_measurer.TextMeasurer,\n        char_to_length: Mapping[str, float],\n        characters: Iterable[str]) -> Mapping[str, float]:\n    \"\"\"Returns a mapping between each *pair* of characters and their kerning.\n\n    Args:\n        measurer: The TextMeasurer used to measure the width of each pair of\n            characters.\n        char_to_length: A mapping between characters and their length in pixels.\n            Must contain every character in 'characters' e.g.\n            {'h': 5.2, 'e': 4.0, 'l', 1.2, 'o': 5.0}.\n        characters: The characters to generate the kerning mapping for e.g.\n            'hel'.\n\n    Returns:\n        A mapping "
+      "label": "def leave(self, node):",
+      "text": "def leave(self, node):\n        \"\"\"walk on the tree from <node>, getting callbacks from handler\"\"\"\n        method = self.get_callbacks(node)[1]\n        if method is not None:\n            method(node)"
     },
     {
-      "label": "def replace(s, replace):",
-      "text": "def replace(s, replace):\n    \"\"\"Replace multiple values in a string\"\"\"\n    for r in replace:\n        s = s.replace(*r)\n    return s"
+      "label": "def wrap(text, indent='    '):",
+      "text": "def wrap(text, indent='    '):\n    \"\"\"Wrap text to terminal width with default indentation\"\"\"\n    wrapper = textwrap.TextWrapper(\n        width=int(os.environ.get('COLUMNS', 80)),\n        initial_indent=indent,\n        subsequent_indent=indent\n    )\n    return '\\n'.join(wrapper.wrap(text))"
     },
     {
-      "label": "def asHdl(cls, obj, ctx: SerializerCtx):",
-      "text": "def asHdl(cls, obj, ctx: SerializerCtx):\n        \"\"\"\n        Convert object to HDL string\n\n        :param obj: object to serialize\n        :param ctx: SerializerCtx instance\n        \"\"\"\n        if isinstance(obj, RtlSignalBase):\n            return cls.SignalItem(obj, ctx)\n        elif isinstance(obj, Value):\n            return cls.Value(obj, ctx)\n        else:\n            try:\n                serFn = getattr(cls, obj.__class__.__name__)\n            except AttributeError:\n                raise SerializerException(\"Not implemented for\", obj)\n            return serFn(obj, ctx)"
-    },
-    {
-      "label": "def _rewrite_insert(self, sql, params, return_id=Fal...",
-      "text": "def _rewrite_insert(self, sql, params, return_id=False):\n        \"\"\"Rewrites a formed SQL INSERT query to include\n        the ON CONFLICT clause.\n\n        Arguments:\n            sql:\n                The SQL INSERT query to rewrite.\n\n            params:\n                The parameters passed to the query.\n\n            returning:\n                What to put in the `RETURNING` clause\n                of the resulting query.\n\n        Returns:\n            A tuple of the rewritten SQL query and new params.\n        \"\"\"\n\n        returning = self.qn(self.query.model._meta.pk.attname) if return_id else '*'\n\n        if self.query.conflict_action.value == 'UPDATE':\n            return self._rewrite_insert_"
-    },
-    {
-      "label": "def check_arguments_in_docstring(",
-      "text": "def check_arguments_in_docstring(\n        self, doc, arguments_node, warning_node, accept_no_param_doc=None\n    ):\n        \"\"\"Check that all parameters in a function, method or class constructor\n        on the one hand and the parameters mentioned in the parameter\n        documentation (e.g. the Sphinx tags 'param' and 'type') on the other\n        hand are consistent with each other.\n\n        * Undocumented parameters except 'self' are noticed.\n        * Undocumented parameter types except for 'self' and the ``*<args>``\n          and ``**<kwargs>`` parameters are noticed.\n        * Parameters mentioned in the parameter documentation that don't or no\n          longer exist in the function par"
-    },
-    {
-      "label": "def get_conn(self):",
-      "text": "def get_conn(self):\n        \"\"\"\n        Returns verticaql connection object\n        \"\"\"\n        conn = self.get_connection(self.vertica_conn_id)\n        conn_config = {\n            \"user\": conn.login,\n            \"password\": conn.password or '',\n            \"database\": conn.schema,\n            \"host\": conn.host or 'localhost'\n        }\n\n        if not conn.port:\n            conn_config[\"port\"] = 5433\n        else:\n            conn_config[\"port\"] = int(conn.port)\n\n        conn = connect(**conn_config)\n        return conn"
-    },
-    {
-      "label": "def start(self):",
-      "text": "def start(self):\n        \"\"\"\n        Use multiple processes to parse and generate tasks for the\n        DAGs in parallel. By processing them in separate processes,\n        we can get parallelism and isolation from potentially harmful\n        user code.\n        \"\"\"\n\n        self.log.info(\"Processing files using up to %s processes at a time \", self._parallelism)\n        self.log.info(\"Process each file at most once every %s seconds\", self._file_process_interval)\n        self.log.info(\n            \"Checking for new files in %s every %s seconds\", self._dag_directory, self.dag_dir_list_interval\n        )\n\n        if self._async_mode:\n            self.log.debug(\"Starting DagFileProcessorManager in"
-    },
-    {
-      "label": "def movies(self, **kwargs):",
-      "text": "def movies(self, **kwargs):\n        \"\"\"\n        Get the list of movies for a particular genre by id. By default, only\n        movies with 10 or more votes are included.\n\n        Args:\n            page: (optional) Minimum 1, maximum 1000.\n            language: (optional) ISO 639-1 code.\n            include_all_movies: (optional) Toggle the inclusion of all movies \n                                and not just those with 10 or more ratings. \n                                Expected value is: True or False.\n            include_adult: (optional) Toggle the inclusion of adult titles.\n                           Expected value is: True or False.\n\n        Returns:\n            A dict respresentation o"
-    },
-    {
-      "label": "def save_mojo(self, path=\"\", force=False):",
-      "text": "def save_mojo(self, path=\"\", force=False):\n        \"\"\"\n        Save an H2O Model as MOJO (Model Object, Optimized) to disk.\n\n        :param model: The model object to save.\n        :param path: a path to save the model at (hdfs, s3, local)\n        :param force: if True overwrite destination directory in case it exists, or throw exception if set to False.\n\n        :returns str: the path of the saved model\n        \"\"\"\n        assert_is_type(path, str)\n        assert_is_type(force, bool)\n        if not self.have_mojo:\n            raise H2OValueError(\"Export to MOJO not supported\")\n        path = os.path.join(os.getcwd() if path == \"\" else path, self.model_id + \".zip\")\n        return h2o.api(\"GE"
-    },
-    {
-      "label": "def random_playout(self, board):",
-      "text": "def random_playout(self, board):\n        \"\"\" random play until both players pass \"\"\"\n        for x in range(MAXMOVES):  # XXX while not self.finished?\n            if board.finished:\n                break\n            board.move(board.random_move())"
+      "label": "def bootstrap_repl(which_ns: str) -> types.ModuleType:",
+      "text": "def bootstrap_repl(which_ns: str) -> types.ModuleType:\n    \"\"\"Bootstrap the REPL with a few useful vars and returned the\n    bootstrapped module so it's functions can be used by the REPL\n    command.\"\"\"\n    repl_ns = runtime.Namespace.get_or_create(sym.symbol(\"basilisp.repl\"))\n    ns = runtime.Namespace.get_or_create(sym.symbol(which_ns))\n    repl_module = importlib.import_module(\"basilisp.repl\")\n    ns.add_alias(sym.symbol(\"basilisp.repl\"), repl_ns)\n    ns.refer_all(repl_ns)\n    return repl_module"
     },
     {
       "label": "def show(self):",
       "text": "def show(self):\n        \"\"\"Print innards of model, without regards to type.\"\"\"\n        if self._future:\n            self._job.poll_once()\n            return\n        if self._model_json is None:\n            print(\"No model trained yet\")\n            return\n        if self.model_id is None:\n            print(\"This H2OEstimator has been removed.\")\n            return\n        model = self._model_json[\"output\"]\n        print(\"Model Details\")\n        print(\"=============\")\n\n        print(self.__class__.__name__, \": \", self._model_json[\"algo_full_name\"])\n        print(\"Model Key: \", self._id)\n\n        self.summary()\n\n        print()\n        # training metrics\n        tm = model[\"training_metrics\"]\n  "
     },
     {
-      "label": "def global_iterator(self):",
-      "text": "def global_iterator(self):\n        \"\"\"\n        Return global iterator sympy expression\n        \"\"\"\n        global_iterator = sympy.Integer(0)\n        total_length = sympy.Integer(1)\n        for var_name, start, end, incr in reversed(self._loop_stack):\n            loop_var = symbol_pos_int(var_name)\n            length = end - start  # FIXME is incr handled correct here?\n            global_iterator += (loop_var - start) * total_length\n            total_length *= length\n        return global_iterator"
+      "label": "def object_info(**kw):",
+      "text": "def object_info(**kw):\n    \"\"\"Make an object info dict with all fields present.\"\"\"\n    infodict = dict(izip_longest(info_fields, [None]))\n    infodict.update(kw)\n    return infodict"
     },
     {
-      "label": "def create_report(self, report_type, account_id, ter...",
-      "text": "def create_report(self, report_type, account_id, term_id=None, params={}):\n        \"\"\"\n        Generates a report instance for the canvas account id.\n\n        https://canvas.instructure.com/doc/api/account_reports.html#method.account_reports.create\n        \"\"\"\n        if term_id is not None:\n            params[\"enrollment_term_id\"] = term_id\n\n        url = ACCOUNTS_API.format(account_id) + \"/reports/{}\".format(\n            report_type)\n        body = {\"parameters\": params}\n\n        data = self._post_resource(url, body)\n        data[\"account_id\"] = account_id\n        return Report(data=data)"
-    },
-    {
-      "label": "def clear(self):",
-      "text": "def clear(self):\n        'od.clear() -> None.  Remove all items from od.'\n        try:\n            for node in self.__map.itervalues():\n                del node[:]\n            root = self.__root\n            root[:] = [root, root, None]\n            self.__map.clear()\n        except AttributeError:\n            pass\n        dict.clear(self)"
-    },
-    {
-      "label": "def reader(stream, dialect=DIALECT, encoding=False, ...",
-      "text": "def reader(stream, dialect=DIALECT, encoding=False, **fmtparams):\n    r\"\"\"CSV reader yielding lists of ``unicode`` strings (PY3: ``str``).\n\n    Args:\n        stream: Iterable of text (``unicode``, PY3: ``str``) lines. If an\n            ``encoding`` is given, iterable of encoded (``str``, PY3: ``bytes``)\n            lines in the given (8-bit clean) ``encoding``.\n        dialect: Dialect argument for the underlying :func:`py:csv.reader`.\n        encoding: If not ``False`` (default): name of the encoding needed to\n            decode the encoded (``str``, PY3: ``bytes``) lines from ``stream``.\n        \\**fmtparams: Keyword arguments (formatting parameters) for the\n            underlying :func:`p"
-    },
-    {
-      "label": "def import_modules(self):",
-      "text": "def import_modules(self):\n        \"\"\"Import customer's service module.\"\"\"\n        modules = self.get_modules()\n        log.info(\"import service modules: \" + str(modules))\n        try:\n            for module in modules:\n                __import__(module)\n        except ImportError as error:\n            raise ImportModulesError(error.msg)"
+      "label": "def _initialize_master_working_set():",
+      "text": "def _initialize_master_working_set():\n    \"\"\"\n    Prepare the master working set and make the ``require()``\n    API available.\n\n    This function has explicit effects on the global state\n    of pkg_resources. It is intended to be invoked once at\n    the initialization of this module.\n\n    Invocation by other packages is unsupported and done\n    at their own risk.\n    \"\"\"\n    working_set = WorkingSet._build_master()\n    _declare_state('object', working_set=working_set)\n\n    require = working_set.require\n    iter_entry_points = working_set.iter_entry_points\n    add_activation_listener = working_set.subscribe\n    run_script = working_set.run_script\n    # backward compatibility\n    run_main = ru"
     }
   ]
 }

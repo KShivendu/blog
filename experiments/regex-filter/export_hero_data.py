@@ -16,7 +16,7 @@ import sys
 
 DATA = "experiments/regex-filter/data"
 OUT = "public/static/data/regex-filter-hero.json"
-N_DOCS = 60
+N_DOCS = 24
 MAX_CHARS = 700
 SEED_QUERY = r"get_user\w*"
 
@@ -36,7 +36,7 @@ def main():
     rng = random.Random(3)
 
     hits = [d for d in docs if rx.search(d)][:4]
-    near = [d for d in docs if "user" in d and not rx.search(d)][:14]
+    near = [d for d in docs if "user" in d and not rx.search(d)][:8]
     rest = [d for d in docs if "user" not in d]
     rng.shuffle(rest)
     sel = hits + near + rest[: N_DOCS - len(hits) - len(near)]
