@@ -143,8 +143,8 @@ Compression ratio is one way to spend the freed slots. The other is to not spend
 <VocabSweep />
 
 <LineChart
-  title="Vocabulary size against tokens emitted, held-out Python"
-  subtitle="down and to the left is better: fewer embedding rows AND shorter sequences"
+  title="Token count vs vocabulary size"
+  subtitle="held out, same 20 MB training corpus per arm · down and left is better · toggle the corpus →"
   xLabel="vocabulary size"
   xScale="log"
   xTicks={[
@@ -155,59 +155,124 @@ Compression ratio is one way to spend the freed slots. The other is to not spend
     [32768, '32k'],
     [65536, '64k'],
   ]}
-  yMin={290000}
-  yMax={450000}
-  series={[
+  views={[
     {
-      name: 'BPE at V=65,536',
-      color: '#cbd5e1',
-      dashed: true,
-      showMarkers: false,
-      points: [
-        [2048, 336736],
-        [65536, 336736],
+      label: 'Python code',
+      default: true,
+      yMin: 296635,
+      yMax: 444396,
+      series: [
+        {
+          name: 'BPE at V=65,536',
+          color: '#cbd5e1',
+          dashed: true,
+          showMarkers: false,
+          points: [
+            [2048, 336736],
+            [65536, 336736],
+          ],
+        },
+        {
+          name: 'BPE + gpt2 regex',
+          color: '#94a3b8',
+          marker: 'circle',
+          points: [
+            [2048, 435683],
+            [4096, 392140],
+            [8192, 365856],
+            [16384, 350468],
+            [32768, 341372],
+            [49152, 338406],
+            [65536, 336736],
+          ],
+        },
+        {
+          name: 'ISBPE single-flag',
+          color: '#2dd4bf',
+          marker: 'square',
+          points: [
+            [2048, 414640],
+            [4096, 363883],
+            [8192, 335386],
+            [16384, 319892],
+            [32768, 310994],
+            [49152, 308124],
+            [65536, 306575],
+          ],
+        },
+        {
+          name: 'ISBPE dual-flag',
+          color: '#0d9488',
+          marker: 'diamond',
+          points: [
+            [2048, 431252],
+            [4096, 363186],
+            [8192, 332773],
+            [16384, 317341],
+            [32768, 309772],
+            [49152, 307168],
+            [65536, 305810],
+          ],
+        },
       ],
     },
     {
-      name: 'BPE + gpt2 regex',
-      color: '#94a3b8',
-      marker: 'circle',
-      points: [
-        [2048, 435683],
-        [4096, 392140],
-        [8192, 365856],
-        [16384, 350468],
-        [32768, 341372],
-        [49152, 338406],
-        [65536, 336736],
-      ],
-    },
-    {
-      name: 'ISBPE single-flag',
-      color: '#2dd4bf',
-      marker: 'square',
-      points: [
-        [2048, 414640],
-        [4096, 363883],
-        [8192, 335386],
-        [16384, 319892],
-        [32768, 310994],
-        [49152, 308124],
-        [65536, 306575],
-      ],
-    },
-    {
-      name: 'ISBPE dual-flag',
-      color: '#0d9488',
-      marker: 'diamond',
-      points: [
-        [2048, 431252],
-        [4096, 363186],
-        [8192, 332773],
-        [16384, 317341],
-        [32768, 309772],
-        [49152, 307168],
-        [65536, 305810],
+      label: 'English (C4)',
+      yMin: 270675,
+      yMax: 485169,
+      series: [
+        {
+          name: 'BPE at V=65,536',
+          color: '#cbd5e1',
+          dashed: true,
+          showMarkers: false,
+          points: [
+            [2048, 280162],
+            [65536, 280162],
+          ],
+        },
+        {
+          name: 'BPE + gpt2 regex',
+          color: '#94a3b8',
+          marker: 'circle',
+          points: [
+            [2048, 436271],
+            [4096, 378652],
+            [8192, 336859],
+            [16384, 308416],
+            [32768, 290344],
+            [49152, 283778],
+            [65536, 280162],
+          ],
+        },
+        {
+          name: 'ISBPE single-flag',
+          color: '#2dd4bf',
+          marker: 'square',
+          points: [
+            [2048, 442443],
+            [4096, 379713],
+            [8192, 336123],
+            [16384, 307408],
+            [32768, 289945],
+            [49152, 283504],
+            [65536, 280204],
+          ],
+        },
+        {
+          name: 'ISBPE dual-flag',
+          color: '#0d9488',
+          marker: 'diamond',
+          points: [
+            [2048, 475656],
+            [4096, 388655],
+            [8192, 337606],
+            [16384, 306511],
+            [32768, 288830],
+            [49152, 282232],
+            [65536, 279047],
+          ],
+        },
       ],
     },
   ]}
@@ -215,10 +280,10 @@ Compression ratio is one way to spend the freed slots. The other is to not spend
 
 Observations:
 
-- **Both ISBPE variants sit below BPE at every size**, so this is not a win at one operating point. The smallest gap is at V=2,048 (+1.02%) and it widens to +9.45% by V=16,384, then flattens.
-- **The dashed line is BPE's best result**, 336,736 tokens at V=65,536. Dual-flag crosses it at **V=7,658** and single-flag at **V=7,998**, both about 88% smaller.
-- **Dual-flag and single-flag are nearly identical on token count**, 305,810 against 306,575 at full size. The two-sided mark earns its keep on compression ratio and on out-of-domain transfer, not here.
-- **The curve flattens after V=16,384.** Going from 16k to 65k slots buys BPE 13,732 tokens and ISBPE 11,531, so most of what a large vocabulary is for has already been bought by then.
+- **On code both ISBPE variants sit below BPE at every size.** The gap is smallest at V=2,048 (+1.02%) and widens to +9.45% by V=16,384. The dashed line is BPE's best result, 336,736 tokens at 65,536 slots, and dual-flag crosses it at **V=7,658**.
+- **On English the curves cross the other way at small sizes.** ISBPE is 9.03% worse at V=2,048 and stays behind until about 16k, because the mark costs a dimension on every id and there is little duplication to pool until the vocabulary is large enough to have been wasting slots.
+- **English never gets the dramatic version.** Dual-flag needs 59,800 slots to match BPE's 65,536, only 8.8% smaller, and single-flag never reaches it at any size in this sweep.
+- **Single and dual are nearly identical on token count**, 306,575 against 305,810 on code at full size. The two-sided mark earns its keep on compression ratio and on out-of-domain transfer, not here.
 
 **ISBPE with 8,192 slots emits fewer tokens on held-out Python than BPE with 65,536.** Interpolating, it matches BPE's exact token count at **V=7,658**, a vocabulary 88.3% smaller at the same sequence length. That's 57,878 fewer embedding and output rows, which at `d_model=4096` is about 474M parameters, though that last figure is arithmetic on the row count and not something I measured.
 
