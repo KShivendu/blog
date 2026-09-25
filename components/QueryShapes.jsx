@@ -21,7 +21,7 @@ const AGENT = [
   { p: 'duckdb|DuckDB', lit: 'duckdb / DuckDB' },
   { p: 'def matrix', lit: 'def matrix' },
   { p: 'multipart', lit: 'multipart' },
-  { p: 'test', lit: null },
+  { p: 'test', lit: 'test' },
   { p: '\\\\"', lit: null },
 ]
 
@@ -89,7 +89,7 @@ export default function QueryShapes() {
               cursor: 'pointer',
               border: `1px solid ${C.border}`,
               borderRight: k === 1 ? `1px solid ${C.border}` : 'none',
-              background: k === who ? (k === 0 ? P.good : C.ink) : 'transparent',
+              background: k === who ? (k === 0 ? P.series0 : C.ink) : 'transparent',
               color: k === who ? C.card : C.muted,
             }}
           >
@@ -105,7 +105,7 @@ export default function QueryShapes() {
               fontFamily: MONO,
               fontSize: 26,
               fontWeight: 600,
-              color: who === 0 ? P.good : P.muted,
+              color: who === 0 ? P.series0 : P.muted,
             }}
           >
             {stat.pct}%
@@ -127,7 +127,7 @@ export default function QueryShapes() {
             style={{
               height: '100%',
               width: `${stat.pct}%`,
-              background: who === 0 ? P.good : P.muted,
+              background: who === 0 ? P.series0 : P.muted,
               transition: 'width .35s ease',
             }}
           />
@@ -167,7 +167,7 @@ export default function QueryShapes() {
               style={{
                 fontFamily: MONO,
                 fontSize: 10,
-                color: r.lit ? P.good : P.bad,
+                color: r.lit ? P.series0 : P.muted,
                 textAlign: 'right',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -191,11 +191,11 @@ export default function QueryShapes() {
           lineHeight: 1.65,
         }}
       >
-        Agents search for identifiers. People writing{' '}
-        <code style={{ fontFamily: MONO }}>re.compile</code> in source are describing shapes, and
-        those patterns are string-processing utilities rather than searches. Nobody greps a repo for{' '}
-        <code style={{ fontFamily: MONO }}>\s+</code>. Swapping one query set for the other moves
-        the measured speedup over a full scan from 2.1x to 11.4x.
+        These ten rows are examples rather than a proportional sample. Agents search for
+        identifiers. People writing <code style={{ fontFamily: MONO }}>re.compile</code> in source
+        are describing shapes, and those patterns are string-processing utilities rather than
+        searches. Nobody greps a repo for <code style={{ fontFamily: MONO }}>\s+</code>. Swapping
+        one query set for the other moves the measured speedup over a full scan from 2.1x to 11.4x.
       </div>
     </figure>
   )

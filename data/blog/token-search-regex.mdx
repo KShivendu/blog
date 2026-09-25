@@ -15,7 +15,7 @@ In [Token Search](/blog/token-search) I ran BM25 over BPE token IDs and it match
 
 It almost can. One extra posting list finishes the job, and the result ties the standard approach while beating [TopK's sparse grams](https://www.topk.io/blog/20260814-fast-regex-search-sparse-grams) on postings and build time. But the thing that decides how fast regex search feels turned out to have nothing to do with the index at all. **It is what fraction of queries contain no literal text to look up**, and that fraction depends entirely on who is typing.
 
-Every method here does the same two things: chop the text into pieces, and remember which documents each piece appeared in. Then chop the query the same way, look its pieces up, and run the real regex on whatever survives. Watch it on 60 real documents:
+Every method here does the same two things: chop the text into pieces, and remember which documents each piece appeared in. Then chop the query the same way, look its pieces up, and run the real regex on whatever survives. Watch it on 24 real documents, and try your own search:
 
 <RegexFilterPipeline />
 
@@ -43,10 +43,10 @@ So the token index cannot be asked about arbitrary text directly. Instead it get
 ```
   regex:  colou?r of the (sky|sea)
 
-  TopK:   " the" AND "r of t" AND ("e se" OR "e sk")
-  chunks: "the" AND "of " AND ("sky" OR "sea")
-          AND ("col" AND "olo" AND "lor")
+  chunks: "the" AND "of " AND ("sky" OR "sea") AND "col" AND "olo"
 ```
+
+Note what is missing. `colour` chops to `col olo lou our` and `color` to `col olo lor`, so only `col` and `olo` are guaranteed present and the filter may require nothing else from that word. Demanding `lor` would drop every `colour` match, which is a wrong answer rather than a slow one.
 
 The gap that matters is the seam. Take `datestamp`, which BPE chops into `dat` and `estamp`, and search for `test`:
 
@@ -57,7 +57,7 @@ The gap that matters is the seam. Take `datestamp`, which BPE chops into `dat` a
       test spans the cut, so no single token holds it
 ```
 
-Searching the token vocabulary for a piece containing `test` finds nothing, because the word was split through the middle of it. Over a corpus of English words, **28.0% of a word's chunks sit inside no single token** and 77.6% of words have at least one such chunk. The seam is the common case.
+Searching the token vocabulary for a piece containing `test` finds nothing, because the word was split through the middle of it. Over 4,000 English dictionary words, **28.0% of a word's chunks sit inside no single token** and 77.6% of words have at least one such chunk. The seam is the common case.
 
 So the design needs two lookups per chunk. Tokens whose text contains the chunk, which a 2 MB static index over the vocabulary answers, or **token pairs that spell it across a seam**, which needs one new posting list keyed by adjacent token pairs.
 
@@ -199,8 +199,8 @@ Observations:
 
 - **Swapping the query set moves every index from about 2.1x to about 11.4x**, and the indexes stay tied to each other. The old ceiling was never the index, it was the half of the query set no index can help.
 - **Agent queries are 96.3% filterable against 48.2% for mined `re.compile` patterns**, both at a 3-character minimum literal, because agents search for identifiers like `GetEdk2RelativePathFromAbsolutePath` where source-code regexes describe shapes like `(.)([A-Z][a-z]+)`.
-- **A 3.7% fallback rate still costs half the available speedup.** The filterable slice alone reaches 24x and the aggregate lands at 11.4x, because each unfilterable query costs about 24x more than a filtered one.
-- **The filterable slice reproduces TopK's setting.** Counting only queries an index can help, the speedups run 36.5x to 50.0x, the same order as their reported 55.3x, which is the external check that this benchmark and theirs describe the same slice of traffic.
+- **A 3.7% fallback rate still costs half the available speedup.** Counting only the queries an index can help, the speedups run 36.5x to 50.0x. Counting everything, the aggregate lands at 11.4x, because each unfilterable query costs roughly 24x more than a filtered one.
+- **TopK report 55.3x, which is the same order as that filterable slice.** Their corpus, hardware and query set are all different, so this is a sanity check that we are measuring the same kind of thing rather than a reproduction.
 
 The agent queries also found a bug the human ones hid. `names\[0\]` returned 0 candidates for 7 matching documents, because I derived seam chunks from the bigram index, which sees only pairs, and a chunk can span **three** tokens when the middle one is a single character. `names[0]` tokenises with `[`, `0` and `]` separate, so the chunk `[0]` belonged to no pair. Human patterns lacked the punctuation density to trigger it. Walking the token stream instead is sound for any token length.
 
@@ -226,7 +226,7 @@ Observations:
 | TopK sparse grams |    112,362,219 | 211.1 s | 0.71 ms |
 | token + bigram    | **41,302,244** | 115.9 s | 0.29 ms |
 
-The token route holds the smallest index at two orders of magnitude, and takes 6.0x longer to build than a dense trigram index. Sparse grams take 11.0x longer and hold 2.7x the postings.
+The token route still holds the smallest index at 128,000 documents, 41.3M postings against 50.2M, and takes 6.0x longer to build than a dense trigram index. Sparse grams take 11.0x longer and hold 2.7x the postings.
 
 ## The tokenizer is a correctness decision
 
@@ -267,7 +267,7 @@ Observations:
 1. **The token bigram index.** This is the only item that changes the numbers. Whole words looked up in the unigram postings alone constrain 61 of 400 patterns, leave 98.4% of sub-word patterns with no constraint at all, and hand over 7.5% of the corpus on the word-aligned ones. Adding the bigram index takes coverage to 186 of 400 and selectivity to 0.8%.
 2. **The 2 MB vocabulary sidecar**, static, built from the tokenizer at startup, which turns a sub-word literal into a candidate token set.
 3. **Skip sparse grams.** They cost 2.7x the postings and 1.9x the build time for identical candidates.
-4. **If you do not already run BM25 on token postings, build a dense trigram index instead.** It is smaller than what you would add, 2.93M postings against a 1.65M bigram index on top of a 0.77M unigram one, and it builds 5.7x faster. The token route wins on marginal cost and loses on absolute cost.
+4. **If you do not already run BM25 on token postings, build a dense trigram index instead.** The token route is smaller either way, 2.42M postings against 2.93M at 8,000 documents, but it takes 6.3 s to build where a trigram index takes 1.1 s. Build time is the only axis where starting from scratch on tokens loses.
 
 ## Limitations
 
@@ -292,7 +292,7 @@ python3 experiments/regex-filter/fuzzy_over_index.py   # typo search on the same
 ## Key Takeaways
 
 - **A token-bigram index turns BM25 postings into a regex filter that ties a dense trigram index candidate for candidate**, at 2.41M postings against sparse grams' 6.51M and 6.3 s of build time against 12.2 s. It computes the same function as a trigram index from storage that already exists for ranking.
-- **The win is marginal cost, and it reverses if you have no token index.** Adding regex to existing BM25 postings costs a 1.65M-posting bigram index where a trigram index costs 2.93M from scratch, but the trigram index is smaller in absolute terms and builds 5.7x faster.
+- **The win is marginal cost.** Adding regex to existing BM25 postings costs a 1.65M-posting bigram index where a trigram index costs 2.93M from scratch, so 1.8x less. Build time is where the token route loses, 6.3 s against 1.1 s at 8,000 documents.
 - **How many queries have no literal decides everything.** 53.5% for regexes mined from source, 3.7% for greps coding agents really run, and that one swap moves every index from 2.1x over a full scan to 11.4x. Quoting a speedup without a fallback rate says almost nothing.
 - **Two predictions of mine died on contact with data.** A 5.2x sub-word win rested on dense trigrams returning 8x the true matches when they return 1.3x, and the advantage I expected to grow with corpus size shrank across a 16x sweep.
 - **The tokenizer is a correctness decision.** WordPiece and SentencePiece fail to reassemble every one of 400 code files, so a regex derives chunks their index cannot hold. That rules them out before retrieval quality is discussed.

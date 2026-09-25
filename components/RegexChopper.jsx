@@ -25,8 +25,6 @@ const METHODS = [
     sub: 'the standard, used for decades',
     pieces: Array.from({ length: LINE.length - 2 }, (_, i) => LINE.slice(i, i + 3)),
     total: 24,
-    postings: 3514896,
-    build: 1.5,
     tone: 'muted',
     note: 'Slide along one character at a time. Simple, and it makes a lot of pieces.',
   },
@@ -37,8 +35,6 @@ const METHODS = [
     pieces: Array.from({ length: LINE.length - 2 }, (_, i) => LINE.slice(i, i + 3)),
     extra: ['f ge', 'et_u', '_use', 'ser_', 'conf', 'nfig', 'g(na', 'g(nam'],
     total: 37,
-    postings: 8005565,
-    build: 12.8,
     tone: 'muted',
     note: 'A hash picks which longer chunks to keep, so the query and the document always agree on the choice.',
   },
@@ -48,15 +44,12 @@ const METHODS = [
     sub: 'the pieces your model already uses',
     pieces: ['def', ' get', '_user', '_config', '(name', '):'],
     total: 6,
-    postings: 2461981,
-    build: 4.3,
     tone: 'good',
     note: 'Four times fewer pieces, because a token covers about four characters instead of one.',
   },
 ]
 
 const MONO = 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)'
-const fmt = (n) => (n / 1e6).toFixed(1) + 'M'
 
 export default function RegexChopper() {
   const { resolvedTheme } = useTheme()
@@ -78,7 +71,6 @@ export default function RegexChopper() {
 
   const m = METHODS[i]
   const accent = m.tone === 'good' ? P.good : P.muted
-  const maxPost = Math.max(...METHODS.map((x) => x.postings))
 
   const box = {
     fontFamily: MONO,
@@ -180,43 +172,6 @@ export default function RegexChopper() {
           ))}
         </div>
         <div style={{ fontSize: 11, color: C.muted, marginTop: 8, minHeight: 30 }}>{m.note}</div>
-      </div>
-
-      {/* index size comparison */}
-      <div style={{ padding: '4px 16px 0' }}>
-        <div style={{ fontSize: 11, color: C.muted, margin: '8px 0 6px' }}>
-          index size over 8,000 real documents, in postings
-        </div>
-        {METHODS.map((x, k) => (
-          <div
-            key={x.key}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}
-          >
-            <span
-              style={{
-                fontFamily: MONO,
-                fontSize: 10,
-                color: k === i ? C.ink : C.muted,
-                width: 112,
-                textAlign: 'right',
-              }}
-            >
-              {x.label}
-            </span>
-            <span
-              style={{
-                height: 10,
-                width: `${(x.postings / maxPost) * 58}%`,
-                background: x.tone === 'good' ? P.good : k === i ? C.ink : P.muted,
-                opacity: k === i ? 1 : 0.45,
-                borderRadius: 1,
-              }}
-            />
-            <span style={{ fontFamily: MONO, fontSize: 10, color: C.muted }}>
-              {fmt(x.postings)} · builds in {x.build}s
-            </span>
-          </div>
-        ))}
       </div>
 
       {/* the catch, only for tokens */}
