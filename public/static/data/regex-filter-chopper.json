@@ -1,0 +1,82 @@
+{
+  "generated_by": "experiments/regex-filter/export_chopper_data.py",
+  "line": "def get_user_config(name):",
+  "query": "get_user",
+  "methods": {
+    "trigram": {
+      "pieces": [
+        "def",
+        "ef ",
+        "f g",
+        " ge",
+        "get",
+        "et_",
+        "t_u",
+        "_us",
+        "use",
+        "ser",
+        "er_",
+        "r_c",
+        "_co",
+        "con",
+        "onf",
+        "nfi",
+        "fig",
+        "ig(",
+        "g(n",
+        "(na",
+        "nam",
+        "ame",
+        "me)",
+        "e):"
+      ],
+      "total": 24
+    },
+    "sparse": {
+      "pieces": [
+        "def",
+        "ef ",
+        "f g",
+        " ge",
+        "get",
+        "et_",
+        "t_u",
+        "_us",
+        "use",
+        "ser",
+        "er_",
+        "r_c",
+        "_co",
+        "con",
+        "onf",
+        "nfi",
+        "fig",
+        "ig(",
+        "g(n",
+        "(na",
+        "nam",
+        "ame",
+        "me)",
+        "e):"
+      ],
+      "extra": ["et_u", "g(na", "nfig", "f ge", "ser_", "conf", "_use", "g(nam"],
+      "total": 37
+    },
+    "bpe": {
+      "pieces": ["def", " get", "_user", "_config", "(name", "):"],
+      "total": 6,
+      "query_pieces": ["get", "_user"],
+      "in_line_pieces": [" get", "_user"]
+    },
+    "isbpe": {
+      "pieces": ["def", "get", "#_#", "user", "#_#", "config", "#(#", "name", "#):"],
+      "total": 9,
+      "query_pieces": ["get", "#_#", "user"],
+      "identity": {
+        "def {}(": ["def", "get", "#_#", "user", "#("],
+        "self.{}(": ["self", "#.#", "get", "#_#", "user", "#("],
+        "_{}(": ["_#", "get", "#_#", "user", "#("]
+      }
+    }
+  }
+}

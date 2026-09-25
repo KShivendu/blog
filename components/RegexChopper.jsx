@@ -39,6 +39,15 @@ const METHODS = [
     note: 'A hash picks which longer chunks to keep, so the query and the document always agree on the choice.',
   },
   {
+    key: 'isbpe',
+    label: 'ISBPE tokens',
+    sub: 'the space stored as its absence',
+    pieces: ['def', 'get', '#_#', 'user', '#_#', 'config', '#(#', 'name', '#):'],
+    total: 9,
+    tone: 'good',
+    note: 'A flag on the neighbour marks where a space is missing, so a word never changes shape to absorb one.',
+  },
+  {
     key: 'token',
     label: 'BPE tokens',
     sub: 'the pieces your model already uses',
@@ -186,7 +195,38 @@ export default function RegexChopper() {
         <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>
           now someone searches for <code style={{ fontFamily: MONO, color: C.ink }}>{QUERY}</code>
         </div>
-        {m.key === 'token' ? (
+        {m.key === 'isbpe' ? (
+          <div style={{ fontSize: 12, color: C.ink, lineHeight: 1.65 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: C.muted, width: 78 }}>in the query</span>
+              <span style={{ ...box, borderColor: accent, color: accent }}>get</span>
+              <span style={{ ...box }}>#_#</span>
+              <span style={{ ...box, borderColor: accent, color: accent }}>user</span>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 4,
+                alignItems: 'center',
+                marginTop: 4,
+              }}
+            >
+              <span style={{ fontSize: 11, color: C.muted, width: 78 }}>in the line</span>
+              <span style={{ ...box, borderColor: accent, color: accent }}>get</span>
+              <span style={{ ...box }}>#_#</span>
+              <span style={{ ...box, borderColor: accent, color: accent }}>user</span>
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>
+              The same pieces both times. It holds after a dot and after an underscore too:{' '}
+              <code style={{ fontFamily: MONO }}>self.get_user(</code> and{' '}
+              <code style={{ fontFamily: MONO }}>_get_user(</code> both still contain{' '}
+              <code style={{ fontFamily: MONO }}>get</code> and{' '}
+              <code style={{ fontFamily: MONO }}>user</code>, where BPE gives three different
+              pieces.
+            </div>
+          </div>
+        ) : m.key === 'token' ? (
           <div style={{ fontSize: 12, color: C.ink, lineHeight: 1.65 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
               <span style={{ fontSize: 11, color: C.muted, width: 78 }}>in the query</span>

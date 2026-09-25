@@ -102,10 +102,14 @@ export default function SpaceSlotHero() {
   const red = c.bad
 
   // The duplicate is the point: one surface word BPE holds in two slots.
+  // The leading space arrives as U+00B7 from bpe_pieces(), not as a space, so
+  // strip both. Testing startsWith(' ') matched nothing and the duplicate was
+  // never highlighted, which is the one thing this widget exists to show.
+  const core = (str) => str.replace(/^[ \u00b7]+/, '')
   const dup = (() => {
-    const bare = new Set(h.bpe_slots.filter((s) => !s.s.startsWith(' ')).map((s) => s.s.trim()))
-    const hit = h.bpe_slots.find((s) => s.s.startsWith(' ') && bare.has(s.s.trim()))
-    return hit ? hit.s.trim() : null
+    const bare = new Set(h.bpe_slots.filter((x) => x.s === core(x.s)).map((x) => x.s))
+    const hit = h.bpe_slots.find((x) => x.s !== core(x.s) && bare.has(core(x.s)))
+    return hit ? core(hit.s) : null
   })()
 
   const FS = narrow ? 11 : 13
@@ -147,54 +151,121 @@ export default function SpaceSlotHero() {
   )
   const LANE_X = narrow ? 0 : 62
   const VB_W = W + LANE_X + 56
-  const VB_H = ROW * 4 + (narrow ? 74 : 58)
+  const VB_H = ROW * 2 + (narrow ? 32 : 26)
 
-  const Chip = ({ d, y, tint, o = 1, dim }) => (
-    <g opacity={o} style={{ transition: 'none' }}>
-      <rect
-        x={d.x}
-        y={y}
-        width={d.w}
-        height={ROW - 10}
-        rx={2}
-        fill={tint ? (dark ? `${tint}28` : `${tint}18`) : c.fill}
-        stroke={tint || c.border}
-        strokeWidth={1}
-        opacity={dim ? 0.55 : 1}
-      />
+  const Chip = ({ d, y, tint, o = 1, dim }) => {
+    // The leading space is drawn as a filled slab rather than a glyph, so it
+    // reads as width the token took rather than as punctuation.
+    const lead = d.txt.startsWith('\u00b7')
+    const body = lead ? d.txt.slice(1) : d.txt
+    const slabW = CH + PAD * 0.6
+    return (
+      <g opacity={o}>
+        <rect
+          x={d.x}
+          y={y}
+          width={d.w}
+          height={ROW - 10}
+          rx={2}
+          fill={tint ? (dark ? `${tint}28` : `${tint}18`) : c.fill}
+          stroke={tint || c.border}
+          strokeWidth={1}
+          opacity={dim ? 0.55 : 1}
+        />
+        {lead ? (
+          <>
+            <rect
+              x={d.x + 1}
+              y={y + 1}
+              width={slabW}
+              height={ROW - 12}
+              rx={1}
+              fill={red}
+              opacity={dim ? 0.3 : 0.55}
+            />
+            <line
+              x1={d.x + 1 + slabW}
+              y1={y + 1}
+              x2={d.x + 1 + slabW}
+              y2={y + ROW - 11}
+              stroke={red}
+              strokeWidth={1}
+              opacity={0.75}
+            />
+          </>
+        ) : null}
+        <text
+          x={d.x + (lead ? slabW + 1 : 0) + (d.w - (lead ? slabW + 1 : 0)) / 2}
+          y={y + (ROW - 10) / 2 + FS * 0.36}
+          textAnchor="middle"
+          fontFamily={MONO}
+          fontSize={FS}
+          fill={tint || c.ink}
+          opacity={dim ? 0.75 : 1}
+        >
+          {body}
+        </text>
+      </g>
+    )
+  }
+
+  // Drawn OUTSIDE the translated group, so it can never sit under a chip.
+  const Count = ({ x, y, n, tint, o }) => (
+    <g opacity={o}>
       <text
-        x={d.x + d.w / 2}
+        x={x}
         y={y + (ROW - 10) / 2 + FS * 0.36}
-        textAnchor="middle"
         fontFamily={MONO}
-        fontSize={FS}
-        fill={tint || c.ink}
-        opacity={dim ? 0.75 : 1}
+        fontSize={FS + 2}
+        fontWeight="700"
+        fill={tint}
       >
-        {d.txt}
+        {n}
+      </text>
+      <text
+        x={x + (FS + 2) * 0.62 + 5}
+        y={y + (ROW - 10) / 2 + FS * 0.36}
+        fontFamily={MONO}
+        fontSize={FS - 2}
+        fill={c.muted}
+      >
+        slots
       </text>
     </g>
   )
 
   const laneLabel = (y, text, tint) =>
     narrow ? null : (
-      <text x={0} y={y + (ROW - 10) / 2 + 3} fontFamily={MONO} fontSize={10} fill={tint}>
+      <text
+        x={LANE_X - 10}
+        y={y + (ROW - 10) / 2 + 3}
+        textAnchor="end"
+        fontFamily={MONO}
+        fontSize={10}
+        fill={tint}
+      >
         {text}
       </text>
     )
 
-  const yBPE = narrow ? 34 : 30
-  const ySlotB = yBPE + ROW
-  const yISB = ySlotB + ROW + (narrow ? 12 : 10)
-  const ySlotI = yISB + ROW
+  // Two rows, not four. For this example BPE's token row and slot row are
+  // identical (6 and 6), so showing both read as an accidental duplicate. The
+  // distinct-slot count goes inline at the end of each row instead.
+  const yBPE = narrow ? 30 : 26
+  const yISB = yBPE + ROW + (narrow ? 10 : 8)
 
+  // A space-separated example never produces a mark, so the phase text must
+  // not promise one.
+  const hasMarks = h.isbpe.some((x) => x.l || x.r)
   const phaseText =
     p < P0
       ? 'one line of text'
       : p < P1
       ? 'cut into pretokens, identical so far'
       : p < P2
-      ? 'BPE swallows the space. ISBPE drops it and marks only where one is missing'
+      ? hasMarks
+        ? 'BPE swallows the space. ISBPE drops it and marks where one is missing'
+        : 'BPE swallows the space. ISBPE just drops it'
       : 'and here is what each scheme has to store'
 
   return (
@@ -241,86 +312,58 @@ export default function SpaceSlotHero() {
       <div style={{ ...LABEL, color: c.muted, minHeight: 15, marginBottom: 4 }}>{phaseText}</div>
 
       <svg viewBox={`0 0 ${VB_W} ${VB_H}`} width="100%" role="img" aria-label={phaseText}>
+        {/* Labels live outside the chip group so they can never be covered. */}
+        {laneLabel(yBPE, 'BPE', red)}
+        {laneLabel(yISB, 'ISBPE', green)}
+
         <g transform={`translate(${LANE_X},0)`}>
-          {/* the raw line, fading out as the pretokens appear */}
+          {/* the raw line, fading as the pretokens take over */}
           <text
             x={0}
-            y={16}
+            y={14}
             fontFamily={MONO}
             fontSize={FS}
             fill={c.muted}
-            opacity={1 - tCut * 0.75}
+            opacity={1 - tCut * 0.8}
           >
             {h.text}
           </text>
 
-          {/* BPE lane */}
-          {laneLabel(yBPE, 'BPE', red)}
+          {/* BPE: the space is glued on, so the repeated word needs two slots */}
           {bpeRow.map((d, i) => (
             <Chip
               key={`b${i}`}
               d={d}
               y={yBPE}
               o={tCut}
-              tint={dup && d.s.trim() === dup && tSplit > 0.5 ? red : undefined}
+              tint={dup && core(d.s) === dup ? red : undefined}
             />
           ))}
+          <Count
+            x={(bpeRow.at(-1)?.x ?? 0) + (bpeRow.at(-1)?.w ?? 0) + 12}
+            y={yBPE}
+            n={h.bpe_slots.length}
+            tint={red}
+            o={tSlots}
+          />
 
-          {/* BPE slots, revealed last */}
-          {laneLabel(ySlotB, 'slots', c.muted)}
-          {bpeSlots.map((d, i) => (
-            <Chip
-              key={`bs${i}`}
-              d={d}
-              y={ySlotB}
-              o={tSlots}
-              dim
-              tint={dup && d.s.trim() === dup ? red : undefined}
-            />
-          ))}
-          <text
-            x={(bpeSlots.at(-1)?.x ?? 0) + (bpeSlots.at(-1)?.w ?? 0) + 10}
-            y={ySlotB + (ROW - 10) / 2 + FS * 0.36}
-            fontFamily={MONO}
-            fontSize={FS + 1}
-            fontWeight="700"
-            fill={red}
-            opacity={tSlots}
-          >
-            {h.bpe_slots.length}
-          </text>
-
-          {/* ISBPE lane */}
-          {laneLabel(yISB, 'ISBPE', green)}
+          {/* ISBPE: identical to BPE until P1, then the spaces leave */}
           {(tSplit > 0 ? isbRow : bpeRow).map((d, i) => (
             <Chip
               key={`i${i}`}
               d={d}
               y={yISB}
               o={tCut}
-              tint={
-                tSplit > 0.5 && (d.txt.includes('#') || (dup && d.s.trim() === dup))
-                  ? green
-                  : undefined
-              }
+              tint={tSplit > 0.4 && dup && core(d.s) === dup ? green : undefined}
             />
           ))}
-
-          {laneLabel(ySlotI, 'slots', c.muted)}
-          {isbSlots.map((d, i) => (
-            <Chip key={`is${i}`} d={d} y={ySlotI} o={tSlots} dim tint={green} />
-          ))}
-          <text
-            x={(isbSlots.at(-1)?.x ?? 0) + (isbSlots.at(-1)?.w ?? 0) + 10}
-            y={ySlotI + (ROW - 10) / 2 + FS * 0.36}
-            fontFamily={MONO}
-            fontSize={FS + 1}
-            fontWeight="700"
-            fill={green}
-            opacity={tSlots}
-          >
-            {h.isbpe_slots.length}
-          </text>
+          <Count
+            x={(isbRow.at(-1)?.x ?? 0) + (isbRow.at(-1)?.w ?? 0) + 12}
+            y={yISB}
+            n={h.isbpe_slots.length}
+            tint={green}
+            o={tSlots}
+          />
         </g>
       </svg>
 
@@ -346,8 +389,8 @@ export default function SpaceSlotHero() {
         <span style={{ color: c.muted }}>{h.note}.</span>{' '}
         {dup ? (
           <>
-            BPE needs a slot for <code style={{ fontFamily: MONO }}>{dup}</code> and another for{' '}
-            <code style={{ fontFamily: MONO, color: red }}>·{dup}</code>.{' '}
+            BPE needs one slot for <code style={{ fontFamily: MONO }}>{dup}</code> and a second for
+            the same word with the space attached to it.{' '}
           </>
         ) : null}
         Across a real vocabulary that is{' '}

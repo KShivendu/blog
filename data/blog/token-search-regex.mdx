@@ -34,7 +34,7 @@ BPE has no such property. Merges apply in rank order across the whole word, so a
   "tokenization"  ->  [token][ization]
 ```
 
-A piece of a word does not tokenize to a piece of that word's tokens. Here is the same line of Python chopped three ways, with the real pieces from each method:
+A piece of a word does not tokenize to a piece of that word's tokens. Here is the same line of Python chopped four ways, with the real pieces each method produces:
 
 <RegexChopper />
 
@@ -232,16 +232,19 @@ The token route still holds the smallest index at 128,000 documents, 41.3M posti
 
 Everything above uses `o200k_base` because Token Search did. That was a default rather than an argument, so I tested the alternatives against the one property a filter actually needs: **the pieces have to reassemble into the original text.** If they do not, the chunks you derive belong to text no document contains.
 
-| tokenizer                     | round-trips exactly, 400 code files |
-| ----------------------------- | ----------------------------------: |
-| BPE `o200k_base`              |                         **400/400** |
-| WordPiece `bert-base-uncased` |                               0/400 |
-| SentencePiece `xlm-roberta`   |                               0/400 |
+| tokenizer                         | round-trips exactly | one identity per word |
+| --------------------------------- | ------------------: | --------------------: |
+| BPE `o200k_base`                  |         **400/400** |             5.0 forms |
+| WordPiece `bert-base-uncased`     |               0/400 |             1.4 forms |
+| SentencePiece `xlm-roberta`       |               0/400 |             3.2 forms |
+| [ISBPE dual](/blog/improving-bpe) |         **400/400** |         **1.0 forms** |
 
 Observations:
 
 - **WordPiece and SentencePiece fail every document.** WordPiece turned `def get_vid_from_url` into `def get _ vid _ url` and `makeMimi` into `makemimi`, changing 47,281 characters. SentencePiece collapsed newline runs, changing 87,986. A regex for `get_vid_from_url` then derives chunks the index does not hold. Normalisation helps a language model and breaks a filter.
 - **That rules both out on correctness**, whatever they do for retrieval quality.
+- **BPE round-trips and still gives a word five identities**, counting how many ways one identifier chops across six surrounding contexts. `def get_user` yields the piece `·get`, `self.get_user` yields `.get`, and `_get_user` yields `get`. That is why looking the query's own tokens up directly is unsound, and why the seam lookup exists.
+- **[ISBPE](/blog/improving-bpe) is the only one with both properties.** It stores the absence of a space on the neighbouring piece, so a word keeps one identity everywhere, and losslessness is structural. It would make the whole-word lookup sound on its own, though [I measured the end-to-end gain here at about 4%](/blog/improving-bpe), since the seam index still has to exist for sub-word searches.
 
 ## Typo search comes free
 
