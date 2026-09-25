@@ -1,28 +1,37 @@
 import { useTheme } from 'next-themes'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { chartChrome, vizPalette } from '../lib/viz-palette'
 
-// The hero. Every regex prefilter chops text into chunks and records which
-// documents each chunk appears in. That record IS the index, so it is the thing
-// on screen: one row per chunk, one column per document, and the AND across
-// rows is what the verifier actually receives.
-//
-// Rows are all present at once because the real operation fetches every posting
-// list and intersects them. An earlier version applied chunks one at a time,
-// which taught a pipeline of filters instead of a set intersection.
+// The hero. It walks the five things a regex prefilter does, and the fourth one
+// is the point: every posting list arrives at once, because the real operation
+// fetches them all and intersects. An earlier version revealed chunks one at a
+// time, which taught a pipeline of filters instead of a set intersection.
 //
 // Documents come from public/static/data/regex-filter-hero.json, written by
 // experiments/regex-filter/export_hero_data.py out of CodeSearchNet. The reader
-// types their own search and the containment is computed live, so this widget
-// cannot drift from the benchmark and cannot be disagreed with by hand.
+// types their own search and containment is computed live, so the widget cannot
+// drift from the benchmark.
 
 const DATA_URL = '/static/data/regex-filter-hero.json'
 const MONO = 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)'
-const PRESETS = ['get_user', 'return self', 'datestamp', '\\s+']
+// One preset per lesson: an exact hit, a wider one, a search whose chunks all
+// land in the wrong places, and a pattern that pins down no text at all.
+const PRESETS = ['get_user', 'def get', 'return self', '\\s+']
+const STEP_MS = 1700
+const HOLD_MS = 3200
 
-// The literal text a regex guarantees. Anything under a ? or * is optional, and
-// a character class pins nothing down, so neither can be required.
+const STEPS = [
+  'a search arrives',
+  'keep only the text it guarantees',
+  'chop that into chunks',
+  'fetch every chunk’s document list at once',
+  'keep the documents on every list',
+  'run the real regex on those',
+]
+
+// The literal text a regex guarantees. Anything under ? or * is optional and a
+// character class pins nothing down, so neither can be required.
 function requiredLiteral(pattern) {
   const out = []
   let cur = ''
@@ -68,6 +77,11 @@ export default function RegexFilterPipeline() {
 
   const [docs, setDocs] = useState(null)
   const [query, setQuery] = useState('get_user')
+  const [step, setStep] = useState(0)
+  const [playing, setPlaying] = useState(true)
+  const [inView, setInView] = useState(false)
+  const [reduced, setReduced] = useState(false)
+  const wrap = useRef(null)
 
   useEffect(() => {
     let live = true
@@ -80,17 +94,45 @@ export default function RegexFilterPipeline() {
     }
   }, [])
 
+  // Readers who asked for less motion get the finished frame, not a loop.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const apply = () => {
+      setReduced(mq.matches)
+      if (mq.matches) setStep(STEPS.length - 1)
+    }
+    apply()
+    mq.addEventListener?.('change', apply)
+    return () => mq.removeEventListener?.('change', apply)
+  }, [])
+
+  useEffect(() => {
+    const node = wrap.current
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      setInView(true)
+      return undefined
+    }
+    const obs = new IntersectionObserver(([e]) => setInView(e.isIntersecting), { threshold: 0.2 })
+    obs.observe(node)
+    return () => obs.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (reduced || !playing || !inView) return undefined
+    const last = STEPS.length - 1
+    const t = setTimeout(
+      () => setStep((s) => (s + 1) % STEPS.length),
+      step === last ? HOLD_MS : STEP_MS
+    )
+    return () => clearTimeout(t)
+  }, [step, playing, inView, reduced])
+
   const model = useMemo(() => {
     if (!docs || !docs.length) return null
     const lit = requiredLiteral(query)
     const chunks = chunksOf(lit)
-    const rows = chunks.map((g) => ({
-      g,
-      hits: docs.map((d) => d.text.includes(g)),
-    }))
-    // Every chunk must be present, so the survivors are the columns marked in
-    // every row. With no usable chunk there is no constraint and everything
-    // survives, which is the fallback the post is about.
+    const rows = chunks.map((g) => ({ g, hits: docs.map((d) => d.text.includes(g)) }))
     const survives = docs.map((_, i) => rows.length > 0 && rows.every((r) => r.hits[i]))
     let truth = docs.map(() => false)
     let valid = true
@@ -106,7 +148,8 @@ export default function RegexFilterPipeline() {
       alive = alive.map((a, i) => a && r.hits[i])
       running.push(alive.filter(Boolean).length)
     })
-    return { lit, chunks, rows, survives, truth, valid, running }
+    const at = lit ? query.indexOf(lit) : -1
+    return { lit, chunks, rows, survives, truth, valid, running, at }
   }, [docs, query])
 
   if (!docs) {
@@ -118,10 +161,15 @@ export default function RegexFilterPipeline() {
   }
 
   const m = model
-  const nSurv = m ? m.survives.filter(Boolean).length : docs.length
+  const none = !m || m.chunks.length === 0
+  const nSurv = m && !none ? m.survives.filter(Boolean).length : docs.length
   const nTrue = m ? m.truth.filter(Boolean).length : 0
-  const nFalse = m ? m.survives.filter((s, i) => s && !m.truth[i]).length : 0
-  const noConstraint = !m || m.chunks.length === 0
+  const nFalse = m && !none ? m.survives.filter((s, i) => s && !m.truth[i]).length : 0
+
+  const restart = (v) => {
+    setQuery(v)
+    if (!reduced) setStep(0)
+  }
 
   const cell = (on, tone) => ({
     width: 13,
@@ -129,11 +177,16 @@ export default function RegexFilterPipeline() {
     borderRadius: 1,
     flex: '0 0 auto',
     background: on ? tone : dark ? '#141922' : '#eef1f6',
-    transition: 'background .2s ease',
+    transition: 'background .3s ease',
   })
+
+  const rowsVisible = step >= 3
+  const andVisible = step >= 4
+  const verified = step >= 5
 
   return (
     <figure
+      ref={wrap}
       style={{
         margin: '2rem 0',
         border: `1px solid ${C.border}`,
@@ -142,19 +195,92 @@ export default function RegexFilterPipeline() {
         overflow: 'hidden',
       }}
     >
-      <div style={{ padding: '14px 16px 0' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>
-          Chop the search, look up each chunk, keep what every list agrees on
-        </div>
-        <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
-          24 real Python functions from CodeSearchNet. Type anything and the lists below are
-          recomputed.
-        </div>
-      </div>
-
       <div
         style={{
-          padding: '12px 16px 0',
+          padding: '14px 16px 0',
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 10,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>
+            What a regex filter actually does
+          </div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
+            24 real Python functions from CodeSearchNet. Type your own search and it recomputes.
+          </div>
+        </div>
+        {!reduced && (
+          <button
+            onClick={() => setPlaying((x) => !x)}
+            aria-label={playing ? 'pause the walkthrough' : 'play the walkthrough'}
+            style={{
+              fontFamily: MONO,
+              fontSize: 11,
+              padding: '4px 9px',
+              height: 26,
+              cursor: 'pointer',
+              border: `1px solid ${C.border}`,
+              borderRadius: 2,
+              background: 'transparent',
+              color: C.muted,
+            }}
+          >
+            {playing ? 'pause' : 'play'}
+          </button>
+        )}
+      </div>
+
+      {/* step rail, clickable so a reader can go straight to a stage */}
+      <div style={{ display: 'flex', gap: 3, padding: '12px 16px 0' }} role="group">
+        {STEPS.map((s, k) => (
+          <button
+            key={s}
+            onClick={() => {
+              setStep(k)
+              setPlaying(false)
+            }}
+            aria-pressed={k === step}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              textAlign: 'left',
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+            }}
+          >
+            <div
+              style={{
+                height: 3,
+                borderRadius: 1,
+                background: k < step ? P.muted : k === step ? C.ink : C.grid,
+                marginBottom: 5,
+                transition: 'background .25s ease',
+              }}
+            />
+            <div
+              style={{
+                fontSize: 10.5,
+                lineHeight: 1.3,
+                color: k === step ? C.ink : C.muted,
+                opacity: k <= step ? 1 : 0.55,
+                paddingRight: 6,
+              }}
+            >
+              {k + 1}. {s}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* the query, and the literal inside it */}
+      <div
+        style={{
+          padding: '14px 16px 0',
           display: 'flex',
           gap: 8,
           flexWrap: 'wrap',
@@ -163,15 +289,15 @@ export default function RegexFilterPipeline() {
       >
         <input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => restart(e.target.value)}
           spellCheck={false}
           aria-label="search pattern"
           style={{
             fontFamily: MONO,
             fontSize: 14,
             padding: '6px 9px',
-            minWidth: 210,
-            flex: '1 1 210px',
+            minWidth: 190,
+            flex: '1 1 190px',
             color: C.ink,
             background: dark ? '#0a0f0d' : '#f7f9f8',
             border: `1px solid ${m && !m.valid ? P.bad : C.border}`,
@@ -181,7 +307,7 @@ export default function RegexFilterPipeline() {
         {PRESETS.map((p) => (
           <button
             key={p}
-            onClick={() => setQuery(p)}
+            onClick={() => restart(p)}
             style={{
               fontFamily: MONO,
               fontSize: 11,
@@ -198,34 +324,82 @@ export default function RegexFilterPipeline() {
         ))}
       </div>
 
-      <div style={{ padding: '12px 16px 0', fontSize: 11, color: C.muted }}>
-        {noConstraint ? (
-          <span>
-            No run of three or more fixed characters, so there is nothing to look up and every
-            document has to be read.
-          </span>
-        ) : (
-          <span>
-            guaranteed text <code style={{ fontFamily: MONO, color: C.ink }}>{m.lit}</code>, chopped
-            into {m.chunks.length} chunks
-          </span>
-        )}
+      <div style={{ padding: '11px 16px 0', fontSize: 11.5, color: C.muted, minHeight: 34 }}>
+        {step === 0 && <span>The pattern as typed. Most of it is shape rather than text.</span>}
+        {step === 1 &&
+          (none ? (
+            <span>Nothing here is guaranteed. Every character sits under a class or a star.</span>
+          ) : (
+            <span>
+              Only <code style={{ fontFamily: MONO, color: P.good }}>{m.lit}</code> has to be
+              present in a match, so that is all the filter may require.
+            </span>
+          ))}
+        {step >= 2 &&
+          (none ? (
+            <span>
+              No run of three fixed characters, so there is nothing to look up and all {docs.length}{' '}
+              documents get read.
+            </span>
+          ) : (
+            <span>
+              <code style={{ fontFamily: MONO, color: C.ink }}>{m.lit}</code> becomes{' '}
+              {m.chunks.length} chunks, and a document must hold every one of them.
+            </span>
+          ))}
       </div>
 
-      {/* the index: one row per chunk, one column per document */}
-      <div style={{ padding: '10px 16px 0', overflowX: 'auto' }}>
-        {m &&
+      {/* chunks */}
+      <div
+        style={{
+          padding: '8px 16px 0',
+          display: 'flex',
+          gap: 4,
+          flexWrap: 'wrap',
+          minHeight: 28,
+        }}
+      >
+        {step >= 2 &&
+          !none &&
+          m.chunks.map((g) => (
+            <code
+              key={g}
+              style={{
+                fontFamily: MONO,
+                fontSize: 11.5,
+                padding: '2px 6px',
+                border: `1px solid ${C.border}`,
+                borderRadius: 2,
+                color: C.ink,
+                whiteSpace: 'pre',
+              }}
+            >
+              {g.replace(/ /g, '·')}
+            </code>
+          ))}
+      </div>
+
+      {/* the index: one row per chunk, every row arriving together */}
+      <div style={{ padding: '10px 16px 0', overflowX: 'auto', minHeight: 130 }}>
+        {!none &&
           m.rows.map((r, ri) => (
             <div
               key={r.g}
-              style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                marginBottom: 3,
+                opacity: rowsVisible ? 1 : 0,
+                transition: 'opacity .4s ease',
+              }}
             >
               <code
                 style={{
                   fontFamily: MONO,
                   fontSize: 11,
                   color: C.ink,
-                  width: 34,
+                  width: 32,
                   textAlign: 'right',
                   flex: '0 0 auto',
                 }}
@@ -234,12 +408,12 @@ export default function RegexFilterPipeline() {
               </code>
               <div style={{ display: 'flex', gap: 2 }}>
                 {r.hits.map((h, i) => (
-                  <span key={i} style={cell(h, P.muted)} title={docs[i].label} />
+                  <span key={i} style={cell(rowsVisible && h, P.muted)} title={docs[i].label} />
                 ))}
               </div>
               <span style={{ fontFamily: MONO, fontSize: 10, color: C.muted, paddingLeft: 4 }}>
-                {r.hits.filter(Boolean).length} docs
-                <span style={{ opacity: 0.6 }}> &rarr; {m.running[ri]} left</span>
+                {r.hits.filter(Boolean).length}
+                {andVisible && <span style={{ opacity: 0.65 }}> &rarr; {m.running[ri]} left</span>}
               </span>
             </div>
           ))}
@@ -252,6 +426,8 @@ export default function RegexFilterPipeline() {
             marginTop: 6,
             paddingTop: 6,
             borderTop: `1px solid ${C.border}`,
+            opacity: andVisible || none ? 1 : 0.25,
+            transition: 'opacity .4s ease',
           }}
         >
           <code
@@ -259,7 +435,7 @@ export default function RegexFilterPipeline() {
               fontFamily: MONO,
               fontSize: 11,
               color: C.ink,
-              width: 34,
+              width: 32,
               textAlign: 'right',
               flex: '0 0 auto',
               fontWeight: 600,
@@ -268,16 +444,14 @@ export default function RegexFilterPipeline() {
             AND
           </code>
           <div style={{ display: 'flex', gap: 2 }}>
-            {docs.map((d, i) => (
-              <span
-                key={i}
-                style={cell(noConstraint || m.survives[i], noConstraint ? P.muted : P.good)}
-                title={d.label}
-              />
-            ))}
+            {docs.map((d, i) => {
+              const keep = none || (andVisible && m.survives[i])
+              const tone = verified && !none ? (m.truth[i] ? P.good : P.muted) : P.good
+              return <span key={i} style={cell(keep, none ? P.muted : tone)} title={d.label} />
+            })}
           </div>
           <span style={{ fontFamily: MONO, fontSize: 10, color: C.ink, paddingLeft: 4 }}>
-            {noConstraint ? docs.length : nSurv} to check
+            {nSurv} to check
           </span>
         </div>
       </div>
@@ -291,31 +465,36 @@ export default function RegexFilterPipeline() {
           fontSize: 11.5,
           color: C.muted,
           lineHeight: 1.7,
-          minHeight: 62,
+          minHeight: 64,
         }}
       >
-        {noConstraint ? (
+        {none ? (
           <span>
             Every index in this post fails the same way here, TopK&rsquo;s included. A filter can
             only look up fixed text, and this pattern names none.
           </span>
-        ) : (
+        ) : verified ? (
           <>
-            The real regex now runs on{' '}
+            The regex ran on{' '}
             <strong style={{ color: C.ink }}>
               {nSurv} of {docs.length}
             </strong>{' '}
-            documents and finds <strong style={{ color: P.good }}>{nTrue}</strong>.
+            documents and found <strong style={{ color: P.good }}>{nTrue}</strong>.
             {nFalse > 0 ? (
               <>
                 {' '}
-                The other {nFalse} hold every chunk scattered in different places, which is the cost
-                of a filter that may hand over junk but may never drop a match.
+                The other {nFalse} hold every chunk in scattered places. A filter may hand over
+                junk, and may never drop a match.
               </>
             ) : (
               <> Here the chunks alone were exact.</>
             )}
           </>
+        ) : (
+          <span>
+            Every list is fetched together and intersected. Nothing is read from a document until
+            the last step.
+          </span>
         )}
       </div>
     </figure>
