@@ -1,11 +1,11 @@
 ---
-title: 'Regex Without a Regex Index'
-subtitle: 'Token postings filter regex as well as a trigram index at a third of the storage, and the fallback rate is the number nobody quotes'
+title: 'Regex on a BM25 Index'
+subtitle: 'One extra posting list turns token postings into a regex filter, and the number that decides regex speed is how many queries have no literal at all'
 date: '2026-09-16'
-lastmod: '2026-09-16'
+lastmod: '2026-09-25'
 tags: ['search', 'internals', 'information-retrieval', 'nlp']
 draft: true
-summary: 'TopK filters regex with content-defined sparse character grams. I benchmarked that against the BM25 token postings from Token Search on 4,000 CodeSearchNet Python functions and 400 regexes mined from real re.compile calls, with exact ground truth and a recall check that caught three soundness bugs in my own code. Token unigram plus bigram postings match a dense trigram index on candidate count in every query class, at 1.41M postings against sparse grams 4.56M, a 3.25x storage win. The predicted 5.2x latency win on sub-word literals did not appear. Sparse grams also cost 3.0x more to build and run 2x slower per query for identical candidates. And who writes the query decides everything: 53.5% of regexes mined from source code have no literal any index can use, capping every method at 2.1x over a full scan, while real coding-agent searches are 96.3% filterable and lift the same indexes to 11.4x.'
+summary: 'If you already hold BM25 postings keyed by BPE token IDs, a token-bigram index turns them into a regex filter that matches a dense trigram index candidate for candidate and beats TopK sparse grams 2.7x on postings and 1.9x on build time. The number that actually decides regex speed is how many queries pin down no literal text at all: 53.5% for regexes mined from re.compile calls, 3.7% for greps that coding agents really run, which moves every index from 2.1x over a full scan to 11.4x. Benchmarked on CodeSearchNet with exact ground truth and a recall check that caught four soundness bugs in my own code.'
 authors: ['kshivendu']
 ---
 
@@ -13,375 +13,265 @@ authors: ['kshivendu']
 
 In [Token Search](/blog/token-search) I ran BM25 over BPE token IDs and it matched a Porter-stemmed English analyzer. Those postings are keyed by token ID, and a token covers about four bytes where a character gram covers half of one. So a fair question is whether the same index can answer `/colou?r of the (sky|sea)/` without building a second one.
 
-[TopK's sparse-gram post](https://www.topk.io/blog/20260814-fast-regex-search-sparse-grams) is the reference point. They weight character bigrams with CRC32, select a gram when both boundary bigrams outweigh every interior one, compile the regex into a boolean expression over grams, and verify survivors with the real regex. I wanted to know what token postings cost against that, so I built both and measured.
+It almost can. One extra posting list finishes the job, and the result ties the standard approach while beating [TopK's sparse grams](https://www.topk.io/blog/20260814-fast-regex-search-sparse-grams) on every axis I measured. But the thing that decides how fast regex search feels turned out to have nothing to do with the index at all. **It is what fraction of queries contain no literal text to look up**, and that fraction depends entirely on who is typing.
 
-Three results, and only one of them is the one I expected.
-
-Every method here does the same two things: chop the text into pieces and remember which documents each piece appeared in. Then it chops the query the same way, looks up its pieces, and runs the real regex on whatever survives. Watch it happen on 60 real documents:
+Every method here does the same two things: chop the text into pieces, and remember which documents each piece appeared in. Then chop the query the same way, look its pieces up, and run the real regex on whatever survives. Watch it on 60 real documents:
 
 <RegexFilterPipeline />
 
-The only thing separating the methods is how they chop. Here is the same line of Python under all three:
+## Why a token index needs help
+
+A prefilter has one obligation. It may hand the verifier junk, but it must never drop a document that actually matches. Extra candidates cost time, a missing candidate is a wrong answer.
+
+TopK's rule earns that. They weight character bigrams with CRC32 and select a gram when both boundary bigrams outweigh every interior one, so the choice depends only on characters inside the gram. Query and document agree without communicating.
+
+BPE has no such property. Merges apply in rank order across the whole word, so a suffix rewrites the prefix:
+
+```
+  "in"            ->  [in]
+  "ing"           ->  [ing]           the [in] is gone
+  "token"         ->  [token]
+  "tokenization"  ->  [token][ization]
+```
+
+A piece of a word does not tokenize to a piece of that word's tokens. Here is the same line of Python chopped three ways, with the real pieces from each method:
 
 <RegexChopper />
 
-## The benchmark needs no labels
-
-Filter quality is candidate-set size, and ground truth is whether the regex actually matches, which Python computes exactly. So this needs no human judgments at all, unlike the NanoBEIR runs in Token Search.
-
-- **Documents.** 4,000 Python functions from [CodeSearchNet](https://github.com/github/CodeSearchNet), 5.7 MB.
-- **Queries.** 400 regexes sampled from 2,998 usable ones mined out of `re.compile`, `re.search`, `re.match` and friends in the **train** split, so the patterns are ones developers wrote and the documents they run against are disjoint from where they came.
-- **Ground truth.** `re.search(pattern, doc)` over every pair.
-- **The check that matters.** Recall must be exactly 1.000. A filter that drops a matching document is a wrong answer, not a tuning choice.
-
-Four methods, all required to be sound:
+The gap that matters is the seam. Take `datestamp`, which BPE chops into `dat` and `estamp`, and search for `test`:
 
 ```
-  dense trigram        every 3-char window -> doc ids
-  TopK sparse          CRC32 content-defined gram selection, n = 3..16
-  token word-aligned   whole words inside the literal, Token Search normalisation
-  token + bigram       token unigram + bigram + a 2 MB static vocab sidecar
+  d a t e s t a m p
+  [dat  ][estamp  ]
+      ^^^^
+      test spans the cut, so no single token holds it
 ```
 
-## The recall check caught three bugs, all mine
+Searching the token vocabulary for a piece containing `test` finds nothing, because the word was split through the middle of it. Over a corpus of English words, **28.0% of a word's chunks sit inside no single token** and 77.6% of words have at least one such chunk. The seam is the common case.
 
-I want to show these before the results, because the first run looked fine and was wrong.
+So the design needs two lookups per chunk. Tokens whose text contains the chunk, which a 2 MB static index over the vocabulary answers, or **token pairs that spell it across a seam**, which needs one new posting list keyed by adjacent token pairs.
 
-**Bug 1. Every literal lost its last character.** `'magnet'` came out as `magne` and `'torrent'` as `torren`. The cause is that my parser tested `if q in "?*"` where `q` is the next character, and at the end of a string `q` is `""`. In Python `"" in "?*"` is `True`, so the final character always looked like it carried an optional quantifier.
+That second index does the heavy lifting, and cheaply, because the vocabulary permits far more pairs than reality contains:
 
-**Bug 2. Group syntax read as text.** I treated `(` as a one-character skip, so `(?P<protocol>[a-z]+)://` had `P<protocol>` parsed as required literal text. Worse, `(?<!\\)%` is a negative lookbehind, where the body is **forbidden** rather than required, and I was requiring it. Nine patterns leaked on every method, which is the tell that the bug was in the shared literal extractor rather than in any index.
-
-**Bug 3. Quantifiers read as text.** After `\d` breaks a literal run, the following `{1,2}` got parsed character by character, yielding a required literal `1,2`. So `(?P<hour>\d{1,2}):(?P<minute>\d{2,2})` demanded text that need not appear, and found 18 documents where 38 match.
-
-There was also a fourth, and it is the one with a design lesson in it.
-
-**The word-aligned method was unsound on code until the index changed.** Token Search's normalisation encodes each word alone with a fixed leading space, `enc.encode(" " + word)`. I applied that on the query side and left the index on raw tokenisation. For the literal `</pre>` the safe word run is `pre`, and the query encodes `" pre"`, but in the document `pre` follows `/` and BPE tokenises it differently, so the true match was not in the candidate set. The normalisation has to run at **index** time too. Once I built a second index that way, the leak closed.
-
-That is a general point about token-native filtering rather than a bug in this script. The leading-space trick assumes words are space-delimited, and in code they mostly are not.
-
-After the fixes, every method is sound:
-
-```
-  dense trigram        400/400
-  TopK sparse          400/400
-  token word-aligned   400/400
-  token + bigram       400/400
-```
-
-## Index size is the clear win
-
-| index                      |   terms |      postings |          vs sparse |
-| -------------------------- | ------: | ------------: | -----------------: |
-| dense trigram              |  59,629 |     1,971,086 |      2.31x smaller |
-| TopK sparse grams          | 694,707 |     4,560,012 |              1.00x |
-| token unigram              |  26,907 |       511,965 |                    |
-| token bigram               | 281,153 |       893,244 |                    |
-| **token unigram + bigram** | 308,060 | **1,405,209** |  **3.25x smaller** |
-| vocab 3-gram sidecar       |  63,245 |       695,371 | static, not corpus |
+| literal   | pairs the vocabulary allows | pairs that actually occur |  pruning |
+| --------- | --------------------------: | ------------------------: | -------: |
+| `ization` |                         778 |                         1 |     778x |
+| `gRPC`    |                       5,636 |                         2 |   2,818x |
+| `keniz`   |                      19,425 |                        29 |     670x |
+| `veal`    |                     213,970 |                         1 | 213,970x |
 
 Observations:
 
-- **Token unigram plus bigram is 3.25x smaller than sparse grams**, 1.41M postings against 4.56M, and my [napkin model](/blog/regex-token-search) predicted 3.9x at 10M documents from the 4-bytes-per-posting argument alone. Same direction, and the measured number is the one I would quote.
-- **Sparse grams are 2.31x larger than a dense trigram index, not smaller.** Their `E[grams] ~= 2L` counts bytes, and since selection probability at length 3 is exactly 1, every trigram is indexed and the longer grams roughly double it. Sparsity is measured against dense-all-lengths, so it buys selectivity rather than size.
-- **The vocab sidecar does not scale with the corpus.** 695,371 postings over the fixed 200k `o200k_base` vocabulary, about 2 MB, built once from the tokenizer and never rebuilt on ingest.
+- **The prune is sound rather than heuristic.** The bigram index is built from the same corpus, so a pair that never occurs adjacently there cannot occur in any document of it. Nothing is dropped.
+- **`veal` allows 213,970 pairs because 726 tokens end in `ve` and 292 start with `al`.** Exactly one of those combinations appears in real text.
+
+## The benchmark needs no labels
+
+Filter quality is candidate-set size, and ground truth is whether the regex matches, which Python computes exactly. So this needs no human judgments, unlike the NanoBEIR runs in Token Search.
+
+- **Documents.** Python functions from [CodeSearchNet](https://github.com/github/CodeSearchNet).
+- **Queries.** Regexes mined from `re.compile`, `re.search` and friends in the **train** split, so the patterns are ones developers wrote and the documents are disjoint from where they came.
+- **Ground truth.** `re.search(pattern, doc)` over every pair.
+- **The check that matters.** Recall must be exactly 1.000. A filter that drops a matching document is a wrong answer rather than a tuning choice.
+
+That check caught four bugs in my own code, and two of them carry a lesson worth keeping.
+
+**`"" in "?*"` is `True` in Python.** My literal extractor tested whether the next character was a quantifier, and at the end of a string the next character is the empty string, which is a substring of everything. Every literal silently lost its last character. `'magnet'` was searched as `magne`.
+
+**The normalisation has to run at index time too.** Token Search encodes each word alone with a fixed leading space, `enc.encode(" " + word)`. I applied that to queries and left the index on raw tokenisation. For the literal `</pre>` the safe word is `pre`, the query encodes `" pre"`, but in the document `pre` follows `/` and tokenises differently, so the true match never entered the candidate set. The leading-space trick assumes words are space-delimited, and in code they mostly are not.
+
+After the fixes, all four methods return every true match on all 400 patterns.
+
+## Storage is the clear win
+
+export const idxCats = ['dense trigram', 'TopK sparse grams', 'token + bigram']
+export const idxVals = [2.93, 6.51, 2.41]
+
+<BarChart
+  orientation="horizontal"
+  title="Index size, 8,000 CodeSearchNet Python functions"
+  subtitle="millions of postings, lower is better"
+  valueLabel="postings (millions)"
+  valueMax={7.4}
+  valueTicks={[0, 2, 4, 6]}
+  categories={idxCats}
+  series={[
+    {
+      name: 'postings',
+      roles: ['muted', 'muted', 'series0'],
+      values: idxVals,
+      text: idxVals.map((v) => v.toFixed(2) + 'M'),
+      textPosition: 'outside',
+    },
+  ]}
+/>
+
+Observations:
+
+- **Token postings plus the bigram index hold 2.41M postings against sparse grams' 6.51M**, a 2.7x gap that comes from one fact: a token posting covers about four bytes where a character gram covers half of one.
+- **Sparse grams are 2.2x larger than the dense trigram index they improve on.** Their `E[grams] ~= 2L` counts bytes, and since selection probability at length 3 is exactly 1, every trigram is indexed and the longer grams roughly double it. Sparsity is measured against a dense index holding every length at once, so it buys selectivity rather than size.
+- **Build time splits the same way**, 6.3 s for token plus bigram against 12.2 s for sparse grams and 1.1 s for dense trigrams, because gram selection walks every length from 3 to 16 at every byte position.
 
 ## Selectivity is a three-way tie
 
-Mean percentage of the corpus handed to the verifier, so lower is better.
+Mean percentage of a 4,000-document corpus handed to the verifier, by query class, so lower is better.
 
-| class        |   n | true matches | dense trigram | TopK sparse | token word-aligned | token + bigram |
-| ------------ | --: | -----------: | ------------: | ----------: | -----------------: | -------------: |
-| word-aligned |  59 |           30 |          0.8% |        0.8% |               7.5% |           0.8% |
-| sub-word     | 123 |           19 |          5.8% |        5.8% |              98.4% |           5.8% |
-| alternation  |   4 |            1 |          0.1% |        0.1% |             100.0% |           0.1% |
-| no-literal   | 214 |         1404 |        100.0% |      100.0% |             100.0% |         100.0% |
-
-Observations:
-
-- **Token plus bigram matches the dense trigram index to the decimal in every class**, 0.8% and 5.8% and 0.1%, which is the design working as intended. It resolves "does this document contain trigram `g`" through the vocab sidecar and token adjacency instead of storing a trigram posting list, so it should land on the same candidates, and it does.
-- **Sparse grams buy nothing measurable here.** Same three numbers, at 3.25x the storage.
-- **Word-aligned token filtering alone is not usable on code.** 7.5% of the corpus against 0.8%, and 98.4% of sub-word patterns get no constraint from it at all. The bigram index and the sidecar are load-bearing, not an optimisation.
-
-False positives, as median candidates divided by true matches, where 1.0x is a perfect filter:
-
-| class        |   n | dense trigram | TopK sparse | token word-aligned | token + bigram |
-| ------------ | --: | ------------: | ----------: | -----------------: | -------------: |
-| word-aligned |   6 |          1.0x |        1.0x |               4.1x |           1.0x |
-| sub-word     |  24 |          1.3x |    **1.2x** |             145.9x |           1.3x |
-| alternation  |   1 |          1.3x |        1.3x |            1333.3x |           1.3x |
+| class        |   n | true matches | dense trigram | TopK sparse | token + bigram |
+| ------------ | --: | -----------: | ------------: | ----------: | -------------: |
+| word-aligned |  59 |           30 |          0.8% |        0.8% |           0.8% |
+| sub-word     | 123 |           19 |          5.8% |        5.8% |           5.8% |
+| alternation  |   4 |            1 |          0.1% |        0.1% |           0.1% |
+| no-literal   | 214 |        1,404 |        100.0% |      100.0% |         100.0% |
 
 Observations:
 
-- **Sparse grams win sub-word literals by 1.2x against 1.3x**, the only place any method separates, and the margin is one notch of the median rather than anything a user would feel.
-- **Word-aligned alone is 145.9x on sub-word**, which is what a filter looks like when it almost always falls back and the few constraints it does find are weak.
+- **Token plus bigram matches the dense trigram index to the decimal in every class.** It computes the same function from different storage, resolving "does this document contain this chunk" through the vocabulary index and token adjacency instead of storing a chunk posting list, so it lands on the same candidates.
+- **Sparse grams buy nothing measurable here**, at 2.7x the postings and 1.9x the build time.
+- **The bottom row is the whole story of this post.** 214 of 400 patterns get no constraint from any method.
 
-## Build time, latency, and how they scale
+### The prediction that broke
 
-Candidate count is the input to latency rather than latency itself, so I measured the rest: build time, end-to-end query time, and QPS across five corpus sizes from 500 to 8,000 documents. End-to-end means filter time plus running the real regex on whatever the filter returned, and every method verifies with the same `re` engine so that half is directly comparable.
+Before running this I modelled `/keniz/` and predicted token plus bigram would beat sparse grams **5.2x** on sub-word literals, reasoning that `ken`, `eni` and `niz` can appear scattered through a document without being adjacent, so a trigram index admits `kennel ... genie ... organize` while adjacency forbids it. That model assumed dense trigrams return **8x** the true matches. Measured, they return **1.3x**.
 
-Build time in seconds, and the fitted exponent against corpus size:
-
-| index              | 500 | 1,000 | 2,000 | 4,000 |    8,000 |    growth |
-| ------------------ | --: | ----: | ----: | ----: | -------: | --------: |
-| dense trigram      | 0.1 |   0.1 |   0.4 |   0.8 |      1.5 | O(N^1.17) |
-| TopK sparse grams  | 0.5 |   1.3 |   3.2 |   6.9 | **12.8** | O(N^1.18) |
-| token word-aligned | 0.1 |   0.3 |   0.7 |   1.7 |      2.9 | O(N^1.17) |
-| token + bigram     | 0.4 |   0.6 |   1.3 |   2.6 |  **4.3** | O(N^0.93) |
-
-Observations:
-
-- **Sparse grams cost 12.8 s to build against token plus bigram's 4.3 s at 8,000 documents**, so 3.0x more, and 8.5x more than a dense trigram index. Selecting grams means walking every gram length from 3 to 16 at every byte position, where the other three make one pass.
-- **Everything is close to linear**, which is what an inverted index should do, and the postings confirm it: dense trigram O(N^1.06), sparse O(N^1.07), token plus bigram O(N^1.08).
-
-Now the query side. The aggregate first, over all 150 patterns:
-
-| method              |  500 | 1,000 | 2,000 | 4,000 | 8,000 |
-| ------------------- | ---: | ----: | ----: | ----: | ----: |
-| full scan p50 ms    | 0.31 |  0.73 |  1.70 |  3.49 |  6.60 |
-| dense trigram       | 0.12 |  0.26 |  0.64 |  1.40 |  2.63 |
-| TopK sparse         | 0.24 |  0.38 |  0.65 |  1.34 |  2.44 |
-| token + bigram      | 0.11 |  0.26 |  0.64 |  1.46 |  2.83 |
-| **speedup vs scan** | 1.8x |  1.9x |  2.3x |  2.4x |  2.1x |
-
-Observations:
-
-- **Every index lands at 2.1x to 2.4x over a full scan, and no better.** TopK report 55.3x. The difference is not the index, it is that 53.5% of these patterns cannot be filtered at all and every method scans the corpus for them, which caps the achievable mean no matter how good the filter is.
-- **p90 is the same story louder.** At 8,000 documents full scan p90 is 259.96 ms and token plus bigram is 152.66 ms, a 1.7x gap, because the 90th percentile query is one of the unfilterable ones.
-
-The filterable 46.5% on its own, which is the slice TopK's number describes:
-
-| method              |   500 | 1,000 | 2,000 | 4,000 |    8,000 |
-| ------------------- | ----: | ----: | ----: | ----: | -------: |
-| full scan p50 ms    |  0.22 |  0.53 |  1.26 |  2.72 |     4.91 |
-| dense trigram       |  0.01 |  0.02 |  0.04 |  0.09 | **0.19** |
-| TopK sparse         |  0.19 |  0.23 |  0.27 |  0.38 | **0.40** |
-| token + bigram      |  0.01 |  0.03 |  0.04 |  0.10 | **0.20** |
-| QPS, token + bigram | 4,956 | 1,694 |   726 |   288 |      146 |
-| QPS, TopK sparse    | 2,628 | 1,367 |   692 |   283 |      154 |
-| QPS, full scan      |   135 |    50 |    16 |     7 |        4 |
-
-Observations:
-
-- **Speedups reach 36.5x to 50.0x once the unfilterable queries are excluded**, peaking at 50.0x for dense trigram at 2,000 documents. That is the same order as TopK's 55.3x, which is the sanity check I wanted: the two numbers describe the same slice of traffic.
-- **Token plus bigram is 2x faster than sparse grams per query**, 0.20 ms against 0.40 ms at 8,000 documents. Both return identical candidate sets, so verification time is identical and the whole gap is the filter step. Sparse has to generate every selected gram of the query literal before it can look anything up.
-- **Sparse gram filter time is nearly flat in corpus size**, O(N^0.29) against token plus bigram's O(N^0.97), because its per-query cost is dominated by that fixed gram-generation step rather than by posting traversal. I would not extrapolate a crossover from this, since the flatness is mostly my implementation's fixed overhead rather than a property of the algorithm.
-
-## The prediction that broke
-
-Before running this I modelled `/keniz/` and predicted token plus bigram would beat sparse grams **5.2x** on sub-word literals, on the reasoning that `ken`, `eni` and `niz` can appear scattered through a document without being adjacent, so a trigram index admits `kennel ... genie ... organize` while a bigram index requires contiguity. That model assumed dense trigrams would return **8x** the true matches. Measured, they return **1.3x**.
-
-So the assumption was wrong by about six times, and the conclusion built on it was wrong with it. I went back to the rows to find out why.
-
-| class        |   n | mean literal len | p50 | min | max |
-| ------------ | --: | ---------------: | --: | --: | --: |
-| word-aligned |  59 |             14.4 |  12 |   3 |  41 |
-| sub-word     | 123 |              7.6 |   6 |   3 |  47 |
-
-Observations:
-
-- **The median sub-word literal is 6 characters, not 5**, and 38 of 123 run to 8 or more. A 6-character literal yields 4 trigrams, and ANDing 4 trigram posting lists over 4,000 documents is already close to exact, which leaves the adjacency constraint nothing to remove.
-- **My 8x figure came from a 5-character literal in isolation**, which is the shortest case that still clears a trigram index and therefore the most favourable one I could have picked. Real mined literals are longer, and a `%s` template or a full error string like `Cannot compile filter '(.*)': syntax error` is nothing like `keniz`.
-
-The adjacency argument is still correct about what it describes. It just describes a case that barely occurs in this workload, so it does not carry a latency claim.
+The reasoning was fine and the input was wrong. The median mined sub-word literal is 6 characters, which yields 4 chunks, and ANDing 4 chunk lists is already near-exact. My 8x came from a 5-character literal in isolation, the shortest case that still clears a trigram index and so the most favourable one I could have picked. Adjacency had nothing left to remove.
 
 ## The number nobody quotes
 
-|                    | patterns with a usable constraint |
-| ------------------ | --------------------------------: |
-| dense trigram      |                 186 / 400 = 46.5% |
-| TopK sparse grams  |                 186 / 400 = 46.5% |
-| token + bigram     |                 186 / 400 = 46.5% |
-| token word-aligned |                  61 / 400 = 15.2% |
-
-**53.5% of these regexes must read every document, under every method.** They pin down no text of three characters or more, so there is no key any index can look up:
+**53.5% of these regexes must read every document, under every method.** They pin down no text of three characters or more, so no index has a key to look up:
 
 ```
   no usable literal              has one
   '\s+'                          'magnet'            -> magnet
   '\d+'                          'tower[0-9]+/'      -> tower
   '[-/]'                         'https?://'         -> http AND ://
-  '(.)([A-Z][a-z]+)'             '\\.drep$'          -> drep
-  '>(.+)<'                       'page=[0-9]+'       -> page=
-  '[A-Z][^A-Z]*'                 '__version__ = ...' -> __version__ =
+  '(.)([A-Z][a-z]+)'             'page=[0-9]+'       -> page=
+  '>(.+)<'                       '__version__ = ...' -> __version__ =
 ```
 
-Note `https?://` gives `http` and `://` but never `https://`. The `s` sits under `?`, so a matching document need not contain it, and a sound filter may only require characters guaranteed to be present. `>(.+)<` gives nothing for a duller reason: `>` and `<` are one character each, below the three a trigram needs.
+Note `https?://` gives `http` and `://` but never `https://`. The `s` sits under `?`, so a matching document need not contain it, and a sound filter may only require characters guaranteed present.
 
-<details>
-<summary>Why 53.5% overstates it for a code-search product</summary>
-
-These patterns come from `re.compile` calls in Python source, so many are string-processing utilities rather than search queries. Nobody opens a code search box and types `\s+` to find a whitespace run, but plenty of programs call `re.split(r'\s+', line)`.
-
-So read 53.5% as the rate for regexes in the wild, and expect a product's query log to skew more literal-heavy, because a person searching a codebase is usually looking for a name they already know. I did not have a real code-search query log to check that against, which is the main thing I would want before quoting a fallback number to anyone.
-
-The direction of the bias is knowable even without that log. Mined patterns have a median sub-word literal of 6 characters and a mean of 7.6, and a search query built around an identifier like `tokenize_and_filter` is far longer than that, which makes it both more filterable and more selective.
-
-</details>
-
-## What I would build
-
-Ordered by measured value rather than by how interesting it is.
-
-1. **Word-aligned literals on the existing unigram postings, with the normalisation applied at index time.** No new storage. It only covers 15.2% of patterns on its own, so it is a starting point rather than a feature.
-2. **The token bigram index**, at 893,244 postings against the unigram's 511,965. This is what lifts coverage from 15.2% to 46.5% and selectivity from 7.5% to 0.8%. It is the only item here that changes the numbers.
-3. **The 2 MB vocab sidecar**, static, built from the tokenizer at startup, which turns a sub-word literal into a candidate token set.
-4. **Skip sparse grams.** They cost 3.25x the storage and returned identical candidate counts in every class.
-
-What I would not claim from this run: any latency number. Candidate count is the input to latency, and the two are only proportional once you fix a fetch path, a verifier and a machine. I measured the input.
-
-## Who writes the query decides everything
-
-Every number above uses regexes mined from `re.compile` calls in Python source. Those are string-processing utilities rather than searches, and nobody greps a repo for `\s+`. So I went and found the searches that coding agents actually run, by pulling `grep` invocations out of published [OpenHands](https://huggingface.co/datasets/nebius/SWE-rebench-openhands-trajectories) and [SWE-agent](https://huggingface.co/datasets/nebius/SWE-agent-trajectories) trajectories. 1,079 distinct patterns from 2,400 agent runs.
+Then I noticed those patterns are string-processing utilities rather than searches. Nobody greps a repo for `\s+`. So I pulled the searches coding agents really run, out of published [OpenHands](https://huggingface.co/datasets/nebius/SWE-rebench-openhands-trajectories) and [SWE-agent](https://huggingface.co/datasets/nebius/SWE-agent-trajectories) trajectories: 1,079 distinct patterns from 2,400 agent runs.
 
 <QueryShapes />
 
-| minimum literal |        agent queries | human `re.compile` |
-| --------------- | -------------------: | -----------------: |
-| 3 characters    | **96.3%** filterable |              48.2% |
-| 4 characters    |                90.9% |              39.0% |
-| 8 characters    |                53.1% |              20.7% |
+export const fbCats = ['dense trigram', 'TopK sparse grams', 'token + bigram']
+export const fbHuman = [2.1, 2.1, 2.0]
+export const fbAgent = [11.4, 11.4, 10.7]
+
+<BarChart
+  orientation="horizontal"
+  title="Same indexes, same corpus, two query sets"
+  subtitle="speedup over a full scan at 8,000 documents"
+  valueLabel="times faster than scanning everything"
+  valueMax={13.5}
+  valueTicks={[0, 3, 6, 9, 12]}
+  categories={fbCats}
+  series={[
+    {
+      name: 'mined from re.compile',
+      role: 'muted',
+      values: fbHuman,
+      text: fbHuman.map((v) => v.toFixed(1) + 'x'),
+      textPosition: 'outside',
+    },
+    {
+      name: 'agent grep searches',
+      role: 'series0',
+      values: fbAgent,
+      text: fbAgent.map((v) => v.toFixed(1) + 'x'),
+      textPosition: 'outside',
+    },
+  ]}
+/>
 
 Observations:
 
-- **The fallback rate collapses from 51.8% to 3.7%.** Agents search for identifiers, so `GetEdk2RelativePathFromAbsolutePath` and `default_parameter_values` and `class Barrier|class WireCut`, where a person writing `re.compile` is describing a shape like `(.)([A-Z][a-z]+)`.
-- **Their literals run longer too**, a median of 9 characters against 7.
+- **Swapping the query set moves every index from about 2.1x to about 11.4x**, and the indexes stay tied to each other. The old ceiling was never the index, it was the half of the query set no index can help.
+- **Agent queries are 96.3% filterable against 48.2% for mined `re.compile` patterns**, both at a 3-character minimum literal, because agents search for identifiers like `GetEdk2RelativePathFromAbsolutePath` where source-code regexes describe shapes like `(.)([A-Z][a-z]+)`.
+- **A 3.7% fallback rate still costs half the available speedup.** The filterable slice alone reaches 24x and the aggregate lands at 11.4x, because each unfilterable query costs about 24x more than a filtered one.
 
-That one swap moves the aggregate speedup over a full scan from **2.1x to 11.4x** at 8,000 documents, for all three indexes. The old ceiling was never the index, it was the half of the query set that no index can help.
+The agent queries also found a bug the human ones hid. `names\[0\]` returned 0 candidates for 7 matching documents, because I derived seam chunks from the bigram index, which sees only pairs, and a chunk can span **three** tokens when the middle one is a single character. `names[0]` tokenises with `[`, `0` and `]` separate, so the chunk `[0]` belonged to no pair. Human patterns lacked the punctuation density to trigger it. Walking the token stream instead is sound for any token length.
 
-| aggregate speedup vs full scan | human queries | agent queries |
-| ------------------------------ | ------------: | ------------: |
-| dense trigram                  |          2.1x |     **11.4x** |
-| TopK sparse grams              |          2.1x |     **11.4x** |
-| token + bigram                 |          2.0x |     **10.7x** |
+## Does the advantage survive at scale?
 
-Observations:
-
-- **A 3.7% fallback rate still costs half the available speedup.** The filterable slice alone reaches 24x, and the aggregate lands at 11.4x, because each unfilterable query costs about 24x more than a filtered one. The fallback rate punches well above its share.
-- **The three indexes stay tied.** Realistic queries raise the whole field rather than separating it.
-
-### The agent queries found a bug the human ones hid
-
-`names\[0\]` leaked under token plus bigram: 7 matching documents, 0 candidates returned. The cause is a gap I had identified in the design and not guarded. I derived boundary-crossing trigrams from the token-bigram index, which only sees pairs, but a trigram can span **three** tokens when the middle one is a single character. `names[0]` tokenises with `[`, `0` and `]` as separate tokens, so the trigram `[0]` belongs to no pair and the documents holding it were dropped.
-
-Human patterns never had the punctuation density to trigger it. The fix is to derive the boundary trigrams by walking the token stream instead, which is sound for any token length. That is the second time realistic data has caught a soundness bug that clean-looking numbers hid.
-
-## Does the trigram advantage survive at scale?
-
-The result above rests on four ANDed trigrams being nearly exact, which held at 8,000 documents. On a much larger corpus each short chunk hits far more documents, so the intersection should get less decisive and TopK's longer grams should start earning their cost. That was my prediction. I swept the corpus 16x to check, on roaring bitmaps rather than Python sets, which is what makes sizes past 10,000 documents reachable at all.
+Four ANDed chunks being near-exact is what makes the tie a tie, and that should weaken as the corpus grows and each chunk hits more documents. Sparse grams should start earning their length. That was my prediction, and I swept the corpus 16x on roaring bitmaps to check.
 
 | corpus       | dense trigram | TopK sparse | sparse advantage |
 | ------------ | ------------: | ----------: | ---------------: |
-| 8,000 docs   |         4.91% |       4.86% |         +0.049pp |
-| 32,000 docs  |         4.98% |       4.93% |         +0.043pp |
-| 128,000 docs |         5.09% |       5.05% |         +0.040pp |
+| 8,000 docs   |         4.91% |       4.86% |         +0.05 pp |
+| 32,000 docs  |         4.98% |       4.93% |         +0.04 pp |
+| 128,000 docs |         5.09% |       5.05% |         +0.04 pp |
 
 Observations:
 
-- **The advantage shrinks rather than grows**, from +0.049 to +0.040 percentage points across a 16x corpus increase. My prediction was wrong in direction, not just in size.
-- **Candidate fraction barely moves either**, 4.91% to 5.09%. Four ANDed trigrams stay near-exact as the corpus grows, so there is still nothing for a longer gram to remove.
+- **The advantage shrinks across a 16x corpus increase** rather than growing, so the prediction was wrong in direction as well as size.
+- **The candidate fraction barely moves**, 4.91% to 5.09%, so four ANDed chunks stay near-exact and there is still nothing for a longer gram to remove.
+- **Build cost is what scales.** At 128,000 documents sparse grams take 211.7 s against a dense trigram index's 22.9 s, a gap that widened from 8.5x to 9.2x while buying nothing measurable.
 
-What does change with scale is the cost of building the thing:
+## The tokenizer is a correctness decision
 
-| at 128,000 docs   |       postings |       build |     p50 | speedup |
-| ----------------- | -------------: | ----------: | ------: | ------: |
-| dense trigram     |     50,246,591 |      22.9 s | 0.24 ms |   20.0x |
-| TopK sparse grams |    112,362,219 | **211.7 s** | 0.69 ms |   19.1x |
-| token + bigram    | **41,272,640** |     115.1 s | 0.31 ms |   18.6x |
+Everything above uses `o200k_base` because Token Search did. That was a default rather than an argument, so I tested the alternatives against the one property a filter actually needs: **the pieces have to reassemble into the original text.** If they do not, the chunks you derive belong to text no document contains.
 
-Observations:
-
-- **Sparse grams now take 211.7 s to build against a dense trigram index's 22.9 s**, a 9.2x gap that widened from 8.5x at 8,000 documents. Selecting grams means walking every length from 3 to 16 at every byte position, and that cost scales with the corpus while buying nothing measurable.
-- **Token plus bigram stays the smallest index**, 41.3M postings against 50.2M and 112.4M, so the storage argument is the one that holds up across two orders of magnitude.
-
-## The tokenizer is a correctness decision, not a quality one
-
-Everything above uses `o200k_base` because that is what [Token Search](/blog/token-search) used. That was a default, not an argument, so I went and tested the alternatives. The property a filter needs has nothing to do with retrieval quality: **the pieces have to reassemble into the original text.** If they do not, the chunks you derive belong to text no document contains, and real matches get dropped.
-
-| tokenizer                     | round-trips exactly | one identity per word |
-| ----------------------------- | ------------------: | --------------------: |
-| BPE `o200k_base`              |         **400/400** |             5.0 forms |
-| WordPiece `bert-base-uncased` |               0/400 |             1.4 forms |
-| SentencePiece `xlm-roberta`   |               0/400 |             3.2 forms |
-| ISBPE dual                    |         **400/400** |         **1.0 forms** |
+| tokenizer                     | round-trips exactly, 400 code files |
+| ----------------------------- | ----------------------------------: |
+| BPE `o200k_base`              |                         **400/400** |
+| WordPiece `bert-base-uncased` |                               0/400 |
+| SentencePiece `xlm-roberta`   |                               0/400 |
 
 Observations:
 
-- **WordPiece and SentencePiece fail every document.** WordPiece turned `def get_vid_from_url` into `def get _ vid _ url` and `makeMimi` into `makemimi`, changing 47,281 characters across 400 files. SentencePiece collapsed newline runs, changing 87,986. A regex for `get_vid_from_url` derives chunks the index does not hold, so the match is dropped. Normalisation is a feature for a language model and a hazard for a filter.
-- **BPE round-trips but gives a word five identities.** `def get_user` yields the piece `·get`, `self.get_user` yields `.get`, and `_get_user` yields `get`, so looking the query's own tokens up finds a fraction of the matches. That is the whole reason the adjacency index exists.
-- **ISBPE dual is the only one with both properties.** It stores the _absence_ of a space on the neighbouring token rather than gluing the space onto the word, so `get` is one id everywhere, and losslessness is structural rather than tested-in.
+- **WordPiece and SentencePiece fail every document.** WordPiece turned `def get_vid_from_url` into `def get _ vid _ url` and `makeMimi` into `makemimi`, changing 47,281 characters. SentencePiece collapsed newline runs, changing 87,986. A regex for `get_vid_from_url` then derives chunks the index does not hold. Normalisation helps a language model and breaks a filter.
+- **That rules both out on correctness**, whatever they do for retrieval quality.
 
-### What one identity per word would buy
+## Typo search comes free
 
-If a word has a single id regardless of context, a whole-word search needs two token lookups instead of resolving six chunks. Measured over 3,000 documents and 300 mined agent patterns:
+The chunk lookup answers "which documents contain this 3-character sequence", which is exactly what classic q-gram typo search runs on. Chop the misspelled word and require most of its chunks instead of all of them, since one edit damages at most three.
 
-| lookup path                        |        recall | filter time | candidates |
-| ---------------------------------- | ------------: | ----------: | ---------: |
-| chunk resolution, what ships today |         sound |     32.5 us |    57 mean |
-| whole-word, 2 token lookups        | 2,999 / 2,999 | **24.1 us** |    44 mean |
-| substring literal, same 2 lookups  | 3,166 / 5,225 |             |            |
+Over 3,000 documents and 322 agent query words, with **nothing added to the index**:
 
-Observations:
-
-- **The filter gets 1.35x faster and returns 23% fewer candidates**, but the filter is roughly 30 us of a 190 us query. The rest is fetching candidates and running the real regex. End to end that is about 4%, which is close to noise.
-- **It saves no storage, which is where I had this wrong.** I first wrote that whole-word queries could skip the adjacency index, 68% of the postings. They cannot. 20.6% of agent patterns are substring searches that need it, so the index gets built either way and simply goes unread more often. An index you build and do not read costs exactly what it cost before.
-- **ISBPE fixes the spacing problem and not the substring problem.** A piece of a word is still a different token from the word containing it, so `test` inside `datestamp` (which chops to `dat` and `estamp`) still needs the adjacency index to cover the seam.
-
-The better argument for ISBPE here is not the regex filter at all. [Token Search](/blog/token-search#the-fix-normalize-before-you-tokenize) needs a normalisation step, `enc.encode(" " + word)`, purely because `The` and `the` and `·the` are three different terms under BPE. ISBPE makes them one by construction, so the step goes away:
-
-| index over 3,000 Python files             |      terms |    postings |
-| ----------------------------------------- | ---------: | ----------: |
-| BPE, raw                                  |     23,468 |     383,218 |
-| BPE, normalised per word                  |     13,019 |     241,223 |
-| ISBPE dual, word tokens, no normalisation | **13,189** | **211,498** |
+```
+  recall of documents holding the correct word   15,889/15,889 = 100.0%
+  candidates                                     p50 242, mean 462  (of 3,000)
+  exact-search baseline                          p50 1
+```
 
 Observations:
 
-- **ISBPE reaches the normalised term count without the normalisation**, 13,189 against 13,019, and holds 12% fewer postings. The preprocessing step exists to paper over a property of the tokenizer, and a tokenizer that lacks the property does not need the paper.
-- **Read the percentages loosely.** The vocabularies are not matched, 32,768 against 200,000, so the sizes are confounded even though the structural point is not.
+- **Recall is total, and the cost is selectivity.** 242 candidates against 1 for an exact search, so the verifier works far harder, while still reading 12x less than a full scan.
+- **Ranking by closeness is free** during the verification pass you already run, since edit distance is computed on candidates you have already decoded.
 
-<details>
-<summary>Two bugs this shook out, one mine and one in the pretokenizer</summary>
+## What I would build
 
-Both showed up as a 99.9% whole-word recall, which is the kind of number that looks like noise and is not.
-
-**Mine.** I required every token the query produced, punctuation included. ISBPE guarantees identity for word pretokens and never promised it for punctuation, and `__` merges into `#.__#` after a dot while `getitem` stays put. Requiring only the word tokens is still a superset, so it stays sound, and it recovered both failures.
-
-**The pretokenizer's.** GPT-2's regex offers the contraction `'t` as a standalone alternative, so `b'test'` pretokenised to `b | 't | est | '` and the word `test` existed nowhere in the document. It fires on any word starting with `s`, `t`, `re`, `ve`, `m`, `ll` or `d` straight after an apostrophe, which in Python is a large share of single-quoted string literals. Requiring the contraction not to be followed by a letter fixes it, leaves real contractions alone (`don't`, `it's`, `we'll`), and took whole-word recall to 100.00%.
-
-Neither was visible in aggregate numbers. Both needed the specific failing rows.
-
-</details>
+1. **The token bigram index.** This is the only item that changes the numbers, lifting coverage from 15.2% of patterns to 46.5% and selectivity from 7.5% of the corpus to 0.8%.
+2. **The 2 MB vocabulary sidecar**, static, built from the tokenizer at startup, which turns a sub-word literal into a candidate token set.
+3. **Skip sparse grams.** They cost 2.7x the postings and 1.9x the build time for identical candidates.
+4. **If you do not already run BM25 on token postings, build a dense trigram index instead.** It is smaller than what you would add, 2.93M postings against a 1.65M bigram index on top of a 0.77M unigram one, and it builds 5.7x faster. The token route wins on marginal cost and loses on absolute cost.
 
 ## Limitations
 
-- **4,000 documents is small.** Trigram AND is more selective on a small corpus because posting lists are short, so the 1.3x false-positive figure will rise with scale and the adjacency argument may recover some ground. This is the single thing I would rerun first, at 1M documents.
-- **One corpus, one language.** Python functions from CodeSearchNet. Natural-language documents have different token-boundary behaviour, and CJK has [no word boundaries at all](/blog/token-search#the-real-payoff-one-analyzer-every-language), where the leading-space normalisation has nothing to hold onto.
-- **Mined regexes are not search queries.** Covered above, and it biases the fallback rate upward.
-- **My literal extractor is conservative by design.** It skips any group containing alternation and every lookaround, so it under-uses some patterns. That direction is safe, since dropping a constraint costs candidates and inventing one costs correctness, but a better extractor would improve all four methods together.
-- **Pure-Python indexes, Python `set` postings.** Sizes are posting counts rather than bytes on disk, and a real encoder would compress the four differently, most likely in token postings' favour since their lists are longer and their gaps smaller.
+- **These are posting counts rather than bytes on disk.** A real encoder would compress the three differently, most likely favouring token postings since their lists are longer and their gaps smaller.
+- **One corpus, one language.** Python from CodeSearchNet. CJK has [no word boundaries at all](/blog/token-search#the-real-payoff-one-analyzer-every-language), where the leading-space normalisation has nothing to hold onto.
+- **Mined regexes are not search queries**, which biases the 53.5% fallback rate upward. I had no real code-search query log to check against, and that is the number I would most want before quoting a fallback rate to anyone.
+- **My literal extractor is conservative.** It skips any group containing alternation and every lookaround, so it under-uses some patterns. That direction is safe, since dropping a constraint costs candidates and inventing one costs correctness.
 
 ## Reproducing
 
 ```
-python experiments/regex-filter/build_dataset.py   # corpus + mined patterns
-python experiments/regex-filter/test_indexes.py    # sparse-gram soundness tests
-python experiments/regex-filter/evaluate.py        # all four methods, exact ground truth
-python experiments/regex-filter/report.py          # per-class breakdown
+python3 experiments/regex-filter/build_dataset.py      # corpus + mined patterns
+python3 experiments/regex-filter/mine_agent_queries.py # agent greps from trajectories
+python3 experiments/regex-filter/test_indexes.py       # sparse-gram soundness tests
+python3 experiments/regex-filter/evaluate.py           # all methods, exact ground truth
+python3 experiments/regex-filter/scale_run.py          # corpus-size sweep
+python3 experiments/regex-filter/fuzzy_over_index.py   # typo search on the same index
 ```
 
-`test_indexes.py` checks the two properties everything rests on: that my vectorised sparse-gram selection agrees with brute force on 400/400 random strings, and that `covering(q)` is a subset of `all(d)` on 400/400 random embeddings, which is the no-false-negatives guarantee.
+`test_indexes.py` checks the two properties everything rests on: that my vectorised sparse-gram selection agrees with brute force on 400 random strings, and that a gram chosen from a query is always chosen inside a document holding it, which is the no-false-negatives guarantee.
 
 ## Key Takeaways
 
-- **Token unigram plus bigram postings filter regex as well as a dense trigram index at a third of the storage of sparse grams.** 1.41M postings against 4.56M, and identical mean candidate counts in all four query classes. The storage gap comes from a posting covering four bytes instead of half of one.
-- **Sparse grams bought nothing measurable on this workload.** Same candidates, 3.25x the index, and they are 2.31x larger than the dense trigram index they are meant to improve on.
-- **I predicted a 5.2x sub-word win and got none.** The model assumed dense trigrams return 8x the true matches and they return 1.3x, because the median mined literal is 6 characters and four ANDed trigrams are already nearly exact. The adjacency argument is sound and describes a case this workload barely contains.
-- **53.5% of real regexes have no literal any of these indexes can use**, so they scan everything under every method. That fallback rate deserves to sit next to any speedup number, and it overstates the case for a code-search product whose users type identifiers.
-- **Word-aligned token filtering alone covers 15.2% of patterns and is unsound on code until the per-word normalisation runs at index time as well as query time.** The bigram index and the vocab sidecar are what make the approach work, not an extra on top of it.
-- **The tokenizer is a correctness decision.** A filter needs the pieces to reassemble into the original text, and WordPiece and SentencePiece fail that on every one of 400 code documents, changing 47,281 and 87,986 characters respectively. That rules both out, whatever they do for retrieval quality. BPE round-trips but gives a word five identities depending on what precedes it, which is why the adjacency index exists, and ISBPE removes that by construction while staying lossless. The regex speedup from doing so is about 4% end to end and it saves no storage, so the real case for it is that it deletes Token Search's normalisation step rather than anything it does here.
-- **The trigram advantage does not decay at scale.** I predicted that on a bigger corpus four ANDed trigrams would lose their edge and TopK's longer grams would start paying off. Across a 16x sweep the sparse-gram advantage went from +0.049 to +0.040 percentage points, shrinking rather than growing, while its build cost rose to 9.2x a dense trigram index.
-- **Who writes the regex matters more than which index you pick.** Patterns mined from `re.compile` calls in source are 48.2% filterable, and real coding-agent `grep` searches are 96.3%. That one swap moves every index from 2.1x over a full scan to 11.4x, because agents search for identifiers where source-code regexes describe shapes.
-- **Against a plain dense trigram index the win is narrow, and it is about marginal cost.** Token plus bigram is 1.43x smaller in total postings, 2.94x slower to build, and tied on query time at 0.20 ms against 0.19 ms. The argument that survives is marginal: the token unigram index already exists to serve BM25, so adding regex costs 1,547,278 postings for the bigram index where a trigram index costs 3,514,896 from scratch, 2.27x more. Without an existing token index, dense trigram is the better choice.
-- **Sparse grams lose to dense trigrams too, by more than they lose to token postings.** Dense trigram beats them 2.28x on postings, 8.70x on build time and 2.11x on query time, against token plus bigram's 3.25x, 2.95x and 2.00x. Nothing about the token representation is what defeats sparse gram selection.
-- **Speedup depends entirely on which queries you count.** Over all patterns every index is 2.1x to 2.4x faster than a full scan, because the unfilterable half drags the mean down. Over the filterable 46.5% the same indexes reach 36.5x to 50.0x, the same order as TopK's 55.3x. Quoting either number without the other is misleading.
-- **The recall check earned its place.** It caught three bugs in my own literal extractor, including `"" in "?*"` evaluating to `True` and quietly truncating every literal, none of which showed up as an obviously wrong number.
+- **A token-bigram index turns BM25 postings into a regex filter that ties a dense trigram index candidate for candidate**, at 2.41M postings against sparse grams' 6.51M and 6.3 s of build time against 12.2 s. It computes the same function as a trigram index from storage that already exists for ranking.
+- **The win is marginal cost, and it reverses if you have no token index.** Adding regex to existing BM25 postings costs a 1.65M-posting bigram index where a trigram index costs 2.93M from scratch, but the trigram index is smaller in absolute terms and builds 5.7x faster.
+- **How many queries have no literal decides everything.** 53.5% for regexes mined from source, 3.7% for greps coding agents really run, and that one swap moves every index from 2.1x over a full scan to 11.4x. Quoting a speedup without a fallback rate says almost nothing.
+- **Two predictions of mine died on contact with data.** A 5.2x sub-word win rested on dense trigrams returning 8x the true matches when they return 1.3x, and the advantage I expected to grow with corpus size shrank across a 16x sweep.
+- **The tokenizer is a correctness decision.** WordPiece and SentencePiece fail to reassemble every one of 400 code files, so a regex derives chunks their index cannot hold. That rules them out before retrieval quality is discussed.
+- **The recall check paid for itself four times**, including `"" in "?*"` evaluating to `True` and quietly truncating every literal. None of those bugs produced an obviously wrong number.

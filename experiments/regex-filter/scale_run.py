@@ -73,7 +73,7 @@ def build_trigram(docs, n=3):
 
 
 def tri_key(s):
-    b = s.encode("utf-8", "replace")
+    b = s if isinstance(s, bytes) else s.encode("utf-8", "replace")
     return [(b[i] << 16) | (b[i + 1] << 8) | b[i + 2] for i in range(len(b) - 2)]
 
 
@@ -93,8 +93,12 @@ def build_token(docs, V):
         for i in set(ids):
             uni[i].add(d)
         bi_terms.update(zip(ids, ids[1:]))
-        parts = [V.get(i) or ENC.decode([i]) for i in ids]
-        flat = "".join(parts)
+        # BYTES, not characters: BPE is a byte-level code, so a multi-byte
+        # UTF-8 character can split across two tokens and decoding each token
+        # to str turns the partial character into U+FFFD. Walking that
+        # reconstruction silently drops documents.
+        parts = [ENC.decode_single_token_bytes(i) for i in ids]
+        flat = b"".join(parts)
         pos = 0
         for s_ in parts[:-1]:
             pos += len(s_)
