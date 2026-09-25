@@ -6,8 +6,14 @@
 
 ## Writing for the blog (IMPORTANT)
 
-Full guide: `writing-style.md`. Read it before drafting or editing any `.mdx`. The rules
-below are the ones that get broken most, so treat them as the minimum bar.
+Full guide: `writing-style.md`. **Read the whole file, in this session, before any of:
+writing a new post, a big edit, a purge, a merge, or a restructure.** Not a skim, not from
+memory, and not "I read something like it last week". It changes, and the parts that
+change are exactly the parts that were getting broken. If a session is about to cut
+sections, move numbers around, or rewrite an argument, the guide gets read first and the
+finished draft gets audited against it before anything is committed.
+
+The rules below are the ones that get broken most, so treat them as the minimum bar.
 
 **Never frame a thing against what it isn't.** No "it's not X, it's Y", no "not a X, not a
 Y, a Z", and no negation clipped onto the end of a sentence ("real, not rounding", "a
