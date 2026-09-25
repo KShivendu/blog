@@ -288,17 +288,35 @@
     }
   },
   "pareto": {
-    "rows": [
-      { "v": 2048, "bpe": 435683, "single": 414640, "dual": 431252 },
-      { "v": 4096, "bpe": 392140, "single": 363883, "dual": 363186 },
-      { "v": 8192, "bpe": 365856, "single": 335386, "dual": 332773 },
-      { "v": 16384, "bpe": 350468, "single": 319892, "dual": 317341 },
-      { "v": 32768, "bpe": 341372, "single": 310994, "dual": 309772 },
-      { "v": 49152, "bpe": 338406, "single": 308124, "dual": 307168 },
-      { "v": 65536, "bpe": 336736, "single": 306575, "dual": 305810 }
-    ],
-    "ref_tokens": 336736,
-    "ref_v": 65536,
-    "crossing": { "dual": 7658, "single": 7998 }
+    "Python code": {
+      "rows": [
+        { "v": 2048, "bpe": 435683, "dual": 431252, "single": 414640 },
+        { "v": 4096, "bpe": 392140, "dual": 363186, "single": 363883 },
+        { "v": 8192, "bpe": 365856, "dual": 332773, "single": 335386 },
+        { "v": 16384, "bpe": 350468, "dual": 317341, "single": 319892 },
+        { "v": 32768, "bpe": 341372, "dual": 309772, "single": 310994 },
+        { "v": 49152, "bpe": 338406, "dual": 307168, "single": 308124 },
+        { "v": 65536, "bpe": 336736, "dual": 305810, "single": 306575 }
+      ],
+      "ref_tokens": 336736,
+      "ref_v": 65536,
+      "crossing": { "dual": 7658, "single": 7998 },
+      "dominates": { "dual": true, "single": true }
+    },
+    "English (C4)": {
+      "rows": [
+        { "v": 2048, "bpe": 436271, "dual": 475656, "single": 442443 },
+        { "v": 4096, "bpe": 378652, "dual": 388655, "single": 379713 },
+        { "v": 8192, "bpe": 336859, "dual": 337606, "single": 336123 },
+        { "v": 16384, "bpe": 308416, "dual": 306511, "single": 307408 },
+        { "v": 32768, "bpe": 290344, "dual": 288830, "single": 289945 },
+        { "v": 49152, "bpe": 283778, "dual": 282232, "single": 283504 },
+        { "v": 65536, "bpe": 280162, "dual": 279047, "single": 280204 }
+      ],
+      "ref_tokens": 280162,
+      "ref_v": 65536,
+      "crossing": { "dual": 59800, "single": null },
+      "dominates": { "dual": false, "single": false }
+    }
   }
 }
