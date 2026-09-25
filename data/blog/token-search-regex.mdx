@@ -121,6 +121,7 @@ Observations:
 - **Token postings plus the bigram index hold 2.41M postings against sparse grams' 6.51M**, a 2.7x gap that comes from one fact: a token posting covers about four bytes where a character gram covers half of one.
 - **Sparse grams are 2.2x larger than the dense trigram index they improve on.** Their `E[grams] ~= 2L` counts bytes, and since selection probability at length 3 is exactly 1, every trigram is indexed and the longer grams roughly double it. Sparsity is measured against a dense index holding every length at once, so it buys selectivity rather than size.
 - **Build time splits the same way**, 6.3 s for token plus bigram against 12.2 s for sparse grams and 1.1 s for dense trigrams, because gram selection walks every length from 3 to 16 at every byte position.
+- **Read the token build time as an upper bound.** I profiled the 6.3 s and only 1.6 s of it is tokenizing. Half is a Python loop over roughly 4 million boundary inserts, where the trigram build it is being compared against is vectorised with numpy. Doing the same to the token side, and taking per-token offsets from HuggingFace `tokenizers` so the decode step disappears, gives 2.33 s for an identical index. The honest gap against dense trigrams is 2.1x rather than 5.7x.
 
 ## Selectivity is a three-way tie
 
@@ -270,11 +271,12 @@ Observations:
 1. **The token bigram index.** This is the only item that changes the numbers. Whole words looked up in the unigram postings alone constrain 61 of 400 patterns, leave 98.4% of sub-word patterns with no constraint at all, and hand over 7.5% of the corpus on the word-aligned ones. Adding the bigram index takes coverage to 186 of 400 and selectivity to 0.8%.
 2. **The 2 MB vocabulary sidecar**, static, built from the tokenizer at startup, which turns a sub-word literal into a candidate token set.
 3. **Skip sparse grams.** They cost 2.7x the postings and 1.9x the build time for identical candidates.
-4. **If you do not already run BM25 on token postings, build a dense trigram index instead.** The token route is smaller either way, 2.42M postings against 2.93M at 8,000 documents, but it takes 6.3 s to build where a trigram index takes 1.1 s. Build time is the only axis where starting from scratch on tokens loses.
+4. **If you do not already run BM25 on token postings, a dense trigram index is the simpler build.** The token route is smaller either way, 2.42M postings against 2.93M at 8,000 documents, and slower to build, 2.33 s against 1.13 s once both sides are vectorised. Build time is the only axis where starting from scratch on tokens loses, and the margin is small enough that an existing token index settles it.
 
 ## Limitations
 
 - **These are posting counts rather than bytes on disk.** A real encoder would compress the three differently, most likely favouring token postings since their lists are longer and their gaps smaller.
+- **Build times compare implementations as much as methods.** The 128,000-document figures are the unvectorised token build, so treat the 6.0x against dense trigrams there as an upper bound in the same way as the 8,000-document one.
 - **One corpus, one language.** Python from CodeSearchNet. CJK has [no word boundaries at all](/blog/token-search#the-real-payoff-one-analyzer-every-language), where the leading-space normalisation has nothing to hold onto.
 - **Mined regexes are not search queries**, which biases the 53.5% fallback rate upward. I had no real code-search query log to check against, and that is the number I would most want before quoting a fallback rate to anyone.
 - **My literal extractor is conservative.** It skips any group containing alternation and every lookaround, so it under-uses some patterns. That direction is safe, since dropping a constraint costs candidates and inventing one costs correctness.
@@ -295,7 +297,7 @@ python3 experiments/regex-filter/fuzzy_over_index.py   # typo search on the same
 ## Key Takeaways
 
 - **A token-bigram index turns BM25 postings into a regex filter that ties a dense trigram index candidate for candidate**, at 2.41M postings against sparse grams' 6.51M and 6.3 s of build time against 12.2 s. It computes the same function as a trigram index from storage that already exists for ranking.
-- **The win is marginal cost.** Adding regex to existing BM25 postings costs a 1.65M-posting bigram index where a trigram index costs 2.93M from scratch, so 1.8x less. Build time is where the token route loses, 6.3 s against 1.1 s at 8,000 documents.
+- **The win is marginal cost.** Adding regex to existing BM25 postings costs a 1.65M-posting bigram index where a trigram index costs 2.93M from scratch, so 1.8x less. Build time is where the token route loses, 2.33 s against 1.13 s at 8,000 documents once both builds are vectorised.
 - **How many queries have no literal decides everything.** 53.5% for regexes mined from source, 3.7% for greps coding agents really run, and that one swap moves every index from 2.1x over a full scan to 11.4x. Quoting a speedup without a fallback rate says almost nothing.
 - **Two predictions of mine died on contact with data.** A 5.2x sub-word win rested on dense trigrams returning 8x the true matches when they return 1.3x, and the advantage I expected to grow with corpus size shrank across a 16x sweep.
 - **The tokenizer is a correctness decision.** WordPiece and SentencePiece fail to reassemble every one of 400 code files, so a regex derives chunks their index cannot hold. That rules them out before retrieval quality is discussed.
