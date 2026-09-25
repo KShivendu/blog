@@ -1,0 +1,304 @@
+{
+  "hero": [
+    {
+      "text": "the cat sat on the mat",
+      "corpus": "en",
+      "note": "one word, two positions, and BPE needs a slot for each",
+      "bpe": [
+        { "s": "the", "l": false, "r": false },
+        { "s": "\u00b7cat", "l": false, "r": false },
+        { "s": "\u00b7sat", "l": false, "r": false },
+        { "s": "\u00b7on", "l": false, "r": false },
+        { "s": "\u00b7the", "l": false, "r": false },
+        { "s": "\u00b7mat", "l": false, "r": false }
+      ],
+      "isbpe": [
+        { "s": "the", "l": false, "r": false },
+        { "s": "cat", "l": false, "r": false },
+        { "s": "sat", "l": false, "r": false },
+        { "s": "on", "l": false, "r": false },
+        { "s": "the", "l": false, "r": false },
+        { "s": "mat", "l": false, "r": false }
+      ],
+      "bpe_slots": [
+        { "k": "the", "s": "the", "l": false, "r": false },
+        { "k": "\u00b7cat", "s": "\u00b7cat", "l": false, "r": false },
+        { "k": "\u00b7sat", "s": "\u00b7sat", "l": false, "r": false },
+        { "k": "\u00b7on", "s": "\u00b7on", "l": false, "r": false },
+        { "k": "\u00b7the", "s": "\u00b7the", "l": false, "r": false },
+        { "k": "\u00b7mat", "s": "\u00b7mat", "l": false, "r": false }
+      ],
+      "isbpe_slots": [
+        { "k": "the", "s": "the", "l": false, "r": false },
+        { "k": "cat", "s": "cat", "l": false, "r": false },
+        { "k": "sat", "s": "sat", "l": false, "r": false },
+        { "k": "on", "s": "on", "l": false, "r": false },
+        { "k": "mat", "s": "mat", "l": false, "r": false }
+      ]
+    },
+    {
+      "text": "self.account = account",
+      "corpus": "code",
+      "note": "same word glued and spaced, which is what code does constantly",
+      "bpe": [
+        { "s": "self", "l": false, "r": false },
+        { "s": ".", "l": false, "r": false },
+        { "s": "account", "l": false, "r": false },
+        { "s": "\u00b7=", "l": false, "r": false },
+        { "s": "\u00b7account", "l": false, "r": false }
+      ],
+      "isbpe": [
+        { "s": "self", "l": false, "r": false },
+        { "s": ".", "l": true, "r": true },
+        { "s": "account", "l": false, "r": false },
+        { "s": "=", "l": false, "r": false },
+        { "s": "account", "l": false, "r": false }
+      ],
+      "bpe_slots": [
+        { "k": "self", "s": "self", "l": false, "r": false },
+        { "k": ".", "s": ".", "l": false, "r": false },
+        { "k": "account", "s": "account", "l": false, "r": false },
+        { "k": "\u00b7=", "s": "\u00b7=", "l": false, "r": false },
+        { "k": "\u00b7account", "s": "\u00b7account", "l": false, "r": false }
+      ],
+      "isbpe_slots": [
+        { "k": "self", "s": "self", "l": false, "r": false },
+        { "k": "#.#", "s": ".", "l": true, "r": true },
+        { "k": "account", "s": "account", "l": false, "r": false },
+        { "k": "=", "s": "=", "l": false, "r": false }
+      ]
+    },
+    {
+      "text": "get_attraction",
+      "corpus": "en",
+      "note": "the case that forced the rule: which side carries the mark",
+      "bpe": [
+        { "s": "get", "l": false, "r": false },
+        { "s": "_", "l": false, "r": false },
+        { "s": "att", "l": false, "r": false },
+        { "s": "raction", "l": false, "r": false }
+      ],
+      "isbpe": [
+        { "s": "get", "l": false, "r": false },
+        { "s": "_", "l": true, "r": true },
+        { "s": "attraction", "l": false, "r": false }
+      ],
+      "bpe_slots": [
+        { "k": "get", "s": "get", "l": false, "r": false },
+        { "k": "_", "s": "_", "l": false, "r": false },
+        { "k": "att", "s": "att", "l": false, "r": false },
+        { "k": "raction", "s": "raction", "l": false, "r": false }
+      ],
+      "isbpe_slots": [
+        { "k": "get", "s": "get", "l": false, "r": false },
+        { "k": "#_#", "s": "_", "l": true, "r": true },
+        { "k": "attraction", "s": "attraction", "l": false, "r": false }
+      ]
+    }
+  ],
+  "slots": {
+    "vocab": 65536,
+    "pairs": 15430,
+    "slots_used": 30860,
+    "share": 47.1,
+    "examples": [
+      "cookie",
+      "Shards",
+      "exempt",
+      "nonnan",
+      "imshow",
+      "locker",
+      "lstBse",
+      "Resets",
+      "System",
+      "stroke",
+      "bottle",
+      "bigram",
+      "Cancel",
+      "metodo"
+    ]
+  },
+  "flagside": [
+    {
+      "text": "lang.split(x)",
+      "corpus": "code",
+      "single": [
+        { "s": "lang", "l": false, "r": false },
+        { "s": ".", "l": true, "r": false },
+        { "s": "split", "l": true, "r": false },
+        { "s": "(", "l": true, "r": false },
+        { "s": "x", "l": true, "r": false },
+        { "s": ")", "l": true, "r": false }
+      ],
+      "dual": [
+        { "s": "lang", "l": false, "r": false },
+        { "s": ".", "l": true, "r": true },
+        { "s": "split", "l": false, "r": false },
+        { "s": "(", "l": true, "r": true },
+        { "s": "x", "l": false, "r": false },
+        { "s": ")", "l": true, "r": false }
+      ],
+      "bpe": [
+        { "s": "lang", "l": false, "r": false },
+        { "s": ".", "l": false, "r": false },
+        { "s": "split", "l": false, "r": false },
+        { "s": "(", "l": false, "r": false },
+        { "s": "x", "l": false, "r": false },
+        { "s": ")", "l": false, "r": false }
+      ]
+    },
+    {
+      "text": "get_attraction",
+      "corpus": "en",
+      "single": [
+        { "s": "get", "l": false, "r": false },
+        { "s": "_", "l": true, "r": false },
+        { "s": "att", "l": true, "r": false },
+        { "s": "raction", "l": true, "r": false }
+      ],
+      "dual": [
+        { "s": "get", "l": false, "r": false },
+        { "s": "_", "l": true, "r": true },
+        { "s": "attraction", "l": false, "r": false }
+      ],
+      "bpe": [
+        { "s": "get", "l": false, "r": false },
+        { "s": "_", "l": false, "r": false },
+        { "s": "att", "l": false, "r": false },
+        { "s": "raction", "l": false, "r": false }
+      ]
+    },
+    {
+      "text": "self.fireEvent",
+      "corpus": "code",
+      "single": [
+        { "s": "self", "l": false, "r": false },
+        { "s": ".", "l": true, "r": false },
+        { "s": "fire", "l": true, "r": false },
+        { "s": "Event", "l": true, "r": false }
+      ],
+      "dual": [
+        { "s": "self", "l": false, "r": false },
+        { "s": ".", "l": true, "r": true },
+        { "s": "fire", "l": false, "r": false },
+        { "s": "Event", "l": true, "r": false }
+      ],
+      "bpe": [
+        { "s": "self", "l": false, "r": false },
+        { "s": ".", "l": false, "r": false },
+        { "s": "fire", "l": false, "r": false },
+        { "s": "Event", "l": false, "r": false }
+      ]
+    },
+    {
+      "text": "the cat sat",
+      "corpus": "en",
+      "single": [
+        { "s": "the", "l": false, "r": false },
+        { "s": "cat", "l": false, "r": false },
+        { "s": "sat", "l": false, "r": false }
+      ],
+      "dual": [
+        { "s": "the", "l": false, "r": false },
+        { "s": "cat", "l": false, "r": false },
+        { "s": "sat", "l": false, "r": false }
+      ],
+      "bpe": [
+        { "s": "the", "l": false, "r": false },
+        { "s": "\u00b7cat", "l": false, "r": false },
+        { "s": "\u00b7sat", "l": false, "r": false }
+      ]
+    }
+  ],
+  "sweep": {
+    "code": [
+      { "v": 2048, "bpe_tokens": 435683, "isbpe_tokens": 431252 },
+      { "v": 4096, "bpe_tokens": 392140, "isbpe_tokens": 363186 },
+      { "v": 8192, "bpe_tokens": 365856, "isbpe_tokens": 332773 },
+      { "v": 16384, "bpe_tokens": 350468, "isbpe_tokens": 317341 },
+      { "v": 32768, "bpe_tokens": 341372, "isbpe_tokens": 309772 },
+      { "v": 49152, "bpe_tokens": 338406, "isbpe_tokens": 307168 },
+      { "v": 65536, "bpe_tokens": 336736, "isbpe_tokens": 305810 }
+    ],
+    "crossing": 7658,
+    "ref": 65536,
+    "note": "ISBPE emits as few tokens at V=7,658 as BPE does at V=65,536"
+  },
+  "ratio_dist": {
+    "chunk_bytes": 4096,
+    "by_corpus": {
+      "English (C4)": {
+        "BPE + gpt2 regex": {
+          "mean": 2.6941,
+          "p50": 2.7108,
+          "p90": 2.9405,
+          "p99": 3.164,
+          "p25": 2.5875,
+          "p10": 2.4309,
+          "n": 317
+        },
+        "ISBPE single-flag": {
+          "mean": 2.7008,
+          "p50": 2.7202,
+          "p90": 2.9408,
+          "p99": 3.1658,
+          "p25": 2.5912,
+          "p10": 2.4492,
+          "n": 317
+        },
+        "ISBPE dual-flag": {
+          "mean": 2.7166,
+          "p50": 2.7307,
+          "p90": 2.9652,
+          "p99": 3.207,
+          "p25": 2.6052,
+          "p10": 2.4605,
+          "n": 317
+        }
+      },
+      "Python code": {
+        "BPE + gpt2 regex": {
+          "mean": 2.4448,
+          "p50": 2.4553,
+          "p90": 2.6912,
+          "p99": 2.9192,
+          "p25": 2.3161,
+          "p10": 2.1828,
+          "n": 317
+        },
+        "ISBPE single-flag": {
+          "mean": 2.6311,
+          "p50": 2.6417,
+          "p90": 2.9177,
+          "p99": 3.1862,
+          "p25": 2.4832,
+          "p10": 2.327,
+          "n": 317
+        },
+        "ISBPE dual-flag": {
+          "mean": 2.6767,
+          "p50": 2.6912,
+          "p90": 2.9891,
+          "p99": 3.2095,
+          "p25": 2.5354,
+          "p10": 2.3614,
+          "n": 317
+        }
+      }
+    }
+  },
+  "pareto": {
+    "rows": [
+      { "v": 2048, "bpe": 435683, "single": 414640, "dual": 431252 },
+      { "v": 4096, "bpe": 392140, "single": 363883, "dual": 363186 },
+      { "v": 8192, "bpe": 365856, "single": 335386, "dual": 332773 },
+      { "v": 16384, "bpe": 350468, "single": 319892, "dual": 317341 },
+      { "v": 32768, "bpe": 341372, "single": 310994, "dual": 309772 },
+      { "v": 49152, "bpe": 338406, "single": 308124, "dual": 307168 },
+      { "v": 65536, "bpe": 336736, "single": 306575, "dual": 305810 }
+    ],
+    "ref_tokens": 336736,
+    "ref_v": 65536,
+    "crossing": { "dual": 7658, "single": 7998 }
+  }
+}

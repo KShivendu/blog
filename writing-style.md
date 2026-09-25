@@ -84,6 +84,7 @@ Semicolons go the same way, comma-splice or period. "`storage` is one token; `to
 - One cause, one sentence: "The 13× latency gap comes _entirely_ from eliminating the query encoder call."
 - I address the obvious "but what about X" before someone asks it in the comments
 - I show the failed attempt before the fix. "Here's the first thing I tried. It fails in an instructive way, the fix falls right out of it." That's more honest than pretending I got it right first try.
+- **But only when the failure teaches the reader something about the IDEA, not about my process.** This is the line I keep having to redraw. `get_attraction` shattering into `get | #_ | #att | #raction` earns a section, because the fix falls straight out of it and you can't understand dual-flag without it. "I compared against an off-the-shelf vocabulary early on and my numbers were inflated" does not, even though it's true and it's a good lesson, because it's a fact about how I worked, not about how the tokenizer works. A post has to convey and sell the idea. The research log is where every dead end belongs, and it's a different document with a different job. When I cut one of these I keep the _conclusion_ if it's load-bearing ("every number here is against a baseline retrained on the same corpus") and drop the narrative around it, which is usually one sentence instead of a section. **Elegance is doing more in less.**
 - `<details>` is for side quests, not a dumping ground. I like running side experiments and sharing them, but they don't belong in the main flow, they'd dilute the actual argument. So they get fenced off instead of cut entirely. If something's fun but tangential: collapse it, don't kill it.
 - Everything left OUTSIDE a `<details>` is the core argument, and it earns the full treatment: real data, color, interactivity, an actual experiment behind it, clean bullets. If a core point is just sitting there as a paragraph with nothing backing it, that's a gap I need to fill, not a style choice.
 - `<details>` sections are also where I proofread least, so that's exactly where old AI-draft leftovers hide longest if I'm not careful:
@@ -106,6 +107,15 @@ A lot of people find my posts from social media on their phone, mid-scroll. The 
 - Fonts go up on mobile even as the chart shrinks, small text on a small screen doesn't work no matter how you scale it
 - Titles reflow above the chart instead of getting crammed into the SVG at unreadable size
 - Basically: every interactive thing gets its own "how does this feel on a phone, half-attentive, from a tweet" check, not just a generic responsive breakpoint
+
+## The core idea gets a component, not a paragraph
+
+My better posts open with something that moves. `token-storage.mdx` has `<TokenCompressionAnimated />`, `relevance-tail.mdx` has `<QueryExplorer />` and `<ScoreHistogram />`. That isn't decoration, it's the fastest way to make one idea land before the reader has agreed to read 3,000 words. If a post is worth writing up properly, the central mechanism earns a hero component that shows it happening.
+
+- **One component per beat, not per section.** Three is usually right: the idea, the thing that makes it non-obvious, and the payoff number. More than that and they start competing with each other.
+- **The component shows real output, never a mock-up.** If the widget claims a tokenizer produces `get | #_# | attraction`, that string has to come out of the actual trained model, extracted by a script in the research repo and dumped to a small JSON next to the post. Hand-typed examples drift from the code the moment anything changes, and then the post is lying in a way nobody will catch.
+- **Reuse the visual language.** `lib/viz-palette.js` for colour, Fira Code mono, hairline borders, squared corners, grey for the baseline and the palette green for the thing I'm arguing for. A new post that invents its own look reads as a different site.
+- **Interactive means the reader can disagree with me.** The good version lets you type your own input or toggle the arm and see the claim hold or fail. `<WordpieceSplit />` letting you type any string is worth more than any sentence I could write about how WordPiece splits.
 
 ## Charts and tables
 
