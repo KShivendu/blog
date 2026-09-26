@@ -58,16 +58,21 @@ const securityHeaders = [
   },
 ]
 
-// /lab/flythrough is served from a Cloudflare Worker (query-flythrough.kshivendu1.workers.dev,
-// source: ~/projects/experiments/touchdesigner). It loads its model runtime and hand tracking
-// from cdn.jsdelivr.net and asks for the webcam, so it gets its own headers: same hardening
-// minus the strict CSP, and camera allowed for this path only.
-const LAB_ORIGIN = 'https://query-flythrough.kshivendu1.workers.dev'
+// /lab/* pages are served from Cloudflare Workers via rewrites below:
+//   /lab/flythrough -> query-flythrough.kshivendu1.workers.dev (~/projects/experiments/touchdesigner)
+//   /lab/hnsw, /lab/ivf -> lab-viz.kshivendu1.workers.dev (~/projects/rag-cookbook/hnsw-viz)
+// They load code from CDNs, spawn blob: workers (maplibre, onnx), flythrough asks for the webcam and hnsw for location,
+// so /lab/* gets its own headers: same hardening minus the strict CSP, camera + location allowed.
+const LAB = {
+  flythrough: 'https://query-flythrough.kshivendu1.workers.dev',
+  hnsw: 'https://lab-viz.kshivendu1.workers.dev',
+  ivf: 'https://lab-viz.kshivendu1.workers.dev',
+}
 const labHeaders = [
   ...securityHeaders.filter(
     (h) => !['Content-Security-Policy', 'Permissions-Policy'].includes(h.key)
   ),
-  { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=()' },
+  { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(self)' }, // hnsw has a 📍 My location button
 ]
 
 module.exports = withBundleAnalyzer({
@@ -79,19 +84,18 @@ module.exports = withBundleAnalyzer({
   async headers() {
     return [
       {
-        source: '/((?!lab/flythrough).*)',
+        source: '/((?!lab/).*)',
         headers: securityHeaders,
       },
-      { source: '/lab/flythrough', headers: labHeaders },
-      { source: '/lab/flythrough/:path*', headers: labHeaders },
+      { source: '/lab/:path*', headers: labHeaders },
     ]
   },
   async rewrites() {
     // proxy, not redirect: the address bar stays on kshivendu.dev
-    return [
-      { source: '/lab/flythrough', destination: `${LAB_ORIGIN}/lab/flythrough` },
-      { source: '/lab/flythrough/:path*', destination: `${LAB_ORIGIN}/lab/flythrough/:path*` },
-    ]
+    return Object.entries(LAB).flatMap(([name, origin]) => [
+      { source: `/lab/${name}`, destination: `${origin}/lab/${name}` },
+      { source: `/lab/${name}/:path*`, destination: `${origin}/lab/${name}/:path*` },
+    ])
   },
   webpack: (config, { dev, isServer }) => {
     config.experiments = { ...config.experiments, asyncWebAssembly: true }
