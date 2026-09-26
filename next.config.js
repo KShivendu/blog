@@ -58,6 +58,18 @@ const securityHeaders = [
   },
 ]
 
+// /lab/flythrough is served from a Cloudflare Worker (query-flythrough.kshivendu1.workers.dev,
+// source: ~/projects/experiments/touchdesigner). It loads its model runtime and hand tracking
+// from cdn.jsdelivr.net and asks for the webcam, so it gets its own headers: same hardening
+// minus the strict CSP, and camera allowed for this path only.
+const LAB_ORIGIN = 'https://query-flythrough.kshivendu1.workers.dev'
+const labHeaders = [
+  ...securityHeaders.filter(
+    (h) => !['Content-Security-Policy', 'Permissions-Policy'].includes(h.key)
+  ),
+  { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=()' },
+]
+
 module.exports = withBundleAnalyzer({
   reactStrictMode: true,
   pageExtensions: ['js', 'jsx', 'md', 'mdx'],
@@ -67,9 +79,18 @@ module.exports = withBundleAnalyzer({
   async headers() {
     return [
       {
-        source: '/(.*)',
+        source: '/((?!lab/flythrough).*)',
         headers: securityHeaders,
       },
+      { source: '/lab/flythrough', headers: labHeaders },
+      { source: '/lab/flythrough/:path*', headers: labHeaders },
+    ]
+  },
+  async rewrites() {
+    // proxy, not redirect: the address bar stays on kshivendu.dev
+    return [
+      { source: '/lab/flythrough', destination: `${LAB_ORIGIN}/lab/flythrough` },
+      { source: '/lab/flythrough/:path*', destination: `${LAB_ORIGIN}/lab/flythrough/:path*` },
     ]
   },
   webpack: (config, { dev, isServer }) => {
