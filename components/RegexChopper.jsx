@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { chartChrome, vizPalette } from '../lib/viz-palette'
 
-// Hero for token-search-regex.mdx. Every regex prefilter does the same thing:
+// Hero for token-regex.mdx. Every regex prefilter does the same thing:
 // chop the text into pieces, remember which documents each piece appeared in,
 // then look the query's pieces up. The methods differ in ONE way, how they chop.
 // So the hero shows one real line of code chopped three ways, with the real
