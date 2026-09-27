@@ -6,8 +6,9 @@ import { chartChrome, vizPalette } from '../lib/viz-palette'
 // Hero for token-regex.mdx. Every regex prefilter does the same thing:
 // chop the text into pieces, remember which documents each piece appeared in,
 // then look the query's pieces up. The methods differ in ONE way, how they chop.
-// So the hero shows one real line of code chopped three ways, with the real
-// piece counts from tiktoken o200k and the sparse-gram selection rule.
+// So the hero shows one real line of code chopped four ways, with the real
+// pieces: GPT-2 tokens and boundary grams from the token-regex repo
+// (`tok_show`), ISBPE pieces, and the sparse-gram selection rule.
 //
 // Visual language follows TokenSearchAnalyzer: Fira Code mono, hairline borders,
 // squared corners, segmented toggles, greys for the baseline and the palette's
@@ -16,8 +17,9 @@ import { chartChrome, vizPalette } from '../lib/viz-palette'
 const LINE = 'def get_user_config(name):'
 const QUERY = 'get_user'
 
-// Real output. tiktoken o200k_base for the tokens, the CRC32 boundary rule from
-// the TopK post for the sparse grams. See experiments/regex-filter/.
+// Real output. GPT-2 for the tokens (the tokenizer every size in the post uses),
+// the CRC32 boundary rule from the TopK post for the sparse grams. Boundary
+// grams are every 3-char window that crosses a cut between two tokens.
 const METHODS = [
   {
     key: 'trigram',
@@ -49,12 +51,27 @@ const METHODS = [
   },
   {
     key: 'token',
-    label: 'BPE tokens',
-    sub: 'the pieces your model already uses',
-    pieces: ['def', ' get', '_user', '_config', '(name', '):'],
-    total: 6,
+    label: 'BPE tokens + boundary grams',
+    sub: 'tokens BM25 already has, plus 3-char pieces across each cut',
+    pieces: ['def', ' get', '_', 'user', '_', 'config', '(', 'name', '):'],
+    extra: [
+      'ef ',
+      'f g',
+      'et_',
+      't_u',
+      '_us',
+      'er_',
+      'r_c',
+      '_co',
+      'ig(',
+      'g(n',
+      '(na',
+      'me)',
+      'e):',
+    ],
+    total: 22,
     tone: 'good',
-    note: 'Four times fewer pieces, because a token covers about four characters instead of one.',
+    note: '9 GPT-2 tokens that BM25 already stores, plus 13 boundary grams (dashed), the 3-char pieces that straddle a cut. Only the 13 are new.',
   },
 ]
 
@@ -110,7 +127,7 @@ export default function RegexChopper() {
           Every regex filter chops text into pieces. They differ in how.
         </div>
         <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
-          One line of Python, chopped three ways. Real pieces, not illustrations.
+          One line of Python, chopped four ways. Real pieces from real tokenizers.
         </div>
       </div>
 
@@ -229,29 +246,39 @@ export default function RegexChopper() {
         ) : m.key === 'token' ? (
           <div style={{ fontSize: 12, color: C.ink, lineHeight: 1.65 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-              <span style={{ fontSize: 11, color: C.muted, width: 78 }}>in the query</span>
-              <span style={{ ...box, borderColor: P.bad, color: P.bad }}>get</span>
-              <span style={{ ...box, borderColor: accent, color: accent }}>_user</span>
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 4,
-                alignItems: 'center',
-                marginTop: 4,
-              }}
-            >
-              <span style={{ fontSize: 11, color: C.muted, width: 78 }}>in the line</span>
-              <span style={{ ...box, borderColor: P.bad, color: P.bad }}>·get</span>
-              <span style={{ ...box, borderColor: accent, color: accent }}>_user</span>
+              <span style={{ fontSize: 11, color: C.muted, width: 78 }}>look up</span>
+              {[
+                ['get', false],
+                ['et_', true],
+                ['t_u', true],
+                ['_us', true],
+                ['use', false],
+                ['ser', false],
+              ].map(([p, cross]) => (
+                <span
+                  key={p}
+                  style={
+                    cross
+                      ? { ...box, borderStyle: 'dashed' }
+                      : { ...box, borderColor: accent, color: accent }
+                  }
+                >
+                  {p}
+                </span>
+              ))}
             </div>
             <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>
-              The first piece does not match. <code style={{ fontFamily: MONO }}>get</code> and{' '}
-              <code style={{ fontFamily: MONO }}>·get</code> are different tokens, because BPE is
-              space sensitive. That is why this method also records{' '}
-              <strong style={{ color: C.ink }}>which pieces sit next to each other</strong>. Without
-              that, the search misses the line.
+              <code style={{ fontFamily: MONO }}>get</code>,{' '}
+              <code style={{ fontFamily: MONO }}>use</code> and{' '}
+              <code style={{ fontFamily: MONO }}>ser</code> sit inside one token, so a small table
+              over the vocabulary finds the tokens holding them and BM25&apos;s own lists answer.{' '}
+              <code style={{ fontFamily: MONO }}>et_</code>,{' '}
+              <code style={{ fontFamily: MONO }}>t_u</code> and{' '}
+              <code style={{ fontFamily: MONO }}>_us</code> cross a cut, so they come from the{' '}
+              <strong style={{ color: C.ink }}>boundary grams</strong>. Asking for the query&apos;s
+              own tokens would fail: the query starts with{' '}
+              <code style={{ fontFamily: MONO }}>get</code>, the line with{' '}
+              <code style={{ fontFamily: MONO }}>·get</code>.
             </div>
           </div>
         ) : (

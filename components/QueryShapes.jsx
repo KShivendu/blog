@@ -10,7 +10,9 @@ import { chartChrome, vizPalette } from '../lib/viz-palette'
 //
 // Every pattern below is real: the agent column is mined from published
 // OpenHands and SWE-agent trajectories, the human column from re.compile calls
-// in CodeSearchNet. See experiments/regex-filter/mine_agent_queries.py.
+// in CodeSearchNet. See experiments/regex-filter/mine_agent_queries.py. The
+// shares come from the token-regex repo's extractor (`plan_check`) over every
+// distinct pattern that compiles in Rust's regex engine.
 
 const AGENT = [
   { p: 'GetEdk2RelativePathFromAbsolutePath', lit: 'GetEdk2RelativePathFromAbsolutePath' },
@@ -39,8 +41,8 @@ const HUMAN = [
 ]
 
 const STATS = [
-  { label: 'written by agents', sub: 'grep calls in 2,400 trajectories', pct: 96.3, n: 1079 },
-  { label: 'written by humans', sub: 're.compile calls in source', pct: 48.2, n: 2998 },
+  { label: 'written by agents', sub: 'grep calls in 2,400 trajectories', pct: 97.3, n: 1073 },
+  { label: 'written by humans', sub: 're.compile calls in source', pct: 53.5, n: 2806 },
 ]
 
 const MONO = 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)'
