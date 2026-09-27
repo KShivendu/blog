@@ -700,14 +700,15 @@ body {
   text-align: left;
   white-space: normal;
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.28);
-  opacity: 0;
+  /* display, not opacity: a hidden pop still takes layout, and one near the
+     right edge made phone-width pages scroll sideways. */
+  display: none;
   pointer-events: none;
-  transition: opacity 0.12s ease, transform 0.12s ease;
 }
 .tty-term:hover .tty-term-pop,
 .tty-term:focus .tty-term-pop,
 .tty-term:focus-within .tty-term-pop {
-  opacity: 1;
+  display: block;
   transform: translate(0, -8px);
 }
 
