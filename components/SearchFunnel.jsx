@@ -133,7 +133,8 @@ export default function SearchFunnel() {
   const set = data[corpus]
   const q = set.queries[Math.min(qi, set.queries.length - 1)]
   const counts = [q.chunks, q.fitting, q.positions, q.truth]
-  const top = Math.max(q.chunks, 1)
+  const es = q.es_wildcard
+  const top = Math.max(q.chunks, es || 0, 1)
   const toggle = (on) => ({
     fontFamily: MONO,
     fontSize: 11,
@@ -288,6 +289,65 @@ export default function SearchFunnel() {
           )
         })}
       </div>
+
+      {es != null && (
+        <div
+          style={{
+            marginTop: 10,
+            padding: '6px 8px',
+            border: `1px dashed ${C.border}`,
+            borderRadius: 2,
+            fontSize: 12,
+            color: C.ink,
+          }}
+        >
+          <div
+            style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}
+          >
+            <span>
+              for comparison: <strong>Elasticsearch wildcard field</strong>
+              <span style={{ color: C.muted }}> · lowercased 3-letter pieces, then the regex</span>
+            </span>
+            <span style={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
+              {fmt(es)} files
+              <span style={{ color: C.muted }}>
+                {' '}
+                (
+                {es - Math.min(q.truth, es) > 0
+                  ? `${fmt(es - Math.min(q.truth, es))} wrong`
+                  : 'all real'}
+                )
+              </span>
+            </span>
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              height: 10,
+              marginTop: 5,
+              width: `${Math.max((es / top) * 100, es > 0 ? 0.8 : 0)}%`,
+            }}
+          >
+            <div
+              style={{
+                flex: Math.min(q.truth, es) || 0,
+                background: P.good,
+                minWidth: q.truth ? 2 : 0,
+              }}
+            />
+            <div
+              style={{ flex: es - Math.min(q.truth, es) || 0, background: P.muted, opacity: 0.55 }}
+            />
+          </div>
+          <div style={{ color: C.muted, marginTop: 6 }}>
+            Its regex check runs on all {fmt(es)}, against {fmt(q.positions)} after our step 3.
+            {q.es_case_example
+              ? ' It lowercases everything, so it also passes files like this one, where the text only appears with different capitals:'
+              : ''}
+          </div>
+          {q.es_case_example && <Line ex={q.es_case_example} C={C} P={P} color={P.muted} />}
+        </div>
+      )}
 
       <div
         style={{
