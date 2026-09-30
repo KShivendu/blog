@@ -17,6 +17,9 @@ import SpladeVsIF from './SpladeVsIF'
 import TokenCompressionPipeline from './TokenCompressionPipeline'
 import TokenCompressionAnimated from './TokenCompressionAnimated'
 import TokenSearchAnalyzer from './TokenSearchAnalyzer'
+import RegexChopper from './RegexChopper'
+import RegexFilterPipeline from './RegexFilterPipeline'
+import QueryShapes from './QueryShapes'
 import StemExpandHero from './StemExpandHero'
 import SimilarityGate from './SimilarityGate'
 import CompressionWidget from './CompressionWidget'
@@ -29,8 +32,18 @@ import StaticPipeline from './StaticPipeline'
 import LoadModelAnimated from './LoadModelAnimated'
 import CoordinatedOmission from './CoordinatedOmission'
 import ScoreHistogram from './ScoreHistogram'
+import FlagSide from './FlagSide'
+import QueryExplorer from './QueryExplorer'
+import SpaceSlotHero from './SpaceSlotHero'
 import { ClosedLoopChart, OpenLoopChart, BadHarnessChart } from './LoadTestCharts'
+import VocabSweep from './VocabSweep'
+import WordpieceSplit from './WordpieceSplit'
+import ThreeChannels from './ThreeChannels'
+import PieceDerivation from './PieceDerivation'
+import WeightHandoff from './WeightHandoff'
 import Term from './Term'
+import GroundedExpansionAnim from './GroundedExpansionAnim'
+import PassageColors from './PassageColors'
 
 export const MDXComponents = {
   Image,
@@ -49,6 +62,9 @@ export const MDXComponents = {
   TokenCompressionPipeline,
   TokenCompressionAnimated,
   TokenSearchAnalyzer,
+  RegexChopper,
+  RegexFilterPipeline,
+  QueryShapes,
   StemExpandHero,
   SimilarityGate,
   CompressionWidget,
@@ -61,10 +77,20 @@ export const MDXComponents = {
   LoadModelAnimated,
   CoordinatedOmission,
   ScoreHistogram,
+  FlagSide,
+  QueryExplorer,
+  SpaceSlotHero,
   ClosedLoopChart,
   OpenLoopChart,
   BadHarnessChart,
+  VocabSweep,
+  WordpieceSplit,
+  ThreeChannels,
+  PieceDerivation,
+  WeightHandoff,
   Term,
+  GroundedExpansionAnim,
+  PassageColors,
   wrapper: ({ components, layout, ...rest }) => {
     const Layout = require(`../layouts/${layout}`).default
     return <Layout {...rest} />

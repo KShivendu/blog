@@ -1,0 +1,70 @@
+{
+  "data": [
+    {
+      "x": [
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
+      ],
+      "y": [
+        -0.0179, 0.0015, 0.0027, 0.002, -0.0009, 0.0031, 0.0146, 0.0143, 0.0203, 0.0149, 0.021,
+        0.0405, 0.0448, 0.0332, 0.0543, 0.0615, 0.0658, 0.0769, 0.1274, 0.2249, 0.3387, 0.4695,
+        0.5249, 0.6662, 1.0
+      ],
+      "name": "cos\u2192final (CLS crystallization)",
+      "mode": "lines+markers",
+      "line": { "color": "#f59e0b", "width": 3 },
+      "marker": { "size": 5 },
+      "yaxis": "y"
+    },
+    {
+      "x": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
+      "y": [
+        74.5, 67.4, 65.8, 66.4, 68.6, 70.8, 69.2, 65.3, 69.9, 67.8, 70.5, 72.9, 73.9, 70.8, 72.5,
+        72.8, 69.9, 64.6, 69.6, 74.3, 70.5, 58.1, 55.3, 46.1
+      ],
+      "name": "token diversity\u00b0 (angular spread)",
+      "mode": "lines+markers",
+      "line": { "color": "#38bdf8", "width": 3, "dash": "dot" },
+      "marker": { "size": 5 },
+      "yaxis": "y2"
+    }
+  ],
+  "layout": {
+    "title": { "text": "The sentence vector wanders, then commits (mxbai)" },
+    "xaxis": { "title": "layer", "dtick": 2 },
+    "yaxis": { "title": "cos to final vector", "range": [0, 1.02], "side": "left" },
+    "yaxis2": {
+      "title": "token diversity (\u00b0)",
+      "overlaying": "y",
+      "side": "right",
+      "range": [40, 80],
+      "showgrid": false
+    },
+    "legend": { "orientation": "h", "y": -0.22, "x": 0 },
+    "height": 420,
+    "shapes": [
+      {
+        "type": "rect",
+        "xref": "x",
+        "yref": "paper",
+        "x0": 18,
+        "x1": 24,
+        "y0": 0,
+        "y1": 1,
+        "fillcolor": "#f59e0b",
+        "opacity": 0.07,
+        "line": { "width": 0 }
+      }
+    ],
+    "annotations": [
+      {
+        "x": 21,
+        "y": 0.95,
+        "xref": "x",
+        "yref": "paper",
+        "text": "final ~6 layers:<br>vector crystallizes",
+        "showarrow": false,
+        "font": { "size": 11, "color": "#f59e0b" }
+      }
+    ]
+  }
+}

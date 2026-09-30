@@ -1,5 +1,5 @@
 import dynamic from 'next/dynamic'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { useTheme } from 'next-themes'
 import { chartChrome, vizPalette } from '../lib/viz-palette'
 
@@ -256,10 +256,18 @@ function ChartImpl({
   series: seriesProp = [],
   views,
   onViewChange,
+  chrome,
 }) {
   const { theme, resolvedTheme } = useTheme()
   const isDark = (resolvedTheme || theme) === 'dark'
-  const C = chartChrome(isDark)
+  /**
+   * `chrome` shallow-merges over chartChrome(isDark), so a caller can retheme the
+   * furniture -- most usefully `accent`/`accentInk`, which colour the active
+   * view/dataset toggle. The site's own charts are green; a deck or a page with a
+   * different brand can pass its own without forking the component. Only the keys
+   * given are overridden, and the light/dark base still applies underneath.
+   */
+  const C = useMemo(() => ({ ...chartChrome(isDark), ...(chrome || {}) }), [isDark, chrome])
 
   const tipRef = useRef(null)
   // Which series' point the cursor is actually closest to (by pixel distance,
@@ -861,7 +869,14 @@ function ChartImpl({
     if (hLineRef.current) hLineRef.current.style.opacity = '0'
     hideTip()
   }
-  const onCrosshairLeave = () => {
+  // Function declaration, not `const`: the marker hit-targets bind this as
+  // onPointerLeave while building their layer ~260 lines above, which is during
+  // render. As a const it was in its temporal dead zone at that point, so ANY
+  // series with markers threw "Cannot access 'onCrosshairLeave' before
+  // initialization" and took the whole chart down. Declarations hoist, so the
+  // binding is valid wherever it is referenced; the body still only runs on
+  // pointer-leave, by which time clearActive and lockedRef are initialized.
+  function onCrosshairLeave() {
     if (lockedRef.current) return // stay put while a point is locked
     clearActive()
   }
