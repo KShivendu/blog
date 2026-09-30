@@ -318,5 +318,95 @@
       "crossing": { "dual": 59800, "single": null },
       "dominates": { "dual": false, "single": false }
     }
+  },
+  "bpb_sweep": {
+    "Python code": [
+      {
+        "v": 2048,
+        "bpe": { "tokens": 435683, "freq": 1.9045, "xz": 1.4935, "distinct": 1568 },
+        "single": { "tokens": 414640, "freq": 1.9814, "xz": 1.4806, "distinct": 1494 },
+        "dual": { "tokens": 431252, "freq": 1.9371, "xz": 1.4489, "distinct": 1176 }
+      },
+      {
+        "v": 4096,
+        "bpe": { "tokens": 392140, "freq": 2.0735, "xz": 1.4663, "distinct": 3090 },
+        "single": { "tokens": 363883, "freq": 2.1918, "xz": 1.4494, "distinct": 3033 },
+        "dual": { "tokens": 363186, "freq": 2.2104, "xz": 1.4058, "distinct": 3009 }
+      },
+      {
+        "v": 8192,
+        "bpe": { "tokens": 365856, "freq": 2.2137, "xz": 1.4418, "distinct": 6099 },
+        "single": { "tokens": 335386, "freq": 2.3669, "xz": 1.4218, "distinct": 6096 },
+        "dual": { "tokens": 332773, "freq": 2.4004, "xz": 1.3743, "distinct": 6555 }
+      },
+      {
+        "v": 16384,
+        "bpe": { "tokens": 350468, "freq": 2.3177, "xz": 1.4224, "distinct": 12123 },
+        "single": { "tokens": 319892, "freq": 2.4869, "xz": 1.4026, "distinct": 12190 },
+        "dual": { "tokens": 317341, "freq": 2.536, "xz": 1.3543, "distinct": 13717 }
+      },
+      {
+        "v": 32768,
+        "bpe": { "tokens": 341372, "freq": 2.3891, "xz": 1.4079, "distinct": 24514 },
+        "single": { "tokens": 310994, "freq": 2.566, "xz": 1.3878, "distinct": 24752 },
+        "dual": { "tokens": 309772, "freq": 2.6117, "xz": 1.3403, "distinct": 28275 }
+      },
+      {
+        "v": 49152,
+        "bpe": { "tokens": 338406, "freq": 2.4139, "xz": 1.4014, "distinct": 37360 },
+        "single": { "tokens": 308124, "freq": 2.5944, "xz": 1.3822, "distinct": 37680 },
+        "dual": { "tokens": 307168, "freq": 2.6396, "xz": 1.3341, "distinct": 43262 }
+      },
+      {
+        "v": 65536,
+        "bpe": { "tokens": 336736, "freq": 2.4279, "xz": 1.3977, "distinct": 49977 },
+        "single": { "tokens": 306575, "freq": 2.6111, "xz": 1.3787, "distinct": 50490 },
+        "dual": { "tokens": 305810, "freq": 2.6548, "xz": 1.3303, "distinct": 58517 }
+      }
+    ],
+    "English (C4)": [
+      {
+        "v": 2048,
+        "bpe": { "tokens": 436271, "freq": 1.8249, "xz": 2.4158, "distinct": 1808 },
+        "single": { "tokens": 442443, "freq": 1.8131, "xz": 2.4045, "distinct": 1659 },
+        "dual": { "tokens": 475656, "freq": 1.7404, "xz": 2.419, "distinct": 1196 }
+      },
+      {
+        "v": 4096,
+        "bpe": { "tokens": 378652, "freq": 2.0206, "xz": 2.3669, "distinct": 3672 },
+        "single": { "tokens": 379713, "freq": 2.022, "xz": 2.3527, "distinct": 3551 },
+        "dual": { "tokens": 388655, "freq": 1.9848, "xz": 2.3549, "distinct": 3106 }
+      },
+      {
+        "v": 8192,
+        "bpe": { "tokens": 336859, "freq": 2.2197, "xz": 2.3147, "distinct": 7362 },
+        "single": { "tokens": 336123, "freq": 2.2323, "xz": 2.2982, "distinct": 7365 },
+        "dual": { "tokens": 337606, "freq": 2.2238, "xz": 2.2919, "distinct": 6939 }
+      },
+      {
+        "v": 16384,
+        "bpe": { "tokens": 308416, "freq": 2.4101, "xz": 2.2653, "distinct": 14561 },
+        "single": { "tokens": 307408, "freq": 2.4261, "xz": 2.2487, "distinct": 14803 },
+        "dual": { "tokens": 306511, "freq": 2.4347, "xz": 2.2374, "distinct": 14597 }
+      },
+      {
+        "v": 32768,
+        "bpe": { "tokens": 290344, "freq": 2.5702, "xz": 2.2136, "distinct": 28560 },
+        "single": { "tokens": 289945, "freq": 2.5826, "xz": 2.1983, "distinct": 29339 },
+        "dual": { "tokens": 288830, "freq": 2.5955, "xz": 2.1848, "distinct": 29943 }
+      },
+      {
+        "v": 49152,
+        "bpe": { "tokens": 283778, "freq": 2.6366, "xz": 2.1869, "distinct": 42150 },
+        "single": { "tokens": 283504, "freq": 2.6482, "xz": 2.1733, "distinct": 43736 },
+        "dual": { "tokens": 282232, "freq": 2.6634, "xz": 2.1589, "distinct": 45213 }
+      },
+      {
+        "v": 65536,
+        "bpe": { "tokens": 280162, "freq": 2.6771, "xz": 2.1706, "distinct": 55661 },
+        "single": { "tokens": 280204, "freq": 2.6849, "xz": 2.1583, "distinct": 57966 },
+        "dual": { "tokens": 279047, "freq": 2.7002, "xz": 2.144, "distinct": 60410 }
+      }
+    ]
   }
 }
