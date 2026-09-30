@@ -6,6 +6,235 @@
   "queries": [
    {
     "all": 45283,
+    "chunks": 31,
+    "dropped_by_fitting": {
+     "hl": [
+      0,
+      8
+     ],
+     "piece": "con",
+     "text": "continue",
+     "token": " continue"
+    },
+    "dropped_by_positions": {
+     "hl": [
+      14,
+      17
+     ],
+     "text": "def _get_init_containers(self):"
+    },
+    "dropped_by_regex": {
+     "hl": [
+      25,
+      31
+     ],
+     "text": "public_role = appbuilder.config.get('AUTH_ROLE_PUBLIC')"
+    },
+    "es_case_example": {
+     "hl": [
+      3,
+      9
+     ],
+     "text": "\"\"\"Configures the given :class:`OAuth2Provider` instance with the"
+    },
+    "es_wildcard": 36,
+    "fitting": 30,
+    "kept_example": {
+     "hl": [
+      13,
+      19
+     ],
+     "text": "def get_user_config_dir(app_name, app_author, roaming=T"
+    },
+    "literals": [
+     "config",
+     "get_us"
+    ],
+    "pattern": "get_us.*config",
+    "positions": 19,
+    "pure": false,
+    "truth": 8
+   },
+   {
+    "all": 45283,
+    "chunks": 1611,
+    "dropped_by_fitting": {
+     "hl": [
+      30,
+      36
+     ],
+     "piece": "mpt",
+     "text": "tring it will NOT be imported. Empty string means all lines are imported",
+     "token": " Empty"
+    },
+    "dropped_by_positions": null,
+    "dropped_by_regex": {
+     "hl": [
+      19,
+      24
+     ],
+     "text": "a list if matched. empty if not."
+    },
+    "es_case_example": {
+     "hl": [
+      25,
+      30
+     ],
+     "text": "write_disposition='WRITE_EMPTY',"
+    },
+    "es_wildcard": 1758,
+    "fitting": 1604,
+    "kept_example": {
+     "hl": [
+      30,
+      35
+     ],
+     "text": "ta()), low_memory=False, skip_blank_lines=False)"
+    },
+    "literals": [
+     "blank",
+     "empty"
+    ],
+    "pattern": "empty.*line|blank.*line",
+    "positions": 1604,
+    "pure": false,
+    "truth": 99
+   },
+   {
+    "all": 45283,
+    "chunks": 462,
+    "dropped_by_fitting": {
+     "hl": [
+      23,
+      27
+     ],
+     "piece": "ter",
+     "text": "distributions: Python `iterable` of `tfd.MultivariateNormalDiag`",
+     "token": "iter"
+    },
+    "dropped_by_positions": {
+     "hl": [
+      0,
+      3
+     ],
+     "text": "def apply_defaults(func):"
+    },
+    "dropped_by_regex": null,
+    "es_case_example": {
+     "hl": [
+      0,
+      9
+     ],
+     "text": "def MultiArgMax(x):"
+    },
+    "es_wildcard": 506,
+    "fitting": 423,
+    "kept_example": {
+     "hl": [
+      0,
+      9
+     ],
+     "text": "def multivariate_normal_tril(x,"
+    },
+    "literals": [
+     "def filterby",
+     "def multi"
+    ],
+    "pattern": "def filterby|def multi",
+    "positions": 44,
+    "pure": true,
+    "truth": 44
+   },
+   {
+    "all": 45283,
+    "chunks": 2865,
+    "dropped_by_fitting": {
+     "hl": [
+      3,
+      13
+     ],
+     "piece": "con",
+     "text": "def construct_ingest_query(self, static_path, columns):",
+     "token": " construct"
+    },
+    "dropped_by_positions": {
+     "hl": [
+      0,
+      3
+     ],
+     "text": "Converts branch length to years and plots"
+    },
+    "dropped_by_regex": {
+     "hl": [
+      23,
+      29
+     ],
+     "text": "cfg_patt = r'clip_page_config\\s*=\\s*(\\{.+?\\});'"
+    },
+    "es_case_example": {
+     "hl": [
+      13,
+      19
+     ],
+     "text": "raise AirflowConfigException("
+    },
+    "es_wildcard": 3078,
+    "fitting": 2778,
+    "kept_example": {
+     "hl": [
+      24,
+      30
+     ],
+     "text": "edit_empty_value = self.config.get('edit_empty_value', False)"
+    },
+    "literals": [
+     "EditConfig",
+     "config"
+    ],
+    "pattern": "EditConfig|edit.*config",
+    "positions": 2777,
+    "pure": false,
+    "truth": 8
+   },
+   {
+    "all": 45283,
+    "chunks": 6389,
+    "dropped_by_fitting": null,
+    "dropped_by_positions": null,
+    "dropped_by_regex": {
+     "hl": [
+      0,
+      3
+     ],
+     "text": "log.wtf(name)"
+    },
+    "es_case_example": {
+     "hl": [
+      13,
+      16
+     ],
+     "text": "Sun Java Krb5LoginModule in Java6, so we need to take a"
+    },
+    "es_wildcard": 7279,
+    "fitting": 6389,
+    "kept_example": {
+     "hl": [
+      5,
+      8
+     ],
+     "text": "self.log.info('Tmp dir root location: \\n %s', gettempdir())"
+    },
+    "literals": [
+     "--log",
+     "log"
+    ],
+    "pattern": "log.*dir|log.to|--log",
+    "positions": 6389,
+    "pure": false,
+    "truth": 270
+   },
+   {
+    "all": 45283,
     "chunks": 913,
     "dropped_by_fitting": {
      "hl": [
@@ -41,215 +270,6 @@
     "positions": 17,
     "pure": true,
     "truth": 17
-   },
-   {
-    "all": 45283,
-    "chunks": 741,
-    "dropped_by_fitting": {
-     "hl": [
-      1,
-      7
-     ],
-     "piece": "ter",
-     "text": ".filter(TI.dag_id.in_(DAG_IDS))",
-     "token": "filter"
-    },
-    "dropped_by_positions": {
-     "hl": [
-      9,
-      12
-     ],
-     "text": "wait_for_completion, check_interval, max_ingestion_"
-    },
-    "dropped_by_regex": null,
-    "es_case_example": {
-     "hl": [
-      8,
-      17
-     ],
-     "text": "#print 'Completer->global_matches, txt=%r' % text # dbg"
-    },
-    "es_wildcard": 805,
-    "fitting": 107,
-    "kept_example": {
-     "hl": [
-      8,
-      17
-     ],
-     "text": "def autocompleter():"
-    },
-    "literals": [
-     "completer"
-    ],
-    "pattern": "completer",
-    "positions": 23,
-    "pure": true,
-    "truth": 23
-   },
-   {
-    "all": 45283,
-    "chunks": 302,
-    "dropped_by_fitting": {
-     "hl": [
-      5,
-      13
-     ],
-     "piece": "est",
-     "text": "body, request_id=None, project_id=None):",
-     "token": " request"
-    },
-    "dropped_by_positions": {
-     "hl": [
-      0,
-      3
-     ],
-     "text": "def _check_and_change_state_before_execution("
-    },
-    "dropped_by_regex": null,
-    "es_case_example": null,
-    "es_wildcard": 340,
-    "fitting": 157,
-    "kept_example": {
-     "hl": [
-      0,
-      9
-     ],
-     "text": "def test_funny():"
-    },
-    "literals": [
-     "def test_"
-    ],
-    "pattern": "def test_",
-    "positions": 16,
-    "pure": true,
-    "truth": 16
-   },
-   {
-    "all": 45283,
-    "chunks": 709,
-    "dropped_by_fitting": {
-     "hl": [
-      14,
-      18
-     ],
-     "piece": " st",
-     "text": ":type project: str",
-     "token": " str"
-    },
-    "dropped_by_positions": {
-     "hl": [
-      0,
-      3
-     ],
-     "text": "def _wait_for_operation_to_complete(self, project_id, operation_name):"
-    },
-    "dropped_by_regex": null,
-    "es_case_example": null,
-    "es_wildcard": 736,
-    "fitting": 514,
-    "kept_example": {
-     "hl": [
-      0,
-      10
-     ],
-     "text": "def status(self):"
-    },
-    "literals": [
-     "def status"
-    ],
-    "pattern": "def status",
-    "positions": 31,
-    "pure": true,
-    "truth": 31
-   },
-   {
-    "all": 45283,
-    "chunks": 285,
-    "dropped_by_fitting": {
-     "hl": [
-      0,
-      5
-     ],
-     "piece": "val",
-     "text": "value=outlets,",
-     "token": " value"
-    },
-    "dropped_by_positions": {
-     "hl": [
-      57,
-      60
-     ],
-     "text": "This function finds the date in a list closest to the target date."
-    },
-    "dropped_by_regex": null,
-    "es_case_example": {
-     "hl": [
-      30,
-      39
-     ],
-     "text": "ridlib.GRIDTABLE_REQUEST_VIEW_GET_VALUES)"
-    },
-    "es_wildcard": 296,
-    "fitting": 252,
-    "kept_example": {
-     "hl": [
-      30,
-      39
-     ],
-     "text": "('theme', request.preferences.get_value('theme'))"
-    },
-    "literals": [
-     "get_value"
-    ],
-    "pattern": "get_value",
-    "positions": 113,
-    "pure": true,
-    "truth": 113
-   },
-   {
-    "all": 45283,
-    "chunks": 11030,
-    "dropped_by_fitting": {
-     "hl": [
-      13,
-      20
-     ],
-     "piece": "ist",
-     "text": "If it already exists and is a directory, files will be",
-     "token": " exists"
-    },
-    "dropped_by_positions": {
-     "hl": [
-      22,
-      25
-     ],
-     "text": ">>> y_fast  = librosa.istft(D_fast, hop_length=512)"
-    },
-    "dropped_by_regex": null,
-    "es_case_example": {
-     "hl": [
-      30,
-      34
-     ],
-     "text": ".pyopenssl.DEFAULT_SSL_CIPHER_LIST = \\"
-    },
-    "es_wildcard": 11066,
-    "fitting": 10911,
-    "kept_example": {
-     "hl": [
-      19,
-      23
-     ],
-     "text": "Convert XML to URL List."
-    },
-    "literals": [
-     "List",
-     "list"
-    ],
-    "pattern": "list|List",
-    "positions": 10901,
-    "pure": true,
-    "truth": 10901
    }
   ]
  },
