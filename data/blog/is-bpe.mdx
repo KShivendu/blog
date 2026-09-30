@@ -1,6 +1,6 @@
 ---
-title: 'Fixing the BPE tokenizer'
-subtitle: 'Every tokenizer stores the word "the" twice'
+title: 'Implicit Space BPE'
+subtitle: "Fixing BPE's duplicate tokens"
 date: '2026-09-17'
 lastmod: '2026-10-01'
 tags: ['nlp', 'compression', 'tokenization', 'internals']
@@ -620,7 +620,7 @@ tok.explain("self.fireEvent")
 
 `mode="dual"` is the one to use, and the contraction fix is the default pattern. Losslessness is verified on three corpora plus 2,000 random byte strings per mode, and the packaged library reproduces the numbers in this post to the token.
 
-The honest limitations. A custom tokenizer produces ids no existing model can read, so if your reader is an LLM you need the lab to ship the vocabulary. Everything here is one 20 MB corpus per domain, one held-out file, one deterministic build, with no variance reported. And the comparison is against GPT-2's 2019 pretokenizer, not a modern one that caps digit runs. For a storage layer where you control both ends, none of that applies and you can use it today.
+The honest limitations. A custom tokenizer produces ids no existing model can read, so if your reader is an LLM you need the lab to ship the vocabulary. Everything here is one 20 MB corpus per domain, one held-out file, one deterministic build, with no variance reported. And the comparison is against GPT-2's 2019 pretokenizer. That is the conservative choice rather than a gap: a modern one lets any punctuation character begin a word pretoken, so `lang.split` splits as `lang | .split` instead of `lang | . | split`, and a word then needs a form per preceding character. cl100k holds twelve forms of `value` where GPT-2 holds two, and spends **47.8%** of its slots on words held in more than one form against GPT-2's 30.6%. The catch is that the dual-flag mark needs the punctuation to be its own pretoken, so the scheme as built assumes GPT-2's regex. For a storage layer where you control both ends, none of that applies and you can use it today.
 
 ## Key Takeaways
 
