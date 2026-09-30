@@ -39,3 +39,7 @@ yarn-error.log*
 .env
 scripts/.record-deps/
 __pycache__/
+
+# private writing guides (kept locally, never published)
+writing-style*.md
+writing-skill-draft.md
