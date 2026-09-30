@@ -6,7 +6,7 @@ can compute chunk containment live for whatever the reader types and the widget
 cannot disagree with the benchmark.
 
 Run from the repo root:
-  python3 experiments/regex-filter/export_hero_data.py
+  uv run --with tokenizers python experiments/regex-filter/export_hero_data.py
 """
 import json
 import os
@@ -19,6 +19,7 @@ OUT = "public/static/data/regex-filter-hero.json"
 N_DOCS = 24
 MAX_CHARS = 700
 SEED_QUERY = r"get_user\w*"
+GPT2 = "~/projects/research/token-regex/token-regex-rs/.cache/gpt2-tokenizer.json"
 
 
 def label_of(text):
@@ -48,7 +49,17 @@ def main():
         "source": "CodeSearchNet Python, test split",
         "seed_query": SEED_QUERY,
         "docs": [{"label": label_of(t), "text": t[:MAX_CHARS]} for t in sel],
+        "tokenizer": "gpt2",
     }
+    # where GPT-2 cuts each document into tokens (character offsets), so the
+    # widget can show whether a chunk sits inside a token (answered by the
+    # BM25 token lists) or crosses a cut (answered by a boundary gram)
+    from tokenizers import Tokenizer
+
+    tk = Tokenizer.from_file(os.path.expanduser(GPT2))
+    for d in out["docs"]:
+        offs = tk.encode(d["text"]).offsets
+        d["cuts"] = [e for _, e in offs[:-1]]
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     json.dump(out, open(OUT, "w"))
     kb = os.path.getsize(OUT) / 1024

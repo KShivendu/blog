@@ -19,7 +19,7 @@ const fmt = (n) => n.toLocaleString('en-US')
 
 // how a pattern is shown on a button: the news phrases are written as
 // \bbe\ the\b for the regex engine, a reader just wants "be the"
-const pretty = (p) => p.replace(/\\b/g, '').replace(/\\ /g, ' ')
+const pretty = (p) => p.replace(/\\ /g, ' ')
 
 const STEPS = [
   {
@@ -44,7 +44,7 @@ const STEPS = [
     key: 'truth',
     label: 'the regex agrees',
     how: 'regex on what is left',
-    why: 'The last check is the real regex. For plain text it has nothing left to remove.',
+    why: 'The last check is the real regex, for what the index cannot check: order, .* staying on one line, word edges.',
   },
 ]
 
@@ -56,6 +56,7 @@ function Line({ ex, C, P, color }) {
     <div
       style={{
         fontFamily: MONO,
+        fontVariantLigatures: 'none',
         fontSize: 12,
         color: C.ink,
         background: C.grid,
@@ -93,7 +94,15 @@ export default function SearchFunnel() {
     let live = true
     fetch(DATA_URL)
       .then((r) => r.json())
-      .then((d) => live && setData(d))
+      .then((d) => {
+        if (!live) return
+        setData(d)
+        const x = d.code.queries[0]
+        const c = [x.chunks, x.fitting, x.positions, x.truth]
+        let best = 1
+        for (let i = 2; i < 4; i += 1) if (c[i - 1] - c[i] > c[best - 1] - c[best]) best = i
+        setStep(best)
+      })
       .catch(() => live && setData(false))
     return () => {
       live = false
@@ -137,6 +146,7 @@ export default function SearchFunnel() {
   const top = Math.max(q.chunks, es || 0, 1)
   const toggle = (on) => ({
     fontFamily: MONO,
+    fontVariantLigatures: 'none',
     fontSize: 11,
     padding: '5px 10px',
     cursor: 'pointer',
@@ -163,7 +173,7 @@ export default function SearchFunnel() {
     const ex = q.dropped_by_fitting
     detail = ex ? (
       <>
-        {fmt(removed)} files dropped. In this one, the piece{' '}
+        {fmt(removed)} {removed === 1 ? 'file' : 'files'} dropped. In this one, the piece{' '}
         <code style={{ fontFamily: MONO }}>{ex.piece}</code> sits inside the token{' '}
         <code style={{ fontFamily: MONO }}>{ex.token.replace(/ /g, '·')}</code>, whose other letters
         don&apos;t match the search:
@@ -176,7 +186,8 @@ export default function SearchFunnel() {
     const ex = q.dropped_by_positions
     detail = ex ? (
       <>
-        {fmt(removed)} files dropped. This one has every piece, but never in one row:
+        {fmt(removed)} {removed === 1 ? 'file' : 'files'} dropped. This one has every piece, but
+        never in one row:
         <Line ex={ex} C={C} P={P} color={P.muted} />
       </>
     ) : (
@@ -186,7 +197,10 @@ export default function SearchFunnel() {
     const ex = q.dropped_by_regex
     detail = ex ? (
       <>
-        {fmt(removed)} files dropped. The text is there, but the regex wants a word edge around it:
+        {fmt(removed)} {removed === 1 ? 'file' : 'files'} dropped.{' '}
+        {q.pattern.includes('\\b')
+          ? 'The text is there, but the regex wants a word edge around it:'
+          : 'The text the index can check is there, but the full regex rejects the file, here because the parts are missing, out of order or on different lines:'}
         <Line ex={ex} C={C} P={P} color={P.muted} />
         A real match:
         <Line ex={q.kept_example} C={C} P={P} />

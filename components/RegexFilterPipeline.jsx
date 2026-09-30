@@ -17,7 +17,7 @@ const DATA_URL = '/static/data/regex-filter-hero.json'
 const MONO = 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)'
 // One preset per lesson: an exact hit, a wider one, a search whose chunks all
 // land in the wrong places, and a pattern that pins down no text at all.
-const PRESETS = ['get_user', 'def get', 'return self', '\\s+']
+const PRESETS = ['get_user', 'get_us.*config', 'def get', '\\s+']
 const STEP_MS = 1700
 const HOLD_MS = 3200
 
@@ -25,7 +25,7 @@ const STEPS = [
   'a search arrives',
   'keep only the text it guarantees',
   'chop that into chunks',
-  'fetch every chunk’s document list at once',
+  'fetch every chunk’s list: token lists, or boundary grams at a cut',
   'keep the documents on every list',
   'run the real regex on those',
 ]
@@ -62,6 +62,22 @@ function requiredLiteral(pattern) {
   }
   out.push(cur)
   return out.sort((a, b) => b.length - a.length)[0] || ''
+}
+
+// Where a chunk sits in a file, from GPT-2's cuts: 1 if some occurrence lies
+// inside one token (the BM25 token lists answer it, through the vocabulary),
+// 2 if every occurrence crosses a cut (only the boundary grams answer it),
+// 0 if the file doesn't hold it.
+function whereIs(doc, g) {
+  let i = doc.text.indexOf(g)
+  if (i < 0) return 0
+  const cuts = doc.cuts || []
+  while (i >= 0) {
+    const s = i
+    if (!cuts.some((c) => c > s && c < s + g.length)) return 1
+    i = doc.text.indexOf(g, i + 1)
+  }
+  return 2
 }
 
 const chunksOf = (lit) =>
@@ -132,8 +148,8 @@ export default function RegexFilterPipeline() {
     if (!docs || !docs.length) return null
     const lit = requiredLiteral(query)
     const chunks = chunksOf(lit)
-    const rows = chunks.map((g) => ({ g, hits: docs.map((d) => d.text.includes(g)) }))
-    const survives = docs.map((_, i) => rows.length > 0 && rows.every((r) => r.hits[i]))
+    const rows = chunks.map((g) => ({ g, hits: docs.map((d) => whereIs(d, g)) }))
+    const survives = docs.map((_, i) => rows.length > 0 && rows.every((r) => r.hits[i] > 0))
     let truth = docs.map(() => false)
     let valid = true
     try {
@@ -381,6 +397,32 @@ export default function RegexFilterPipeline() {
 
       {/* the index: one row per chunk, every row arriving together */}
       <div style={{ padding: '10px 16px 0', overflowX: 'auto', minHeight: 130 }}>
+        {!none && (
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 12,
+              fontSize: 11,
+              color: C.muted,
+              marginBottom: 6,
+              opacity: rowsVisible ? 1 : 0.3,
+            }}
+          >
+            <span>
+              <span
+                style={{ ...cell(true, P.series1), display: 'inline-block', verticalAlign: -2 }}
+              />{' '}
+              inside a token: BM25&apos;s own token lists
+            </span>
+            <span>
+              <span
+                style={{ ...cell(true, P.series2), display: 'inline-block', verticalAlign: -2 }}
+              />{' '}
+              across a token cut: the boundary grams
+            </span>
+          </div>
+        )}
         {!none &&
           m.rows.map((r, ri) => (
             <div
@@ -408,11 +450,23 @@ export default function RegexFilterPipeline() {
               </code>
               <div style={{ display: 'flex', gap: 2 }}>
                 {r.hits.map((h, i) => (
-                  <span key={i} style={cell(rowsVisible && h, P.muted)} title={docs[i].label} />
+                  <span
+                    key={i}
+                    style={cell(rowsVisible && h > 0, h === 2 ? P.series2 : P.series1)}
+                    title={`${docs[i].label}: ${
+                      h === 2 ? 'crosses a token cut' : h === 1 ? 'inside a token' : 'not present'
+                    }`}
+                  />
                 ))}
               </div>
               <span style={{ fontFamily: MONO, fontSize: 10, color: C.muted, paddingLeft: 4 }}>
-                {r.hits.filter(Boolean).length}
+                {r.hits.filter((h) => h > 0).length}
+                {r.hits.some((h) => h === 2) && (
+                  <span style={{ color: P.series2 }}>
+                    {' '}
+                    ({r.hits.filter((h) => h === 2).length} at a cut)
+                  </span>
+                )}
                 {andVisible && <span style={{ opacity: 0.65 }}> &rarr; {m.running[ri]} left</span>}
               </span>
             </div>
