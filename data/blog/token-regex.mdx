@@ -15,9 +15,11 @@ In [Token Search](/blog/token-search) I ran BM25 over BPE token IDs and it match
 
 It almost can. One extra posting list finishes the job. On 45,283 Python functions the result hands the regex engine exactly the files a trigram index would. A check that only tokens allow then makes it tighter and faster than trigram: 16% fewer wrong files, and 35.3 µs per query against 50.7 µs. The whole index for ranking, regex and typos also comes out smaller than what Lucene-style engines build for the same features.
 
-Every regex prefilter works the same way. Chop the text into pieces and remember which files each piece is in. Then chop the query the same way, keep the files that hold all its pieces, and run the real regex on those. Try your own search on 24 real functions:
+Every regex prefilter works like a funnel. It starts with every file and throws away the ones that can't match, in cheap steps, so the real regex only runs on the few that are left. Pick a search and watch where the wrong files go:
 
-<RegexFilterPipeline />
+<SearchFunnel />
+
+The rest of the post builds that funnel one step at a time.
 
 ## Search text falls across token cuts
 
@@ -133,6 +135,36 @@ Observations:
 A trigram index builds in 1.6 s and the token index took 9.1 s, of which 5.2 s was tokenizing with HuggingFace `tokenizers` 0.22. Its 1.0 release candidate produces identical tokens and was 30x faster in a back-to-back run, and a BM25 index pays for tokenizing anyway. I haven't timed the boundary grams on their own.
 
 Any tokenizer that gives back the exact text works. GPT-2, Qwen3-Embedding and ISBPE hand over the same files on every query, and only the size changes: Qwen3 stores the fewest postings, 14.9M against 16.2M for GPT-2, because it merges runs of indentation. So an embedding model's own tokenizer can drive BM25 and regex from one set of token IDs. WordPiece and SentencePiece can't, since they failed all 400 code files I round-tripped (WordPiece turns `def get_vid_from_url` into `def get _ vid _ url`). That rules out the BERT-family embedding models.
+
+## Positions make it exact
+
+Many engines already store each token's position, for phrase search. A file's tokens in order spell its text exactly, so positions can confirm a match without reading the text. The catch is to use them without tokenizing the query, because the query's own tokens can't be trusted: `completer` alone is `com|ple|ter`, but inside a file it is `·comple|ter`.
+
+So I start from one letter of the query instead. Whatever the tokenizer did, that letter sits inside exactly one token of the file. The candidates are the vocabulary tokens that hold it and agree with the query on their other letters. For `get_value` and its `a`, those are tokens like `value`, `val` and `_val`. A small table built from the vocabulary answers this in about 30 µs. Then:
+
+```
+file tokens:   ... | get | _ | value | ( | ...
+                           ^^^^^ holds the "a" at position 12
+walk left:     position 11 "_" and position 10 "get" match the query
+               -> this file really contains "get_value"
+```
+
+This check never guesses how the query tokenizes, and it made no mistakes: over 399 code literals and 360 news phrases it missed no file and let no wrong file through. It takes the funnel from 73,862 wrong files after fitting to 66,819. That is the least any filter on the text can leave, since the rest contain the text but fail the full regex.
+
+When the search is plain text, like `get_value` or `duckdb|DuckDB` (224 of the 299 agent greps), positions are the final answer and the regex never runs. Timed in one run on the same machine:
+
+| code, 299 agent greps                                    |        p50 |          p90 |         mean |   vs scan |
+| -------------------------------------------------------- | ---------: | -----------: | -----------: | --------: |
+| text compressed (LZ4, 16 KB blocks): trigram, then regex |     220 µs |    11,061 µs |     3,546 µs |      9.2x |
+| text compressed: boundary grams, fitting, positions      | **173 µs** | **5,976 µs** | **2,762 µs** | **11.8x** |
+| text in memory: trigram, then regex                      |      55 µs |       858 µs |       445 µs |     11.9x |
+| text in memory: boundary grams, fitting, positions       |     127 µs |     3,044 µs |     1,025 µs |      5.2x |
+
+Observations:
+
+- **With compressed text, positions halve the p90**, because 224 plain-text greps never unpack a 16 KB block to check a file.
+- **With text in memory the regex is cheaper than my position check.** Scanning bytes already in RAM costs less than reading positions from the hash map I kept them in. A real engine reads positions in order, so part of this gap is my implementation.
+- **Positions cost space.** In the same simple codec they take 31.1 MB on code and 11.5 MB on news, against 13.9 MB and 11.4 MB for boundary grams. An engine that already stores them for phrase search pays nothing extra.
 
 ## The queries matter more than the index
 

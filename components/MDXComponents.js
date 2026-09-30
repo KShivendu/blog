@@ -20,6 +20,7 @@ import TokenSearchAnalyzer from './TokenSearchAnalyzer'
 import RegexChopper from './RegexChopper'
 import RegexFilterPipeline from './RegexFilterPipeline'
 import QueryShapes from './QueryShapes'
+import SearchFunnel from './SearchFunnel'
 import StemExpandHero from './StemExpandHero'
 import SimilarityGate from './SimilarityGate'
 import CompressionWidget from './CompressionWidget'
@@ -65,6 +66,7 @@ export const MDXComponents = {
   RegexChopper,
   RegexFilterPipeline,
   QueryShapes,
+  SearchFunnel,
   StemExpandHero,
   SimilarityGate,
   CompressionWidget,

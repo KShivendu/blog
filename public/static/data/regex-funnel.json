@@ -1,0 +1,478 @@
+{
+ "generated_by": "token-regex-rs: src/bin/positional.rs (EXPORT) + scripts/funnel/merge.py",
+ "code": {
+  "label": "45,283 Python functions",
+  "files": 45283,
+  "queries": [
+   {
+    "all": 45283,
+    "chunks": 913,
+    "dropped_by_fitting": {
+     "hl": [
+      28,
+      34
+     ],
+     "piece": "hil",
+     "text": "Runs forever, monitoring the child processes of @gunicorn_master_proc",
+     "token": " child"
+    },
+    "dropped_by_positions": null,
+    "dropped_by_regex": null,
+    "fitting": 17,
+    "kept_example": {
+     "hl": [
+      21,
+      25
+     ],
+     "text": "perm = cs.reverse_cuthill_mckee(sp_sub_graph)"
+    },
+    "literals": [
+     "hill"
+    ],
+    "pattern": "hill",
+    "positions": 17,
+    "pure": true,
+    "truth": 17
+   },
+   {
+    "all": 45283,
+    "chunks": 741,
+    "dropped_by_fitting": {
+     "hl": [
+      1,
+      7
+     ],
+     "piece": "ter",
+     "text": ".filter(TI.dag_id.in_(DAG_IDS))",
+     "token": "filter"
+    },
+    "dropped_by_positions": {
+     "hl": [
+      9,
+      12
+     ],
+     "text": "wait_for_completion, check_interval, max_ingestion_"
+    },
+    "dropped_by_regex": null,
+    "fitting": 107,
+    "kept_example": {
+     "hl": [
+      8,
+      17
+     ],
+     "text": "def autocompleter():"
+    },
+    "literals": [
+     "completer"
+    ],
+    "pattern": "completer",
+    "positions": 23,
+    "pure": true,
+    "truth": 23
+   },
+   {
+    "all": 45283,
+    "chunks": 302,
+    "dropped_by_fitting": {
+     "hl": [
+      5,
+      13
+     ],
+     "piece": "est",
+     "text": "body, request_id=None, project_id=None):",
+     "token": " request"
+    },
+    "dropped_by_positions": {
+     "hl": [
+      0,
+      3
+     ],
+     "text": "def _check_and_change_state_before_execution("
+    },
+    "dropped_by_regex": null,
+    "fitting": 157,
+    "kept_example": {
+     "hl": [
+      0,
+      9
+     ],
+     "text": "def test_funny():"
+    },
+    "literals": [
+     "def test_"
+    ],
+    "pattern": "def test_",
+    "positions": 16,
+    "pure": true,
+    "truth": 16
+   },
+   {
+    "all": 45283,
+    "chunks": 709,
+    "dropped_by_fitting": {
+     "hl": [
+      14,
+      18
+     ],
+     "piece": " st",
+     "text": ":type project: str",
+     "token": " str"
+    },
+    "dropped_by_positions": {
+     "hl": [
+      0,
+      3
+     ],
+     "text": "def _wait_for_operation_to_complete(self, project_id, operation_name):"
+    },
+    "dropped_by_regex": null,
+    "fitting": 514,
+    "kept_example": {
+     "hl": [
+      0,
+      10
+     ],
+     "text": "def status(self):"
+    },
+    "literals": [
+     "def status"
+    ],
+    "pattern": "def status",
+    "positions": 31,
+    "pure": true,
+    "truth": 31
+   },
+   {
+    "all": 45283,
+    "chunks": 285,
+    "dropped_by_fitting": {
+     "hl": [
+      0,
+      5
+     ],
+     "piece": "val",
+     "text": "value=outlets,",
+     "token": " value"
+    },
+    "dropped_by_positions": {
+     "hl": [
+      57,
+      60
+     ],
+     "text": "This function finds the date in a list closest to the target date."
+    },
+    "dropped_by_regex": null,
+    "fitting": 252,
+    "kept_example": {
+     "hl": [
+      30,
+      39
+     ],
+     "text": "('theme', request.preferences.get_value('theme'))"
+    },
+    "literals": [
+     "get_value"
+    ],
+    "pattern": "get_value",
+    "positions": 113,
+    "pure": true,
+    "truth": 113
+   },
+   {
+    "all": 45283,
+    "chunks": 11030,
+    "dropped_by_fitting": {
+     "hl": [
+      13,
+      20
+     ],
+     "piece": "ist",
+     "text": "If it already exists and is a directory, files will be",
+     "token": " exists"
+    },
+    "dropped_by_positions": {
+     "hl": [
+      22,
+      25
+     ],
+     "text": ">>> y_fast  = librosa.istft(D_fast, hop_length=512)"
+    },
+    "dropped_by_regex": null,
+    "fitting": 10911,
+    "kept_example": {
+     "hl": [
+      19,
+      23
+     ],
+     "text": "Convert XML to URL List."
+    },
+    "literals": [
+     "List",
+     "list"
+    ],
+    "pattern": "list|List",
+    "positions": 10901,
+    "pure": true,
+    "truth": 10901
+   }
+  ]
+ },
+ "news": {
+  "label": "120,000 AG News articles",
+  "files": 120000,
+  "queries": [
+   {
+    "all": 120000,
+    "chunks": 4510,
+    "dropped_by_fitting": {
+     "hl": [
+      30,
+      41
+     ],
+     "piece": "the",
+     "text": "dence supporting contradictory hypotheses and she will go looking for a",
+     "token": " hypotheses"
+    },
+    "dropped_by_positions": {
+     "hl": [
+      30,
+      33
+     ],
+     "text": "''UZIs and AK-47s could again be flooding the streets. quot; His ..."
+    },
+    "dropped_by_regex": {
+     "hl": [
+      29,
+      35
+     ],
+     "text": "scientific instruments to probe the vibrant waters of the Pacific. He i"
+    },
+    "fitting": 4459,
+    "kept_example": {
+     "hl": [
+      30,
+      36
+     ],
+     "text": "ering. That could turn out to be the good news or the bad news."
+    },
+    "literals": [
+     "be the"
+    ],
+    "pattern": "\\bbe\\ the\\b",
+    "positions": 683,
+    "pure": false,
+    "truth": 624
+   },
+   {
+    "all": 120000,
+    "chunks": 3685,
+    "dropped_by_fitting": {
+     "hl": [
+      30,
+      38
+     ],
+     "piece": "sai",
+     "text": "R: NWFP Governor Syed Iftikhar Hussain Shah on Friday rejected claims th",
+     "token": " Hussain"
+    },
+    "dropped_by_positions": {
+     "hl": [
+      29,
+      32
+     ],
+     "text": "and died\\young,\" researchers said on Wednesday."
+    },
+    "dropped_by_regex": {
+     "hl": [
+      30,
+      37
+     ],
+     "text": "the U.S. Department of Energy said inventory controls at the Los Alamos"
+    },
+    "fitting": 3683,
+    "kept_example": {
+     "hl": [
+      30,
+      37
+     ],
+     "text": "urrent market conditions,\" it said in a regulatory filing on Wednesday.\\"
+    },
+    "literals": [
+     "said in"
+    ],
+    "pattern": "\\bsaid\\ in\\b",
+    "positions": 460,
+    "pure": false,
+    "truth": 428
+   },
+   {
+    "all": 120000,
+    "chunks": 1161,
+    "dropped_by_fitting": {
+     "hl": [
+      30,
+      37
+     ],
+     "piece": "eco",
+     "text": "its from historic major league record SEATTLE - Ichiro went 1-for-4 agai",
+     "token": " record"
+    },
+    "dropped_by_positions": {
+     "hl": [
+      30,
+      33
+     ],
+     "text": "s \"delays,\" the second glitch in two weeks. Those affected are told to r"
+    },
+    "dropped_by_regex": {
+     "hl": [
+      30,
+      43
+     ],
+     "text": "tend that last week's debacle in the secondary against the Rams isn't a"
+    },
+    "fitting": 1157,
+    "kept_example": {
+     "hl": [
+      30,
+      43
+     ],
+     "text": "the company swung to a profit in the second quarter, but same-store sale"
+    },
+    "literals": [
+     "in the second"
+    ],
+    "pattern": "\\bin\\ the\\ second\\b",
+    "positions": 512,
+    "pure": false,
+    "truth": 505
+   },
+   {
+    "all": 120000,
+    "chunks": 2111,
+    "dropped_by_fitting": {
+     "hl": [
+      30,
+      37
+     ],
+     "piece": "the",
+     "text": "volleyball: US falls to Russia Athens, Greece (Sports Network) - The Uni",
+     "token": " Athens"
+    },
+    "dropped_by_positions": {
+     "hl": [
+      30,
+      33
+     ],
+     "text": "rld  best time to qualify for the final of the men's Olympic eights  rac"
+    },
+    "dropped_by_regex": {
+     "hl": [
+      30,
+      47
+     ],
+     "text": "ereo.\" Caution- doing this in the United Statesor other parts of the wor"
+    },
+    "fitting": 2085,
+    "kept_example": {
+     "hl": [
+      30,
+      47
+     ],
+     "text": "ffice Monday just hours after the United States returned the nation's\\so"
+    },
+    "literals": [
+     "the United States"
+    ],
+    "pattern": "\\bthe\\ United\\ States\\b",
+    "positions": 1709,
+    "pure": false,
+    "truth": 1706
+   },
+   {
+    "all": 120000,
+    "chunks": 4905,
+    "dropped_by_fitting": {
+     "hl": [
+      30,
+      40
+     ],
+     "piece": "irs",
+     "text": ") AP - U.S. forces launched an airstrike Friday in the troubled Iraqi ci",
+     "token": " airstrike"
+    },
+    "dropped_by_positions": {
+     "hl": [
+      30,
+      33
+     ],
+     "text": "esday, joining South Korea on the leading edge of stem cell research, wh"
+    },
+    "dropped_by_regex": {
+     "hl": [
+      30,
+      39
+     ],
+     "text": "er Kevin Davies scored late inthe first half to give Bolton Wanderers a"
+    },
+    "fitting": 4884,
+    "kept_example": {
+     "hl": [
+      30,
+      39
+     ],
+     "text": "Bali in  Indonesia. Be one of the first to vote and let us know your rea"
+    },
+    "literals": [
+     "the first"
+    ],
+    "pattern": "\\bthe\\ first\\b",
+    "positions": 4030,
+    "pure": false,
+    "truth": 4028
+   },
+   {
+    "all": 120000,
+    "chunks": 4164,
+    "dropped_by_fitting": {
+     "hl": [
+      30,
+      37
+     ],
+     "piece": "the",
+     "text": "bile phone text message to her father that his live-in girlfriend was tr",
+     "token": " father"
+    },
+    "dropped_by_positions": {
+     "hl": [
+      30,
+      33
+     ],
+     "text": "enius can mess up. Bill Gates was a brilliant technologist when he cofou"
+    },
+    "dropped_by_regex": {
+     "hl": [
+      29,
+      36
+     ],
+     "text": "#39;t miss it if you knew it was there."
+    },
+    "fitting": 4078,
+    "kept_example": {
+     "hl": [
+      30,
+      37
+     ],
+     "text": "But, at 32, \"buying insurance was the furthest thing from my mind,\" says"
+    },
+    "literals": [
+     "was the"
+    ],
+    "pattern": "\\bwas\\ the\\b",
+    "positions": 668,
+    "pure": false,
+    "truth": 638
+   }
+  ]
+ }
+}
