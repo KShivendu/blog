@@ -201,14 +201,86 @@ export default function SearchFunnel() {
     )
   }
 
+  // widths are linear, scaled to the widest band below the mouth; the mouth
+  // (all files) is drawn full width with a marked zoom so nothing needs a
+  // log scale
+  const w = (n) => (n <= 0 ? 0 : Math.max((n / top) * 100, 1.2))
+  const core = w(q.truth)
+  const zoom = Math.round(set.files / top)
+  const band = (a, b, dashed, coreW = core) => (
+    <div style={{ position: 'relative', height: '100%', minHeight: 44 }}>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: P.muted,
+          opacity: dashed ? 0.35 : 0.5,
+          clipPath: `polygon(${50 - a / 2}% 0, ${50 + a / 2}% 0, ${50 + b / 2}% 100%, ${
+            50 - b / 2
+          }% 100%)`,
+          transition: 'clip-path 350ms ease',
+        }}
+      />
+      {coreW > 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            left: `${50 - coreW / 2}%`,
+            width: `${coreW}%`,
+            minWidth: 3,
+            background: P.good,
+            transition: 'all 350ms ease',
+          }}
+        />
+      )}
+    </div>
+  )
+  const rows = STEPS.map((st, i) => {
+    // each band narrows from the files the step received to the files it
+    // keeps, so the shaved-off grey sits next to its own "dropped" count
+    const n = counts[i]
+    const prev = i === 0 ? top : counts[i - 1]
+    const out = (i === 0 ? set.files : counts[i - 1]) - n
+    return { i, st, n, a: w(prev), b: w(n), out }
+  })
+
+  let esDetail = null
+  if (step === 4) {
+    esDetail = (
+      <>
+        Elasticsearch&apos;s wildcard field runs its regex on {fmt(es)} files for this search,
+        against {fmt(q.positions)} after our step 3.{' '}
+        {q.es_case_example
+          ? 'It lowercases everything, so it also passes files like this one, where the text only appears with different capitals:'
+          : 'Its trigrams carry no token, so it cannot do our steps 2 and 3.'}
+        {q.es_case_example && <Line ex={q.es_case_example} C={C} P={P} color={P.muted} />}
+      </>
+    )
+  }
+
   return (
     <figure style={box}>
+      <style>{`
+        .sf-row { display: grid; grid-template-columns: 24% 1fr 21%; gap: 10px; align-items: stretch;
+          width: 100%; background: transparent; border: 0; padding: 0 4px; cursor: pointer;
+          text-align: left; color: inherit; }
+        .sf-row:hover .sf-label { color: ${C.ink}; }
+        .sf-on .sf-label { box-shadow: inset 3px 0 0 ${P.good}; padding-left: 6px; }
+        .sf-side { font-size: 12px; line-height: 1.35; align-self: center; padding: 3px 0; }
+        @media (max-width: 560px) {
+          .sf-row { grid-template-columns: 1fr; gap: 3px; }
+          .sf-drop { order: 3; }
+        }
+      `}</style>
       <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>
         One search, narrowed down step by step
       </div>
       <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
-        Real counts over {set.label}. Green is files that really match, grey is files that
-        don&apos;t. Click a step to see what it threw away.
+        Real counts over {set.label}. The green column is files that really match, and it never
+        narrows. The grey around it is wrong files, shaved off step by step. Click a step to see
+        what it threw away.
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
@@ -230,124 +302,74 @@ export default function SearchFunnel() {
         ))}
       </div>
 
-      <div style={{ marginTop: 14, fontSize: 12, color: C.muted, fontFamily: MONO }}>
-        all files: {fmt(set.files)}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
-        {STEPS.map((st, i) => {
-          const n = counts[i]
-          const real = Math.min(q.truth, n)
-          const on = i === step
-          return (
-            <button
-              key={st.key}
-              onClick={() => setStep(i)}
-              style={{
-                textAlign: 'left',
-                cursor: 'pointer',
-                border: `1px solid ${on ? P.good : C.border}`,
-                background: 'transparent',
-                borderRadius: 2,
-                padding: '6px 8px',
-                color: C.ink,
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                  flexWrap: 'wrap',
-                  fontSize: 12,
-                }}
-              >
-                <span>
-                  <span style={{ color: C.muted, fontFamily: MONO }}>{i + 1}.</span> {st.label}
-                  <span style={{ color: C.muted }}> · {st.how}</span>
-                </span>
-                <span style={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-                  {fmt(n)} files
-                  <span style={{ color: C.muted }}>
-                    {' '}
-                    ({n - real > 0 ? `${fmt(n - real)} wrong` : 'all real'})
-                  </span>
-                </span>
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  height: 10,
-                  marginTop: 5,
-                  width: `${Math.max((n / top) * 100, n > 0 ? 0.8 : 0)}%`,
-                  transition: 'width 300ms ease',
-                }}
-              >
-                <div style={{ flex: real || 0, background: P.good, minWidth: real ? 2 : 0 }} />
-                <div style={{ flex: n - real || 0, background: P.muted, opacity: 0.55 }} />
-              </div>
-            </button>
-          )
-        })}
-      </div>
-
-      {es != null && (
+      <div style={{ marginTop: 14, color: C.ink }}>
+        <div className="sf-row" style={{ cursor: 'default' }}>
+          <div className="sf-side" style={{ fontFamily: MONO }}>
+            all {fmt(set.files)} files
+          </div>
+          {band(100, 100, true, (q.truth / set.files) * 100)}
+          <div className="sf-side sf-drop" style={{ color: C.muted }} />
+        </div>
         <div
           style={{
-            marginTop: 10,
-            padding: '6px 8px',
-            border: `1px dashed ${C.border}`,
-            borderRadius: 2,
-            fontSize: 12,
-            color: C.ink,
+            textAlign: 'center',
+            fontSize: 11,
+            color: C.muted,
+            fontFamily: MONO,
+            margin: '2px 0 4px',
           }}
         >
-          <div
-            style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}
-          >
-            <span>
-              for comparison: <strong>Elasticsearch wildcard field</strong>
-              <span style={{ color: C.muted }}> · lowercased 3-letter pieces, then the regex</span>
-            </span>
-            <span style={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-              {fmt(es)} files
-              <span style={{ color: C.muted }}>
-                {' '}
-                (
-                {es - Math.min(q.truth, es) > 0
-                  ? `${fmt(es - Math.min(q.truth, es))} wrong`
-                  : 'all real'}
-                )
-              </span>
-            </span>
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              height: 10,
-              marginTop: 5,
-              width: `${Math.max((es / top) * 100, es > 0 ? 0.8 : 0)}%`,
-            }}
-          >
-            <div
-              style={{
-                flex: Math.min(q.truth, es) || 0,
-                background: P.good,
-                minWidth: q.truth ? 2 : 0,
-              }}
-            />
-            <div
-              style={{ flex: es - Math.min(q.truth, es) || 0, background: P.muted, opacity: 0.55 }}
-            />
-          </div>
-          <div style={{ color: C.muted, marginTop: 6 }}>
-            Its regex check runs on all {fmt(es)}, against {fmt(q.positions)} after our step 3.
-            {q.es_case_example
-              ? ' It lowercases everything, so it also passes files like this one, where the text only appears with different capitals:'
-              : ''}
-          </div>
-          {q.es_case_example && <Line ex={q.es_case_example} C={C} P={P} color={P.muted} />}
+          ┄┄ the funnel below is zoomed in {zoom > 1 ? `×${fmt(zoom)}` : ''} ┄┄
         </div>
-      )}
+        {rows.map(({ i, st, n, a, b, out }) => (
+          <button
+            key={st.key}
+            className={i === step ? 'sf-row sf-on' : 'sf-row'}
+            onClick={() => setStep(i)}
+          >
+            <div className="sf-side sf-label">
+              <span style={{ color: C.muted, fontFamily: MONO }}>{i + 1}.</span> {st.label}
+              <div style={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
+                {fmt(n)} files
+                <span style={{ color: C.muted }}>
+                  {' '}
+                  (
+                  {n - Math.min(q.truth, n) > 0
+                    ? `${fmt(n - Math.min(q.truth, n))} wrong`
+                    : 'all real'}
+                  )
+                </span>
+              </div>
+            </div>
+            {band(a, b)}
+            <div
+              className="sf-side sf-drop"
+              style={{ color: out > 0 ? C.ink : C.muted, fontFamily: MONO }}
+            >
+              {out > 0 ? `→ ${fmt(out)} dropped` : '→ nothing dropped'}
+              <div style={{ color: C.muted, fontFamily: 'inherit', fontSize: 11 }}>{st.how}</div>
+            </div>
+          </button>
+        ))}
+        {es != null && (
+          <button
+            className={step === 4 ? 'sf-row sf-on' : 'sf-row'}
+            onClick={() => setStep(4)}
+            style={{ marginTop: 14, paddingTop: 8, borderTop: `1px dashed ${C.border}` }}
+          >
+            <div className="sf-side sf-label">
+              for comparison: <strong>Elasticsearch wildcard</strong>
+              <div style={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
+                {fmt(es)} files reach its regex
+              </div>
+            </div>
+            {band(w(es), w(es), true)}
+            <div className="sf-side sf-drop" style={{ color: C.muted, fontSize: 11 }}>
+              lowercased 3-letter pieces, no token check
+            </div>
+          </button>
+        )}
+      </div>
 
       <div
         style={{
@@ -360,10 +382,16 @@ export default function SearchFunnel() {
           color: C.ink,
         }}
       >
-        <div style={{ color: C.muted, marginBottom: 4 }}>
-          step {step + 1}: {s.why}
-        </div>
-        {detail}
+        {step === 4 ? (
+          esDetail
+        ) : (
+          <>
+            <div style={{ color: C.muted, marginBottom: 4 }}>
+              step {step + 1}: {STEPS[step].why}
+            </div>
+            {detail}
+          </>
+        )}
       </div>
     </figure>
   )
