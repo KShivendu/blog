@@ -1,0 +1,234 @@
+{
+  "queries": [
+    {
+      "ds": "MSMARCO",
+      "qid": "1049867",
+      "q": "who sang here i go again",
+      "note": "the stoplist deletes here, i and again, so only sang and go reach the index",
+      "runs": {
+        "word": {
+          "terms": ["who", "sang", "here", "i", "go", "again"],
+          "docs": [
+            {
+              "id": "7946528",
+              "text": "For other uses, see Here I Go Again (disambiguation). Here I Go Again is a song by British rock band Whitesnake. Originally released on their 1982 album, Saints & Sinners, the song was re-recorded for their eponymous 1987 album Whitesnake. ",
+              "score": 23.11,
+              "relevant": true
+            },
+            {
+              "id": "65352",
+              "score": 17.47,
+              "relevant": false
+            },
+            {
+              "id": "456120",
+              "score": 16.48,
+              "relevant": false
+            },
+            {
+              "id": "1334388",
+              "score": 15.6,
+              "relevant": false
+            },
+            {
+              "id": "4630972",
+              "score": 15.56,
+              "relevant": false
+            }
+          ]
+        },
+        "word_en": {
+          "terms": ["sang", "go"],
+          "docs": [
+            {
+              "id": "8828449",
+              "score": 10.21,
+              "relevant": false
+            },
+            {
+              "id": "2872904",
+              "score": 10.04,
+              "relevant": false
+            },
+            {
+              "id": "3791271",
+              "score": 7.56,
+              "relevant": false
+            },
+            {
+              "id": "4630972",
+              "score": 7.56,
+              "relevant": false
+            },
+            {
+              "id": "8798058",
+              "score": 7.1,
+              "relevant": false
+            }
+          ]
+        }
+      },
+      "relevantTotal": 1,
+      "ndcg10": 100.0,
+      "ndcg10_en": 0.0
+    },
+    {
+      "ds": "NQ",
+      "qid": "test115",
+      "q": "who appoints the members of the given branch in the united states",
+      "note": "the stemmer cuts united states down to unit state",
+      "runs": {
+        "word": {
+          "terms": [
+            "who",
+            "appoints",
+            "the",
+            "members",
+            "of",
+            "the",
+            "given",
+            "branch",
+            "in",
+            "the",
+            "united",
+            "states"
+          ],
+          "docs": [
+            {
+              "id": "doc4147",
+              "text": "While most executive agencies have a single director, administrator, or secretary appointed by the President of the United States, independent agencies (in the narrower sense of being outside presidential control) almost always have a commi",
+              "score": 17.69,
+              "relevant": true
+            },
+            {
+              "id": "doc223538",
+              "score": 16.46,
+              "relevant": false
+            },
+            {
+              "id": "doc2107033",
+              "score": 15.97,
+              "relevant": false
+            },
+            {
+              "id": "doc32937",
+              "score": 15.49,
+              "relevant": false
+            },
+            {
+              "id": "doc1927002",
+              "score": 15.27,
+              "relevant": false
+            }
+          ]
+        },
+        "word_en": {
+          "terms": ["appoint", "member", "given", "branch", "unit", "state"],
+          "docs": [
+            {
+              "id": "doc2212270",
+              "score": 17.38,
+              "relevant": false
+            },
+            {
+              "id": "doc223538",
+              "score": 16.95,
+              "relevant": false
+            },
+            {
+              "id": "doc3668",
+              "score": 16.81,
+              "relevant": false
+            },
+            {
+              "id": "doc1745418",
+              "score": 16.15,
+              "relevant": false
+            },
+            {
+              "id": "doc1400520",
+              "score": 15.99,
+              "relevant": false
+            }
+          ]
+        }
+      },
+      "relevantTotal": 1,
+      "ndcg10": 100.0,
+      "ndcg10_en": 0.0
+    },
+    {
+      "ds": "MSMARCO",
+      "qid": "1028652",
+      "q": "who invented corn flakes",
+      "note": "the stemmer folds invented, invents and invention onto one term, which helps here",
+      "runs": {
+        "word": {
+          "terms": ["who", "invented", "corn", "flakes"],
+          "docs": [
+            {
+              "id": "1800205",
+              "score": 18.96,
+              "relevant": false
+            },
+            {
+              "id": "4765788",
+              "score": 16.84,
+              "relevant": false
+            },
+            {
+              "id": "7344853",
+              "score": 15.84,
+              "relevant": false
+            },
+            {
+              "id": "7833608",
+              "text": "John Harvey Kellogg is best known for the invention of the famous breakfast cereal, Corn Flakes, in 1878. Originally, he called this cereal Granula, which he later changed to Granola in 1881. However, due to patent rights, he had to once ag",
+              "score": 15.74,
+              "relevant": true
+            },
+            {
+              "id": "6714731",
+              "score": 15.34,
+              "relevant": false
+            }
+          ]
+        },
+        "word_en": {
+          "terms": ["invent", "corn", "flake"],
+          "docs": [
+            {
+              "id": "7833608",
+              "text": "John Harvey Kellogg is best known for the invention of the famous breakfast cereal, Corn Flakes, in 1878. Originally, he called this cereal Granula, which he later changed to Granola in 1881. However, due to patent rights, he had to once ag",
+              "score": 20.45,
+              "relevant": true
+            },
+            {
+              "id": "1800205",
+              "score": 18.23,
+              "relevant": false
+            },
+            {
+              "id": "4661403",
+              "score": 17.28,
+              "relevant": false
+            },
+            {
+              "id": "4765788",
+              "score": 16.86,
+              "relevant": false
+            },
+            {
+              "id": "6714731",
+              "score": 15.82,
+              "relevant": false
+            }
+          ]
+        }
+      },
+      "relevantTotal": 1,
+      "ndcg10": 43.1,
+      "ndcg10_en": 100.0
+    }
+  ]
+}

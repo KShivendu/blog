@@ -218,41 +218,12 @@ function buildCompareView(rows, stats, mdef, C) {
   const win = deltas.filter((d) => d > 1e-9).length
   const loss = deltas.filter((d) => d < -1e-9).length
 
-  // Linear-interpolated percentile, matching numpy, so the chart and the prose that
-  // quotes these numbers can't drift apart.
-  const sorted = [...deltas].sort((a, b) => a - b)
-  const q = (p) => {
-    const i = (p / 100) * (sorted.length - 1)
-    const lo = Math.floor(i)
-    const hi = Math.ceil(i)
-    return sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo)
-  }
-  const st = stats[mdef.stat]
-  const stEn = stats[`${mdef.stat}|word_en`]
-  const meanD = stEn.mean - st.mean
-  // deltas are reported x100 too, so +0.0191 reads as +1.9
-  const fmt = (v) => (v >= 0 ? `+${(v * 100).toFixed(1)}` : (v * 100).toFixed(1))
-
-  // A delta's position on this axis: the zero spike owns a whole slot, so the negative
-  // buckets sit left of it and the positive ones right, each slot one bucket wide.
-  const at = (x) => {
-    const i = bucketOf(x)
-    if (i === ZERO_IDX) return ZERO_IDX + 0.5
-    const edges = x < 0 ? D_NEG : D_POS
-    const j = x < 0 ? i : i - 6
-    const lo = edges[j]
-    const hi = edges[j + 1]
-    return i + (hi === lo ? 0.5 : (x - lo) / (hi - lo))
-  }
-
   return {
     label: mdef.label,
     title: `${mdef.label}: how much each query actually changed`,
     valueLabel: 'queries',
     catLabel: `change in ${mdef.label} (x100)`,
-    subtitle:
-      `${win} improved, ${loss} got worse, ${n - win - loss} never moved · ` +
-      `mean Δ ${fmt(meanD)} but median Δ ${fmt(q(50))} · p10 Δ ${fmt(q(10))}`,
+    subtitle: `${win} improved, ${loss} got worse, ${n - win - loss} never moved`,
     categories: D_CATS.map((b) => (b === '=0' ? 'no change' : `Δ ${mdef.label} = ${b}`)),
     catTicks: [
       { at: 0, label: '−100' },
@@ -260,11 +231,6 @@ function buildCompareView(rows, stats, mdef, C) {
       { at: ZERO_IDX + 0.5, label: 'no change' },
       { at: 7, label: '+10' },
       { at: D_CATS.length, label: '+100' },
-    ],
-    markers: [
-      { at: at(q(10)), label: `p10 ${fmt(q(10))}`, color: C.p10, side: 'left' },
-      { at: at(meanD), label: `mean ${fmt(meanD)}`, color: C.mean, row: 1 },
-      { at: at(q(90)), label: `p90 ${fmt(q(90))}`, color: C.p50, row: 2 },
     ],
     series: [
       {

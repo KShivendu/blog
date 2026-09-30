@@ -1,11 +1,11 @@
 ---
 title: 'Stop Averaging Search Evals'
-subtitle: 'Report percentiles, not just the mean.'
+subtitle: 'Report p25/p50 and debug your queries'
 date: '2026-08-27'
 lastmod: '2026-08-27'
 tags: ['search', 'evals', 'evaluation', 'metrics']
 draft: false
-summary: 'Search evals are broken. We track p50/p99 for latency because an average hides the tail, then report search quality as one average NDCG and call it a day. A mean of 52.5 can sit on top of a fifth of queries finding nothing at all. Track p25 and p50 alongside the mean.'
+summary: 'Search evals are broken. We track p50/p99 for latency because an average hides the tail, then report search quality as one average NDCG and call it a day. A mean of 52.5 can sit on top of a fifth of queries finding nothing at all. Track p25 and p50 alongside the mean, then debug the queries that moved.'
 authors: ['kshivendu']
 ---
 
@@ -13,11 +13,11 @@ authors: ['kshivendu']
 
 Any serious team tracks latency as p50, p90, p99. Reporting just "our average latency is 40ms" is naive, because it hides the p99 150ms tail that's hurting real users. Yet we report search relevance as a single average NDCG all the time, and somehow that's normal. Relevance has a tail too, but the average hides it.
 
-## Distribution vs average
+## Average can't represent the distribution
 
 I ran a plain word-BM25 baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries). Instead of averaging each metric, I calculated percentiles over the per-query scores. The mean NDCG@10 is **52.5**, which _feels_ respectable, as if every query comes back roughly half-right. In reality, they range from perfect to nothing: one in five queries retrieves nothing relevant in the top 10, and the average buries every one.
 
-(Every score here is ×100, the way IR papers report NDCG. A mean of 52.5 reads better than 0.525, and a +2.2 gain reads as a real change where +0.022 reads as rounding.)
+(Note: Every score here is ×100, the way IR papers report NDCG. A mean of 52.5 reads better than 0.525, and a +2.2 gain reads as a real change where +0.022 reads as rounding.)
 
 Let's look at the distribution.
 
@@ -25,15 +25,107 @@ Let's look at the distribution.
 
 Observations:
 
-- 119 queries score exactly 0 and 129 score exactly 100. That's **41% of all queries** sitting at the two ends, and the mean is neither.
+- 119/599 queries score exactly 0 and 129/599 score exactly 100 on ndcg@10. That's **41% of all queries** sitting at the two extreme ends.
 - Only **43 of 599** queries land within 5 of the mean (52.5), so it describes a query that barely exists.
 - Switch to recall@10 and it gets worse: **63%** of queries at the two ends, 13 near the mean.
+- The mean's error flips sign between metrics. It overstates recall@10's median (56.3 vs 50.0) and understates NDCG@10's (52.5 vs 55.4), so you can't correct for it in your head.
 
-## The mean hides the reality
+## Understanding impact of your changes
 
-Read the same three runs as percentiles instead of averages:
+Take a real improvement: plain word BM25, then apply a Porter stemmer and a stopword list (`word_en`). It moves mean NDCG@10 by **+1.9**, a bump you'd squint at.
 
-export const pctCats = ['NDCG@10', 'recall@10', 'recall@100']
+The first thing I've started reading is **p25 and p50 along with mean**. It comes out of the per-query scores I already have with a 1 line change. Toggle the statistic:
+
+export const tailCats = ['NDCG@10', 'recall@10', 'recall@100']
+export const tailFmt = (v) => v.map((x) => x.toFixed(1))
+export const tailView = (label, w, en) => ({
+  label,
+  title: `${label} before and after the stemmer`,
+  categories: tailCats,
+  series: [
+    {
+      name: 'word',
+      role: 'muted',
+      values: w,
+      text: tailFmt(w),
+      textPosition: 'outside',
+    },
+    {
+      name: 'word_en',
+      role: 'series0',
+      values: en,
+      text: tailFmt(en),
+      textPosition: 'outside',
+    },
+  ],
+})
+
+<BarChart
+  orientation="horizontal"
+  subtitle="plain word BM25 vs word + Porter stemmer + stopword list, 599 queries"
+  valueLabel="score (higher is better)"
+  valueMax={112}
+  valueTicks={[0, 25, 50, 75, 100]}
+  views={[
+    tailView('p25', [21.9, 13.7, 50.0], [26.4, 17.3, 62.6]),
+    tailView('p50', [55.4, 50.0, 100.0], [59.2, 60.0, 100.0]),
+    tailView('mean', [52.5, 56.3, 76.5], [54.5, 58.5, 79.3]),
+  ]}
+/>
+
+Observations:
+
+- The mean moves least on all three metrics (**+1.9**, **+2.2**, **+2.8**). Whichever percentile you pick, it moves further.
+- recall@100's median is pinned at 100 before and after, so it reads **+0.0** while p25 moves **+12.6**.
+- recall@10 is the other way round, the median jumps **+10.0** while p25 moves **+3.6**. Neither percentile wins every time, which is why I report both.
+
+**p50/p25/mean are great for communicating**. But if you wanna drill down and properly compare two methods, you should look into exact queries that are improved/degraded.
+
+That's why I like to bucket the exact deltas per query for my metrics and use that to find queries to focus on:
+
+<ScoreHistogram compare />
+
+Observations:
+
+- 294/599 (49%) queries don't move. Half the set sits in the no-change bar, so +1.9 is an average over mostly zeros.
+- **Win/tie/loss is 172/294/133.** Of the 305 queries that actually moved, 56% got better, which is why the mean lands so near zero.
+- **Weight each query by how far it moved and it's 3359 points gained against 2217 lost.** 60% of the movement was upward, better than the 56% the raw count suggests, because winners move further than losers do (+19.5 each against −16.7).
+- Both ends hit the full 100. `Which colors can one use to fill out a check in the US?` gains 100, `who sang here i go again` loses 100, and 5 queries lost more than 50 points against 11 that gained more than 50.
+
+Numbers are fine, but now let's drill down into the real data and read the queries behind those bars to understand what's really happening.
+
+I like to ask an LLM to build a UI for me to explore the dataset. It just needs basic sorting by metrics, filtering, and search (yeah. use search to improve search :D). Here are three queries from this run, click one to see what each analyzer sent to the index and what came back:
+
+<QueryExplorer />
+
+Some interesting examples:
+
+- `who sang here i go again` went from a perfect **100 to 0** on NDCG@10. "Here I Go Again" is a song title made of stopwords, so the stoplist deletes most of it and we only ever query the index for `sang go`.
+- `who appoints the members of the given branch in the united states` also went **100 to 0**. The stemmer cuts `united states` down to `unit state`, so unrelated stuff gets ranked too.
+- Even recall@100, the most #[forgiving](it only asks whether a relevant doc landed anywhere in the top 100, so a doc can slip 90 places and still count) metric here, hits 0 on 4 queries. One asks which state generates the most solar power, and the stemmer cuts "generates" down to #[gener](Porter gives that same stem to general, generally, generic, generous and generation). Leading to lots of unrelated documents popping up.
+- **9/599 queries** fell from a real NDCG@10 score to exactly 0 like this.
+- What's most surprising is that **stemmer and stopwords are considered standard but it's clear even they hurt some queries**. There's no free lunch. You must look into your data/distribution
+
+The zero-rate improved too, **19.9%** of queries scored 0 before and **17.2%** after.
+
+<details>
+<summary>Three more ways to slice the same run</summary>
+
+Splitting the mean into what was gained and what was given back:
+
+| metric     | gained | lost | net (the mean) |
+| ---------- | -----: | ---: | -------------: |
+| NDCG@10    |   +5.6 | −3.7 |           +1.9 |
+| recall@10  |   +4.2 | −2.0 |           +2.2 |
+| recall@100 |   +4.0 | −1.2 |           +2.8 |
+
+Every mean here is a small difference between two larger numbers. NDCG@10 gives back two thirds of what it wins, recall@100 a quarter. Same-looking gains, different trades.
+
+A saturated percentile can't show a gain. NDCG@10's p90 is already at 100, so a better method moves it +0.0. The 22% of queries already scoring 100 have no room left to improve, and they dilute the mean.
+
+Subtracting one run's percentiles from the other's answers a different question: did the whole distribution shift?
+
+export const deltaCats = ['mean', 'p10', 'p25', 'p50', 'p75', 'p90']
 export const pctRoles = {
   mean: 'statMean',
   p50: 'statP50',
@@ -44,106 +136,6 @@ export const pctRoles = {
   p90: 'statMuted',
 }
 
-<BarChart
-  orientation="horizontal"
-  title="Mean vs percentiles, 599 queries"
-  subtitle="BM25 over 12 NanoBEIR datasets. p10 is 0.0 on NDCG@10 and recall@10."
-  valueLabel="score (higher is better)"
-  valueMax={100}
-  valueTicks={[0, 20, 40, 60, 80, 100]}
-  categories={pctCats}
-  series={[
-    {
-      name: 'mean',
-      values: [52.5, 56.3, 76.5],
-      role: 'statMean',
-      text: ['52.5', '56.3', '76.5'],
-      textPosition: 'outside',
-    },
-    {
-      name: 'median (p50)',
-      values: [55.4, 50.0, 100.0],
-      role: 'statP50',
-      text: ['55.4', '50.0', '100'],
-      textPosition: 'outside',
-    },
-    {
-      name: 'p25',
-      values: [21.9, 13.7, 50.0],
-      role: 'statP25',
-      text: ['21.9', '13.7', '50.0'],
-      textPosition: 'outside',
-    },
-    {
-      name: 'p10 (floor)',
-      values: [0.0, 0.0, 12.6],
-      role: 'statP10',
-      text: ['0.0', '0.0', '12.6'],
-      textPosition: 'outside',
-    },
-  ]}
-/>
-
-Observations:
-
-- p10 is **0.0** on both NDCG@10 and recall@10, so over 10% of queries score a hard zero while the mean sits near 53.
-- On recall@100 the typical query is perfect (p50 = 100), but a tail that bottoms out at p10 = 12.6 pulls the mean to **76.5**, a number no real query got.
-- The mean's error flips sign between metrics. It overstates recall@10's median (56.3 vs 50.0) and understates NDCG@10's (52.5 vs 55.4), so you can't correct for it in your head.
-
-## It hides your improvements, too
-
-Take a real improvement: plain word BM25, then apply a Porter stemmer and a stopword list (`word_en`). It moves mean NDCG@10 by **+1.9**, a bump you'd squint at.
-
-A +1.9 mean could be every query gaining 1.9. Here it's three different groups:
-
-- **294** of the 599 queries don't move at all
-- **172** improve, by 19.5 on average
-- **133** get worse, by 16.7 on average
-
-`(172 × 19.5 − 133 × 16.7) / 599 = +1.9`
-
-So report percentiles of Δ, not the Δ of percentiles. Subtracting two summaries says NDCG@10's median gained +3.7. Asking each query how far it moved says it gained **0**.
-
-<ScoreHistogram compare />
-
-Observations:
-
-- The median Δ is **0** on all three metrics. The typical query is untouched.
-- NDCG@10 moves the most queries and is the least one-sided: **172 wins against 133 losses**, p10 Δ **−11.7**.
-- recall@100 is the most #[forgiving](it only asks whether a relevant doc landed anywhere in the top 100, so a doc can slip 90 places and still count) metric and yet we see **84 wins against 32 losses**. So even a stemmer that's considered helpful can #[hurt](ECS stems to ec, so the only distinctive term in one ClimateFEVER query stops being distinctive and it drops 33 → 0) at times.
-- Some queries swing the whole way, 100 → 0 and 0 → 100 (hover a bar to see which).
-
-Reported properly, that run is:
-
-| NDCG@10   |  word | word_en |        Δ |
-| --------- | ----: | ------: | -------: |
-| mean      |  52.5 |    54.5 |     +1.9 |
-| p50       |  55.4 |    59.2 |     +3.7 |
-| p25       |  21.9 |    26.4 | **+4.5** |
-| zero-rate | 19.9% |   17.2% |  −2.7 pp |
-
-The mean is the smallest number in that Δ column, and p25 moves 2.4× as far.
-
-Then there's **win/tie/loss: 172/294/133**. It needs a baseline scored on the same queries, which is why it rarely gets reported. 56% of the queries that moved got better, and +1.9 doesn't say that.
-
-Splitting the mean into what was gained and what was given back:
-
-| metric     | gained | given back | net (the mean) |
-| ---------- | -----: | ---------: | -------------: |
-| NDCG@10    |   +5.6 |       −3.7 |           +1.9 |
-| recall@10  |   +4.2 |       −2.0 |           +2.2 |
-| recall@100 |   +4.0 |       −1.2 |           +2.8 |
-
-Every mean here is a small difference between two larger numbers. NDCG@10 gives back two thirds of what it wins, recall@100 a quarter. Same-looking gains, different trades.
-
-A saturated percentile can't show a gain. NDCG@10's p90 is already at 100, so a better method moves it +0.0. The 22% of queries already scoring 100 have no room left to improve, and they dilute the mean.
-
-<details>
-<summary>The Δ of percentiles, across six statistics and all three metrics</summary>
-
-Subtracting one run's percentiles from the other's answers a different question: did the whole distribution shift?
-
-export const deltaCats = ['mean', 'p10', 'p25', 'p50', 'p75', 'p90']
 export const deltaRoles = [
   pctRoles.mean,
   pctRoles.p10,
@@ -156,7 +148,7 @@ export const deltaRoles = [
 <BarChart
   orientation="horizontal"
   title="One improvement, six ways to measure it: recall@10, word → word_en"
-  subtitle="how far each statistic moved. the gain lives in p25/p50; p10, p75 and p90 are saturated"
+  subtitle="how far each statistic moved. the gain lives in p25/p50, and p10, p75 and p90 are saturated"
   valueLabel="move in recall@10 (Δ)"
   valueMax={12}
   valueTicks={[0, 3, 6, 9, 12]}
@@ -174,16 +166,16 @@ export const deltaRoles = [
 
 Observations:
 
-- The mean smears the gain across every query (**+2.2**); the median reads it where the queries can actually move (**+10.0**, 4.6×).
+- The mean smears the gain across every query (**+2.2**). The median reads it where the queries can actually move (**+10.0**, 4.6×).
 - p10, p75 and p90 all sit at +0.0 because they're saturated, p10 at 0 and the other two at 100.
 
 The pattern holds across metrics:
 
-| metric     | mean Δ | where it shows up                                                         |
-| ---------- | -----: | ------------------------------------------------------------------------- |
-| recall@10  |   +2.2 | median jumps **50 → 60**, a **+10.0 move (4.6×)**; p75, p90 pinned at 100 |
-| NDCG@10    |   +1.9 | p25 / p50 / p75 all move ~2× the mean (+3.7 to +4.5)                      |
-| recall@100 |   +2.8 | median already 100, so the gain lands in **p25: 50 → 63 (+12.6, 4.5×)**   |
+| metric     | mean Δ | where it shows up                                                                       |
+| ---------- | -----: | --------------------------------------------------------------------------------------- |
+| recall@10  |   +2.2 | median jumps **50 → 60**, a **+10.0 move (4.6×)**, while p75 and p90 stay pinned at 100 |
+| NDCG@10    |   +1.9 | p25 / p50 / p75 all move ~2× the mean (+3.7 to +4.5)                                    |
+| recall@100 |   +2.8 | median already 100, so the gain lands in **p25: 50 → 63 (+12.6, 4.5×)**                 |
 
 The gain lands wherever the queries still have room to move, and that percentile shifts 2-5× as far as the mean.
 
@@ -197,24 +189,28 @@ Report p25, not p10. p10 pins at 0 once more than 10% of queries fail, and 20% d
 
 I timed this BM25 baseline at **3.2ms p50, 7.2ms p90**. Nobody would report only the 4.4ms mean, because the p90 is the request a real user is waiting on. A p25 relevance score is that same user's search. We just forget to report it.
 
-## So what should we report instead?
+## So what should we actually track?
 
-Improving a system and reporting one need different things.
+The queries are the real thing. Everything else in this post is a way of finding them faster.
 
-To improve it, start with real queries and why they ranked what they did. Then the shape of the distribution. Summary numbers come last.
+A search engineer should be able to tell you what kinds of queries their system fails on. In this run it was song titles made of stopwords, and queries whose one distinctive word gets stemmed into a common one. That's the real result of an eval. The distribution, the percentiles and the mean are summaries of it.
 
-To report it, print p50 and p25 next to the mean. Three numbers is still few enough to remember and compare, and you get the typical query and the weak tail.
+- **The distribution** shows you where to look. A spike at 0 means go read the zeros.
+- **Win/tie/loss** shows you what a change moved, so it's what I reach for when comparing two of my own runs. It stops at what moved, so you still end up reading the queries it flags.
+- **p50, p25 and the mean** are for communicating. Three numbers fit in a message and compare across runs.
 
-Zero-rate and win/tie/loss come out of the same per-query scores if you want them. Win/tie/loss earns its keep when you're comparing two of your own runs, since it needs a baseline scored on the same queries.
+Your golden set is probably small. Mine is 599 queries and most teams have fewer. That's small enough to treat like a test suite. A query that used to work and now returns nothing is a regression, and you want to see it by name.
 
 > **Beyond search:** any eval with graded per-item scores, an LLM judge's rubric, a similarity score, a per-query metric, hides its tail in the mean the same way.#[\*](Binary pass/fail evals are the exception: there the mean already tells you everything.)
 
-Mean alone can't capture a distribution. We realised this for latency decades ago. Search relevance deserves the same.
-
-(This fell out of benchmarking [token search](/blog/token-search), where I was macro-averaging NDCG across datasets and realised the average was quietly deciding my conclusions for me.)
+Mean alone can't capture a distribution. We realised this for latency decades ago, and search relevance deserves the same. Then go read the queries.
 
 ## Key Takeaways
 
 - **A good average can hide queries that are hurting real users.** A mean of 50 could be every query scoring 50, or half the queries scoring 100 and half scoring 0.
 - **It hides your gains too.** Adding a stemmer and stopwords moves mean NDCG@10 by a forgettable +1.9, while 133 of 599 queries actually get worse.
 - **Report p50 and p25 next to the mean.** Higher is better for relevance, so the tail that hurts is the low end. p25 is the relevance equivalent of p90/p99 latency.
+- **Win/tie/loss says what the mean can't.** That +1.9 was 172 queries up, 133 down and 294 unmoved. Weighted by how far each one moved, 60% of the movement was upward.
+- **Track your golden queries like test cases.** Mine is 599 queries and most sets are smaller. A query that used to work and now returns nothing is a regression you should see by name, not as a mean that moved by 1.9.
+
+I believe that the industry and academia should start reporting p50/p25 along with the mean. It's very effective.

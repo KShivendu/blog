@@ -1,5 +1,5 @@
 import dynamic from 'next/dynamic'
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useMemo } from 'react'
 import { useTheme } from 'next-themes'
 import { chartChrome, vizPalette } from '../lib/viz-palette'
 
@@ -227,10 +227,18 @@ function ChartImpl({
   markers,
   catTicks,
   catLabel,
+  chrome,
 }) {
   const { theme, resolvedTheme } = useTheme()
   const isDark = (resolvedTheme || theme) === 'dark'
-  const C = chartChrome(isDark)
+  /**
+   * `chrome` shallow-merges over chartChrome(isDark), so a caller can retheme the
+   * furniture -- most usefully `accent`/`accentInk`, which colour the active
+   * view/dataset toggle. The site's own charts are green; a deck or a page with a
+   * different brand can pass its own without forking the component. Only the keys
+   * given are overridden, and the light/dark base still applies underneath.
+   */
+  const C = useMemo(() => ({ ...chartChrome(isDark), ...(chrome || {}) }), [isDark, chrome])
 
   const tipRef = useRef(null)
   const [activeCat, setActiveCat] = useState(null)
@@ -286,10 +294,8 @@ function ChartImpl({
   const activeView =
     views && views.length ? views[Math.min(viewIdx, views.length - 1)] : { categories, series }
   const activeDatasets = activeView.datasets
-  const activeDataset =
-    activeDatasets && activeDatasets.length
-      ? activeDatasets[Math.min(datasetIdx, activeDatasets.length - 1)]
-      : null
+  const nDatasets = activeDatasets ? activeDatasets.length : 0
+  const activeDataset = nDatasets ? activeDatasets[Math.min(datasetIdx, nDatasets - 1)] : null
   const activeVariants = activeDataset?.variants
   // Same mobile-Focus-default idea as the view-level one above, but for
   // charts where All/Focus is a nested variant instead of a top-level view
@@ -434,13 +440,22 @@ function ChartImpl({
 
   // Linear keeps its original max (unchanged for existing usages); log spans the
   // provided floor→ceiling, defaulting from the ticks/data.
+  // Marker pills stack downward from the top of the PLOT, and bars grow up to fill
+  // it, so moving the plot down moves the bars with it and changes nothing. The
+  // headroom has to come from the value axis: each extra row of pills buys the
+  // tallest bar another 10% of ceiling to stop short of.
+  const mkRows = (resolved?.markers ?? markers ?? []).reduce(
+    (max, mk) => Math.max(max, (mk.row || 0) + 1),
+    0
+  )
+  const mkHeadroom = 1.12 + Math.max(0, mkRows - 1) * 0.1
   const vMax = isLog
     ? rValueMax != null
       ? rValueMax
       : Math.max(dataMax || 1, ...tickVals)
     : rValueMax != null
     ? rValueMax
-    : (dataMax || 1) * 1.12
+    : (dataMax || 1) * mkHeadroom
   const vMin = isLog
     ? rValueMin != null
       ? rValueMin

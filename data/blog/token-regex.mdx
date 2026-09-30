@@ -1,0 +1,373 @@
+---
+title: 'Regex on a BM25 Index'
+subtitle: 'A BM25 index keyed by token IDs is most of a regex filter already. One extra posting list finishes it, and the result is the smallest index that ranks, greps, and survives typos'
+date: '2026-09-16'
+lastmod: '2026-09-28'
+tags: ['search', 'internals', 'information-retrieval', 'nlp']
+draft: true
+summary: 'BM25 postings keyed by BPE token IDs become a regex filter once you add one index of 3-byte pieces that cross token boundaries. On 45,283 Python functions it hands the regex engine the same 4.68% of files as a trigram index, and a free check inside each token cuts wrong files by 18% in total. In a real engine codec the whole stack for ranking, case-sensitive regex, substring and typo search is 24.9 MB against 30.1 MB for the Lucene-style equivalent. The number that decides regex speed is still outside the index: 65.9% of the most frequent regexes mined from source code name no text to look up, against 3.3% of greps coding agents run, which moves every index from 1.5x over a full scan to 11.5x.'
+authors: ['kshivendu']
+---
+
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
+
+In [Token Search](/blog/token-search) I ran BM25 over BPE token IDs and it matched a Porter-stemmed English analyzer. Those postings are keyed by token ID, and a token covers several bytes where a character gram covers one (2.2 bytes per GPT-2 token on the code in this post). So a fair question is whether the same index can answer `/colou?r of the (sky|sea)/` without building a second one.
+
+It almost can. One extra posting list finishes the job. The result hands the regex engine exactly the files a trigram index would, a check that only tokens allow makes it tighter than one, and the whole stack for ranking, regex and typo search comes out smaller than what Lucene-style engines build for the same features. But what decides how fast regex search feels is **the fraction of queries with no literal text to look up**, and that depends on who is typing.
+
+Every method here does the same two things: chop the text into pieces, and remember which documents each piece appeared in. Then chop the query the same way, look its pieces up, and run the real regex on whatever survives. Watch it on 24 real documents, and try your own search:
+
+<RegexFilterPipeline />
+
+## Why a token index needs help
+
+A prefilter has one obligation. It may hand the verifier junk, but it must never drop a document that actually matches. Extra candidates cost time, a missing candidate is a wrong answer.
+
+BPE makes that hard. Merges apply in rank order across the whole word, so a suffix rewrites the prefix:
+
+```
+  "in"            ->  [in]
+  "ing"           ->  [ing]           the [in] is gone
+  "token"         ->  [token]
+  "tokenization"  ->  [token][ization]
+```
+
+A piece of a word does not tokenize to a piece of that word's tokens, so the query's own tokens can't be looked up. Instead the index gets asked about **chunks**, meaning every 3-character window of the text a regex guarantees, which is what a trigram index stores:
+
+```
+  regex:  colou?r of the (sky|sea)
+
+  chunks: "the" AND "of " AND ("sky" OR "sea") AND "col" AND "olo"
+```
+
+Note what is missing. `colour` chops to `col olo lou our` and `color` to `col olo lor`, so only `col` and `olo` are guaranteed present. Demanding `lor` would drop every `colour` match.
+
+A chunk inside one token is easy. A small table built once from the tokenizer's vocabulary lists the tokens containing each chunk (`hil` is in `while`, `hill`, `child`...), and the union of those tokens' posting lists is every file holding the chunk inside a token. BM25 already has those lists.
+
+The hard case is a chunk that crosses the cut between two tokens. GPT-2 chops `datestamp` into `dat` and `estamp`, so search for `test`:
+
+```
+  d a t e s t a m p
+  [dat  ][estamp  ]
+      ^^^^
+      "tes" spans the cut, so no single token holds it
+```
+
+No vocabulary lookup finds `tes` in this file, because the word was split through the middle of it. In my Python prototype, over 4,000 English dictionary words tokenized with `o200k_base`, **28.0% of a word's chunks sit inside no single token** and 77.6% of words have at least one such chunk. Crossing a cut is the common case.
+
+## Boundary grams: store only what crosses a cut
+
+So the design stores exactly the part tokens can't answer. At every cut between two tokens, it records the 3-byte chunks that cross it, as ordinary posting lists. I call them #[boundary grams](3-byte pieces of text that straddle the cut between two tokens, stored with the list of files they appear in). `dat|estamp` stores `ate` and `tes`. A chunk is then answered one of two ways:
+
+```
+  chunk inside a token   ->  vocabulary table: tokens holding it -> merge their BM25 lists
+  chunk across a cut     ->  boundary grams list for that chunk
+  files that may hold it =  both, merged
+```
+
+Here is one real line of Python chopped four ways, with the pieces each method stores:
+
+<RegexChopper />
+
+The line gives 9 GPT-2 tokens, which BM25 already stores, plus 13 boundary grams, against 24 chunks for a trigram index. Across the whole corpus the boundary grams are 11.6M postings, against 18.1M for a trigram index built from scratch.
+
+One case needs care. `names[0]` tokenizes as `names|[|0|]`, so the chunk `[0]` crosses two cuts at once, around a one-byte token. Walking the token stream catches it (the chunk still crosses a cut). My Python prototype first derived boundary grams from adjacent token pairs and lost `[0]` entirely: `names\[0\]` returned 0 candidates for 7 matching files.
+
+## The benchmark needs no labels
+
+Filter quality is how many files reach the regex, and ground truth is whether the regex matches, which the regex engine computes exactly. So this needs no human judgments.
+
+- **Documents.** 45,283 Python functions from [CodeSearchNet](https://github.com/github/CodeSearchNet), 50 MB.
+- **Queries.** 300 greps from published [OpenHands](https://huggingface.co/datasets/nebius/SWE-rebench-openhands-trajectories) and [SWE-agent](https://huggingface.co/datasets/nebius/SWE-agent-trajectories) trajectories, the searches coding agents really run, like `GetEdk2RelativePathFromAbsolutePath`, `duckdb|DuckDB` and `get_value`. 299 compile in Rust's regex engine.
+- **Ground truth.** The regex over every file.
+- **The check that matters.** Every query must return every true match, because a filter that drops one gives a wrong answer.
+
+That check caught bugs that each produced a believable number, and three of them flattered the method under test:
+
+- **`"" in "?*"` is `True` in Python.** My first literal extractor tested whether the next character was a quantifier, and at the end of a string the next character is the empty string. Every literal silently lost its last character, so `'magnet'` was searched as `magne`.
+- **A missing key means empty.** Treating a chunk absent from the index as "no constraint" turned filtered queries into full scans. The baselines then fell back to a full scan on 18.7% of queries against 3.7% for the token index, which read as a finding and was a bug.
+- **A query loader rewrote `\|` into `|` for every query set.** Right for grep syntax, wrong for the rest. One log ID with escaped pipes became an alternation whose empty branch matched all 32,000 lines, and it made [Zoekt](#how-it-compares-to-zoekt-and-elasticsearch) look 15x worse than it is.
+
+After the fixes, every method returns every true match on every query set in this post.
+
+## Selectivity ties, then a free check breaks the tie
+
+Mean share of the corpus handed to the regex, over the 299 agent greps:
+
+| method                                                                                |          postings | files handed to the regex |
+| ------------------------------------------------------------------------------------- | ----------------: | ------------------------: |
+| dense trigram                                                                         |             18.1M |                     4.68% |
+| [TopK sparse grams](https://www.topk.io/blog/20260814-fast-regex-search-sparse-grams) |             40.8M |                     4.60% |
+| BM25 tokens + boundary grams                                                          | 16.2M (11.6M new) |                 **4.68%** |
+
+Observations:
+
+- **Tokens plus boundary grams match the trigram index exactly.** They answer the same question ("does this file contain this chunk") from different storage, so they land on the same files.
+- **Sparse grams save 0.08 points for 2.3x the postings of a trigram index.** Their longer grams are meant to encode adjacency, but TopK's rule picks a gram of n characters with probability `2/((n-1)(n-2))`, so a 5-character literal carries its long gram 1 time in 6.
+
+Now the interesting part. A token is a contiguous run of bytes, so when a chunk is answered through a token, that token has to agree with the query on every byte where they overlap. Search for `hill`: the chunk `hil` sits inside `while`, but in `while` it is followed by `e`, and the query needs `l` there. So `while` can't be part of a match and its files can be skipped. I call this #[fitting](keeping only the tokens that agree with the query on every overlapping byte, so no extra storage is needed). It needs no extra storage, and a trigram index can't do it, since a trigram posting carries no token to check.
+
+| agent greps, 45,283 functions |    trigram | boundary grams |  + fitting |
+| ----------------------------- | ---------: | -------------: | ---------: |
+| wrong files per query, p50    |          3 |              3 |      **0** |
+| wrong files per query, p90    |        597 |            597 |        306 |
+| queries with zero wrong files | 113 of 289 |     113 of 289 | 153 of 289 |
+| total wrong files             |     87,815 |         87,815 |     71,594 |
+
+Observations:
+
+- **Fitting cuts wrong files by 18% in total and halves the p90.** `hill` goes from 913 files to 17, all 17 true matches, and `completer` from 741 to 107 (23 true).
+- **It helps only chunks inside a token.** A chunk across a cut is a boundary gram with no token attached, so `be the` in prose gains nothing.
+- **Full fitting costs time, and a cached version keeps most of it.** Checking tokens per query takes 241 µs p50. Precomputing the fitting lists for one byte of context on each side (0.42 s at load time, nothing extra on disk) keeps 86% of the gain and is the fastest variant measured ([build and query time](#build-and-query-time)). Wrong-file counts below use full fitting, timings use the precomputed one.
+
+## The number nobody quotes
+
+One number decides regex speed more than any index choice, so it comes before storage and speed. Some regexes name no text of 3 characters or more, so no index has a key to look up and every file goes to the regex:
+
+```
+  no usable literal              has one
+  '\s+'                          'magnet'            -> magnet
+  '\d+'                          'tower[0-9]+/'      -> tower
+  '(.)([A-Z][a-z]+)'             'https?://'         -> http AND ://
+  '>(.+)<'                       'page=[0-9]+'       -> page=
+```
+
+Note `https?://` gives `http` and `://` but never `https://`. The `s` sits under `?`, so a matching file need not contain it. `>(.+)<` fails for a duller reason: `>` and `<` are one character each.
+
+Regexes mined from `re.compile`, `re.search` and friends in CodeSearchNet's train split (functions disjoint from the indexed ones) are mostly like the left column, because they are string-processing utilities. Agent greps are mostly like the right column.
+
+<QueryShapes />
+
+export const fbCats = ['dense trigram', 'BM25 tokens + boundary grams']
+export const fbHuman = [1.5, 1.6]
+export const fbAgent = [11.5, 11.7]
+
+<BarChart
+  orientation="horizontal"
+  title="Same indexes, same 45,283 functions, two query sets"
+  subtitle="mean speedup over scanning every file"
+  valueLabel="times faster than scanning everything"
+  valueMax={14}
+  valueTicks={[0, 3, 6, 9, 12]}
+  categories={fbCats}
+  series={[
+    {
+      name: 'regexes mined from re.compile',
+      role: 'muted',
+      values: fbHuman,
+      text: fbHuman.map((v) => v.toFixed(1) + 'x'),
+      textPosition: 'outside',
+    },
+    {
+      name: 'agent greps',
+      role: 'series0',
+      values: fbAgent,
+      text: fbAgent.map((v) => v.toFixed(1) + 'x'),
+      textPosition: 'outside',
+    },
+  ]}
+/>
+
+Observations:
+
+- **65.9% of the benchmarked mined regexes name no usable text, against 3.3% of agent greps.** That is 189 of 287 against 10 of 299, and it moves every index from about 1.5x to about 11.5x while they stay tied to each other. The sample is the 300 most frequent patterns of each set. Across every distinct pattern the split is 46.5% of 2,806 against 2.7% of 1,073.
+- **Even 3.3% costs 40% of the speedup.** On the 289 agent greps an index can use, trigram runs 19.3x faster than a scan (11.5x over all 299) and boundary grams + fitting 22.7x. Each unfilterable query reads all 45,283 files, so the 10 of them hand the regex 452,830 files, 2.5x the 180,528 the other 289 hand over together.
+- **The mined share overstates the loss.** Of the 40 most common unfilterable mined patterns, 28 match at least half of a 5,000-function sample anyway (`\s+` matches 100%, `(.)([A-Z][a-z]+)` 98.1%), so even a perfect filter would hand over most files.
+- **Quoting a regex speedup without a fallback rate says almost nothing.** [TopK report 55.3x](https://www.topk.io/blog/20260814-fast-regex-search-sparse-grams), the same order as the filterable slice here, on a different corpus and query set.
+
+## Storage, in a real engine's format
+
+Posting counts mislead, because a short list compresses worse per entry than a long one. So I wrote every piece as its own single-segment [Tantivy](https://github.com/quickwit-oss/tantivy) index (a Lucene-style engine: block-packed postings, an FST term dictionary) and read the file sizes off disk.
+
+The fair comparison is a whole stack: everything needed for BM25 ranking, case-sensitive regex, substring search and typo search, against what a Lucene-style engine builds for the same features (word postings with positions, plus the lowercased trigram index behind Elasticsearch's `wildcard` field). Stored text is left out of both. In the chart, Lucene-style is word postings + positions + a lowercased trigram index, ours is BM25 tokens + boundary grams + a sub-word dictionary for typos, and ours with pairs swaps the boundary grams for token pairs + short-token grams (both defined in the next section).
+
+export const stackCats = ['Lucene-style', 'ours, boundary grams', 'ours, pairs']
+
+<BarChart
+  orientation="horizontal"
+  title="Index size for ranking + regex + substring + typos"
+  subtitle="MB on disk, single-segment Tantivy indexes, lower is better"
+  valueLabel="MB"
+  views={[
+    {
+      label: 'code (45k functions)',
+      categories: stackCats,
+      series: [
+        {
+          name: 'MB',
+          roles: ['muted', 'series0', 'seriesAlt0'],
+          values: [30.1, 24.9, 36.5],
+          text: ['30.1 MB', '24.9 MB', '36.5 MB'],
+        },
+      ],
+    },
+    {
+      label: 'news (120k articles)',
+      categories: stackCats,
+      series: [
+        {
+          name: 'MB',
+          roles: ['muted', 'series0', 'seriesAlt0'],
+          values: [32.1, 25.5, 40.9],
+          text: ['32.1 MB', '25.5 MB', '40.9 MB'],
+        },
+      ],
+    },
+    {
+      label: 'logs (32k lines)',
+      categories: stackCats,
+      series: [
+        {
+          name: 'MB',
+          roles: ['muted', 'series0', 'seriesAlt0'],
+          values: [7.1, 6.9, 7.5],
+          text: ['7.1 MB', '6.9 MB', '7.5 MB'],
+        },
+      ],
+    },
+  ]}
+/>
+
+Observations:
+
+- **The boundary-gram stack is the smallest on all three corpora.** It comes in 17% under the Lucene-style stack on code, 21% on news and 3% on logs.
+- **The regex part alone is 13.5 MB against 17.0 MB** for the lowercased trigram index on code, and it keeps case. Lowercased grams put `PARAMETER` in the same list as `parameter`, so that search goes from 46 files to 7,779.
+- **Logs are the close call because IDs chop badly.** `2017-05-16 00:00:01.813` becomes `2017|-|05|-|16| 00|:|00|:|01|.|8|13` in GPT-2, and every cut is a boundary. On 5 of 16 [Loghub](https://github.com/logpai/loghub) systems (BGL, HDFS, HealthApp, OpenStack, Thunderbird) tokens + boundary grams hold more postings than a plain trigram index, up to 113%.
+- **The pairs stack is 6-27% larger than Lucene-style.** It buys near-exact phrases, which the next section is about.
+
+## Three settings, one dial
+
+Boundary grams store chunks. Two other ways to store what happens at a cut trade size for precision:
+
+- **4-byte windows.** One key per cut, the 2 bytes before it and the 2 after (`dat|estamp` stores `at|es`), instead of two 3-byte grams. Both 3-byte grams sit inside the window, so it stays sound.
+- **Token pairs.** Key each cut by the two tokens that meet there (` be` + ` the`). The key proves the tokens touch, so fitting runs straight through the cut. A small set of #[short-token grams](3-byte pieces that span a whole one-byte token, which a pair of tokens cannot pin down) covers chunks like `t_v` in `get|_|value`.
+
+Wrong files, and how much of the gap to a perfect filter each one closes. "Perfect" keeps only files holding every required literal exactly, the best any literal filter can do:
+
+|                                     | MB (code / news) | code: wrong files | news phrases: wrong files | phrase gap closed |
+| ----------------------------------- | ---------------: | ----------------: | ------------------------: | ----------------: |
+| boundary grams + fitting            |      13.5 / 10.4 |            71,594 |                    53,916 |                6% |
+| 4-byte windows + fitting            |       15.2 / 9.6 |            68,994 |                    21,054 |               70% |
+| pairs + short-token grams + fitting |      25.1 / 25.7 |            68,112 |                     6,941 |               98% |
+| perfect literal filter              |                  |            66,819 |                     5,692 |              100% |
+
+Observations:
+
+- **On code the three settings sit within about 5% of each other**, because most agent greps are single identifiers and fitting already did the work.
+- **On prose phrases they split wide open.** `be the` keeps 4,459 AG News articles with boundary grams + fitting and 841 with pairs + fitting, and 624 are true matches. Without fitting, 4-byte windows alone take it from 4,510 to 1,117. Its chunks (`be `, `e t`, ` th`) all sit on word boundaries, where fitting can't help.
+- **4-byte windows are the cheap middle.** On news they are smaller than boundary grams and cut phrase wrong files by 61%. On code they cost 13% more bytes, mostly a bigger term dictionary (489k distinct keys against 167k).
+- **Pairs pay when a wrong file is expensive.** With text in memory a wrong file costs 66-129 ns to reject, so the plain lookup wins on mean time. With text stored LZ4-compressed in 16 KB blocks, as Lucene stores it, pairs make average queries 7-10% faster on code and 15-25% on news, because heavy queries skip decompressing hundreds of blocks. The median query stays slower with pairs (about 282 µs against 206 µs on code).
+
+The rule I would use: boundary grams + fitting by default, 4-byte windows if the corpus is prose, pairs only when phrase queries must be near-exact or each wrong file costs more than roughly 1-4 µs to check.
+
+## Build and query time
+
+Query time, p50 per agent grep (filter plus regex check, text in memory):
+
+| method                                |         p50 | mean vs full scan |
+| ------------------------------------- | ----------: | ----------------: |
+| scan every file                       |    4,863 µs |                1x |
+| dense trigram                         |     50.7 µs |             11.5x |
+| boundary grams, precomputed           |     51.0 µs |             11.7x |
+| boundary grams + fitting, precomputed | **35.3 µs** |         **13.1x** |
+
+Observations:
+
+- **Boundary grams + fitting is the fastest measured**, because fitting leaves fewer files for the regex and the lookups are precomputed at load time.
+- **These are the slow intersection order.** Starting from the rarest chunk's list and taking the biggest lists next halves filter time on a trigram index (1.90 ms against 3.65 ms in total over 289 greps at 45,283 functions, 2.3x at 457,461). The token index has not been switched to that order yet.
+
+Build is where the token route used to lose badly. The trigram index builds in 1.6 s, the token index took 9.1 s, and 5.2 s of that was tokenizing with HuggingFace `tokenizers` 0.22. Its 1.0 release candidate produces identical token IDs on all 45,283 files and tokenizes 30x faster, timed back to back on one machine. A BM25 index pays for tokenizing anyway, so the cost regex adds is the rest, 3.9 s in that run. That rest also builds the experimental structures (pairs and context tables, and in runs that add 4-byte windows and pruned pairs it grows to 6.9 s), so the boundary grams alone cost less, and I haven't timed them separately yet.
+
+## Beyond regex: typos, phrases, highlights
+
+The same pieces answer three more questions search engines get asked.
+
+**Typos.** The classic trick, requiring most chunks of the misspelled word instead of all of them, is sound but loose: it keeps 8.8% of the corpus per typo. Lucene's approach, fuzzy matching whole terms in a dictionary, is tight but misses the word when it hides inside a longer one. I tested 400 real misspellings from [codespell](https://github.com/codespell-project/codespell), like `igonore -> ignore` and `initilializer -> initializer`:
+
+| method                                     | files kept, p50 | % of corpus (mean) | files with the wanted word missed |
+| ------------------------------------------ | --------------: | -----------------: | --------------------------------: |
+| most chunks present                        |           1,256 |               8.8% |                                0% |
+| whole-term fuzzy (Lucene FuzzyQuery style) |              34 |               0.6% |                             20.0% |
+| sub-word dictionary, substring fuzzy match |              40 |           **0.8%** |                            **0%** |
+
+Observations:
+
+- **Whole-term fuzzy misses a fifth of the files**, whenever the wanted word sits inside a longer one: `categories` in `subcategories`, `valid` in `invalid`, `ignore` in `ignores`, and one real typo in the code, `useful` in `usefull`.
+- **Matching the typo against substrings of each dictionary word fixes all of them.** The dictionary holds the snake_case and camelCase parts of every identifier: 55,363 terms, 15% of the token index.
+- **It needs its own small index at scale.** Brute-force matching takes 3.3 ms per query at 45,283 functions and 29 ms at 457,461.
+
+**Phrases.** For phrase search alone, word positions win. They are exact, and in Tantivy word lists with positions take 13.0 MB on code against 13.5 MB for boundary grams. What positions can't do is substrings or regex. If phrases matter, the 4-byte windows or pairs from the [previous section](#three-settings-one-dial) close most of the gap without positions.
+
+**Highlights** come free. The regex check already runs on every candidate, and the match span it finds is the highlight.
+
+## The tokenizer is a correctness decision
+
+The boundary walk needs to know where each token sits in the original bytes, so the tokenizer has to be lossless. Round-trip on 400 code files:
+
+| tokenizer                             | kind                       | round-trips exactly |
+| ------------------------------------- | -------------------------- | ------------------: |
+| BAAI/bge-base-en-v1.5                 | WordPiece                  |               0/400 |
+| intfloat/e5-base-v2                   | WordPiece                  |               0/400 |
+| multilingual-e5-base                  | SentencePiece              |               0/400 |
+| `o200k_base`                          | byte-level BPE             |         **400/400** |
+| ModernBERT-base, Qwen3-Embedding-0.6B | byte-level BPE             |         **400/400** |
+| [ISBPE](/blog/improving-bpe)          | byte-level, implicit space |         **400/400** |
+
+Observations:
+
+- **WordPiece and SentencePiece fail every file.** WordPiece turned `def get_vid_from_url` into `def get _ vid _ url` and SentencePiece collapsed newline runs, so a regex for `get_vid_from_url` derives chunks their index never saw. That rules the classic BERT-family embedding models out before retrieval quality comes up.
+- **GPT-2 is lossless too.** Its token byte lengths summed to each file's exact length on all 4,000 files I checked, which is how the index finds every cut without asking the tokenizer for offsets.
+- **Among lossless ones the tokenizer changes size and speed, never the candidates.** GPT-2, Qwen3-Embedding and ISBPE hand over the same share of files on every query. Qwen3-Embedding stores the fewest postings (14.9M against 16.2M for GPT-2) because it merges indentation runs and emits half as many tokens. ISBPE stores the fewest token postings, since a word keeps one identity wherever it appears.
+
+<details>
+<summary>How it compares to Zoekt and Elasticsearch</summary>
+
+**[Zoekt](https://github.com/sourcegraph/zoekt)** (Sourcegraph's code search) stores trigrams with their positions and a copy of the content. For a literal it intersects only the two rarest trigrams and checks their distance. Every method returned every true match.
+
+| query set                                                                | truly match | Zoekt reads | trigram / boundary grams read |
+| ------------------------------------------------------------------------ | ----------: | ----------: | ----------------------------: |
+| agent greps, 45,283 functions                                            |       1.09% |       5.14% |                 4.68% / 4.68% |
+| [gitleaks](https://github.com/gitleaks/gitleaks) rules, 10,000 functions |       0.01% |       4.42% |                 2.51% / 2.51% |
+| Loghub ID lookups, 32,000 lines                                          |       0.03% |       0.06% |                 0.03% / 0.03% |
+
+- **Two rarest trigrams is looser than all of them.** `su(pam_unix)[16663` has 2 matching lines: trigrams read 2, Zoekt reads 172.
+- **Zoekt reads everything on alternation inside a group.** For `(?:ghu|ghs)_[0-9a-zA-Z]{36}` (GitHub tokens) it reads all 10,000 files and we read 0.
+- **Positions help Zoekt on case-insensitive rules, and fitting does better on average.** `(?i)codecov` has 128 spellings, and "all trigrams somewhere" lets mixed spellings match on scattered pieces: 21 files, 0 true. Fitting takes it to 1. Over 137 case-insensitive gitleaks rules, wrong files average 15.2 with fitting against 23.1 for Zoekt, and both have a p90 of 10.
+- **Zoekt stores far more.** A shard is 140.9 MB for 50 MB of code, because it holds positions and the content.
+
+**Elasticsearch** has two regex routes. `regexp` on a normal field walks the regex over the term dictionary, exact and with no extra index, but a term is one whole word, so `et_use` or `def get_user` can never match. The `wildcard` field adds a lowercased trigram index plus a full copy of every value to verify against. That's where the 17.0 MB lowercased trigram in the storage chart comes from, and the extra copy of the text isn't even counted there.
+
+</details>
+
+<details>
+<summary>The prediction that broke</summary>
+
+In the first Python prototype I modelled `/keniz/` and predicted token adjacency would beat sparse grams **5.2x** on sub-word literals, reasoning that `ken`, `eni` and `niz` can appear scattered through a file without touching, so a trigram index admits `kennel ... genie ... organize` while adjacency forbids it. That model assumed dense trigrams return **8x** the true matches. Measured, they returned **1.3x**.
+
+The median sub-word literal is 6 characters, which yields 4 chunks, and ANDing 4 chunk lists is already near-exact. My 8x came from a 5-character literal in isolation, the most favourable case I could have picked. I also expected sparse grams to pull ahead as the corpus grew, and across a 16x sweep (8,000 to 128,000 files) their advantage went from 0.05 to 0.04 points.
+
+</details>
+
+## What I would build
+
+1. **Boundary grams, next to the BM25 token lists.** This is the only item that makes regex work. Whole tokens alone constrain almost nothing on sub-word searches.
+2. **The vocabulary table and fitting, precomputed at load time.** Built from the tokenizer, never grows with the corpus, and makes queries faster than trigram.
+3. **A sub-word dictionary for typos**, with substring fuzzy matching.
+4. **4-byte windows or pairs only if phrase precision matters**, per the rule in [three settings](#three-settings-one-dial).
+5. **Skip sparse grams.** 2.3x the postings of a trigram index for 0.08 points of selectivity.
+
+## Limitations
+
+- **Ranking on code is unmeasured.** BPE-token BM25 matched word BM25 on prose in [Token Search](/blog/token-search). The storage comparison assumes it holds on code too.
+- **Every size uses GPT-2.** The boundary-gram share moves with the tokenizer: on logs it is 63% of a trigram index with `o200k_base` and 75% with an ISBPE model trained on code.
+- **No human query log.** The agent greps are real, but I had no log of what people type into code search, and that is the number I would most want before quoting a fallback rate to anyone.
+- **Build times are from one implementation**, and the boundary grams have not been timed on their own.
+- **One programming language.** Python from CodeSearchNet, plus AG News and Loghub for prose and logs.
+
+## Key Takeaways
+
+- **BM25 token postings plus boundary grams make a regex filter that ties a trigram index**, handing the regex 4.68% of files either way, from 11.6M added postings against 18.1M for a trigram index built from scratch.
+- **Fitting is where tokens pull ahead.** Only tokens that agree with the query's neighbouring bytes count, which takes `hill` from 913 files to 17 and cuts wrong files by 18%. Precomputed, it runs at 35.3 µs p50 against 50.7 µs for trigram.
+- **The whole stack is the smallest measured.** Ranking, case-sensitive regex, substring and typo search take 24.9 MB on code against 30.1 MB for the Lucene-style equivalent. 4-byte windows or token pairs buy near-exact phrases for more space.
+- **How many queries have no literal decides regex speed.** 65.9% of the most frequent mined regexes against 3.3% of agent greps, which moves every index from 1.5x over a full scan to 11.5x.
+- **The tokenizer is a correctness decision.** WordPiece and SentencePiece can't reassemble a single one of 400 code files, so a regex derives chunks their index never saw.

@@ -1,0 +1,103 @@
+{
+  "generated_by": "experiments/regex-filter/export_hero_data.py",
+  "source": "CodeSearchNet Python, test split",
+  "seed_query": "get_user\\w*",
+  "docs": [
+    {
+      "label": "def _stderr_raw(self, s):",
+      "text": "def _stderr_raw(self, s):\n        \"\"\"Writes the string to stdout\"\"\"\n        print(s, end='', file=sys.stderr)\n        sys.stderr.flush()"
+    },
+    {
+      "label": "def _pre_image_append(self, msg, prompt_number):",
+      "text": "def _pre_image_append(self, msg, prompt_number):\n        \"\"\" Append the Out[] prompt  and make the output nicer\n\n        Shared code for some the following if statement\n        \"\"\"\n        self.log.debug(\"pyout: %s\", msg.get('content', ''))\n        self._append_plain_text(self.output_sep, True)\n        self._append_html(self._make_out_prompt(prompt_number), True)\n        self._append_plain_text('\\n', True)"
+    },
+    {
+      "label": "def _choi_to_superop(data, input_dim, output_dim):",
+      "text": "def _choi_to_superop(data, input_dim, output_dim):\n    \"\"\"Transform Choi to SuperOp representation.\"\"\"\n    shape = (input_dim, output_dim, input_dim, output_dim)\n    return _reshuffle(data, shape)"
+    },
+    {
+      "label": "def send_message(self, text, user_ids, thread_id=None):",
+      "text": "def send_message(self, text, user_ids, thread_id=None):\n    \"\"\"\n    :param self: bot\n    :param text: text of message\n    :param user_ids: list of user_ids for creating group or one user_id for send to one person\n    :param thread_id: thread_id\n    \"\"\"\n    user_ids = _get_user_ids(self, user_ids)\n    if not isinstance(text, str) and isinstance(user_ids, (list, str)):\n        self.logger.error('Text must be an string, user_ids must be an list or string')\n        return False\n\n    if self.reached_limit('messages'):\n        self.logger.info(\"Out of messages for today.\")\n        return False\n\n    self.delay('message')\n    urls = self.extract_urls(text)\n    item_type = 'link' if urls else 'text'\n"
+    },
+    {
+      "label": "def import_modules(self):",
+      "text": "def import_modules(self):\n        \"\"\"Import customer's service module.\"\"\"\n        modules = self.get_modules()\n        log.info(\"import service modules: \" + str(modules))\n        try:\n            for module in modules:\n                __import__(module)\n        except ImportError as error:\n            raise ImportModulesError(error.msg)"
+    },
+    {
+      "label": "def utc_epoch():",
+      "text": "def utc_epoch():\n    \"\"\"\n    Gets the epoch in the users timezone\n    :return:\n    \"\"\"\n\n    # pendulum utcnow() is not used as that sets a TimezoneInfo object\n    # instead of a Timezone. This is not pickable and also creates issues\n    # when using replace()\n    d = dt.datetime(1970, 1, 1)\n    d = d.replace(tzinfo=utc)\n\n    return d"
+    },
+    {
+      "label": "def get_user_roles(self, user=None):",
+      "text": "def get_user_roles(self, user=None):\n        \"\"\"\n        Get all the roles associated with the user.\n\n        :param user: the ab_user in FAB model.\n        :return: a list of roles associated with the user.\n        \"\"\"\n        if user is None:\n            user = g.user\n        if user.is_anonymous:\n            public_role = appbuilder.config.get('AUTH_ROLE_PUBLIC')\n            return [appbuilder.security_manager.find_role(public_role)] \\\n                if public_role else []\n        return user.roles"
+    },
+    {
+      "label": "def get_conn(self):",
+      "text": "def get_conn(self):\n        \"\"\"\n        Returns verticaql connection object\n        \"\"\"\n        conn = self.get_connection(self.vertica_conn_id)\n        conn_config = {\n            \"user\": conn.login,\n            \"password\": conn.password or '',\n            \"database\": conn.schema,\n            \"host\": conn.host or 'localhost'\n        }\n\n        if not conn.port:\n            conn_config[\"port\"] = 5433\n        else:\n            conn_config[\"port\"] = int(conn.port)\n\n        conn = connect(**conn_config)\n        return conn"
+    },
+    {
+      "label": "def _get_conn_params(self):",
+      "text": "def _get_conn_params(self):\n        \"\"\"\n        one method to fetch connection params as a dict\n        used in get_uri() and get_connection()\n        \"\"\"\n        conn = self.get_connection(self.snowflake_conn_id)\n        account = conn.extra_dejson.get('account', None)\n        warehouse = conn.extra_dejson.get('warehouse', None)\n        database = conn.extra_dejson.get('database', None)\n        region = conn.extra_dejson.get(\"region\", None)\n        role = conn.extra_dejson.get('role', None)\n\n        conn_config = {\n            \"user\": conn.login,\n            \"password\": conn.password or '',\n            \"schema\": conn.schema or '',\n            \"database\": self.database or database or '',\n   "
+    },
+    {
+      "label": "def get_conn(self):",
+      "text": "def get_conn(self):\n        \"\"\"\n        Returns a mysql connection object\n        \"\"\"\n        conn = self.get_connection(self.mysql_conn_id)\n        conn_config = {\n            \"user\": conn.login,\n            \"passwd\": conn.password or '',\n            \"host\": conn.host or 'localhost',\n            \"db\": self.schema or conn.schema or ''\n        }\n\n        if not conn.port:\n            conn_config[\"port\"] = 3306\n        else:\n            conn_config[\"port\"] = int(conn.port)\n\n        if conn.extra_dejson.get('charset', False):\n            conn_config[\"charset\"] = conn.extra_dejson[\"charset\"]\n            if (conn_config[\"charset\"]).lower() == 'utf8' or\\\n                    (conn_config[\"charset\"]"
+    },
+    {
+      "label": "def get_all_permissions_views(self):",
+      "text": "def get_all_permissions_views(self):\n        \"\"\"\n        Returns a set of tuples with the perm name and view menu name\n        \"\"\"\n        perms_views = set()\n        for role in self.get_user_roles():\n            perms_views.update({(perm_view.permission.name, perm_view.view_menu.name)\n                                for perm_view in role.permissions})\n        return perms_views"
+    },
+    {
+      "label": "def _has_role(self, role_name_or_list):",
+      "text": "def _has_role(self, role_name_or_list):\n        \"\"\"\n        Whether the user has this role name\n        \"\"\"\n        if not isinstance(role_name_or_list, list):\n            role_name_or_list = [role_name_or_list]\n        return any(\n            [r.name in role_name_or_list for r in self.get_user_roles()])"
+    },
+    {
+      "label": "def readString(self, st):",
+      "text": "def readString(self, st):\n        \"\"\"Parse a WFS capabilities document, returning an\n        instance of WFSCapabilitiesInfoset\n\n        string should be an XML capabilities document\n        \"\"\"\n        if not isinstance(st, str) and not isinstance(st, bytes):\n            raise ValueError(\"String must be of type string or bytes, not %s\" % type(st))\n        return etree.fromstring(st)"
+    },
+    {
+      "label": "def _set_env_from_extras(self, extras):",
+      "text": "def _set_env_from_extras(self, extras):\n        \"\"\"\n        Sets the environment variable `GOOGLE_APPLICATION_CREDENTIALS` with either:\n\n        - The path to the keyfile from the specified connection id\n        - A generated file's path if the user specified JSON in the connection id. The\n            file is assumed to be deleted after the process dies due to how mkstemp()\n            works.\n\n        The environment variable is used inside the gcloud command to determine correct\n        service account to use.\n        \"\"\"\n        key_path = self._get_field(extras, 'key_path', False)\n        keyfile_json_str = self._get_field(extras, 'keyfile_dict', False)\n\n        if not key_path and not ke"
+    },
+    {
+      "label": "def get_conn(self):",
+      "text": "def get_conn(self):\n        \"\"\"Returns a connection object\"\"\"\n        db = self.get_connection(self.presto_conn_id)\n        reqkwargs = None\n        if db.password is not None:\n            reqkwargs = {'auth': HTTPBasicAuth(db.login, db.password)}\n        return presto.connect(\n            host=db.host,\n            port=db.port,\n            username=db.login,\n            source=db.extra_dejson.get('source', 'airflow'),\n            protocol=db.extra_dejson.get('protocol', 'http'),\n            catalog=db.extra_dejson.get('catalog', 'hive'),\n            requests_kwargs=reqkwargs,\n            schema=db.schema)"
+    },
+    {
+      "label": "def season(self):",
+      "text": "def season(self):\n        \"\"\"\n        Returns the year ID of the season in which this game took place.\n        Useful for week 17 January games.\n\n        :returns: An int representing the year of the season.\n        \"\"\"\n        date = self.date()\n        return date.year - 1 if date.month <= 3 else date.year"
+    },
+    {
+      "label": "def get_uri(self):",
+      "text": "def get_uri(self):\n        \"\"\"\n        override DbApiHook get_uri method for get_sqlalchemy_engine()\n        \"\"\"\n        conn_config = self._get_conn_params()\n        uri = 'snowflake://{user}:{password}@{account}/{database}/'\n        uri += '{schema}?warehouse={warehouse}&role={role}'\n        return uri.format(**conn_config)"
+    },
+    {
+      "label": "def copy_expert(self, sql, filename, open=open):",
+      "text": "def copy_expert(self, sql, filename, open=open):\n        \"\"\"\n        Executes SQL using psycopg2 copy_expert method.\n        Necessary to execute COPY command without access to a superuser.\n\n        Note: if this method is called with a \"COPY FROM\" statement and\n        the specified input file does not exist, it creates an empty\n        file and no data is loaded, but the operation succeeds.\n        So if users want to be aware when the input file does not exist,\n        they have to check its existence by themselves.\n        \"\"\"\n        if not os.path.isfile(filename):\n            with open(filename, 'w'):\n                pass\n\n        with open(filename, 'r+') as f:\n            with closi"
+    },
+    {
+      "label": "def leave(self, node):",
+      "text": "def leave(self, node):\n        \"\"\"walk on the tree from <node>, getting callbacks from handler\"\"\"\n        method = self.get_callbacks(node)[1]\n        if method is not None:\n            method(node)"
+    },
+    {
+      "label": "def wrap(text, indent='    '):",
+      "text": "def wrap(text, indent='    '):\n    \"\"\"Wrap text to terminal width with default indentation\"\"\"\n    wrapper = textwrap.TextWrapper(\n        width=int(os.environ.get('COLUMNS', 80)),\n        initial_indent=indent,\n        subsequent_indent=indent\n    )\n    return '\\n'.join(wrapper.wrap(text))"
+    },
+    {
+      "label": "def bootstrap_repl(which_ns: str) -> types.ModuleType:",
+      "text": "def bootstrap_repl(which_ns: str) -> types.ModuleType:\n    \"\"\"Bootstrap the REPL with a few useful vars and returned the\n    bootstrapped module so it's functions can be used by the REPL\n    command.\"\"\"\n    repl_ns = runtime.Namespace.get_or_create(sym.symbol(\"basilisp.repl\"))\n    ns = runtime.Namespace.get_or_create(sym.symbol(which_ns))\n    repl_module = importlib.import_module(\"basilisp.repl\")\n    ns.add_alias(sym.symbol(\"basilisp.repl\"), repl_ns)\n    ns.refer_all(repl_ns)\n    return repl_module"
+    },
+    {
+      "label": "def show(self):",
+      "text": "def show(self):\n        \"\"\"Print innards of model, without regards to type.\"\"\"\n        if self._future:\n            self._job.poll_once()\n            return\n        if self._model_json is None:\n            print(\"No model trained yet\")\n            return\n        if self.model_id is None:\n            print(\"This H2OEstimator has been removed.\")\n            return\n        model = self._model_json[\"output\"]\n        print(\"Model Details\")\n        print(\"=============\")\n\n        print(self.__class__.__name__, \": \", self._model_json[\"algo_full_name\"])\n        print(\"Model Key: \", self._id)\n\n        self.summary()\n\n        print()\n        # training metrics\n        tm = model[\"training_metrics\"]\n  "
+    },
+    {
+      "label": "def object_info(**kw):",
+      "text": "def object_info(**kw):\n    \"\"\"Make an object info dict with all fields present.\"\"\"\n    infodict = dict(izip_longest(info_fields, [None]))\n    infodict.update(kw)\n    return infodict"
+    },
+    {
+      "label": "def _initialize_master_working_set():",
+      "text": "def _initialize_master_working_set():\n    \"\"\"\n    Prepare the master working set and make the ``require()``\n    API available.\n\n    This function has explicit effects on the global state\n    of pkg_resources. It is intended to be invoked once at\n    the initialization of this module.\n\n    Invocation by other packages is unsupported and done\n    at their own risk.\n    \"\"\"\n    working_set = WorkingSet._build_master()\n    _declare_state('object', working_set=working_set)\n\n    require = working_set.require\n    iter_entry_points = working_set.iter_entry_points\n    add_activation_listener = working_set.subscribe\n    run_script = working_set.run_script\n    # backward compatibility\n    run_main = ru"
+    }
+  ]
+}
