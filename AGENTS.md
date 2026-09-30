@@ -6,43 +6,9 @@
 
 ## Writing for the blog (IMPORTANT)
 
-Full guide: `writing-style.md`. Read it before drafting or editing any `.mdx`. The rules
-below are the ones that get broken most, so treat them as the minimum bar.
-
-**Never frame a thing against what it isn't.** No "it's not X, it's Y", no "not a X, not a
-Y, a Z", and no negation clipped onto the end of a sentence ("real, not rounding", "a
-trade, not an upgrade", "no guessing"). Say what it is and stop. A contrast is only
-allowed when both sides are real, named things the post is actually comparing
-("percentiles of Δ, not the Δ of percentiles").
-
-**No em dashes or en dashes, anywhere.** Use a period, comma, colon, or parentheses, or
-rewrite the sentence. Scan for `—` and `–` before finishing.
-
-**Chart, then `Observations:`, then bullets. Every time.** Never a paragraph after a
-chart. One claim per bullet, with its number, and the reason in the same sentence.
-
-**Cut the wrap-up.** A sentence at the end of a section that restates what the section
-just proved is dead weight. So is a second clause that re-explains the first.
-
-**Bold labels take a period, never a colon.** `**Label.** text` is the house form and is
-fine anywhere, including Key Takeaways. `**Label:** text` is the scaffold to avoid. The
-label has to read like natural English a person would say out loud.
-
-**Banned:** "closes the loop", and hedges the user doesn't use: "genuinely", "clearly",
-"worth noting", "a real but modest". Don't soften a direct ask into "I'd like to see".
-
-**Less is more.** After any cut, re-read the shortened sentence alone and check it is
-still exactly true. If the cut changed a number, a scope, or a causal claim, put the
-precise version back even if it costs words. When one correctness error is flagged, audit
-the rest of the same pass for the same class of mistake.
-
-**Glossary tooltips are `#[phrase](explanation)`.** The remark plugin scans plain text
-nodes only, so the explanation cannot contain backticks (they become `inlineCode` nodes
-and split the pattern) or parentheses (the regex stops at the first one). Write the
-explanation in plain prose, and check it rendered rather than assuming.
-
-**Finish every example you start.** Never name a transformation or comparison and leave
-the values out.
+Use the `natural-writing` skill for any prose in this repo: posts, READMEs, Key Takeaways,
+observations under charts, and edits to existing text. Read it before drafting or editing,
+and run its checker on the result before committing.
 
 ## Charts
 

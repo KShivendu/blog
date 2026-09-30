@@ -1,7 +1,6 @@
 # Chart style
 
-How charts on this blog are coloured and built. `writing-style.md` covers the prose
-around a chart. This covers the chart.
+How charts on this blog are coloured and built.
 
 The short version: a chart never picks a colour. It names a role, and
 `lib/viz-palette.js` hands back the value validated for the surface it's drawn on.
