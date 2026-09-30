@@ -5,14 +5,63 @@
 # A file referenced by committed code but never `git add`-ed builds fine
 # locally and breaks in prod. Catch that here by building the actual
 # committed tree (HEAD) in an isolated worktree before allowing the push.
+#
+# Two things keep it fast:
+#   1. Pushes that only touch files the site never reads (notes, docs,
+#      experiments, git config) skip the build.
+#   2. The build reuses a cache kept outside the repo, so it doesn't
+#      compile everything from zero each time. Measured on 104 pages:
+#      93s before, 39s with a warm cache (the first run after a wipe is ~92s).
+# Emergency escape: git push --no-verify
+
+ZERO=0000000000000000000000000000000000000000
+
+# Files that never affect the build. Anything else triggers it.
+skippable() {
+  case "$1" in
+    */*.md) return 1 ;;           # a .md file inside a folder might be content
+    *.md|LICENSE|.gitignore|.gitattributes) return 0 ;;
+    .github/*|.husky/*|experiments/*|plan/*) return 0 ;;
+  esac
+  return 1
+}
+
+# git passes one line per ref: <local ref> <local sha> <remote ref> <remote sha>
+changed=""
+while read -r _lref lsha _rref rsha; do
+  [ "$lsha" = "$ZERO" ] && continue                  # deleting a branch
+  if [ "$rsha" = "$ZERO" ]; then                     # new branch: compare to main
+    base=$(git merge-base "$lsha" origin/main 2>/dev/null) || { changed="(new branch)"; continue; }
+  else
+    base=$rsha
+  fi
+  files=$(git diff --name-only "$base" "$lsha" 2>/dev/null) || { changed="(diff failed)"; continue; }
+  changed="$changed
+$files"
+done
+
+needs_build=0
+for f in $changed; do
+  skippable "$f" || { needs_build=1; break; }
+done
+
+if [ "$needs_build" = 0 ]; then
+  echo "pre-push: no site files changed, skipping the build check."
+  exit 0
+fi
 
 echo "pre-push: building the committed tree (HEAD) in an isolated worktree..."
 
-WORKTREE_DIR=$(mktemp -d)
+# A fixed path, because Next's cache is keyed on the project's absolute path.
+# A fresh mktemp dir each push made most of the cache miss.
+CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}"
+WORKTREE_DIR="$CACHE_ROOT/blog-prepush-tree"
 cleanup() {
-  git worktree remove --force "$WORKTREE_DIR" >/dev/null 2>&1
+  git worktree remove --force "$WORKTREE_DIR" >/dev/null 2>&1 || true
   rm -rf "$WORKTREE_DIR"
+  git worktree prune >/dev/null 2>&1 || true
 }
+cleanup                      # a leftover from an interrupted push
 trap cleanup EXIT
 
 if ! git worktree add --detach --quiet "$WORKTREE_DIR" HEAD; then
@@ -23,6 +72,12 @@ fi
 # Reuse installed deps instead of a full reinstall, this check is about
 # missing committed files, not dependency drift.
 ln -s "$(pwd)/node_modules" "$WORKTREE_DIR/node_modules"
+
+# Reuse Next's build cache across pushes. It lives outside the repo so it
+# never collides with a running `next dev`, which writes to .next/cache.
+CACHE_DIR="$CACHE_ROOT/blog-prepush-next"
+mkdir -p "$CACHE_DIR" "$WORKTREE_DIR/.next"
+ln -s "$CACHE_DIR" "$WORKTREE_DIR/.next/cache"
 
 if ! (cd "$WORKTREE_DIR" && npm run build) >/tmp/pre-push-build.log 2>&1; then
   echo ""
