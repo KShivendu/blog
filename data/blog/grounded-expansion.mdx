@@ -37,14 +37,7 @@ export const sgn = (x) => (x > 0 ? '+' : '') + x.toFixed(2)
 
 ## The useful words are already in the results
 
-The LLM writes its passage from the query alone. Here it is for modulus, with every word coloured by where it also appears:
-
-<PassageColors data={R.pick} />
-
-Observations:
-
-- **The helpful words sit in the doc at rank 10, the relevant one.** "remainder", "divided", "mod", "17" and "operator" are all there. That doc holds 11 of the highlighted words, more than any other, and adding the highlighted words takes the score from 28.91 to 100.
-- **Some words come from nowhere.** "stiffness" and "deformation" describe modulus in physics, and no top-10 doc has them. Added on their own, the blue words drop the score to 0.
+The LLM writes its passage from the query alone. For "what does modulus mean" it writes about "the remainder when one number is divided by another", with the example "17 mod 5 equals 2". "remainder", "divided", "mod" and "17" all sit in the doc at rank 10, the relevant one, and adding the LLM's words that some top-10 doc has takes the score from 28.91 to 100. It also writes "stiffness" and "deformation" from the physics sense, which no top-10 doc has, and those words alone drop the score to 0.
 
 Across all 649 queries, I split the LLM's words the same way and added each group on its own:
 
@@ -300,6 +293,7 @@ An agent reads the new results again and decides whether a rewrite helped. I tri
 
 - **Baseline.** BM25 (k1 1.2, b 0.75) on stemmed words with 33 stopwords removed, my [strongest lexical baseline](/blog/stemming-expansion). Query words count 5 times and added words count by the model's confidence: `q'(t) = 5 · qtf(t) + 2p(t)`.
 - **The weight scale was chosen on the test set.** 2p was the best of 1, p and 2p, so up to about 0.5 of the gain may be that choice. At weight 1 the 6-layer version scores 59.81 (+2.40).
+- **Two LLM passages answer the wrong query.** For "what is a sales cycle process?" and "where is dia de los muertos celebrated in mexico" the stored rewrite is about car mileage and a nursery rhyme. That costs the LLM at most about 0.3 of its 62.36.
 - **Part of the gain is in-domain.** The model trained on MS MARCO. Without the NanoMSMARCO queries it gains +1.80 at weight 1, against +3.64 for the LLM's own top-10 words.
 - **It is stable.** Two seeds land 0.08 apart, 15.9k to 100k training queries land within 0.1, and swapping the LLM that wrote the training passages (text-davinci-003 or Claude Haiku) moves it 0.22.
 - **Latency.** The models were timed alone on a dedicated 4-core CPU, one query at a time, and BM25 on my laptop. The LLM took 12,040 ms through the Claude CLI, about 6.8 s of it start-up, so its model call is an estimated 5.2 s.
