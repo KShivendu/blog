@@ -61,12 +61,14 @@ const securityHeaders = [
 // /lab/* pages are served from Cloudflare Workers via rewrites below:
 //   /lab/flythrough -> query-flythrough.kshivendu1.workers.dev (~/projects/experiments/touchdesigner)
 //   /lab/hnsw, /lab/ivf -> lab-viz.kshivendu1.workers.dev (~/projects/rag-cookbook/hnsw-viz)
+//   /lab/highlights -> colbert-highlights.kshivendu1.workers.dev (~/projects/colbert-highlights)
 // They load code from CDNs, spawn blob: workers (maplibre, onnx), flythrough asks for the webcam and hnsw for location,
 // so /lab/* gets its own headers: same hardening minus the strict CSP, camera + location allowed.
 const LAB = {
   flythrough: 'https://query-flythrough.kshivendu1.workers.dev',
   hnsw: 'https://lab-viz.kshivendu1.workers.dev',
   ivf: 'https://lab-viz.kshivendu1.workers.dev',
+  highlights: 'https://colbert-highlights.kshivendu1.workers.dev',
 }
 const labHeaders = [
   ...securityHeaders.filter(

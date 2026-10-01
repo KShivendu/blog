@@ -23,6 +23,12 @@ const experiments = [
     about:
       'Type a scientific claim and watch it land among 5,183 SciFact papers in a 3D embedding space. Hand tracking optional.',
   },
+  {
+    title: 'ColBERT sentence highlighter',
+    href: '/lab/highlights',
+    about:
+      'Search "Attention Is All You Need" sentence by sentence and see which words matched. A 17M ColBERT model runs in your browser.',
+  },
 ]
 
 export default function Lab() {
