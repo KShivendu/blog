@@ -6,7 +6,7 @@ import { join } from 'path'
 const dir = mkdtempSync(join(tmpdir(), 'rq-'))
 const f = join(dir, 'm.mjs')
 writeFileSync(f, readFileSync(new URL('../../lib/regex-required.js', import.meta.url)))
-const { requiredText, chunksOf, whereIs } = await import(f)
+const { requiredText, chunkLists } = await import(f)
 const docs = JSON.parse(readFileSync(new URL('../../public/static/data/regex-filter-hero.json', import.meta.url))).docs
 const pats = process.argv.slice(2).length ? process.argv.slice(2) : [
   'def get_\\w*conn', '(user|role)_\\w+ = ', 'user.*role|role.*user', 'Returns? (a|an) \\w+ connection',
@@ -18,7 +18,9 @@ for (const p of pats) {
   const { branches, filterable } = requiredText(p)
   const rx = new RegExp(p)
   const truth = docs.map((d) => rx.test(d.text))
-  const surv = docs.map((d) => !filterable || branches.some((b) => b.every((pc) => chunksOf(pc.text).every((g) => whereIs(d, g)))))
+  // Per chunk, the lists it really reads: fitting tokens' lists plus its boundary gram.
+  const passes = branches.map((b) => b.flatMap((pc) => Array.from({ length: Math.max(0, pc.text.length - 2) }, (_, p) => chunkLists(docs, pc.text, p).pass)))
+  const surv = docs.map((_, i) => !filterable || passes.some((ch) => ch.every((pass) => pass[i])))
   const miss = docs.filter((_, i) => truth[i] && !surv[i]).map((d) => d.label)
   bad += miss.length
   const fp = docs.filter((_, i) => surv[i] && !truth[i]).map((d) => d.label)
