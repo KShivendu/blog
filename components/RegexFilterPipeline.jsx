@@ -1,87 +1,98 @@
 import { useTheme } from 'next-themes'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 
+import { requiredText, chunksOf, whereIs, tokenView } from '../lib/regex-required'
 import { chartChrome, vizPalette } from '../lib/viz-palette'
 
-// The hero. It walks the five things a regex prefilter does, and the fourth one
-// is the point: every posting list arrives at once, because the real operation
-// fetches them all and intersects. An earlier version revealed chunks one at a
-// time, which taught a pipeline of filters instead of a set intersection.
+// The hero. It walks what a regex prefilter does on 24 real files: pull out the
+// text every match must contain, chop it into chunks, fetch every chunk's list
+// at once, keep the files on all of them, and only then run the regex. The last
+// step is the payoff, so the survivors appear as cards showing why each one
+// matched or didn't.
 //
 // Documents come from public/static/data/regex-filter-hero.json, written by
-// experiments/regex-filter/export_hero_data.py out of CodeSearchNet. The reader
-// types their own search and containment is computed live, so the widget cannot
-// drift from the benchmark.
+// experiments/regex-filter/export_hero_data.py out of CodeSearchNet, with GPT-2
+// token cuts. Everything is computed live from the pattern, so a reader's own
+// search works the same way as the presets.
 
 const DATA_URL = '/static/data/regex-filter-hero.json'
 const MONO = 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)'
-// One preset per lesson: an exact hit, a wider one, a search whose chunks all
-// land in the wrong places, and a pattern that pins down no text at all.
-const PRESETS = ['get_user', 'get_us.*config', 'def get', '\\s+']
-const STEP_MS = 1700
-const HOLD_MS = 3200
+// One lesson each: two pieces that must both appear, an OR inside a group, an
+// order the filter can't check, escaped text, and a pattern with no fixed text.
+const PRESETS = [
+  'def get_\\w*conn',
+  '(user|role)_\\w+ = ',
+  'user.*role|role.*user',
+  '\\bget_\\w+\\(self\\)',
+  '\\s+',
+]
+// How long each step stays up. The fetch and the AND have the most to read.
+const STEP_MS = [1400, 2000, 2000, 2600, 2400, 5200]
+const SWEEP_MS = 40
+const MAX_CARDS = 6
 
 const STEPS = [
-  'a search arrives',
-  'keep only the text it guarantees',
-  'chop that into chunks',
-  'fetch every chunk’s list: token lists, or boundary grams at a cut',
-  'keep the documents on every list',
-  'run the real regex on those',
+  'A regex search comes in.',
+  'Keep only the text every match must contain.',
+  'Chop that text into 3-letter chunks.',
+  'Fetch each chunk’s list of files, all at once.',
+  'Keep the files that are on every list.',
+  'Run the real regex on just these files.',
 ]
 
-// The literal text a regex guarantees. Anything under ? or * is optional and a
-// character class pins nothing down, so neither can be required.
-function requiredLiteral(pattern) {
-  const out = []
-  let cur = ''
-  for (let i = 0; i < pattern.length; i += 1) {
-    const c = pattern[i]
-    const next = pattern[i + 1]
-    if (c === '\\') {
-      cur = ''
-      i += 1
-      continue
-    }
-    if ('[](){}|^$.*+?'.includes(c)) {
-      if (c === '[') {
-        const close = pattern.indexOf(']', i + 1)
-        i = close < 0 ? pattern.length : close
-      }
-      out.push(cur)
-      cur = ''
-      continue
-    }
-    if (next === '?' || next === '*') {
-      out.push(cur)
-      cur = ''
-      i += 1
-      continue
-    }
-    cur += c
-  }
-  out.push(cur)
-  return out.sort((a, b) => b.length - a.length)[0] || ''
+const show = (s) => s.replace(/ /g, '·').replace(/\n/g, '⏎')
+const fnName = (label) => {
+  const m = /def\s+(\w+)/.exec(label)
+  const n = m ? m[1] : label
+  return n.length > 14 ? `${n.slice(0, 13)}…` : n
 }
 
-// Where a chunk sits in a file, from GPT-2's cuts: 1 if some occurrence lies
-// inside one token (the BM25 token lists answer it, through the vocabulary),
-// 2 if every occurrence crosses a cut (only the boundary grams answer it),
-// 0 if the file doesn't hold it.
-function whereIs(doc, g) {
-  let i = doc.text.indexOf(g)
-  if (i < 0) return 0
-  const cuts = doc.cuts || []
-  while (i >= 0) {
-    const s = i
-    if (!cuts.some((c) => c > s && c < s + g.length)) return 1
-    i = doc.text.indexOf(g, i + 1)
+// One line of a file around a span, trimmed to fit a card.
+function lineAround(text, spans) {
+  const s0 = spans[0][0]
+  const a = text.lastIndexOf('\n', s0 - 1) + 1
+  let b = text.indexOf('\n', s0)
+  if (b < 0) b = text.length
+  let lo = a
+  while (lo < s0 && (text[lo] === ' ' || text[lo] === '\t')) lo += 1
+  if (s0 - lo > 24) lo = s0 - 18
+  const hi = Math.min(b, lo + 72)
+  const marks = spans
+    .map(([x, y]) => [Math.max(x, lo), Math.min(y, hi)])
+    .filter(([x, y]) => y > x)
+    .sort((p, q) => p[0] - q[0])
+  const parts = []
+  let at = lo
+  for (const [x, y] of marks) {
+    if (x > at) parts.push({ t: text.slice(at, x) })
+    if (y > Math.max(x, at)) parts.push({ t: text.slice(Math.max(x, at), y), hl: true })
+    at = Math.max(at, y)
   }
-  return 2
+  if (hi > at) parts.push({ t: text.slice(at, hi) })
+  return { parts, cutLeft: lo > a, cutRight: hi < b }
 }
 
-const chunksOf = (lit) =>
-  lit.length < 3 ? [] : Array.from({ length: lit.length - 2 }, (_, i) => lit.slice(i, i + 3))
+// For a match: the matched text. For a file that got through and failed: where
+// each required piece of the branch it passed actually sits, which is usually
+// enough to see why the regex said no.
+function cardLines(doc, rx, branch) {
+  const m = rx ? rx.exec(doc.text) : null
+  if (m && m[0].length) return [lineAround(doc.text, [[m.index, m.index + m[0].length]])]
+  if (!branch) return []
+  const hits = branch
+    .map((pc) => {
+      const i = doc.text.indexOf(pc.text)
+      return i < 0 ? null : [i, i + pc.text.length]
+    })
+    .filter(Boolean)
+  const byLine = new Map()
+  for (const h of hits) {
+    const a = doc.text.lastIndexOf('\n', h[0] - 1) + 1
+    if (!byLine.has(a)) byLine.set(a, [])
+    byLine.get(a).push(h)
+  }
+  return [...byLine.values()].slice(0, 2).map((spans) => lineAround(doc.text, spans))
+}
 
 export default function RegexFilterPipeline() {
   const { resolvedTheme } = useTheme()
@@ -92,12 +103,15 @@ export default function RegexFilterPipeline() {
   const P = vizPalette(dark)
 
   const [docs, setDocs] = useState(null)
-  const [query, setQuery] = useState('get_user')
+  const [query, setQuery] = useState(PRESETS[0])
   const [step, setStep] = useState(0)
+  const [cycle, setCycle] = useState(0)
   const [playing, setPlaying] = useState(true)
   const [inView, setInView] = useState(false)
   const [reduced, setReduced] = useState(false)
+  const [hover, setHover] = useState(null)
   const wrap = useRef(null)
+  const last = STEPS.length - 1
 
   useEffect(() => {
     let live = true
@@ -136,36 +150,35 @@ export default function RegexFilterPipeline() {
 
   useEffect(() => {
     if (reduced || !playing || !inView) return undefined
-    const last = STEPS.length - 1
-    const t = setTimeout(
-      () => setStep((s) => (s + 1) % STEPS.length),
-      step === last ? HOLD_MS : STEP_MS
-    )
+    const t = setTimeout(() => {
+      if (step === last) setCycle((c) => c + 1)
+      setStep((s) => (s + 1) % STEPS.length)
+    }, STEP_MS[step])
     return () => clearTimeout(t)
-  }, [step, playing, inView, reduced])
+  }, [step, playing, inView, reduced, last])
 
   const model = useMemo(() => {
     if (!docs || !docs.length) return null
-    const lit = requiredLiteral(query)
-    const chunks = chunksOf(lit)
-    const rows = chunks.map((g) => ({ g, hits: docs.map((d) => whereIs(d, g)) }))
-    const survives = docs.map((_, i) => rows.length > 0 && rows.every((r) => r.hits[i] > 0))
-    let truth = docs.map(() => false)
-    let valid = true
+    const { branches, filterable } = requiredText(query)
+    let rx = null
     try {
-      const rx = new RegExp(query)
-      truth = docs.map((d) => rx.test(d.text))
+      rx = new RegExp(query)
     } catch {
-      valid = false
+      rx = null
     }
-    const running = []
-    let alive = docs.map(() => true)
-    rows.forEach((r) => {
-      alive = alive.map((a, i) => a && r.hits[i])
-      running.push(alive.filter(Boolean).length)
+    const truth = docs.map((d) => (rx ? rx.test(d.text) : false))
+    const kept = new Set()
+    const bands = branches.map((pieces) => {
+      pieces.forEach((pc) => pc.pos.forEach((p) => kept.add(p)))
+      const rows = pieces.flatMap((pc, pi) =>
+        chunksOf(pc.text).map((g) => ({ g, pi, hits: docs.map((d) => whereIs(d, g)) }))
+      )
+      const pass = docs.map((_, i) => rows.every((r) => r.hits[i] > 0))
+      return { pieces, rows, pass }
     })
-    const at = lit ? query.indexOf(lit) : -1
-    return { lit, chunks, rows, survives, truth, valid, running, at }
+    const survives = docs.map((_, i) => !filterable || bands.some((b) => b.pass[i]))
+    const passedBranch = docs.map((_, i) => bands.find((b) => b.pass[i])?.pieces)
+    return { bands, filterable, survives, truth, rx, kept, passedBranch }
   }, [docs, query])
 
   if (!docs) {
@@ -177,40 +190,164 @@ export default function RegexFilterPipeline() {
   }
 
   const m = model
-  const none = !m || m.chunks.length === 0
-  const nSurv = m && !none ? m.survives.filter(Boolean).length : docs.length
+  const N = docs.length
+  const filterable = m?.filterable
+  const nSurv = m ? m.survives.filter(Boolean).length : N
   const nTrue = m ? m.truth.filter(Boolean).length : 0
-  const nFalse = m && !none ? m.survives.filter((s, i) => s && !m.truth[i]).length : 0
+  const survivors = m ? docs.map((d, i) => ({ d, i })).filter(({ i }) => m.survives[i]) : []
+  const nCut = m ? m.bands.flatMap((b) => b.rows).filter((r) => r.hits.includes(2)).length : 0
+  const nRows = m ? m.bands.reduce((s, b) => s + b.rows.length, 0) : 0
 
-  const restart = (v) => {
+  const go = (k) => {
+    setStep(Math.max(0, Math.min(last, k)))
+    setPlaying(false)
+  }
+  const pick = (v) => {
     setQuery(v)
-    if (!reduced) setStep(0)
+    setHover(null)
+    setCycle((c) => c + 1)
+    if (!reduced) {
+      setStep(0)
+      setPlaying(true)
+    }
+  }
+  // Typing shows the answer straight away. The rail replays the steps.
+  const type = (v) => {
+    setQuery(v)
+    setHover(null)
+    setPlaying(false)
+    setStep(last)
   }
 
-  const cell = (on, tone) => ({
-    width: 13,
-    height: 13,
-    borderRadius: 1,
-    flex: '0 0 auto',
-    background: on ? tone : dark ? '#141922' : '#eef1f6',
-    transition: 'background .3s ease',
-  })
+  const btn = {
+    fontFamily: MONO,
+    fontSize: 11,
+    height: 26,
+    padding: '0 9px',
+    cursor: 'pointer',
+    border: `1px solid ${C.border}`,
+    borderRadius: 2,
+    background: 'transparent',
+    color: C.muted,
+  }
 
-  const rowsVisible = step >= 3
-  const andVisible = step >= 4
-  const verified = step >= 5
+  const cellBg = (h) => {
+    if (step < 3 || h === 0) return C.grid
+    return h === 2 ? P.series2 : P.series1
+  }
+  const dimmed = (band, i) => step >= 4 && !band.pass[i]
+  const sweepDelay = (i) => `${i * SWEEP_MS}ms`
+  const keepBg = (i) => {
+    if (!m || step < 4 || !m.survives[i]) return C.grid
+    if (step < 5) return C.ink
+    return m.truth[i] ? P.good : P.muted
+  }
+
+  const hoverText = () => {
+    if (!hover || !m) return null
+    const d = docs[hover.col]
+    if (hover.row == null) {
+      return {
+        label: d.label,
+        body: m.survives[hover.col]
+          ? m.truth[hover.col]
+            ? 'holds every chunk, and the regex matches'
+            : 'holds every chunk, but the regex finds no match'
+          : 'misses a chunk, so the regex never reads it',
+      }
+    }
+    const r = m.bands[hover.band].rows[hover.row]
+    const h = r.hits[hover.col]
+    const g = show(r.g)
+    if (h === 0) return { label: d.label, body: `no “${g}” in this file` }
+    const tv = tokenView(d, r.g)
+    return {
+      label: d.label,
+      body:
+        h === 1
+          ? `“${g}” sits inside the token ${tv}, so the token lists answer it`
+          : `“${g}” crosses a cut in ${tv}, so a boundary gram answers it`,
+    }
+  }
+  const ht = hoverText()
+
+  const caption = () => {
+    if (!m) return ''
+    if (step === 0) return 'The pattern as typed. Most of it describes shape, not text.'
+    if (!filterable) {
+      return `Nothing here is fixed text. Every part can match many strings, so there is nothing to look up and all ${N} files get read.`
+    }
+    const pieces = m.bands.flatMap((b) => b.pieces.map((p) => p.text))
+    const many = m.bands.length > 1
+    if (step === 1) {
+      return many
+        ? `The faded parts can match many strings, so they drop out. A match needs every piece of one group.`
+        : `The faded parts can match many strings, so they drop out. A match needs all ${
+            pieces.length > 1 ? `${pieces.length} pieces` : 'of this'
+          }.`
+    }
+    if (step === 2)
+      return many
+        ? `${nRows} chunks. A file can only match if it holds every chunk of one group.`
+        : `${nRows} chunks. A file can only match if it holds every one of them.`
+    if (step === 3) {
+      return nCut
+        ? `Blue: the chunk sits inside a token, so BM25’s token lists answer it. Amber: it crosses a token cut, so a boundary gram answers it.`
+        : `Blue: the chunk sits inside a token, so BM25’s token lists answer it. None of these chunks needs a boundary gram here.`
+    }
+    if (step === 4) {
+      return `${nSurv} of ${N} files hold every chunk${
+        many ? ' of one group' : ''
+      }. No file has been read yet.`
+    }
+    return nSurv === nTrue
+      ? `The regex ran on ${nSurv} of ${N} files and all ${nTrue} match. Here the chunks alone were exact.`
+      : `The regex ran on ${nSurv} of ${N} files and ${nTrue} match. ${
+          nSurv - nTrue === 1 ? 'The other one holds' : `The other ${nSurv - nTrue} hold`
+        } every piece, in the wrong shape.`
+  }
 
   return (
     <figure
       ref={wrap}
+      className="rfp"
+      tabIndex={-1}
+      onKeyDown={(e) => {
+        if (e.target.tagName === 'INPUT') return
+        if (e.key === 'ArrowRight') go(step + 1)
+        if (e.key === 'ArrowLeft') go(step - 1)
+      }}
       style={{
         margin: '2rem 0',
         border: `1px solid ${C.border}`,
         borderRadius: 3,
         background: C.card,
         overflow: 'hidden',
+        outline: 'none',
+        textAlign: 'left',
       }}
     >
+      <style>{`
+        @keyframes rfp-in { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+        @keyframes rfp-slide { from { opacity: 0; transform: translateX(-10px) } to { opacity: 1; transform: none } }
+        @keyframes rfp-sweep { 0% { left: 0; opacity: 1 } 92% { opacity: 1 } 100% { left: 100%; opacity: 0 } }
+        .rfp-in { animation: rfp-in .28s ease both }
+        .rfp-slide { animation: rfp-slide .3s ease both }
+        .rfp-grid { display: grid; grid-template-columns: 46px repeat(${N}, minmax(0, 16px)) auto;
+          column-gap: 2px; row-gap: 3px; align-items: center; justify-content: start; position: relative; }
+        .rfp-vlab { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 9.5px;
+          white-space: nowrap; height: 78px; overflow: hidden; text-align: left; line-height: 16px; }
+        .rfp-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+        @media (max-width: 560px) {
+          .rfp-vlab { height: 0; visibility: hidden }
+          .rfp-count { font-size: 9px !important }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .rfp *, .rfp *::before { animation: none !important; transition: none !important }
+        }
+      `}</style>
+
+      {/* header and controls */}
       <div
         style={{
           padding: '14px 16px 0',
@@ -220,119 +357,115 @@ export default function RegexFilterPipeline() {
           flexWrap: 'wrap',
         }}
       >
-        <div>
+        <div style={{ flex: '1 1 260px' }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>
             What a regex filter actually does
           </div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
-            24 real Python functions from CodeSearchNet. Type your own search and it recomputes.
+            24 real Python functions from CodeSearchNet. Pick a search or type your own.
           </div>
         </div>
-        {!reduced && (
-          <button
-            onClick={() => setPlaying((x) => !x)}
-            aria-label={playing ? 'pause the walkthrough' : 'play the walkthrough'}
-            style={{
-              fontFamily: MONO,
-              fontSize: 11,
-              padding: '4px 9px',
-              height: 26,
-              cursor: 'pointer',
-              border: `1px solid ${C.border}`,
-              borderRadius: 2,
-              background: 'transparent',
-              color: C.muted,
-            }}
-          >
-            {playing ? 'pause' : 'play'}
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button style={btn} onClick={() => go(step - 1)} aria-label="previous step">
+            ‹
           </button>
-        )}
+          {!reduced && (
+            <button
+              style={btn}
+              onClick={() => {
+                if (!playing && step === last) {
+                  setStep(0)
+                  setCycle((c) => c + 1)
+                }
+                setPlaying((x) => !x)
+              }}
+              aria-label={playing ? 'pause the walkthrough' : 'play the walkthrough'}
+            >
+              {playing ? 'pause' : 'play'}
+            </button>
+          )}
+          <button style={btn} onClick={() => go(step + 1)} aria-label="next step">
+            ›
+          </button>
+        </div>
       </div>
 
-      {/* step rail, clickable so a reader can go straight to a stage */}
-      <div style={{ display: 'flex', gap: 3, padding: '12px 16px 0' }} role="group">
-        {STEPS.map((s, k) => (
-          <button
-            key={s}
-            onClick={() => {
-              setStep(k)
-              setPlaying(false)
-            }}
-            aria-pressed={k === step}
-            style={{
-              flex: 1,
-              minWidth: 0,
-              textAlign: 'left',
-              background: 'transparent',
-              border: 'none',
-              padding: 0,
-              cursor: 'pointer',
-            }}
-          >
-            <div
+      {/* step rail: six bars and one caption, which fits a phone */}
+      <div style={{ padding: '12px 16px 0' }}>
+        <div style={{ display: 'flex', gap: 3 }} role="group" aria-label="steps">
+          {STEPS.map((s, k) => (
+            <button
+              key={s}
+              onClick={() => go(k)}
+              aria-label={`step ${k + 1}: ${s}`}
+              aria-pressed={k === step}
               style={{
-                height: 3,
-                borderRadius: 1,
-                background: k < step ? P.muted : k === step ? C.ink : C.grid,
-                marginBottom: 5,
-                transition: 'background .25s ease',
-              }}
-            />
-            <div
-              style={{
-                fontSize: 10.5,
-                lineHeight: 1.3,
-                color: k === step ? C.ink : C.muted,
-                opacity: k <= step ? 1 : 0.55,
-                paddingRight: 6,
+                flex: 1,
+                height: 14,
+                padding: '5px 0',
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
               }}
             >
-              {k + 1}. {s}
-            </div>
-          </button>
-        ))}
+              <div
+                style={{
+                  height: 4,
+                  borderRadius: 1,
+                  background: k <= step ? C.ink : C.grid,
+                  opacity: k < step ? 0.35 : 1,
+                  transition: 'background .25s ease, opacity .25s ease',
+                }}
+              />
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize: 12.5, color: C.ink, marginTop: 4, fontWeight: 500 }}>
+          <span style={{ color: C.muted, fontFamily: MONO, fontSize: 11, marginRight: 8 }}>
+            {step + 1}/{STEPS.length}
+          </span>
+          {STEPS[step]}
+        </div>
       </div>
 
-      {/* the query, and the literal inside it */}
+      {/* the search box and presets */}
       <div
         style={{
-          padding: '14px 16px 0',
+          padding: '12px 16px 0',
           display: 'flex',
-          gap: 8,
+          gap: 6,
           flexWrap: 'wrap',
           alignItems: 'center',
         }}
       >
         <input
           value={query}
-          onChange={(e) => restart(e.target.value)}
+          onChange={(e) => type(e.target.value)}
           spellCheck={false}
           aria-label="search pattern"
           style={{
             fontFamily: MONO,
-            fontSize: 14,
-            padding: '6px 9px',
-            minWidth: 190,
-            flex: '1 1 190px',
+            fontSize: 13,
+            padding: '5px 9px',
+            minWidth: 0,
+            flex: '1 1 200px',
             color: C.ink,
-            background: dark ? '#0a0f0d' : '#f7f9f8',
-            border: `1px solid ${m && !m.valid ? P.bad : C.border}`,
+            background: 'transparent',
+            border: `1px solid ${m && !m.rx ? P.bad : C.border}`,
             borderRadius: 2,
           }}
         />
         {PRESETS.map((p) => (
           <button
             key={p}
-            onClick={() => restart(p)}
+            onClick={() => pick(p)}
             style={{
-              fontFamily: MONO,
-              fontSize: 11,
-              padding: '4px 8px',
-              cursor: 'pointer',
-              border: `1px solid ${C.border}`,
-              borderRadius: 2,
+              ...btn,
+              height: 'auto',
+              padding: '4px 7px',
               background: query === p ? C.ink : 'transparent',
               color: query === p ? C.card : C.muted,
+              whiteSpace: 'pre',
             }}
           >
             {p}
@@ -340,217 +473,480 @@ export default function RegexFilterPipeline() {
         ))}
       </div>
 
-      <div style={{ padding: '11px 16px 0', fontSize: 11.5, color: C.muted, minHeight: 34 }}>
-        {step === 0 && <span>The pattern as typed. Most of it is shape rather than text.</span>}
-        {step === 1 &&
-          (none ? (
-            <span>Nothing here is guaranteed. Every character sits under a class or a star.</span>
-          ) : (
-            <span>
-              Only <code style={{ fontFamily: MONO, color: P.good }}>{m.lit}</code> has to be
-              present in a match, so that is all the filter may require.
-            </span>
-          ))}
-        {step >= 2 &&
-          (none ? (
-            <span>
-              No run of three fixed characters, so there is nothing to look up and all {docs.length}{' '}
-              documents get read.
-            </span>
-          ) : (
-            <span>
-              <code style={{ fontFamily: MONO, color: C.ink }}>{m.lit}</code> becomes{' '}
-              {m.chunks.length} chunks, and a document must hold every one of them.
-            </span>
-          ))}
-      </div>
-
-      {/* chunks */}
+      {/* the pattern, character by character: what the filter may keep */}
       <div
+        key={`lens-${cycle}-${query}`}
         style={{
-          padding: '8px 16px 0',
-          display: 'flex',
-          gap: 4,
-          flexWrap: 'wrap',
-          minHeight: 28,
+          padding: '14px 16px 0',
+          fontFamily: MONO,
+          fontSize: 17,
+          letterSpacing: 0.5,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+          minHeight: 26,
         }}
       >
-        {step >= 2 &&
-          !none &&
-          m.chunks.map((g) => (
-            <code
-              key={g}
+        {[...query].map((ch, i) => {
+          const keep = m?.kept.has(i)
+          const fade = step >= 1 && !keep
+          return (
+            <span
+              key={i}
+              className={step === 0 && !reduced ? 'rfp-in' : undefined}
               style={{
-                fontFamily: MONO,
-                fontSize: 11.5,
-                padding: '2px 6px',
-                border: `1px solid ${C.border}`,
-                borderRadius: 2,
+                animationDelay: `${i * 35}ms`,
                 color: C.ink,
-                whiteSpace: 'pre',
+                opacity: fade ? 0.28 : 1,
+                textDecoration: step >= 1 && keep ? 'underline' : 'none',
+                textDecorationThickness: 2,
+                textUnderlineOffset: 4,
+                transition: 'opacity .4s ease',
+                transitionDelay: `${i * 18}ms`,
               }}
             >
-              {g.replace(/ /g, '·')}
-            </code>
+              {ch === ' ' && step >= 1 && keep ? '·' : ch}
+            </span>
+          )
+        })}
+      </div>
+
+      {/* the pieces, then their chunks */}
+      <div
+        style={{
+          padding: '10px 16px 0',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 6,
+          alignItems: 'center',
+          minHeight: 30,
+          fontSize: 11,
+          color: C.muted,
+        }}
+      >
+        {step >= 1 &&
+          m &&
+          filterable &&
+          m.bands.map((b, bi) => (
+            <Fragment key={bi}>
+              {bi > 0 && <span style={{ fontFamily: MONO, color: C.ink }}>OR</span>}
+              {b.pieces.map((pc, pi) => (
+                <Fragment key={pi}>
+                  {pi > 0 && <span>and</span>}
+                  <span
+                    className="rfp-in"
+                    style={{
+                      display: 'inline-flex',
+                      gap: step >= 2 ? 3 : 0,
+                      animationDelay: `${(bi * 2 + pi) * 90}ms`,
+                      transition: 'gap .3s ease',
+                    }}
+                  >
+                    {step < 2 ? (
+                      <code
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 12,
+                          padding: '2px 6px',
+                          border: `1px solid ${C.ink}`,
+                          borderRadius: 2,
+                          color: C.ink,
+                          whiteSpace: 'pre',
+                        }}
+                      >
+                        {show(pc.text)}
+                      </code>
+                    ) : (
+                      chunksOf(pc.text).map((g, gi) => (
+                        <code
+                          key={gi}
+                          className="rfp-in"
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 11,
+                            padding: '2px 4px',
+                            border: `1px solid ${C.border}`,
+                            borderRadius: 2,
+                            color: C.ink,
+                            whiteSpace: 'pre',
+                            animationDelay: `${gi * 70}ms`,
+                          }}
+                        >
+                          {show(g)}
+                        </code>
+                      ))
+                    )}
+                  </span>
+                </Fragment>
+              ))}
+            </Fragment>
           ))}
       </div>
 
-      {/* the index: one row per chunk, every row arriving together */}
-      <div style={{ padding: '10px 16px 0', overflowX: 'auto', minHeight: 130 }}>
-        {!none && (
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 12,
-              fontSize: 11,
-              color: C.muted,
-              marginBottom: 6,
-              opacity: rowsVisible ? 1 : 0.3,
-            }}
-          >
-            <span>
+      {/* the index: one row per chunk, one column per file */}
+      {m && filterable && (
+        <div style={{ padding: '12px 16px 0', overflowX: 'auto' }}>
+          <div className="rfp-grid" onMouseLeave={() => setHover(null)}>
+            {/* file names, written up the columns */}
+            <span />
+            {docs.map((d, i) => (
               <span
-                style={{ ...cell(true, P.series1), display: 'inline-block', verticalAlign: -2 }}
-              />{' '}
-              inside a token: BM25&apos;s own token lists
-            </span>
-            <span>
-              <span
-                style={{ ...cell(true, P.series2), display: 'inline-block', verticalAlign: -2 }}
-              />{' '}
-              across a token cut: the boundary grams
-            </span>
-          </div>
-        )}
-        {!none &&
-          m.rows.map((r, ri) => (
-            <div
-              key={r.g}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                marginBottom: 3,
-                opacity: rowsVisible ? 1 : 0,
-                transition: 'opacity .4s ease',
-              }}
-            >
-              <code
+                key={i}
+                className="rfp-vlab"
                 style={{
                   fontFamily: MONO,
-                  fontSize: 11,
-                  color: C.ink,
-                  width: 32,
-                  textAlign: 'right',
-                  flex: '0 0 auto',
+                  color: hover?.col === i ? C.ink : C.muted,
+                  opacity: step >= 4 && !m.survives[i] ? 0.35 : 1,
+                  transition: 'opacity .3s ease',
+                  transitionDelay: step >= 4 ? sweepDelay(i) : '0ms',
                 }}
               >
-                {r.g.replace(/ /g, '·')}
-              </code>
-              <div style={{ display: 'flex', gap: 2 }}>
-                {r.hits.map((h, i) => (
-                  <span
-                    key={i}
-                    style={cell(rowsVisible && h > 0, h === 2 ? P.series2 : P.series1)}
-                    title={`${docs[i].label}: ${
-                      h === 2 ? 'crosses a token cut' : h === 1 ? 'inside a token' : 'not present'
-                    }`}
-                  />
-                ))}
-              </div>
-              <span style={{ fontFamily: MONO, fontSize: 10, color: C.muted, paddingLeft: 4 }}>
-                {r.hits.filter((h) => h > 0).length}
-                {r.hits.some((h) => h === 2) && (
-                  <span style={{ color: P.series2 }}>
-                    {' '}
-                    ({r.hits.filter((h) => h === 2).length} at a cut)
-                  </span>
-                )}
-                {andVisible && <span style={{ opacity: 0.65 }}> &rarr; {m.running[ri]} left</span>}
+                {fnName(d.label)}
               </span>
-            </div>
-          ))}
+            ))}
+            <span />
 
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            marginTop: 6,
-            paddingTop: 6,
-            borderTop: `1px solid ${C.border}`,
-            opacity: andVisible || none ? 1 : 0.25,
-            transition: 'opacity .4s ease',
-          }}
-        >
-          <code
+            {m.bands.map((band, bi) => (
+              <Fragment key={bi}>
+                {bi > 0 && (
+                  <>
+                    <span
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10,
+                        color: C.ink,
+                        textAlign: 'right',
+                        paddingTop: 4,
+                      }}
+                    >
+                      OR
+                    </span>
+                    <span
+                      style={{
+                        gridColumn: `2 / span ${N}`,
+                        borderTop: `1px dashed ${C.axis}`,
+                        marginTop: 4,
+                      }}
+                    />
+                    <span />
+                  </>
+                )}
+                {band.rows.map((r, ri) => {
+                  const nHit = r.hits.filter((h) => h > 0).length
+                  const nAt = r.hits.filter((h) => h === 2).length
+                  const visible = step >= 2
+                  return (
+                    <Fragment key={`${bi}-${ri}`}>
+                      <code
+                        className={visible ? 'rfp-slide' : undefined}
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          color: C.ink,
+                          textAlign: 'right',
+                          whiteSpace: 'pre',
+                          paddingRight: 4,
+                          opacity: visible ? 1 : 0,
+                          animationDelay: `${ri * 70}ms`,
+                        }}
+                      >
+                        {show(r.g)}
+                      </code>
+                      {r.hits.map((h, i) => (
+                        <span
+                          key={i}
+                          onMouseEnter={() => setHover({ band: bi, row: ri, col: i })}
+                          onClick={() => setHover({ band: bi, row: ri, col: i })}
+                          style={{
+                            height: 13,
+                            borderRadius: 1,
+                            cursor: 'pointer',
+                            background: visible ? cellBg(h) : 'transparent',
+                            opacity: dimmed(band, i) ? 0.22 : 1,
+                            outline:
+                              hover?.col === i && hover?.row === ri && hover?.band === bi
+                                ? `2px solid ${C.ink}`
+                                : 'none',
+                            outlineOffset: 1,
+                            transition: 'background .25s ease, opacity .3s ease',
+                            transitionDelay:
+                              step === 3
+                                ? `${i * 22 + ri * 30}ms`
+                                : step >= 4
+                                ? sweepDelay(i)
+                                : '0ms',
+                          }}
+                        />
+                      ))}
+                      <span
+                        className="rfp-count"
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10,
+                          color: C.muted,
+                          paddingLeft: 6,
+                          whiteSpace: 'nowrap',
+                          opacity: step >= 3 ? 1 : 0,
+                          transition: 'opacity .3s ease .5s',
+                        }}
+                      >
+                        {nHit}
+                        {nAt > 0 && <span style={{ color: P.series2 }}> ({nAt} cut)</span>}
+                      </span>
+                    </Fragment>
+                  )
+                })}
+              </Fragment>
+            ))}
+
+            {/* the AND: files on every list of some row */}
+            <span
+              style={{
+                gridColumn: `1 / span ${N + 2}`,
+                borderTop: `1px solid ${C.border}`,
+                marginTop: 4,
+              }}
+            />
+            <code
+              style={{
+                fontFamily: MONO,
+                fontSize: 10.5,
+                fontWeight: 600,
+                color: C.ink,
+                textAlign: 'right',
+                paddingRight: 4,
+              }}
+            >
+              keep
+            </code>
+            {docs.map((d, i) => (
+              <span
+                key={i}
+                onMouseEnter={() => setHover({ col: i })}
+                onClick={() => setHover({ col: i })}
+                style={{
+                  height: 13,
+                  borderRadius: 1,
+                  cursor: 'pointer',
+                  background: keepBg(i),
+                  transition: 'background .3s ease',
+                  transitionDelay: step === 4 ? sweepDelay(i) : step === 5 ? `${i * 15}ms` : '0ms',
+                }}
+              />
+            ))}
+            <span
+              className="rfp-count"
+              style={{
+                fontFamily: MONO,
+                fontSize: 10,
+                color: C.ink,
+                paddingLeft: 6,
+                whiteSpace: 'nowrap',
+                opacity: step >= 4 ? 1 : 0,
+                transition: 'opacity .3s ease',
+                transitionDelay: step === 4 ? `${N * SWEEP_MS}ms` : '0ms',
+              }}
+            >
+              {nSurv} left
+            </span>
+
+            {/* the AND sweeping across the columns */}
+            {step === 4 && !reduced && (
+              <span
+                key={`sweep-${cycle}`}
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  gridColumn: `2 / span ${N}`,
+                  top: 0,
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  pointerEvents: 'none',
+                }}
+              >
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    width: 2,
+                    marginLeft: -1,
+                    background: C.ink,
+                    animation: `rfp-sweep ${N * SWEEP_MS}ms linear both`,
+                  }}
+                />
+              </span>
+            )}
+          </div>
+
+          {/* what's under the pointer */}
+          <div
             style={{
-              fontFamily: MONO,
               fontSize: 11,
-              color: C.ink,
-              width: 32,
-              textAlign: 'right',
-              flex: '0 0 auto',
-              fontWeight: 600,
+              color: C.muted,
+              marginTop: 8,
+              minHeight: 32,
+              lineHeight: 1.45,
             }}
           >
-            AND
-          </code>
-          <div style={{ display: 'flex', gap: 2 }}>
-            {docs.map((d, i) => {
-              const keep = none || (andVisible && m.survives[i])
-              const tone = verified && !none ? (m.truth[i] ? P.good : P.muted) : P.good
-              return <span key={i} style={cell(keep, none ? P.muted : tone)} title={d.label} />
-            })}
-          </div>
-          <span style={{ fontFamily: MONO, fontSize: 10, color: C.ink, paddingLeft: 4 }}>
-            {nSurv} to check
-          </span>
-        </div>
-      </div>
-
-      <div
-        style={{
-          margin: '14px 0 0',
-          padding: '11px 16px',
-          borderTop: `1px solid ${C.border}`,
-          background: dark ? '#0a0f0d' : '#f7f9f8',
-          fontSize: 11.5,
-          color: C.muted,
-          lineHeight: 1.7,
-          minHeight: 64,
-        }}
-      >
-        {none ? (
-          <span>
-            Every index in this post fails the same way here, TopK&rsquo;s included. A filter can
-            only look up fixed text, and this pattern names none.
-          </span>
-        ) : verified ? (
-          <>
-            The regex ran on{' '}
-            <strong style={{ color: C.ink }}>
-              {nSurv} of {docs.length}
-            </strong>{' '}
-            documents and found <strong style={{ color: P.good }}>{nTrue}</strong>.
-            {nFalse > 0 ? (
+            {ht ? (
               <>
-                {' '}
-                The other {nFalse} hold every chunk in scattered places. A filter may hand over
-                junk, and may never drop a match.
+                <code style={{ fontFamily: MONO, color: C.ink }}>{ht.label}</code>
+                {ht.body && <div style={{ fontFamily: MONO, fontSize: 10.5 }}>{ht.body}</div>}
               </>
             ) : (
-              <> Here the chunks alone were exact.</>
+              <span style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
+                <span>
+                  <Swatch c={P.series1} /> inside a token: BM25&rsquo;s token lists
+                </span>
+                <span>
+                  <Swatch c={P.series2} /> across a token cut: boundary grams
+                </span>
+                <span>hover or tap a square for its tokens</span>
+              </span>
             )}
-          </>
+          </div>
+        </div>
+      )}
+
+      {/* the caption for this step */}
+      <div
+        key={`cap-${step}-${query}`}
+        className="rfp-in"
+        style={{
+          padding: '10px 16px 0',
+          fontSize: 12,
+          color: C.ink,
+          lineHeight: 1.55,
+          minHeight: 38,
+        }}
+      >
+        {caption()}
+      </div>
+
+      {/* the regex runs only on the survivors */}
+      <div
+        style={{
+          margin: '12px 0 0',
+          padding: '12px 16px 14px',
+          borderTop: `1px solid ${C.border}`,
+          minHeight: 92,
+        }}
+      >
+        {!filterable && m ? (
+          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6 }}>
+            Every index in this post fails the same way here. A filter can only look up fixed text,
+            and <code style={{ fontFamily: MONO, color: C.ink }}>{query}</code> names none.
+          </div>
+        ) : step < 5 ? (
+          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6 }}>
+            Nothing is read from any file until the last step. The lists answer everything before
+            it.
+          </div>
         ) : (
-          <span>
-            Every list is fetched together and intersected. Nothing is read from a document until
-            the last step.
-          </span>
+          <div className="rfp-cards">
+            {survivors.slice(0, MAX_CARDS).map(({ d, i }, k) => {
+              const ok = m.truth[i]
+              const lines = cardLines(d, m.rx, m.passedBranch[i])
+              return (
+                <div
+                  key={`${cycle}-${i}`}
+                  className="rfp-in"
+                  onMouseEnter={() => setHover({ col: i })}
+                  style={{
+                    animationDelay: `${k * 130}ms`,
+                    border: `1px solid ${ok ? P.good : C.border}`,
+                    borderLeftWidth: 3,
+                    borderRadius: 2,
+                    padding: '6px 8px',
+                    minWidth: 0,
+                    outline: hover?.col === i ? `1px solid ${C.ink}` : 'none',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      fontSize: 10.5,
+                      fontFamily: MONO,
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: C.ink,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {d.label}
+                    </span>
+                    <span style={{ color: ok ? P.good : P.muted, flex: '0 0 auto' }}>
+                      {ok ? 'match' : 'no match'}
+                    </span>
+                  </div>
+                  {lines.map((ln, li) => (
+                    <div
+                      key={li}
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10.5,
+                        color: C.muted,
+                        whiteSpace: 'pre',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        marginTop: 4,
+                      }}
+                    >
+                      {ln.cutLeft && '…'}
+                      {ln.parts.map((p, pi) =>
+                        p.hl ? (
+                          <span
+                            key={pi}
+                            style={{
+                              color: C.ink,
+                              background: ok ? `${P.good}33` : 'transparent',
+                              borderBottom: `1.5px ${ok ? 'solid' : 'dashed'} ${
+                                ok ? P.good : P.muted
+                              }`,
+                            }}
+                          >
+                            {p.t}
+                          </span>
+                        ) : (
+                          <span key={pi}>{p.t}</span>
+                        )
+                      )}
+                      {ln.cutRight && '…'}
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
+            {survivors.length > MAX_CARDS && (
+              <div style={{ fontSize: 11, color: C.muted, alignSelf: 'center' }}>
+                and {survivors.length - MAX_CARDS} more files
+              </div>
+            )}
+          </div>
         )}
       </div>
     </figure>
+  )
+}
+
+function Swatch({ c }) {
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        width: 10,
+        height: 10,
+        borderRadius: 1,
+        background: c,
+        verticalAlign: -1,
+      }}
+    />
   )
 }
