@@ -17,7 +17,7 @@ An AI agent that searches for you works in a loop. It searches, reads what came 
 
 The simplest LLM rewrite skips the reading. Search for "what does modulus mean" with BM25 and the right answer comes back at rank 10. Ask an LLM to write a short passage answering the query, add its words to the query, and the right answer jumps to rank 1. This is #[query2doc](Wang et al. 2023: an LLM writes a passage for the query, and its words are added to the query before searching), and across the 13 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai/nanobeir-66e1a0af21dfd93e620cd9f6) datasets it lifts my BM25 from **57.41 to 62.36** #[nDCG@10](a 0 to 100 score for how high the relevant docs sit in the top 10). It also takes about 5 seconds per query, where BM25 takes a fraction of a millisecond.
 
-Most of the words that help were already in the search results. A small model can read the results and pick them out. Here is the idea on one query, in six steps. Steps 4 and 5 are the method, **grounded expansion**:
+Most of the words that help were already in the search results. A small model can read the results and pick them out. Here is the idea on one query, in four steps. Steps 2 and 3 are the method, **grounded expansion**:
 
 <GroundedExpansionAnim
   data={R.perdoc}
@@ -25,6 +25,7 @@ Most of the words that help were already in the search results. A small model ca
     llm: R.latency.llm_model,
     large: R.latency.pickers[0].ms,
     small: R.latency.pickers[5].ms,
+    bm25: R.latency.bm25,
   }}
 />
 
@@ -78,9 +79,26 @@ Given a query and the docs BM25 found, a small model marks the words an LLM woul
 
 Training it costs nothing new. Public LLM passages already exist for 20,000 MS MARCO training queries ([query2doc](https://huggingface.co/datasets/intfloat/query2doc_msmarco)). A word in a retrieved doc is a 1 if the passage uses it and a 0 if not. That trains in 4 minutes on one GPU, and the model never sees the test datasets.
 
-What it learns is context. In step 4 of the animation, "navy" scores .89 in the naval-rank article, the relevant doc, and .04 in an article about an honorary title. A count of "navy" gives both docs the same number, and the best formula I could build from counts gains +0.90, against +2.96 for the model. Each word keeps its best score over the docs it reads, and the 20 best join the query, weighted by how sure the model is.
+What it learns is context. In step 2 of the animation, "deductible" scores .50 in the right doc and .03 in a doc about investing ("Buy low, sell high"). A count of "deductible" gives both docs the same number, and the best formula I could build from counts gains +0.90, against +2.96 for the model. Each word keeps its best score over the docs it reads, and the 20 best join the query, weighted by how sure the model is.
 
-It still makes RM3's bet that the top docs are worth reading, so misleading docs mislead it too. It just chooses better. RM3 helps 149 queries and hurts 151. Grounded expansion helps 192 and hurts 99.
+## How is this different from relevance feedback?
+
+It is relevance feedback. Both read BM25's top docs and add their words to the query. The difference is how the words are chosen.
+
+```
+                   RM3                           grounded expansion
+which docs count   each doc weighted by its      every doc it reads
+                   BM25 score
+which words        the most frequent ones        the ones a trained model
+                                                 marks, reading each doc
+                                                 next to the query
+same word,         one number                    a score per doc
+two docs                                         ("deductible" .50 vs .03)
+```
+
+On the tax question, RM3 adds "you, have, your, can, loan, cosign", common words from the top-ranked posts, and the score drops from 43.1 to 33.3. Grounded expansion adds "irs, sales, vehicle, deductible" and reaches 100.
+
+Both still bet that the top docs are worth reading, so misleading docs mislead both. Grounded expansion just chooses better. Over the 649 queries RM3 helps 149 and hurts 151, and grounded expansion helps 192 and hurts 99.
 
 ## How good, and how fast
 
@@ -274,12 +292,12 @@ Observations:
 
 An agent reads the new results again and decides whether a rewrite helped. I tried both.
 
-**Looping** the 2-layer version leaves the mean at 59.4 over three rounds, because round 2 helps 39 queries and hurts 29. It fixes "Commodore is only a land rank." (50 to 100) once round 1 lifts the relevant doc into the 5 docs the model reads. It can't fix "what does modulus mean", which drops from 28.9 to 0 when round 1 picks the physics sense ("measure, material, stress"). Round 2 then reads more physics.
+**Looping** the 2-layer version leaves the mean at 59.4 over three rounds, because round 2 helps 39 queries and hurts 29. It fixes "Commodore is only a land rank." (a FEVER claim to fact-check, 50 to 100) once round 1 lifts the relevant doc into the 5 docs the model reads. It can't fix "what does modulus mean", which drops from 28.9 to 0 when round 1 picks the physics sense ("measure, material, stress"). Round 2 then reads more physics.
 
 **Judging** keeps a rewrite only if the 6-layer reranker rates the new top 5 higher than the old top 5. It costs 10 more pairs and needs no training.
 
 - **It rescues RM3.** RM3 goes from 57.04 to 57.99 and beats always-on RM3 on 10 of 13 datasets, expanding 35% of queries.
-- **It catches misleading results.** For "SummerSlam was a concert." BM25 has the right page, SummerSlam 2015, at rank 1. The 6-layer version adds "1999" and "1998" from the pages below it and drops the score to 38.7. The judge sees no gain and keeps BM25's 100, while it keeps Commodore's rewrite from 35.6 to 100.
+- **It catches misleading results.** For "SummerSlam was a concert." BM25 has the right page, SummerSlam 2015, at rank 1. The 6-layer version adds "1999" and "1998" from the pages below it and drops the score to 38.7. The judge sees no gain and keeps BM25's 100, while it keeps the tax question's rewrite, from 43.1 to 100.
 - **It is too careful for grounded expansion.** It expands 40% of queries and scores 59.70, against 60.37 for always expanding. A perfect judge would reach 62.14, and the best one I trained gets 60.57.
 
 ## Key Takeaways
@@ -305,7 +323,7 @@ An agent reads the new results again and decides whether a rewrite helped. I tri
 <details>
 <summary>What did not work</summary>
 
-- **Counting.** Picking each doc's highest-BM25-weight words finds the rarest word anywhere. On "Commodore is only a land rank." it picks "kapitan, cartridge, flotilla", where grounded expansion picks "guard, navy, admiral", and loses 5.96. Counts also can't tell which sense of the query a doc is about. For "how did the mini gun get its name" a counting formula picks "austin, morris" from the Mini car pages and falls from 100 to 50, where grounded expansion picks "rifle, bullet".
+- **Counting.** Picking each doc's highest-BM25-weight words finds the rarest word anywhere. On the FEVER claim "Commodore is only a land rank." it picks "kapitan, cartridge, flotilla", where grounded expansion picks "guard, navy, admiral", and loses 5.96. Counts also can't tell which sense of the query a doc is about. For "how did the mini gun get its name" a counting formula picks "austin, morris" from the Mini car pages and falls from 100 to 50, where grounded expansion picks "rifle, bullet".
 - **Reweighting the query words without reading the docs.** A model that sees only the query gains +0.51 in 1.8 ms.
 
 </details>
