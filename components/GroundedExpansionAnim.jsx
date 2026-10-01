@@ -3,8 +3,8 @@ import { LABEL, MONO, cardStyle, hexFade } from '../lib/wordpiece-lab'
 import { useChrome } from '../lib/cheap-rewriter'
 
 /*
- * Grounded expansion in six scenes, on one real query ("Commodore is only a land
- * rank.", NanoFEVER). Every number is real: BM25's top 10, the Haiku passage and
+ * Grounded expansion in six scenes, on one real query (`perdoc.q`, set by PERDOC_Q
+ * in export_blog.py). Every number is real: BM25's top 10, the Haiku passage and
  * which of its words the top docs share, the 6-layer model's per-doc scores, its
  * top picks at weight 2p, the ranking after the second BM25 pass, and the two
  * latencies (2-layer model on a 4-core CPU, LLM model call estimated from the CLI).
@@ -24,14 +24,33 @@ const SCENES = [
   { key: 'cost', label: 'the cost', ms: 4200 },
 ]
 
-const CAPTIONS = [
-  'BM25 finds the right doc, but ranks it 6th.',
-  'An LLM writes a passage from the query alone. It never sees the docs.',
-  'Many of its words are already in the results. The right doc holds the most, 12, but two others hold 10, so counting alone can’t pick it out.',
-  'Grounded expansion reads each returned doc with a small model trained to predict the green words. The same word scores high in one doc and low in another.',
-  'Its best words join the query, and BM25 runs again. The right doc moves to rank 1.',
-  'On this query the LLM takes about 5 s. The 6-layer model reaches the same 100 in 605 ms. The 2-layer one takes 24 ms and gets it to 50.',
-]
+// the steps a reader sees. Scenes 1 and 2 (the LLM passage and its overlap with the docs) are
+// kept in the code but not shown: the method itself has no LLM in it.
+const STEPS = [0, 3, 4, 5]
+
+const ORD = (n) => n + (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th')
+
+// captions come from the data, so the animation stays true if the example query changes
+const captions = (x, A, cost) => {
+  const counts = A.doc_counts
+  const relC = counts[x.rel[0]]
+  const other = Math.max(...counts.filter((_, i) => i !== x.rel[0]))
+  const n = A.nd_q
+  return [
+    `BM25 finds the right doc, but ranks it ${ORD(x.rel[0] + 1)}.`,
+    'An LLM writes a passage from the query alone. It never sees the docs.',
+    relC > other
+      ? `Many of its words are already in the results, and the right doc holds the most. It has ${relC}, against ${other} for the next one.`
+      : `Many of its words are already in the results. The right doc holds ${relC}, but another holds ${other}, so counting alone can’t pick it out.`,
+    'A small model reads the query next to each doc and scores every word in it. The same word scores high in one doc and low in another.',
+    `Its best words join the query, and BM25 runs again. The right doc moves to rank ${x.new_rank_of_rel[0]}.`,
+    `On this query the LLM takes about ${(cost.llm / 1000).toFixed(0)} s to reach ${n.llm.toFixed(
+      0
+    )}. The 6-layer model reaches ${n.large.toFixed(0)} in ${cost.large.toFixed(
+      0
+    )} ms, and the 2-layer one ${n.small.toFixed(0)} in ${cost.small.toFixed(0)} ms.`,
+  ]
+}
 
 const ROW = 34
 const ROW_M = 27
@@ -41,7 +60,8 @@ export default function GroundedExpansionAnim({ data: x, cost }) {
   const c = useChrome()
   const A = x.anim
   const rel = x.rel[0]
-  const [scene, setScene] = useState(0)
+  const [step, setStep] = useState(0)
+  const scene = STEPS[step]
   const [prog, setProg] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [reduced, setReduced] = useState(false)
@@ -107,23 +127,23 @@ export default function GroundedExpansionAnim({ data: x, cost }) {
   // advance when a scene finishes, stop on the last one
   useEffect(() => {
     if (!playing || prog < 1) return
-    if (scene < SCENES.length - 1) {
-      setScene(scene + 1)
+    if (step < STEPS.length - 1) {
+      setStep(step + 1)
       setProg(0)
     } else setPlaying(false)
-  }, [prog, playing, scene])
+  }, [prog, playing, step])
 
   const go = useCallback(
     (i) => {
-      const n = Math.max(0, Math.min(SCENES.length - 1, i))
-      setScene(n)
+      const n = Math.max(0, Math.min(STEPS.length - 1, i))
+      setStep(n)
       setProg(reduced ? 1 : 0)
     },
     [reduced]
   )
   const onKey = (e) => {
-    if (e.key === 'ArrowRight') go(scene + 1)
-    if (e.key === 'ArrowLeft') go(scene - 1)
+    if (e.key === 'ArrowRight') go(step + 1)
+    if (e.key === 'ArrowLeft') go(step - 1)
   }
 
   // ---- derived per-scene state
@@ -140,7 +160,8 @@ export default function GroundedExpansionAnim({ data: x, cost }) {
       : scene === 4
       ? x.nd[0] + (x.nd[1] - x.nd[0]) * Math.min(1, Math.max(0, (prog - 0.25) / 0.5))
       : x.nd[1]
-  const navy = x.words.find((w) => w.w === 'navy')
+  const watch = A.watch
+  const CAPTIONS = captions(x, A, cost)
 
   // rows: the 10 original docs, plus docs the second pass brings in from outside the top 10
   const rows = x.docs.map((t, i) => ({ id: `d${i}`, title: t, orig: i }))
@@ -250,9 +271,9 @@ export default function GroundedExpansionAnim({ data: x, cost }) {
               const maxC = Math.max(...A.doc_counts)
               const scanned = r.orig != null && scanRow >= r.orig && scene === 3
               const chip =
-                navy &&
+                watch &&
                 r.orig != null &&
-                navy.cells[r.orig] != null &&
+                watch.cells[r.orig] != null &&
                 scanRow >= r.orig &&
                 scene === 3
               return (
@@ -320,10 +341,10 @@ export default function GroundedExpansionAnim({ data: x, cost }) {
                         borderRadius: 4,
                         padding: '1px 5px',
                         color: c.ink,
-                        background: hexFade(c.picker, 0.15 + 0.7 * navy.cells[r.orig]),
+                        background: hexFade(c.picker, 0.15 + 0.7 * watch.cells[r.orig]),
                       }}
                     >
-                      navy {navy.cells[r.orig].toFixed(2).replace(/^0/, '')}
+                      {watch.w} {watch.cells[r.orig].toFixed(2).replace(/^0/, '')}
                     </span>
                   )}
                   {isRel && <span style={{ fontSize: 10.5, color: c.good }}>relevant</span>}
@@ -335,50 +356,20 @@ export default function GroundedExpansionAnim({ data: x, cost }) {
 
         {/* the right-hand panel changes with the scene */}
         <div style={{ minWidth: 0 }}>
-          {scene <= 2 && (
-            <div
-              style={{
-                opacity: scene >= 1 ? 1 : 0.25,
-                transition: reduced ? 'none' : 'opacity 500ms',
-              }}
-            >
-              <div style={{ ...LABEL, color: c.llm, marginBottom: 6 }}>
-                the LLM rewrite · writes from the query alone
-              </div>
-              <div
-                style={{
-                  borderLeft: `3px dashed ${c.border}`,
-                  paddingLeft: 10,
-                  fontSize: 13.5,
-                  lineHeight: 1.75,
-                  minHeight: 120,
-                }}
-              >
-                {A.passage.slice(0, typed).map(([t, cls], i) => (
-                  <span key={i} style={colored ? tone[cls] : undefined}>
-                    {t}
-                  </span>
-                ))}
-                {scene === 1 && typed < nWords && <span style={{ color: c.llm }}>▍</span>}
-              </div>
-              {colored && (
-                <div style={{ fontSize: 11.5, color: c.muted, marginTop: 8 }}>
-                  <span style={tone.docs}>green</span> also in a returned doc ·{' '}
-                  <span style={tone.llm}>blue</span> in none of them.
-                </div>
-              )}
-            </div>
-          )}
           {(scene === 3 || scene === 4) && (
             <div>
               <div style={{ ...LABEL, color: c.picker, marginBottom: 6 }}>
                 grounded expansion · reads each returned doc
               </div>
               <div style={{ fontSize: 13, color: c.muted, lineHeight: 1.55, marginBottom: 10 }}>
-                A small model, trained to predict words like the green ones, reads the query next to
-                each doc and scores every word in it.
+                It was trained on LLM passages to mark the words an answer would use. It reads the
+                query next to each doc and scores every word in it.
                 {scene === 3 &&
-                  ' Watch "navy": high in the naval-rank article, low in the honorary-title one.'}
+                  ` Watch "${watch.w}": ${watch.cells[x.rel[0]]
+                    .toFixed(2)
+                    .replace(/^0/, '')} in the right doc, ${watch.cells[watch.lo_rank - 1]
+                    .toFixed(2)
+                    .replace(/^0/, '')} in the ${watch.lo_label} at #${watch.lo_rank}.`}
               </div>
               {scene === 4 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -413,22 +404,30 @@ export default function GroundedExpansionAnim({ data: x, cost }) {
               </div>
               {[
                 [
+                  'BM25',
+                  cost.bm25,
+                  c.muted,
+                  `${cost.bm25.toFixed(2)} ms (too small to see) · nDCG ${x.nd[0].toFixed(0)}`,
+                ],
+                [
                   'LLM rewrite',
                   cost.llm,
                   c.llm,
-                  `about ${(cost.llm / 1000).toFixed(1)} s · nDCG 100`,
+                  `about ${(cost.llm / 1000).toFixed(1)} s · nDCG ${A.nd_q.llm.toFixed(0)}`,
                 ],
                 [
                   'grounded expansion, 6-layer',
                   cost.large,
                   c.picker,
-                  `${cost.large.toFixed(0)} ms · nDCG 100`,
+                  `${cost.large.toFixed(0)} ms · nDCG ${A.nd_q.large.toFixed(0)}`,
                 ],
                 [
                   'grounded expansion, 2-layer',
                   cost.small,
                   c.picker,
-                  `${cost.small.toFixed(0)} ms (too small to see) · nDCG 50`,
+                  `${cost.small.toFixed(0)} ms (too small to see) · nDCG ${A.nd_q.small.toFixed(
+                    0
+                  )}`,
                 ],
               ].map(([name, ms, col, lab]) => {
                 // linear on purpose: at this scale 24 ms is a sliver next to 5 s
@@ -472,44 +471,44 @@ export default function GroundedExpansionAnim({ data: x, cost }) {
       {/* caption + controls */}
       <div style={{ fontSize: 14, color: c.ink, marginTop: 12, minHeight: 42, lineHeight: 1.45 }}>
         <span style={{ fontFamily: MONO, fontSize: 12, color: c.picker, marginRight: 8 }}>
-          {scene + 1}/6
+          {step + 1}/{STEPS.length}
         </span>
         {CAPTIONS[scene]}
       </div>
       <div
         style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 8 }}
       >
-        <button onClick={() => go(scene - 1)} style={btn(c)} aria-label="previous step">
+        <button onClick={() => go(step - 1)} style={btn(c)} aria-label="previous step">
           ←
         </button>
         <button
           onClick={() => {
-            if (scene === SCENES.length - 1 && done(scene)) go(0)
-            setPlaying((v) => !v || (scene === SCENES.length - 1 && done(scene)))
+            if (step === STEPS.length - 1 && done(scene)) go(0)
+            setPlaying((v) => !v || (step === STEPS.length - 1 && done(scene)))
           }}
           style={btn(c)}
           aria-label={playing ? 'pause' : 'play'}
         >
-          {playing ? 'pause' : scene === SCENES.length - 1 && done(scene) ? 'replay' : 'play'}
+          {playing ? 'pause' : step === STEPS.length - 1 && done(scene) ? 'replay' : 'play'}
         </button>
-        <button onClick={() => go(scene + 1)} style={btn(c)} aria-label="next step">
+        <button onClick={() => go(step + 1)} style={btn(c)} aria-label="next step">
           →
         </button>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginLeft: 6 }}>
-          {SCENES.map((s, i) => (
+          {STEPS.map((k, i) => (
             <button
-              key={s.key}
+              key={SCENES[k].key}
               onClick={() => go(i)}
               style={{
                 ...btn(c),
                 fontSize: 11,
                 padding: '3px 7px',
-                color: i === scene ? c.bg || '#000' : c.muted,
-                background: i === scene ? c.picker : 'transparent',
-                borderColor: i === scene ? c.picker : c.border,
+                color: i === step ? c.bg || '#000' : c.muted,
+                background: i === step ? c.picker : 'transparent',
+                borderColor: i === step ? c.picker : c.border,
               }}
             >
-              {narrow ? i + 1 : `${i + 1}. ${s.label}`}
+              {narrow ? i + 1 : `${i + 1}. ${SCENES[k].label}`}
             </button>
           ))}
         </div>
