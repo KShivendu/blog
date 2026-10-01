@@ -1,12 +1,15 @@
 import { useTheme } from 'next-themes'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 
-import { requiredText, chunksOf, whereIs, tokenView } from '../lib/regex-required'
+import { requiredText, chunksOf, chunkLists, gramView, docTokens } from '../lib/regex-required'
 import { chartChrome, vizPalette } from '../lib/viz-palette'
 
 // The hero. It walks what a regex prefilter does on 24 real files: pull out the
-// text every match must contain, chop it into chunks, fetch every chunk's list
-// at once, keep the files on all of them, and only then run the regex. The last
+// text every match must contain, chop it into chunks, look each chunk up in the
+// vocabulary, fetch the posting lists that names, keep the files that pass
+// every chunk, and only then run the regex. Every row in the grid is a real
+// posting list: a token's BM25 list, or a boundary gram where a chunk crosses
+// a token cut. A chunk is never a key itself, so it is drawn as a dashed label. The last
 // step is the payoff, so the survivors appear as cards showing why each one
 // matched or didn't.
 //
@@ -27,7 +30,7 @@ const PRESETS = [
   '\\s+',
 ]
 // How long each step stays up. The fetch and the AND have the most to read.
-const STEP_MS = [1400, 2000, 2000, 2600, 2400, 5200]
+const STEP_MS = [1400, 2000, 1800, 2600, 2400, 2400, 5200]
 const SWEEP_MS = 40
 const MAX_CARDS = 6
 
@@ -35,7 +38,8 @@ const STEPS = [
   'A regex search comes in.',
   'Keep only the text every match must contain.',
   'Chop that text into 3-letter chunks.',
-  'Fetch each chunk’s list of files, all at once.',
+  'Look each chunk up in the vocabulary.',
+  'Fetch those posting lists, all at once.',
   'Keep the files that are on every list.',
   'Run the real regex on just these files.',
 ]
@@ -170,11 +174,20 @@ export default function RegexFilterPipeline() {
     const kept = new Set()
     const bands = branches.map((pieces) => {
       pieces.forEach((pc) => pc.pos.forEach((p) => kept.add(p)))
-      const rows = pieces.flatMap((pc, pi) =>
-        chunksOf(pc.text).map((g) => ({ g, pi, hits: docs.map((d) => whereIs(d, g)) }))
+      // Chunks that read exactly the same lists (con and onn both read conn,
+      // ·conn, ...) are one fetch, so they share one group of rows.
+      const groups = new Map()
+      pieces.forEach((pc) =>
+        chunksOf(pc.text).forEach((_, p) => {
+          const c = chunkLists(docs, pc.text, p)
+          const sig = c.rows.map((r) => `${r.kind}:${r.key}`).join('\u0000') || `none:${c.g}`
+          if (groups.has(sig)) groups.get(sig).gs.push(c.g)
+          else groups.set(sig, { ...c, gs: [c.g] })
+        })
       )
-      const pass = docs.map((_, i) => rows.every((r) => r.hits[i] > 0))
-      return { pieces, rows, pass }
+      const chunks = [...groups.values()]
+      const pass = docs.map((_, i) => chunks.every((c) => c.pass[i]))
+      return { pieces, chunks, pass }
     })
     const survives = docs.map((_, i) => !filterable || bands.some((b) => b.pass[i]))
     const passedBranch = docs.map((_, i) => bands.find((b) => b.pass[i])?.pieces)
@@ -195,8 +208,12 @@ export default function RegexFilterPipeline() {
   const nSurv = m ? m.survives.filter(Boolean).length : N
   const nTrue = m ? m.truth.filter(Boolean).length : 0
   const survivors = m ? docs.map((d, i) => ({ d, i })).filter(({ i }) => m.survives[i]) : []
-  const nCut = m ? m.bands.flatMap((b) => b.rows).filter((r) => r.hits.includes(2)).length : 0
-  const nRows = m ? m.bands.reduce((s, b) => s + b.rows.length, 0) : 0
+  const allChunks = m ? m.bands.flatMap((b) => b.chunks) : []
+  const allRows = allChunks.flatMap((c) => c.rows)
+  const nCut = allRows.filter((r) => r.kind === 'gram').length
+  const nTok = allRows.filter((r) => r.kind !== 'gram').length
+  const nRows = allChunks.reduce((n, c) => n + c.gs.length, 0)
+  const shared = allChunks.find((c) => c.gs.length > 1)
 
   const go = (k) => {
     setStep(Math.max(0, Math.min(last, k)))
@@ -231,15 +248,13 @@ export default function RegexFilterPipeline() {
     color: C.muted,
   }
 
-  const cellBg = (h) => {
-    if (step < 3 || h === 0) return C.grid
-    return h === 2 ? P.series2 : P.series1
-  }
-  const dimmed = (band, i) => step >= 4 && !band.pass[i]
+  const tone = (kind) => (kind === 'gram' ? P.series2 : P.series1)
+  const cellBg = (hit, kind) => (step < 4 || !hit ? C.grid : tone(kind))
+  const dimmed = (band, i) => step >= 5 && !band.pass[i]
   const sweepDelay = (i) => `${i * SWEEP_MS}ms`
   const keepBg = (i) => {
-    if (!m || step < 4 || !m.survives[i]) return C.grid
-    if (step < 5) return C.ink
+    if (!m || step < 5 || !m.survives[i]) return C.grid
+    if (step < 6) return C.ink
     return m.truth[i] ? P.good : P.muted
   }
 
@@ -251,22 +266,33 @@ export default function RegexFilterPipeline() {
         label: d.label,
         body: m.survives[hover.col]
           ? m.truth[hover.col]
-            ? 'holds every chunk, and the regex matches'
-            : 'holds every chunk, but the regex finds no match'
-          : 'misses a chunk, so the regex never reads it',
+            ? 'passes every chunk, and the regex matches'
+            : 'passes every chunk, but the regex finds no match'
+          : 'fails a chunk, so the regex never reads it',
       }
     }
-    const r = m.bands[hover.band].rows[hover.row]
-    const h = r.hits[hover.col]
-    const g = show(r.g)
-    if (h === 0) return { label: d.label, body: `no “${g}” in this file` }
-    const tv = tokenView(d, r.g)
+    const c = m.bands[hover.band].chunks[hover.chunk]
+    const r = c.rows[hover.row]
+    const hit = r.hits[hover.col]
+    const g = show(c.gs[0])
+    if (r.kind === 'gram') {
+      return {
+        label: d.label,
+        body: hit
+          ? `“${g}” falls on a cut here, ${gramView(
+              d,
+              c.gs[0]
+            )}, so the boundary gram lists this file`
+          : `“${g}” never crosses a cut in this file`,
+      }
+    }
+    const keys = r.kind === 'more' ? r.keys : [r.key]
+    const held = hit && keys.filter((k) => docTokens(d).some((x) => x.t === k))
     return {
       label: d.label,
-      body:
-        h === 1
-          ? `“${g}” sits inside the token ${tv}, so the token lists answer it`
-          : `“${g}” crosses a cut in ${tv}, so a boundary gram answers it`,
+      body: hit
+        ? `holds the token ${held.map(show).join(', ')}, so that token’s list has it`
+        : `no ${keys.map(show).join(', ')} token in this file`,
     }
   }
   const ht = hoverText()
@@ -286,19 +312,30 @@ export default function RegexFilterPipeline() {
             pieces.length > 1 ? `${pieces.length} pieces` : 'of this'
           }.`
     }
-    if (step === 2)
-      return many
-        ? `${nRows} chunks. A file can only match if it holds every chunk of one group.`
-        : `${nRows} chunks. A file can only match if it holds every one of them.`
+    if (step === 2) {
+      return `${nRows} chunks. They are lookups, not keys: the index has no list for a chunk.`
+    }
     if (step === 3) {
+      const same = shared
+        ? ` ${shared.gs
+            .map((g) => show(g))
+            .join(' and ')} name the same lists, so they are fetched once.`
+        : ''
       return nCut
-        ? `Blue: the chunk sits inside a token, so BM25’s token lists answer it. Amber: it crosses a token cut, so a boundary gram answers it.`
-        : `Blue: the chunk sits inside a token, so BM25’s token lists answer it. None of these chunks needs a boundary gram here.`
+        ? `The vocabulary names the tokens that hold each chunk and fit the search. Where a chunk falls on a token cut, its boundary gram is a key too.${same}`
+        : `The vocabulary names the tokens that hold each chunk and fit the search. Their lists are the keys.${same}`
     }
     if (step === 4) {
-      return `${nSurv} of ${N} files hold every chunk${
+      return `${nTok} blue rows are BM25’s own token lists.${
+        nCut
+          ? ` ${nCut} amber rows are boundary grams, stored only where a chunk crosses a cut.`
+          : ' No boundary gram is needed here.'
+      }`
+    }
+    if (step === 5) {
+      return `A file must be on some list under every chunk${
         many ? ' of one group' : ''
-      }. No file has been read yet.`
+      }. ${nSurv} of ${N} are. No file has been read yet.`
     }
     return nSurv === nTrue
       ? `The regex ran on ${nSurv} of ${N} files and all ${nTrue} match. Here the chunks alone were exact.`
@@ -333,13 +370,14 @@ export default function RegexFilterPipeline() {
         @keyframes rfp-sweep { 0% { left: 0; opacity: 1 } 92% { opacity: 1 } 100% { left: 100%; opacity: 0 } }
         .rfp-in { animation: rfp-in .28s ease both }
         .rfp-slide { animation: rfp-slide .3s ease both }
-        .rfp-grid { display: grid; grid-template-columns: 46px repeat(${N}, minmax(0, 16px)) auto;
+        .rfp-grid { display: grid; grid-template-columns: 38px 74px repeat(${N}, minmax(0, 16px)) auto;
           column-gap: 2px; row-gap: 3px; align-items: center; justify-content: start; position: relative; }
         .rfp-vlab { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 9.5px;
           white-space: nowrap; height: 78px; overflow: hidden; text-align: left; line-height: 16px; }
         .rfp-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
         @media (max-width: 560px) {
           .rfp-vlab { height: 0; visibility: hidden }
+          .rfp-grid { grid-template-columns: 32px 60px repeat(${N}, minmax(0, 16px)) auto !important }
           .rfp-count { font-size: 9px !important }
         }
         @media (prefers-reduced-motion: reduce) {
@@ -564,7 +602,7 @@ export default function RegexFilterPipeline() {
                             fontFamily: MONO,
                             fontSize: 11,
                             padding: '2px 4px',
-                            border: `1px solid ${C.border}`,
+                            border: `1px dashed ${C.axis}`,
                             borderRadius: 2,
                             color: C.ink,
                             whiteSpace: 'pre',
@@ -588,6 +626,7 @@ export default function RegexFilterPipeline() {
           <div className="rfp-grid" onMouseLeave={() => setHover(null)}>
             {/* file names, written up the columns */}
             <span />
+            <span />
             {docs.map((d, i) => (
               <span
                 key={i}
@@ -595,9 +634,9 @@ export default function RegexFilterPipeline() {
                 style={{
                   fontFamily: MONO,
                   color: hover?.col === i ? C.ink : C.muted,
-                  opacity: step >= 4 && !m.survives[i] ? 0.35 : 1,
+                  opacity: step >= 5 && !m.survives[i] ? 0.35 : 1,
                   transition: 'opacity .3s ease',
-                  transitionDelay: step >= 4 ? sweepDelay(i) : '0ms',
+                  transitionDelay: step >= 5 ? sweepDelay(i) : '0ms',
                 }}
               >
                 {fnName(d.label)}
@@ -622,7 +661,7 @@ export default function RegexFilterPipeline() {
                     </span>
                     <span
                       style={{
-                        gridColumn: `2 / span ${N}`,
+                        gridColumn: `2 / span ${N + 1}`,
                         borderTop: `1px dashed ${C.axis}`,
                         marginTop: 4,
                       }}
@@ -630,70 +669,124 @@ export default function RegexFilterPipeline() {
                     <span />
                   </>
                 )}
-                {band.rows.map((r, ri) => {
-                  const nHit = r.hits.filter((h) => h > 0).length
-                  const nAt = r.hits.filter((h) => h === 2).length
-                  const visible = step >= 2
-                  return (
-                    <Fragment key={`${bi}-${ri}`}>
-                      <code
-                        className={visible ? 'rfp-slide' : undefined}
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 11,
-                          color: C.ink,
-                          textAlign: 'right',
-                          whiteSpace: 'pre',
-                          paddingRight: 4,
-                          opacity: visible ? 1 : 0,
-                          animationDelay: `${ri * 70}ms`,
-                        }}
-                      >
-                        {show(r.g)}
-                      </code>
-                      {r.hits.map((h, i) => (
-                        <span
-                          key={i}
-                          onMouseEnter={() => setHover({ band: bi, row: ri, col: i })}
-                          onClick={() => setHover({ band: bi, row: ri, col: i })}
+                {band.chunks.map((c, ci) => {
+                  const rows = c.rows.length
+                    ? c.rows
+                    : [{ kind: 'none', key: 'no list', hits: docs.map(() => false) }]
+                  // One chunk label per row; if a group has more chunks than rows,
+                  // the last label counts the rest.
+                  const labels =
+                    c.gs.length <= rows.length
+                      ? c.gs
+                      : [...c.gs.slice(0, rows.length - 1), `+${c.gs.length - rows.length + 1}`]
+                  return rows.map((r, ri) => {
+                    const nHit = r.hits.filter(Boolean).length
+                    const on = step >= 3
+                    const gap = ri === 0 && ci > 0 ? 6 : 0
+                    const delay = `${ci * 110 + ri * 50}ms`
+                    return (
+                      <Fragment key={`${bi}-${ci}-${ri}`}>
+                        {/* the chunk: a lookup, drawn dashed because nothing is keyed by it */}
+                        {labels[ri] ? (
+                          <code
+                            className={step >= 2 ? 'rfp-slide' : undefined}
+                            style={{
+                              justifySelf: 'end',
+                              fontFamily: MONO,
+                              fontSize: 10.5,
+                              color: C.muted,
+                              whiteSpace: 'pre',
+                              padding: '0 3px',
+                              border: `1px dashed ${C.axis}`,
+                              borderRadius: 2,
+                              marginTop: gap,
+                              opacity: step >= 2 ? 1 : 0,
+                              animationDelay: `${ci * 60}ms`,
+                            }}
+                          >
+                            {labels[ri].startsWith('+') && c.gs.length > rows.length
+                              ? labels[ri]
+                              : show(labels[ri])}
+                          </code>
+                        ) : (
+                          <span />
+                        )}
+                        {/* the key: a real posting list */}
+                        <code
+                          className={on ? 'rfp-slide' : undefined}
+                          title={r.kind === 'more' ? r.keys.map(show).join(' ') : undefined}
                           style={{
-                            height: 13,
-                            borderRadius: 1,
-                            cursor: 'pointer',
-                            background: visible ? cellBg(h) : 'transparent',
-                            opacity: dimmed(band, i) ? 0.22 : 1,
-                            outline:
-                              hover?.col === i && hover?.row === ri && hover?.band === bi
-                                ? `2px solid ${C.ink}`
-                                : 'none',
-                            outlineOffset: 1,
-                            transition: 'background .25s ease, opacity .3s ease',
-                            transitionDelay:
-                              step === 3
-                                ? `${i * 22 + ri * 30}ms`
-                                : step >= 4
-                                ? sweepDelay(i)
-                                : '0ms',
+                            justifySelf: 'end',
+                            maxWidth: '100%',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            fontFamily: MONO,
+                            fontSize: 10.5,
+                            color: r.kind === 'none' ? C.muted : C.ink,
+                            whiteSpace: 'pre',
+                            padding: '0 4px',
+                            marginTop: gap,
+                            borderLeft: r.kind === 'none' ? 'none' : `3px solid ${tone(r.kind)}`,
+                            opacity: on ? 1 : 0,
+                            animationDelay: delay,
                           }}
-                        />
-                      ))}
-                      <span
-                        className="rfp-count"
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 10,
-                          color: C.muted,
-                          paddingLeft: 6,
-                          whiteSpace: 'nowrap',
-                          opacity: step >= 3 ? 1 : 0,
-                          transition: 'opacity .3s ease .5s',
-                        }}
-                      >
-                        {nHit}
-                        {nAt > 0 && <span style={{ color: P.series2 }}> ({nAt} cut)</span>}
-                      </span>
-                    </Fragment>
-                  )
+                        >
+                          {r.kind === 'more' || r.kind === 'none' ? r.key : show(r.key)}
+                        </code>
+                        {r.hits.map((hit, i) => (
+                          <span
+                            key={i}
+                            onMouseEnter={() =>
+                              r.kind !== 'none' &&
+                              setHover({ band: bi, chunk: ci, row: ri, col: i })
+                            }
+                            onClick={() =>
+                              r.kind !== 'none' &&
+                              setHover({ band: bi, chunk: ci, row: ri, col: i })
+                            }
+                            style={{
+                              height: 12,
+                              marginTop: gap,
+                              borderRadius: 1,
+                              cursor: 'pointer',
+                              background: on ? cellBg(hit, r.kind) : 'transparent',
+                              opacity: dimmed(band, i) ? 0.22 : 1,
+                              outline:
+                                hover?.col === i &&
+                                hover?.row === ri &&
+                                hover?.chunk === ci &&
+                                hover?.band === bi
+                                  ? `2px solid ${C.ink}`
+                                  : 'none',
+                              outlineOffset: 1,
+                              transition: 'background .25s ease, opacity .3s ease',
+                              transitionDelay:
+                                step === 4
+                                  ? `${i * 18 + ci * 40}ms`
+                                  : step >= 5
+                                  ? sweepDelay(i)
+                                  : '0ms',
+                            }}
+                          />
+                        ))}
+                        <span
+                          className="rfp-count"
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 10,
+                            marginTop: gap,
+                            color: r.kind === 'gram' ? P.series2 : C.muted,
+                            paddingLeft: 6,
+                            whiteSpace: 'nowrap',
+                            opacity: step >= 4 ? 1 : 0,
+                            transition: 'opacity .3s ease .5s',
+                          }}
+                        >
+                          {nHit}
+                        </span>
+                      </Fragment>
+                    )
+                  })
                 })}
               </Fragment>
             ))}
@@ -701,11 +794,12 @@ export default function RegexFilterPipeline() {
             {/* the AND: files on every list of some row */}
             <span
               style={{
-                gridColumn: `1 / span ${N + 2}`,
+                gridColumn: `1 / span ${N + 3}`,
                 borderTop: `1px solid ${C.border}`,
                 marginTop: 4,
               }}
             />
+            <span />
             <code
               style={{
                 fontFamily: MONO,
@@ -729,7 +823,7 @@ export default function RegexFilterPipeline() {
                   cursor: 'pointer',
                   background: keepBg(i),
                   transition: 'background .3s ease',
-                  transitionDelay: step === 4 ? sweepDelay(i) : step === 5 ? `${i * 15}ms` : '0ms',
+                  transitionDelay: step === 5 ? sweepDelay(i) : step === 6 ? `${i * 15}ms` : '0ms',
                 }}
               />
             ))}
@@ -741,22 +835,22 @@ export default function RegexFilterPipeline() {
                 color: C.ink,
                 paddingLeft: 6,
                 whiteSpace: 'nowrap',
-                opacity: step >= 4 ? 1 : 0,
+                opacity: step >= 5 ? 1 : 0,
                 transition: 'opacity .3s ease',
-                transitionDelay: step === 4 ? `${N * SWEEP_MS}ms` : '0ms',
+                transitionDelay: step === 5 ? `${N * SWEEP_MS}ms` : '0ms',
               }}
             >
               {nSurv} left
             </span>
 
             {/* the AND sweeping across the columns */}
-            {step === 4 && !reduced && (
+            {step === 5 && !reduced && (
               <span
                 key={`sweep-${cycle}`}
                 aria-hidden
                 style={{
                   position: 'absolute',
-                  gridColumn: `2 / span ${N}`,
+                  gridColumn: `3 / span ${N}`,
                   top: 0,
                   bottom: 0,
                   left: 0,
@@ -797,12 +891,12 @@ export default function RegexFilterPipeline() {
             ) : (
               <span style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
                 <span>
-                  <Swatch c={P.series1} /> inside a token: BM25&rsquo;s token lists
+                  <Swatch c={P.series1} /> a token&rsquo;s BM25 list
                 </span>
                 <span>
-                  <Swatch c={P.series2} /> across a token cut: boundary grams
+                  <Swatch c={P.series2} /> a boundary gram, stored only at a token cut
                 </span>
-                <span>hover or tap a square for its tokens</span>
+                <span>hover or tap a square to see why</span>
               </span>
             )}
           </div>
@@ -838,7 +932,7 @@ export default function RegexFilterPipeline() {
             Every index in this post fails the same way here. A filter can only look up fixed text,
             and <code style={{ fontFamily: MONO, color: C.ink }}>{query}</code> names none.
           </div>
-        ) : step < 5 ? (
+        ) : step < 6 ? (
           <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6 }}>
             Nothing is read from any file until the last step. The lists answer everything before
             it.
