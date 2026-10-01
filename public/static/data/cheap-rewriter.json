@@ -630,5 +630,87 @@
     ],
     "new_rank_of_rel": [1],
     "nd": [35.62, 100.0]
-  }
+  },
+  "rerank": [
+    {
+      "name": "BM25",
+      "cost": "none",
+      "role": "muted",
+      "mean": 57.41,
+      "p50": 62.57,
+      "p25": 30.66,
+      "q": [0, 0],
+      "r100": 81.2
+    },
+    {
+      "name": "grounded, 2-layer",
+      "cost": "5 pairs, 2-layer",
+      "role": "series0",
+      "mean": 59.46,
+      "p50": 63.09,
+      "p25": 31.55,
+      "q": [161, 99],
+      "r100": 82.14
+    },
+    {
+      "name": "rerank top 5, 2-layer",
+      "cost": "5 pairs, 2-layer",
+      "role": "series2",
+      "mean": 59.31,
+      "p50": 63.09,
+      "p25": 31.52,
+      "q": [139, 102],
+      "r100": 81.2
+    },
+    {
+      "name": "grounded, 6-layer",
+      "cost": "10 pairs, 6-layer",
+      "role": "series0",
+      "mean": 60.37,
+      "p50": 63.09,
+      "p25": 33.92,
+      "q": [192, 99],
+      "r100": 82.45
+    },
+    {
+      "name": "rerank top 10, 6-layer",
+      "cost": "10 pairs, 6-layer",
+      "role": "series2",
+      "mean": 60.68,
+      "p50": 63.09,
+      "p25": 31.55,
+      "q": [198, 151],
+      "r100": 81.2
+    },
+    {
+      "name": "rerank top 20, 6-layer",
+      "cost": "20 pairs, 6-layer",
+      "role": "series2",
+      "mean": 61.48,
+      "p50": 63.09,
+      "p25": 31.55,
+      "q": [234, 164],
+      "r100": 81.2
+    },
+    {
+      "name": "grounded + rerank 5, 6-layer",
+      "cost": "15 pairs, 6-layer",
+      "role": "series1",
+      "mean": 62.07,
+      "p50": 63.72,
+      "p25": 35.0,
+      "q": [232, 132],
+      "r100": 82.45
+    },
+    {
+      "name": "LLM rewrite",
+      "cost": "an LLM call",
+      "role": "muted",
+      "mean": 62.36,
+      "p50": 63.09,
+      "p25": 35.62,
+      "q": [218, 115],
+      "r100": null
+    }
+  ]
 }

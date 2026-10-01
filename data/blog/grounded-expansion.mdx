@@ -1,0 +1,340 @@
+---
+title: 'Grounded expansion'
+subtitle: 'The read-and-rewrite step of agentic search, done by a small model'
+date: '2026-09-24'
+lastmod: '2026-10-02'
+tags: ['search', 'information-retrieval', 'query-expansion', 'sparse-retrieval']
+draft: true
+summary: 'An agent reads the search results before it searches again, and that step is an LLM call. An LLM query rewrite lifts BM25 from 57.41 to 62.36 nDCG@10 on NanoBEIR, yet 81% of that gain comes from words already in the BM25 top 10. A small model trained to pick them keeps +2.05 at 24 ms, and with a reranker on top it reaches 62.07.'
+authors: ['kshivendu']
+---
+
+import R from '../public/static/data/cheap-rewriter.json'
+
+An AI agent that searches for you works in a loop. It searches, reads what came back, rewrites the query and searches again. Each read-and-rewrite is an LLM call, and each one takes seconds.
+
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
+
+The simplest LLM rewrite doesn't even read the results. Search for "what does modulus mean" with BM25 and the right answer comes back at rank 10. Ask an LLM to write a short passage answering the query first, add its words to the query, and the right answer jumps to rank 1. This trick is called #[query2doc](Wang et al. 2023: an LLM writes a passage for the query, and its words are added to the query before searching), and across the 13 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai/nanobeir-66e1a0af21dfd93e620cd9f6) datasets it lifts my BM25 from **57.41 to 62.36** #[nDCG@10](a 0 to 100 score for how high the relevant docs sit in the top 10).
+
+The catch is time. The LLM takes about 5 seconds per query. BM25 takes a fraction of a millisecond.
+
+So I looked at which of the LLM's words actually help. Most of them were already in the search results. So the step query2doc skips, reading the results, can be done by a small model.
+
+Here is the whole idea on one query, in six steps. The method in steps 4 and 5, **grounded expansion**, is what this post builds:
+
+<GroundedExpansionAnim
+  data={R.perdoc}
+  cost={{
+    llm: R.latency.llm_model,
+    large: R.latency.pickers[0].ms,
+    small: R.latency.pickers[5].ms,
+  }}
+/>
+
+{/* Numbers come from research/query-rewriter/qrw/export_blog.py, which writes cheap-rewriter.json. */}
+
+export const G = R.gain
+export const Rs = R.results
+export const L = R.latency
+export const sgn = (x) => (x > 0 ? '+' : '') + x.toFixed(2)
+
+## The LLM never sees the docs
+
+The LLM writes its passage from the query alone. Here it is, with every word coloured by where it also appears:
+
+<PassageColors data={R.pick} />
+
+Observations:
+
+- **The helpful words were already in the results.** "remainder", "divided", "mod", "17" and "operator" all sit in the doc at rank 10, the relevant one. It holds 11 of the highlighted words, more than any other doc.
+- **Some words come from nowhere.** "stiffness" and "deformation" describe modulus in physics, and no top-10 doc has them. The blue words, added on their own, drop the score to 0.
+- **Adding the highlighted words is enough.** The score goes from 28.91 to 100.
+
+## How much of the gain is that?
+
+I split every word the LLM adds into two groups. One holds the words that are also in the query or the top 10 docs, the other holds the rest. Then I added each group on its own, across all 649 queries:
+
+<BarChart
+  orientation="horizontal"
+  title="Where the LLM's gain comes from"
+  subtitle="nDCG@10 gain over BM25 (57.41), 649 queries"
+  valueLabel="nDCG@10 gain over BM25"
+  valueTicks={[0, 1, 2, 3, 4, 5]}
+  showLegend={false}
+  categories={["all the LLM's words", 'already in the query or top 10', 'in no top-10 doc']}
+  series={[
+    {
+      name: 'gain',
+      values: [G.llm.delta, G['Q+P1+P2'].delta, G['+K'].delta],
+      roles: ['seriesAlt1', 'series0', 'series1'],
+      text: [G.llm.delta, G['Q+P1+P2'].delta, G['+K'].delta].map(sgn),
+      textPosition: 'outside',
+      notes: [
+        `${G.llm.q[0]} queries better, ${G.llm.q[1]} worse`,
+        `${G['Q+P1+P2'].q[0]} better, ${G['Q+P1+P2'].q[1]} worse. Includes +0.65 from the LLM repeating the query's own words`,
+        `${G['+K'].q[0]} better, ${G['+K'].q[1]} worse`,
+      ],
+    },
+  ]}
+/>
+
+Observations:
+
+- **81% of the gain is words the query or the top 10 already had.** They give +4.03 of the +4.95.
+- **Words from nowhere else are a coin flip.** They add +1.00 on average, but help 67 queries and hurt 73.
+
+Borrowing words from the top results is an old idea called **pseudo-relevance feedback**. It assumes the top docs are relevant and adds their words to the query. The hard part has always been which words. The top 10 docs typically hold about 500 words the query doesn't have (211 for modulus), and the LLM uses about 20 of them. Keeping the query and adding the same number of words, the LLM's picks give **+3.65** and random picks give **−1.16**. The classic feedback method, #[RM3](it weights each top doc by its BM25 score and adds the most frequent words, so the top-ranked doc dominates), gives −0.37. For "modulus" the top-ranked doc is about self-awareness, and RM3's words drop the score to 0.
+
+## Grounded expansion
+
+I call the method **grounded expansion**, because every word it adds comes from a doc search already returned. The LLM writes from memory. Given a query and the docs BM25 found, a small model marks the words an LLM would write. That model is a #[cross-encoder](a model that reads the query and one doc together, so it judges each word in context): [`ms-marco-MiniLM-L6-v2`](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L6-v2) for the 6-layer version and its sibling [`ms-marco-MiniLM-L2-v2`](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L2-v2) for the 2-layer one.
+
+Training it costs nothing new. For 20,000 MS MARCO training queries, public LLM passages already exist ([query2doc](https://huggingface.co/datasets/intfloat/query2doc_msmarco)). A word in a retrieved doc is a 1 if the passage uses it and a 0 if not. That trains in 4 minutes on one GPU, and the model never sees the test datasets.
+
+What the model learns is context, and step 4 of the animation shows it: "navy" scores .89 in the naval-rank article, the relevant doc, and .04 in the article about an honorary title. Any count of "navy" in the top 10 gives it one number for all of them, and the best formula I could build from counts gains +0.90, against +2.96 for the model. Each word keeps its best score over the 10 docs, and the 20 best join the query, weighted by how sure the model is.
+
+It is still relevance feedback, so it makes the same bet as RM3, that the top docs are worth reading. When they mislead, it is misled too. The choosing makes the difference. Over the 649 queries, RM3 helps 149 and hurts 151. Grounded expansion helps 192 and hurts 99, and one of those 99 is "SummerSlam was a concert.", which comes back in the section on judging below.
+
+## How good, and how fast
+
+export const PT = R.pareto
+export const PTSTYLE = [
+  ['muted', 'square', 'top right'],
+  ['series2', 'square', 'bottom right'],
+  ['series0', 'circle', 'bottom right'],
+  ['series0', 'circle', 'top left'],
+  ['series1', 'star', 'left'],
+]
+export const ptSeries = (qs, ts) =>
+  PT.map((p, i) => ({
+    name: p.name,
+    role: PTSTYLE[i][0],
+    marker: PTSTYLE[i][1],
+    showLine: false,
+    points: [[p.t[ts], p.q[qs]]],
+    text: [p.name],
+    textPositions: [PTSTYLE[i][2]],
+  }))
+export const ptView = (qs, label, yMin, yMax, yTicks) => ({
+  label,
+  yLabel: `nDCG@10, ${label}`,
+  yMin,
+  yMax,
+  yTicks,
+  datasets: [
+    { label: 'latency p50', series: ptSeries(qs, 'p50') },
+    { label: 'p90', series: ptSeries(qs, 'p90') },
+    { label: 'p99', series: ptSeries(qs, 'p99') },
+  ],
+})
+
+<LineChart
+  title="Quality vs time per query"
+  xLabel="ms per query, log scale"
+  xScale="log"
+  xTicks={[
+    [0.1, '0.1'],
+    [1, '1'],
+    [10, '10'],
+    [100, '100'],
+    [1000, '1,000'],
+    [10000, '10,000'],
+  ]}
+  xMin={0.06}
+  xMax={40000}
+  xUnit=" ms"
+  height={400}
+  showLegend={false}
+  views={[
+    ptView(
+      'mean',
+      'mean',
+      56.5,
+      63,
+      [57, 58, 59, 60, 61, 62].map((v) => [v, String(v)])
+    ),
+    ptView(
+      'p50',
+      'p50',
+      62,
+      63.6,
+      [62, 62.5, 63, 63.5].map((v) => [v, String(v)])
+    ),
+    ptView(
+      'p25',
+      'p25',
+      28.5,
+      36.5,
+      [29, 31, 33, 35].map((v) => [v, String(v)])
+    ),
+  ]}
+/>
+
+Observations:
+
+- **The 2-layer version keeps 41% of the gain at 24 ms.** It scores 59.46 (+2.05), better than BM25 on 161 queries and worse on 99.
+- **The 6-layer version gets further, at 605 ms.** It scores 60.37 (+2.96). The 25× time gap comes from four changes multiplied together. They are int8 weights (3.3×), 128 instead of 256 tokens per doc (2×), 2 instead of 6 layers (2×) and 5 instead of 10 docs (1.9×).
+- **RM3 costs almost nothing and loses.** It runs in about 1 ms and scores 57.04, just under BM25.
+- **The medians don't move.** At p50 every system sits at 62.57 to 63.09. The gains live in the weaker queries. At p25, BM25 scores 30.66, the 2-layer version 31.55, the 6-layer version 33.92 and the LLM 35.62, while RM3 falls to 29.61.
+- **The 2-layer version stays fast in the tail.** Its p99 is 34.6 ms, against 709 ms for the 6-layer version and about 14 s for the LLM, which at p50 is about 220 times slower than the 2-layer version for 62.36.
+- **The rest of the gap is out of grounded expansion's reach.** Most of the gap from 60.37 to 62.36 comes from words no top-10 doc contains.
+
+## Per dataset
+
+export const PD = R.per_ds
+export const DSN = [
+  'MSMARCO',
+  'NQ',
+  'HotpotQA',
+  'FiQA',
+  'ArguAna',
+  'Touche',
+  'Quora',
+  'DBPedia',
+  'SCIDOCS',
+  'FEVER',
+  'ClimateFEVER',
+  'NFCorpus',
+  'SciFact',
+]
+export const PDROLE = ['muted', 'series2', 'seriesAlt0', 'series0', 'series1']
+export const FOCUS = ['MSMARCO', 'NQ', 'FiQA', 'FEVER', 'DBPedia', 'ArguAna']
+export const pdPart = (stat, names) => {
+  const idx = names.map((n) => DSN.indexOf(n))
+  return {
+    categories: names,
+    series: PD.systems.map((name, i) => ({
+      name,
+      values: idx.map((j) => PD.stats[stat][i][j]),
+      roles: idx.map(() => PDROLE[i]),
+      text: idx.map((j) => PD.stats[stat][i][j].toFixed(1)),
+      textPosition: 'none',
+    })),
+  }
+}
+export const pdView = (stat, label) => ({
+  label,
+  datasets: [
+    {
+      label: 'nDCG@10',
+      variants: [
+        { label: 'All 13', ...pdPart(stat, DSN) },
+        { label: 'Focus', ...pdPart(stat, FOCUS) },
+      ],
+    },
+  ],
+})
+
+<BarChart
+  orientation="horizontal"
+  title="nDCG@10 per dataset"
+  subtitle="each dataset's 50 queries. Focus shows six datasets that carry the story"
+  valueLabel="nDCG@10"
+  valueMax={100}
+  valueTicks={[0, 20, 40, 60, 80, 100]}
+  views={[pdView('mean', 'mean'), pdView('p50', 'p50'), pdView('p25', 'p25 (the weaker queries)')]}
+/>
+
+Observations:
+
+- **The 6-layer version beats the LLM on MSMARCO.** It scores 60.75 against 54.94. It was trained on MS MARCO queries, so this is its home ground.
+- **The LLM leads where outside knowledge matters.** FiQA 50.31 against 43.72 for the 6-layer version, NFCorpus 39.48 against 33.93, FEVER 93.20 against 87.20. Those answers use words the top 10 docs don't have.
+- **RM3 is a gamble per dataset.** It helps DBPedia (61.79 to 64.53) and hurts MSMARCO (51.27 to 47.28) and HotpotQA (83.13 to 79.81), for −0.37 overall. Both grounded versions improve 12 of 13 datasets.
+- **ArguAna is the one loss.** Its queries are whole arguments, and grounded expansion drops its p25 from 28.91 to 7.23.
+- **Most of the lift is in the weaker queries.** At p25, MSMARCO goes from 7.23 to 36.39 and FEVER from 64.66 to 100, while most medians barely move.
+
+## Why not just rerank?
+
+The model reads every top doc next to the query anyway. A reranker does the same reading and reorders the results directly. So I ran the same MS MARCO cross-encoders as rerankers, at both sizes, on BM25's top 5, 10 and 20. I also stacked one on top of grounded expansion.
+
+At the same size, the grounded-expansion model and the reranker cost the same per (query, doc) pair. With the 6-layer int8 versions, 10 pairs take 251 and 260 ms on my laptop. So the fair cost is how many pairs each one reads. The 2-layer versions read 5, 6-layer expansion reads 10, the 6-layer reranker on its own reads 10 or 20, and expansion followed by the reranker reads 15.
+
+export const RR = R.rerank.slice(1)
+export const RB = R.rerank[0]
+export const rrView = (stat, label) => ({
+  label,
+  categories: RR.map((r) => r.name),
+  series: [
+    {
+      name: label,
+      values: RR.map((r) => r[stat] - RB[stat]),
+      roles: RR.map((r) => r.role),
+      text: RR.map((r) => sgn(r[stat] - RB[stat])),
+      textPosition: 'outside',
+      notes: RR.map(
+        (r) =>
+          `${r[stat].toFixed(2)}. Reads ${r.cost}. ${r.q[0]} queries better than BM25, ${
+            r.q[1]
+          } worse` + (r.r100 != null ? `. recall@100 ${r.r100.toFixed(2)}` : '')
+      ),
+    },
+  ],
+})
+
+<BarChart
+  orientation="horizontal"
+  title="Reranking vs grounded expansion"
+  subtitle="nDCG@10 gain over BM25, 649 queries. Hover a bar for its cost in (query, doc) pairs read"
+  valueLabel="nDCG@10 gain over BM25"
+  valueTicks={[0, 1, 2, 3, 4, 5]}
+  showLegend={false}
+  views={[rrView('mean', 'mean'), rrView('p25', 'p25 (the weaker queries)')]}
+/>
+
+Observations:
+
+- **At the same size and cost they tie.** At 2 layers and 5 pairs, expansion scores 59.46 and the reranker 59.31. At 6 layers and 10 pairs, expansion scores 60.37 and the reranker 60.68, and per query the reranker is better on 167 and worse on 180.
+- **More pairs help the reranker.** On the top 20 it scores 61.48. Per query that is still close to even against 6-layer expansion, 188 better and 185 worse.
+- **Reranking can only reorder what BM25 found.** Its recall@100 stays at 81.20. Expansion searches again and finds new docs, which lifts it to 82.14 at 2 layers and 82.45 at 6.
+- **They fail on different queries.** On ArguAna, where each query is a whole argument like "A bargaining chip In much the same way that material investment in co...", expansion scores 0 and the reranker 100. On SciFact's "Arterioles have a larger lumen diameter than venules." BM25 and expansion have the right doc at rank 1, and the 6-layer reranker on the top 20 pushes it out of the top 10.
+- **Together they come within 0.29 of the LLM.** Expansion then a reranker on the new top 5 scores **62.07** against 62.36 for the LLM rewrite. Its p25 is 35.00 against 35.62, and its median, 63.72, is the best of any system here. It beats BM25 on 232 queries and loses on 132.
+- **Stacking adds +1.70 over expansion alone.** Per query that is 125 better and 106 worse, and 9 of the 13 datasets improve.
+- **It should take about 130 ms.** I haven't timed the stacked version end to end. The int8 6-layer expansion step takes 89 ms on the same dedicated CPU as the other timings, and the reranker's 5 pairs are about half its model pass. That would make it about 40 times faster than the LLM's 5.2 s.
+
+## Can it loop like an agent?
+
+An agent doesn't stop after one rewrite. It reads the new results, and it decides whether the rewrite helped. I tried both.
+
+**Looping** runs grounded expansion again on its own results. I ran it with the 2-layer version. It changes 68 queries, 39 for the better and 29 for the worse, and the mean stays at 59.4 after rounds 1, 2 and 3.
+
+- **It helps when round 1 fixed the top.** With the 2-layer version, "Commodore is only a land rank." goes from 50 to 100 in round 2. Round 1 lifts the relevant doc into the 5 docs the small model reads, and round 2 reads it and adds "command, ship, admiral".
+- **It hurts when round 1 drifted.** The 2-layer version drops "what does modulus mean" from 28.9 to 0 in round 1, because it picks the physics sense, "measure, material, stress". Round 2 reads more physics and it stays at 0. "weather in gig harbor, wa" falls from 30.1 to 0.
+
+**Judging** keeps a rewrite only when the 6-layer reranker rates the new top 5 higher than the old top 5. It needs no training. It costs 10 more 6-layer pairs, the old and the new top 5, on top of the second search. I ran it with the 6-layer version.
+
+- **It rescues RM3.** RM3 goes from 57.04 to 57.99 and beats always-on RM3 on 10 of 13 datasets, expanding 35% of queries.
+- **It catches the misleading results.** For "SummerSlam was a concert." BM25 already has the right page, SummerSlam 2015, at rank 1. The docs below it are about SummerSlam 1999 and 1998, so grounded expansion adds "1999" and "1998" along with "wrestling" and "event". Four pages end up above the right one and the score drops from 100 to 38.7. The judge sees no gain in the new top 5 and keeps BM25's 100. It keeps Commodore's rewrite, which goes from 35.6 to 100.
+- **It is too careful for grounded expansion.** It expands only 40% of queries. It scores 59.70, below always expanding at 60.37.
+- **A perfect judge would reach 62.14.** That is choosing per query between BM25 and grounded expansion with the answers known. The best judge I trained gets 60.57, only +0.20 over always expanding.
+
+## Key Takeaways
+
+- **An LLM rewrite mostly finds words already in the query or the top 10 docs.** It never sees the docs, yet those words carry 81% of its gain.
+- **It is relevance feedback, and the skill is choosing.** From the same top docs, the LLM's picks give +3.65, random picks −1.16 and RM3's counting −0.37.
+- **Grounded expansion does an agent's read-and-rewrite step with a small model.** It only adds words to the query. It reads the docs instead of counting words, trains on LLM passages that already exist, and keeps +2.05 at 24 ms.
+- **With a reranker on top it comes within 0.3 of the LLM.** 6-layer grounded expansion and a reranker on its top 5 score 62.07 against the LLM's 62.36, in an estimated 130 ms against 5.2 s.
+
+<details>
+<summary>Caveats and how the numbers were measured</summary>
+
+- **Baseline.** BM25 (k1 1.2, b 0.75) on stemmed words with 33 stopwords removed, the [strongest lexical baseline](/blog/stemming-expansion) I have. Query words count 5 times and added words count by the model's confidence: `q'(t) = 5 · qtf(t) + 2p(t)`.
+- **The weight scale was chosen on the test set.** 2p was the best of three scales I tried (1, p, 2p), so up to about 0.5 of the gain may be that choice. At weight 1 the 6-layer version scores 59.81 (+2.40).
+- **Part of the gain is in-domain.** The model trained on MS MARCO. Without the NanoMSMARCO queries it gains +1.80 at weight 1, against +3.64 for the LLM's own top-10 words at weight 1.
+- **It is stable.** Two seeds land 0.08 apart, 15.9k to 100k training queries all land within 0.1, and swapping the LLM that wrote the training passages (text-davinci-003 or Claude Haiku) moves it 0.22.
+- **Latency.** The models were timed alone on a dedicated 4-core CPU, one query at a time. The LLM took 12,040 ms through the Claude CLI, about 6.8 s of it CLI start-up, so its model call is an estimated 5.2 s. BM25 was timed on my laptop.
+- **The reranker runs** used int8 weights and 128 tokens per pair. The 6-layer expansion they are compared with and stacked on reads 256-token docs at full precision. At int8 and 128 tokens it scores 60.42 on its own, against 60.37. So I expect the stacked version to score about the same at the estimated 130 ms, but I haven't run it that way. The looping runs cut docs to 128 words, so their round 1 scores 59.42 instead of 59.46. The trained judge is a logistic regression fitted on 12 datasets and tested on the 13th, for each of the 13.
+- **Reweighting the query's own words helps a little more.** The same model can also mark which query words the answer needs. Doing both in one pass scores 61.13, level with the LLM's own top-10 words, but I have only run that with the 6-layer version.
+
+</details>
+
+<details>
+<summary>What did not work</summary>
+
+- **Counting.** Picking the words with the highest BM25 weight in any doc finds the rarest word anywhere. On "Commodore is only a land rank." it picks "kapitan, cartridge, flotilla" where grounded expansion picks "guard, navy, admiral", and loses 5.96. The best formula I could fit from counts gains +0.90. Counts cannot tell which sense of the query a doc is about. For "how did the mini gun get its name" a formula picks "austin, morris" from the pages about the Mini car, and falls from 100 to 50. Grounded expansion picks "rifle, bullet".
+- **Word rarity inside the results.** Measuring how rare each query word is within the top 100 docs, and reranking by that, loses 6.12. The query's main word is in almost every result, so it counts for nothing.
+- **Reweighting the query words without reading the docs.** A model that sees only the query gains +0.51 in 1.8 ms.
+
+</details>
+
+All code and runs are in my research repo under `query-rewriter/`, and `qrw/export_blog.py` regenerates every number here.
