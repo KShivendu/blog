@@ -34,6 +34,8 @@ Observations:
 
 Take a real improvement: plain word BM25, then apply a Porter stemmer and a stopword list (`word_en`). It moves mean NDCG@10 by **+1.9**, a bump you'd squint at.
 
+(Setup: BM25 with k1=1.5, b=0.75 and Lucene IDF. `word` lowercases and splits on word characters. `word_en` also drops NLTK's English stopword list and applies NLTK's Porter stemmer.)
+
 The first thing I've started reading is **p25 and p50 along with mean**. It comes out of the per-query scores I already have with a 1 line change. Toggle the statistic:
 
 export const tailCats = ['NDCG@10', 'recall@10', 'recall@100']
@@ -93,7 +95,7 @@ Observations:
 - The stemmer and stopword list rescued **25 queries from 0** (`Which colors can one use to fill out a check in the US?` goes 0 to 100) and sent 9 to 0 (`who sang here i go again` goes 100 to 0). That moves the zero-rate, the share of queries with nothing relevant in the top 10, from 19.9% to 17.2%.
 - Both ends hit the full 100. `Which colors can one use to fill out a check in the US?` gains 100, `who sang here i go again` loses 100, and 5 queries lost more than 50 points against 11 that gained more than 50.
 
-I like to ask an LLM to build a UI for me to explore the dataset. It just needs basic sorting by metrics, filtering, and search (yeah. use search to improve search :D). Here are three queries from this run, click one to see what each analyzer sent to the index and what came back:
+I like to ask an LLM to build a UI for me to explore the dataset. It just needs basic sorting by metrics, filtering, and search (yeah. use search to improve search :D). Below is a cut-down version with three queries from this run, click one to see what each analyzer sent to the index and what came back:
 
 <QueryExplorer />
 
@@ -104,6 +106,72 @@ Some interesting examples:
 - Even recall@100, the most #[forgiving](it only asks whether a relevant doc landed anywhere in the top 100, so a doc can slip 90 places and still count) metric here, falls to 0 on 4 queries. One is the ClimateFEVER claim `No state generates as much solar power as California`, and the stemmer cuts "generates" down to #[gener](Porter gives that same stem to general, generally, generic, generous and generation), so lots of unrelated documents pop up.
 - **9/599 queries** fell from a real NDCG@10 score to exactly 0 like this.
 - What's most surprising is that **stemmer and stopwords are considered standard but it's clear even they hurt some queries**. There's no free lunch. You must look into your data/distribution.
+
+The same thing happens one level up. Split the +1.9 by dataset:
+
+<BarChart
+  orientation="horizontal"
+  title="NDCG@10 change per dataset, word → word_en"
+  subtitle="mean change over each dataset's ~50 queries"
+  valueLabel="change in mean NDCG@10 (Δ)"
+  valueTicks={[-6, -3, 0, 3, 6]}
+  categories={[
+    'Touche2020',
+    'SCIDOCS',
+    'FEVER',
+    'MSMARCO',
+    'SciFact',
+    'HotpotQA',
+    'ArguAna',
+    'ClimateFEVER',
+    'NFCorpus',
+    'FiQA2018',
+    'NQ',
+    'DBPedia',
+  ]}
+  series={[
+    {
+      name: 'Δ NDCG@10',
+      values: [-6.6, 0.0, 0.3, 0.5, 0.9, 0.9, 1.7, 1.8, 2.0, 6.7, 6.9, 7.6],
+      roles: [
+        'bad',
+        'neutral',
+        'neutral',
+        'neutral',
+        'good',
+        'good',
+        'good',
+        'good',
+        'good',
+        'good',
+        'good',
+        'good',
+      ],
+      text: [
+        '−6.6',
+        '+0.0',
+        '+0.3',
+        '+0.5',
+        '+0.9',
+        '+0.9',
+        '+1.7',
+        '+1.8',
+        '+2.0',
+        '+6.7',
+        '+6.9',
+        '+7.6',
+      ],
+      textPosition: 'outside',
+    },
+  ]}
+/>
+
+Observations:
+
+- `Should prostitution be legal?` drops 73 → 25 and `Should the voting age be lowered?` drops 68 → 30. Both come from Touche2020, a set of debate posts, which loses **−6.6** overall (14 queries better, 33 worse). 10 of the other 11 datasets gain and SCIDOCS stays flat.
+- Both halves of the change hurt Touche2020. The stemmer alone costs −1.3, the stopword list alone −3.3, and the two together −6.6.
+- `Should recreational marijuana be legal?` loses everything to the stemmer alone (61 → 26). Stemming makes `legal` also match `legalized`, `legalization` and `legalizing`, and with `word_en` a post like "Recreational Marijuana should not be legalized. It is harmful and dangerous..." lands in the top 10. It's on topic, but the judges didn't mark it relevant.
+- MSMARCO gains +0.5 on its mean, yet 2 more of its queries now score 0 (14 → 16).
 
 <details>
 <summary>Three more ways to slice the same run</summary>
@@ -205,7 +273,7 @@ Mean alone can't capture a distribution. We realised this for latency decades ag
 ## Key Takeaways
 
 - **A good average can hide queries that are hurting real users.** Plain BM25 averages 52.5 NDCG@10, yet 119 of 599 queries find nothing relevant in the top 10.
-- **It hides what changed.** Adding a stemmer and stopwords moves mean NDCG@10 by a forgettable +1.9, while 172 queries get better and 133 get worse.
+- **It hides what changed.** Adding a stemmer and stopwords moves mean NDCG@10 by a forgettable +1.9, while 172 queries get better, 133 get worse and one dataset (Touche2020) drops 6.6.
 - **Report p50 and p25 next to the mean.** Higher is better for relevance, so the tail that hurts is the low end. p25 is the relevance equivalent of p90/p99 latency.
 - **Win/tie/loss says what the mean can't.** That +1.9 was 172 queries up, 133 down and 294 unmoved. Weighted by how far each one moved, 60% of the movement was upward.
 - **Track your golden queries like test cases.** Mine is 599 queries and most sets are smaller. A query that used to work and now returns nothing is a regression you should see by name, not as a mean that moved by 1.9.
