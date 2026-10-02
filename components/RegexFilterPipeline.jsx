@@ -383,7 +383,8 @@ export default function RegexFilterPipeline() {
               <span
                 key={i}
                 className="rfp-doc"
-                title={d.label}
+                onMouseEnter={() => setHover({ i })}
+                onClick={() => setHover({ i })}
                 style={{
                   fontFamily: MONO,
                   color: C.ink,
@@ -513,7 +514,8 @@ export default function RegexFilterPipeline() {
                   return (
                     <span
                       key={`${label}${i}`}
-                      title={d.label}
+                      onMouseEnter={() => setHover({ i })}
+                      onClick={() => setHover({ i })}
                       style={{
                         marginTop: mt,
                         height: 16,
@@ -550,30 +552,41 @@ export default function RegexFilterPipeline() {
           }}
         >
           {(() => {
-            if (!hover) return 'Hover or tap a square to see where its key sits in the file.'
+            if (!hover) return 'Hover or tap a file or a square to see where its text sits.'
             const d = docs[hover.i]
-            const w = hover.r.hits[hover.i] && whereInFile(d, hover.r)
+            // A whole column: where this file holds each chunk, one line per chunk.
+            const pairs = hover.r
+              ? [[hover.r, hover.r.hits[hover.i] && whereInFile(d, hover.r)]]
+              : m.cols.map((c) => {
+                  const r = c.rows.find((x) => x.hits[hover.i])
+                  return [r || { kind: 'none' }, r && whereInFile(d, r), c]
+                })
             return (
               <>
                 <div style={{ color: C.ink }}>{d.label}</div>
-                {w ? (
-                  <div>
-                    {w.before}
-                    <span
-                      style={{
-                        color: C.card,
-                        background: tone(hover.r.kind),
-                        padding: '0 2px',
-                        borderRadius: 2,
-                      }}
-                    >
-                      {w.hit}
-                    </span>
-                    {w.after}
+                {pairs.map(([r, w, c], k) => (
+                  <div key={k}>
+                    {c && <span style={{ color: C.ink }}>{c.gs.map(show).join(' ')}: </span>}
+                    {w ? (
+                      <>
+                        {w.before}
+                        <span
+                          style={{
+                            color: C.card,
+                            background: tone(r.kind),
+                            padding: '0 2px',
+                            borderRadius: 2,
+                          }}
+                        >
+                          {w.hit}
+                        </span>
+                        {w.after}
+                      </>
+                    ) : (
+                      'not in this file'
+                    )}
                   </div>
-                ) : (
-                  <div>not on this list</div>
-                )}
+                ))}
               </>
             )
           })()}
