@@ -4,11 +4,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { requiredText, chunksOf, chunkLists, docTokens } from '../lib/regex-required'
 import { chartChrome, vizPalette } from '../lib/viz-palette'
 
-// The hero: what a regex prefilter does, on 8 real files. One table. Columns
-// are the chunks of the text every match must contain, headed by the posting
-// lists each chunk really reads: a token's BM25 list (blue), or a boundary gram
-// where the chunk falls on a token cut (amber). No list is keyed by a chunk.
-// Rows are files; the last column is the verdict.
+// The hero: what a regex prefilter does, on 8 real files. It is drawn the way
+// a posting list is drawn: one row per list, one column per file, a filled
+// cell where the file is on the list. Rows are grouped under the chunk that
+// reads them. A chunk is a lookup, never a key: the vocabulary names the
+// tokens that hold it (blue, BM25's own lists), and where it falls on a token
+// cut its boundary gram is read too (amber). The last two rows are the AND and
+// the regex check.
 //
 // Files come from public/static/data/regex-filter-hero.json (CodeSearchNet,
 // GPT-2 token cuts), written by experiments/regex-filter/export_hero_data.py.
@@ -34,20 +36,39 @@ const show = (s) => s.replace(/ /g, '·').replace(/\n/g, '⏎')
 const fnName = (label) => {
   const m = /def\s+(\w+)/.exec(label)
   const n = m ? m[1] : label
-  return n.length > 12 ? `${n.slice(0, 11)}…` : n
+  return n.length > 14 ? `${n.slice(0, 13)}…` : n
 }
 
-// Which list holds file i for this column: the token it holds (blue) or the
-// boundary gram (amber). Tokens first, since that is the common case.
-function holder(col, doc, i) {
-  for (const r of col.rows) {
-    if (!r.hits[i] || r.kind === 'gram') continue
+// Where a list's key sits in a file, as a short line of text around it:
+// the token itself for a token list, the 3 bytes for a boundary gram.
+function whereInFile(doc, r) {
+  let at = -1
+  let len = 0
+  if (r.kind === 'gram') {
+    const cuts = doc.cuts || []
+    let i = doc.text.indexOf(r.key)
+    while (i >= 0 && !cuts.some((c) => c > i && c < i + r.key.length)) {
+      i = doc.text.indexOf(r.key, i + 1)
+    }
+    at = i
+    len = r.key.length
+  } else {
     const keys = r.kind === 'more' ? r.keys : [r.key]
-    const t = keys.find((k) => docTokens(doc).some((x) => x.t === k))
-    return { kind: 'token', key: t ?? r.key }
+    const tok = docTokens(doc).find((x) => keys.includes(x.t))
+    if (tok) {
+      at = tok.s
+      len = tok.t.length
+    }
   }
-  const g = col.rows.find((r) => r.kind === 'gram' && r.hits[i])
-  return g ? { kind: 'gram', key: g.key } : null
+  if (at < 0) return null
+  const flat = (x) => x.replace(/\s+/g, ' ')
+  const a = Math.max(0, at - 28)
+  const b = Math.min(doc.text.length, at + len + 28)
+  return {
+    before: (a > 0 ? '…' : '') + flat(doc.text.slice(a, at)).trimStart(),
+    hit: show(doc.text.slice(at, at + len)),
+    after: flat(doc.text.slice(at + len, b)).trimEnd() + (b < doc.text.length ? '…' : ''),
+  }
 }
 
 export default function RegexFilterPipeline() {
@@ -64,6 +85,7 @@ export default function RegexFilterPipeline() {
   const [playing, setPlaying] = useState(true)
   const [inView, setInView] = useState(false)
   const [reduced, setReduced] = useState(false)
+  const [hover, setHover] = useState(null)
   const wrap = useRef(null)
   const last = STEPS.length - 1
 
@@ -126,7 +148,7 @@ export default function RegexFilterPipeline() {
       pieces.forEach((pc) => {
         pc.pos.forEach((p) => kept.add(p))
         chunksOf(pc.text).forEach((_, p) => {
-          const c = chunkLists(docs, pc.text, p)
+          const c = chunkLists(docs, pc.text, p, MAX_KEYS)
           const sig = c.rows.map((r) => `${r.kind}:${r.key}`).join('|') || `none:${c.g}`
           if (seen.has(sig)) seen.get(sig).gs.push(c.g)
           else {
@@ -167,10 +189,8 @@ export default function RegexFilterPipeline() {
   }
   const nKept = m ? m.pass.filter(Boolean).length : docs.length
   const nTrue = m ? m.truth.filter(Boolean).length : 0
-  const nCols = m ? m.cols.length : 0
   const tone = (kind) => (kind === 'gram' ? P.series2 : P.series1)
   const fade = 'opacity .35s ease'
-  const newBand = (ci) => ci > 0 && m.cols[ci].band !== m.cols[ci - 1].band
 
   const caption = () => {
     if (!m) return ''
@@ -178,12 +198,13 @@ export default function RegexFilterPipeline() {
       return `No fixed text here, so there is nothing to look up. All ${docs.length} files get read.`
     }
     if (step === 0) return 'Most of a pattern describes shape, not text.'
-    if (step === 1) return 'Underlined text must appear in every match. Each column is one chunk.'
+    if (step === 1)
+      return 'Underlined text must appear in every match. Each dashed box is one chunk.'
     if (step === 2) {
-      return 'Blue keys are tokens that hold the chunk: BM25’s own lists. Amber is a boundary gram, stored only where a chunk crosses a token cut.'
+      return 'Each row is a posting list. Blue rows are tokens that hold the chunk: BM25’s own lists. Amber is a boundary gram, stored only where a chunk crosses a token cut.'
     }
     if (step === 3) {
-      return `${nKept} of ${docs.length} files are on a list in every column. No file has been read yet.`
+      return `A file stays if each chunk has a list that holds it. ${nKept} of ${docs.length} do. No file has been read yet.`
     }
     return nKept === nTrue
       ? `The regex read ${nKept} files and all ${nTrue} match.`
@@ -210,11 +231,13 @@ export default function RegexFilterPipeline() {
       }}
     >
       <style>{`
-        .rfp-table { display: grid; column-gap: 6px; row-gap: 4px; align-items: center; min-width: max-content;
-          grid-template-columns: max-content repeat(var(--n), minmax(46px, 74px)) 60px; }
-        @media (max-width: 560px) {
-          .rfp-table { column-gap: 4px; min-width: 0; grid-template-columns: minmax(0, 76px) repeat(var(--n), minmax(28px, 1fr)) 44px; }
-          .rfp-table code, .rfp-table span { font-size: 9.5px !important }
+        .rfp-table { display: grid; gap: 3px; align-items: center; justify-content: start;
+          grid-template-columns: auto minmax(0, 104px) repeat(var(--n), 26px); }
+        .rfp-doc { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 10px; line-height: 26px;
+          white-space: nowrap; justify-self: center; padding-bottom: 4px; }
+        @media (max-width: 480px) {
+          .rfp-table { gap: 2px; grid-template-columns: minmax(0, 46px) minmax(0, 70px) repeat(var(--n), minmax(14px, 22px)); }
+          .rfp-doc { line-height: 20px }
         }
         @media (prefers-reduced-motion: reduce) { .rfp-table * { transition: none !important } }
       `}</style>
@@ -345,165 +368,215 @@ export default function RegexFilterPipeline() {
         })}
       </div>
 
-      {/* the table: files down, chunks across */}
-      {m && (
-        <div style={{ overflowX: 'auto', marginTop: 14 }}>
-          <div className="rfp-table" style={{ '--n': nCols }}>
-            {/* header: the chunk, then the keys it reads */}
+      {/* posting lists down, files across */}
+      {m && m.filterable && (
+        <div style={{ marginTop: 14, maxWidth: '100%' }}>
+          <div
+            className="rfp-table"
+            style={{ '--n': docs.length }}
+            onMouseLeave={() => setHover(null)}
+          >
+            {/* file names up the columns */}
             <span />
-            {m.cols.map((c, ci) => (
-              <div
-                key={ci}
+            <span />
+            {docs.map((d, i) => (
+              <span
+                key={i}
+                className="rfp-doc"
+                title={d.label}
                 style={{
-                  alignSelf: 'end',
-                  borderLeft: newBand(ci) ? `1px dashed ${C.axis}` : 'none',
-                  paddingLeft: newBand(ci) ? 6 : 0,
-                  opacity: step >= 1 ? 1 : 0,
+                  fontFamily: MONO,
+                  color: C.ink,
+                  opacity: step >= 3 && !m.pass[i] ? 0.3 : 1,
                   transition: fade,
-                  transitionDelay: step === 1 ? `${ci * 90}ms` : '0ms',
                 }}
               >
-                <code
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 11,
-                    color: C.muted,
-                    padding: '0 3px',
-                    border: `1px dashed ${C.axis}`,
-                    borderRadius: 2,
-                    whiteSpace: 'pre',
-                  }}
-                >
-                  {newBand(ci) ? 'or ' : ''}
-                  {c.gs.map(show).join(' ')}
-                </code>
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-start',
-                    gap: 2,
-                    marginTop: 4,
-                    opacity: step >= 2 ? 1 : 0,
-                    transition: fade,
-                    transitionDelay: step === 2 ? `${ci * 120}ms` : '0ms',
-                  }}
-                >
-                  {c.rows.length === 0 && (
-                    <span style={{ fontSize: 10, color: C.muted }}>no list</span>
-                  )}
-                  {c.rows
-                    .filter((r) => r.kind === 'token')
-                    .slice(0, MAX_KEYS)
-                    .concat(c.rows.filter((r) => r.kind === 'gram'))
-                    .map((r) => (
-                      <code
-                        key={r.kind + r.key}
-                        style={{
-                          fontFamily: MONO,
-                          fontSize: 10,
-                          color: C.ink,
-                          padding: '0 3px',
-                          borderLeft: `3px solid ${tone(r.kind)}`,
-                          whiteSpace: 'pre',
-                          maxWidth: '100%',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {show(r.key)}
-                      </code>
-                    ))}
-                  {c.nTokens > MAX_KEYS && (
-                    <span style={{ fontSize: 10, color: C.muted, paddingLeft: 6 }}>
-                      +{c.nTokens - MAX_KEYS} tokens
-                    </span>
-                  )}
-                </div>
-              </div>
+                {fnName(d.label)}
+              </span>
             ))}
-            <span />
 
-            {/* one row per file */}
-            {docs.map((d, i) => {
-              const out = step >= 3 && !m.pass[i]
-              let verdict = ''
-              if (step >= 3)
-                verdict = !m.pass[i]
-                  ? 'dropped'
-                  : step < 4
-                  ? 'kept'
-                  : m.truth[i]
-                  ? 'match'
-                  : 'no match'
+            {m.cols.map((c, ci) => {
+              const rows = c.rows.length
+                ? c.rows
+                : [{ kind: 'none', key: 'no list', hits: docs.map(() => false) }]
+              const orGap = ci > 0 && c.band !== m.cols[ci - 1].band
+              const top = ci > 0 && !orGap ? 6 : 0
               return [
-                <code
-                  key={`n${i}`}
-                  title={d.label}
-                  style={{
-                    fontFamily: MONO,
-                    fontSize: 11,
-                    color: C.ink,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    opacity: out ? 0.35 : 1,
-                    transition: fade,
-                  }}
-                >
-                  {fnName(d.label)}
-                </code>,
-                ...m.cols.map((c, ci) => {
-                  const h = holder(c, d, i)
-                  const on = step >= 3 && h
-                  return (
+                orGap && (
+                  <span
+                    key={`or${ci}`}
+                    style={{
+                      gridColumn: '1 / -1',
+                      fontSize: 10,
+                      color: C.muted,
+                      borderTop: `1px dashed ${C.axis}`,
+                      marginTop: 6,
+                      paddingTop: 2,
+                    }}
+                  >
+                    or
+                  </span>
+                ),
+                ...rows.map((r, ri) => {
+                  const mt = ri === 0 ? top : 0
+                  return [
+                    <span key={`g${ci}-${ri}`} style={{ marginTop: mt }}>
+                      {ri === 0 && (
+                        <span
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 11,
+                            color: C.muted,
+                            padding: '0 3px',
+                            border: `1px dashed ${C.axis}`,
+                            borderRadius: 2,
+                            whiteSpace: 'pre',
+                            opacity: step >= 1 ? 1 : 0,
+                            transition: fade,
+                            transitionDelay: step === 1 ? `${ci * 90}ms` : '0ms',
+                          }}
+                        >
+                          {c.gs.map(show).join(' ')}
+                        </span>
+                      )}
+                    </span>,
                     <span
-                      key={`c${i}-${ci}`}
-                      title={
-                        h
-                          ? `${d.label} is on the ${
-                              h.kind === 'gram' ? 'boundary gram' : 'token'
-                            } list ${show(h.key)}`
-                          : `${d.label} is on none of these lists`
-                      }
+                      key={`k${ci}-${ri}`}
+                      title={r.kind === 'more' ? r.keys.map(show).join(' ') : undefined}
                       style={{
+                        marginTop: mt,
                         fontFamily: MONO,
-                        fontSize: 10,
-                        lineHeight: '16px',
-                        height: 16,
+                        fontSize: 10.5,
+                        color: r.kind === 'none' ? C.muted : C.ink,
                         padding: '0 4px',
-                        marginLeft: newBand(ci) ? 7 : 0,
-                        borderRadius: 2,
+                        borderLeft: r.kind === 'none' ? 'none' : `3px solid ${tone(r.kind)}`,
                         whiteSpace: 'pre',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
-                        color: on ? C.card : 'transparent',
-                        background: on ? tone(h.kind) : C.grid,
-                        opacity: out ? 0.35 : 1,
-                        transition: 'background .3s ease, color .3s ease, opacity .35s ease',
-                        transitionDelay: step === 3 ? `${ci * 150 + i * 30}ms` : '0ms',
+                        opacity: step >= 2 ? 1 : 0,
+                        transition: fade,
+                        transitionDelay: step === 2 ? `${ci * 110 + ri * 50}ms` : '0ms',
                       }}
                     >
-                      {h ? show(h.key) : ''}
-                    </span>
-                  )
+                      {r.kind === 'more' || r.kind === 'none' ? r.key : show(r.key)}
+                    </span>,
+                    ...r.hits.map((hit, i) => (
+                      <span
+                        key={`h${ci}-${ri}-${i}`}
+                        onMouseEnter={() => setHover({ r, i })}
+                        onClick={() => setHover({ r, i })}
+                        style={{
+                          cursor: 'pointer',
+                          outline:
+                            hover && hover.r === r && hover.i === i ? `2px solid ${C.ink}` : 'none',
+                          outlineOffset: 1,
+                          marginTop: mt,
+                          height: 14,
+                          borderRadius: 2,
+                          background: step >= 3 && hit ? tone(r.kind) : C.grid,
+                          opacity: step >= 3 && !m.pass[i] ? 0.3 : 1,
+                          transition: 'background .3s ease, opacity .35s ease',
+                          transitionDelay: step === 3 ? `${ci * 120 + i * 25}ms` : '0ms',
+                        }}
+                      />
+                    )),
+                  ]
                 }),
+              ]
+            })}
+
+            {/* the AND, then the regex */}
+            {['kept', 'regex'].map((label) => {
+              const at = label === 'kept' ? 3 : 4
+              const mt = label === 'kept' ? 10 : 0
+              return [
+                <span key={`l${label}`} style={{ marginTop: mt }} />,
                 <span
-                  key={`v${i}`}
+                  key={`n${label}`}
                   style={{
+                    marginTop: mt,
                     fontFamily: MONO,
                     fontSize: 10.5,
-                    color: verdict === 'match' ? P.good : verdict === 'kept' ? C.ink : C.muted,
-                    fontWeight: verdict === 'match' ? 600 : 400,
-                    whiteSpace: 'nowrap',
+                    fontWeight: 600,
+                    color: C.ink,
+                    padding: '0 4px',
+                    opacity: step >= at ? 1 : 0.3,
                     transition: fade,
                   }}
                 >
-                  {verdict}
+                  {label}
                 </span>,
+                ...docs.map((d, i) => {
+                  const lit = step >= at && m.pass[i]
+                  const ok = m.truth[i]
+                  const bg = label === 'kept' ? C.ink : ok ? P.good : P.muted
+                  return (
+                    <span
+                      key={`${label}${i}`}
+                      title={d.label}
+                      style={{
+                        marginTop: mt,
+                        height: 16,
+                        lineHeight: '16px',
+                        textAlign: 'center',
+                        fontSize: 11,
+                        borderRadius: 2,
+                        color: C.card,
+                        background: lit ? bg : C.grid,
+                        transition: 'background .3s ease',
+                        transitionDelay: step === at ? `${i * 70}ms` : '0ms',
+                      }}
+                    >
+                      {label === 'regex' && lit ? (ok ? '✓' : '×') : ''}
+                    </span>
+                  )
+                }),
               ]
             })}
           </div>
+        </div>
+      )}
+
+      {m && m.filterable && (
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 11,
+            color: C.muted,
+            marginTop: 10,
+            minHeight: 34,
+            lineHeight: 1.5,
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {(() => {
+            if (!hover) return 'Hover or tap a square to see where its key sits in the file.'
+            const d = docs[hover.i]
+            const w = hover.r.hits[hover.i] && whereInFile(d, hover.r)
+            return (
+              <>
+                <div style={{ color: C.ink }}>{d.label}</div>
+                {w ? (
+                  <div>
+                    {w.before}
+                    <span
+                      style={{
+                        color: C.card,
+                        background: tone(hover.r.kind),
+                        padding: '0 2px',
+                        borderRadius: 2,
+                      }}
+                    >
+                      {w.hit}
+                    </span>
+                    {w.after}
+                  </div>
+                ) : (
+                  <div>not on this list</div>
+                )}
+              </>
+            )
+          })()}
         </div>
       )}
 
