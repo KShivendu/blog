@@ -73,7 +73,7 @@ The baseline most readers run is Elasticsearch, which offers three ways to regex
 - **`text` field.** The same walk over lowercased words, so a match has to sit inside one word.
 - **`wildcard` field.** A lowercased trigram index plus a second copy of every value, and the regex re-checks candidates against that copy.
 
-| method                       |       index |         read, no match | missed |       p50 |          p90 |          p99 |
+| method                       |       index |    wasted regex checks | missed |       p50 |          p90 |          p99 |
 | ---------------------------- | ----------: | ---------------------: | -----: | --------: | -----------: | -----------: |
 | scan every file              |             | 13,391,583 (all files) |      0 |    6.2 ms |      26.1 ms |      55.8 ms |
 | Elasticsearch `keyword`      |     67.4 MB |          no regex step |     93 |    1.39 s |       9.46 s |       9.73 s |
@@ -82,7 +82,7 @@ The baseline most readers run is Elasticsearch, which offers three ways to regex
 | Elasticsearch `wildcard`     |     48.7 MB |                129,591 |      0 |    101 µs |     1,749 µs |    12,371 µs |
 | **boundary grams + fitting** | **21.6 MB** |             **73,862** |  **0** | **56 µs** | **1,177 µs** | **9,180 µs** |
 
-"Read, no match" counts wrong files: they reach the regex and get thrown out there, which only costs time. "Missed" counts true matches a method never returns, so its answer is wrong. `keyword` and `text` answer from the index alone, so nothing reaches a regex. The index column counts what each method adds for regex. Posting lists are roaring bitmaps, FSTs are counted as built, and the `wildcard` copy of the text is 21.2 MB of LZ4 blocks. My token lists are the BM25 index already. Every method ran query by query in rotating order on one machine, so a slowdown hit them all alike. The machine ran hot, so compare rows rather than absolute times.
+"Wasted regex checks" counts wrong files: the regex runs on them and rejects them, which only costs time. "Missed" counts true matches a method never returns, so its answer is wrong. `keyword` and `text` answer from the index alone, so nothing reaches a regex. The index column counts what each method adds for regex. Posting lists are roaring bitmaps, FSTs are counted as built, and the `wildcard` copy of the text is 21.2 MB of LZ4 blocks. My token lists are the BM25 index already. Every method ran query by query in rotating order on one machine, so a slowdown hit them all alike. The machine ran hot, so compare rows rather than absolute times.
 
 Observations:
 
