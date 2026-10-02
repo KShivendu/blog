@@ -29,6 +29,12 @@ const experiments = [
     about:
       'Search "Attention Is All You Need" sentence by sentence and see which words matched. A 17M ColBERT model runs in your browser.',
   },
+  {
+    title: 'Token streaming',
+    href: '/lab/token-streaming',
+    about:
+      'Stream the same LLM answer as JSON text and as token IDs, side by side, and count the bytes on the wire.',
+  },
 ]
 
 export default function Lab() {
