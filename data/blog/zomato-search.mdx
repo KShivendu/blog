@@ -1,0 +1,418 @@
+---
+title: 'How Zomato Search Works'
+subtitle: 'A thousand dishes, a few hundred neighbourhoods, and a lot of ways to spell paneer'
+date: '2026-10-05'
+lastmod: '2026-10-05'
+tags: ['search', 'internals', 'infra']
+draft: true
+summary: 'A breakdown of Zomato search from its public engineering posts and talks. About 99% of dish searches land on fewer than 1000 dishes and about 95% of queries need only one locality shard, so the work goes into reading messy Hinglish queries and serving the lunch and dinner peaks on self-managed Solr.'
+images: []
+authors: ['kshivendu']
+---
+
+Zomato is one of India's two big food delivery apps, the Indian DoorDash or Uber Eats. About [27 million people order on it every month](https://b.zmtcdn.com/investor-relations/Eternal_Company_Overview_July_2026.pdf), from 328,000 restaurants, carried by 638,000 delivery riders. It also has one of the best search experiences I've used in any product, anywhere in the world. I admire how much care goes into every layer of it: how it reads what you typed, how it builds its catalogue of dishes, and how it shows you the results. So I went looking for how it all works.
+
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
+
+Open Zomato at lunchtime in Gurugram, a city next to Delhi, and type `panir`. You get paneer dishes (paneer is a fresh Indian cheese) from restaurants that can deliver to your address. The same word typed in Kolkata, 1,500 km east, gives a different list, because the restaurants and what people order there are different. In 2023, Zomato said its search handled [more than 100 million queries a day](https://www.zomato.com/blog/explained-how-zomato-handles-100-million-daily-search-queries-p1). That's about 1,200 queries per second (RPS) on average, with peaks at lunch and dinner.
+
+In short, people search for about a thousand dishes inside one neighbourhood, and they spell those thousand dishes a thousand ways.
+
+## The whole picture
+
+Zomato search has two halves. One runs ahead of time and builds the index. The other runs on every query.
+
+```
+ AHEAD OF TIME
+ ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+ │  menu photo  │ → │ ① dish       │ → │ ② Solr index │
+ │  + reviews   │   │   catalogue  │   │   per area   │
+ └──────────────┘   └──────────────┘   └──────┬───────┘
+                                              │
+ ON EVERY QUERY                               ▼
+ ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+ │ "panir tikka"│ → │ ③ read the   │ → │ ④ find and   │
+ │ in Bengaluru │   │   query      │   │   rank       │
+ └──────────────┘   └──────────────┘   └──────┬───────┘
+                                              ▼
+                                           results
+
+ ⑤ keeping it all up at the dinner peak
+```
+
+I'll follow one query through the whole post: `panir tikka` (grilled paneer, misspelled), typed by someone in Koramangala, a neighbourhood in Bengaluru. Each section shows what that stage does to it, then adds the real examples from Zomato's posts.
+
+## Why the search space is small
+
+Two numbers explain most of the design. [About 99% of dish searches](https://www.linkedin.com/posts/saurav-singh-25317625_explained-how-zomato-handles-100-million-activity-7317804832466075650-1f75) are for **fewer than 1000 dishes**, like biryani (spiced rice), paneer, pizza, momos (dumplings) and chole bhature (chickpea curry with fried bread). And [about 95% of queries](https://www.zomato.com/blog/explained-how-zomato-handles-100-million-daily-search-queries-part-three) need only one shard of the index, because each shard holds a group of nearby neighbourhoods.
+
+Here is what that does to our query:
+
+```
+ every restaurant in India
+            │  keep the shard that holds Koramangala
+            ▼  (95% of queries need just one shard)
+ restaurants in and around Koramangala
+            │  keep outlets open now that deliver to you
+            ▼
+ restaurants you can order from
+            │  keep the ones with a "paneer tikka" dish
+            ▼  (one of the ~1000 dishes behind 99% of searches)
+ a short list to rank
+```
+
+A customer in Koramangala never needs a restaurant in Whitefield, on the other side of Bengaluru, so the engine never looks there. A 2022 post describes their retrieval as ["heavily-dependent on lexically-based matches"](https://www.zomato.com/blog/how-we-make-our-search-more-conversational-and-inclusive). With a thousand dishes, keyword match on clean dish names works very well. So the work goes into two places: building clean dish names (①) and turning messy queries into them (③).
+
+## ① Building the dish catalogue
+
+Dish search needs a list of dishes, and Zomato builds that list itself. Back in [2013 Zomato wrote](https://www.zomato.com/blog/three-problems-we-are-trying-to-solve-at-zomato) that it wanted people to search for "restaurants serving a specific dish", like a Tenderloin Steak. The same post says "about 25% restaurants shut down every quarter", so the list has to keep up all the time. Most restaurants are small independent places with no menu data to send, only a printed menu.
+
+Most menus arrive as photos. The [menu digitisation pipeline](https://aws.amazon.com/blogs/machine-learning/zomato-digitizes-menus-using-amazon-textract-and-amazon-sagemaker/), co-written with AWS in 2020, turns a photo into dish rows:
+
+```
+ menu photo
+    │  Amazon Textract reads the text (OCR)
+    ▼
+ text boxes on the page
+    │  Faster R-CNN finds menu sections      mAP 0.93
+    │  price   = box with more than 40% digits
+    │  dish    = text to the left of a price
+    │  unsure? = fine-tuned BERT classifier  AUROC 0.86
+    │  section title = logistic regression on
+    │                  font size, position, word length
+    ▼
+ "Paneer Tikka ............ ₹280"  →  dish row
+```
+
+They also trained their own OCR on 1.5 million synthetic text images, and picked Textract after comparing the two. In 2026 their eval platform added a check that runs several vision models over menus, to catch "a menu item printed in a stylised, low-contrast font that the primary system skips entirely". Every dish the OCR reads becomes a dish you can search for.
+
+Reviews add to the catalogue too. Zomato's [review tags](https://www.zomato.com/blog/architecture-behind-tags) pull dishes and opinions out of review sentences:
+
+```
+ "The Chicken Whopper at Burger King was amazing
+  but the service was slow"
+        │ spaCy finds the dish
+        │ FastText sorts each opinion into a topic
+        ▼
+ Chicken Whopper   food      positive
+ service           service   negative
+```
+
+## ② Storing restaurants in Solr
+
+Zomato runs its own Apache Solr clusters for both search and the home page. Their [three-part series](https://www.zomato.com/blog/explained-how-zomato-handles-100-million-daily-search-queries-p1) from 2023 covers how they run it at food-delivery scale.
+
+The tricky part is popularity, because it depends on where you are. Zomato's examples are "Chole Bhature may be more popular in Delhi than in Kolkata", and sushi more popular in Gurugram's new business district than in its old town a few kilometres away. So a restaurant's popularity is one number per area, and there are thousands of areas.
+
+The first schema stored each area as its own field. The [fix](https://www.zomato.com/blog/explained-how-we-handle-100million-daily-search-queries-pt2) made each area a child document under the restaurant:
+
+```
+ BEFORE: one field per area      AFTER: child documents
+ ┌─────────────────────────┐     restaurant: Tikka House
+ │ name: Tikka House       │       ├── dish: Paneer Tikka
+ │ popularity_area1: 0.93  │       ├── dish: Butter Naan
+ │ popularity_area2: 0.25  │       ├── popularity area1 = 0.93
+ │ ... thousands of fields │       └── popularity area2 = 0.25
+ └─────────────────────────┘
+```
+
+Solr's block join queries match on a child and return the parent. "Restaurants with a dish child named paneer tikka" becomes one query (`{!parent which=...}`), and so does "sort by popularity in Koramangala". A new popularity score in an A/B test adds child documents instead of "hundreds of thousands" of new fields. The index got slightly bigger, and indexing got much faster.
+
+Those thousands of fields had also been filling the Java heap. To sort, Lucene needs every matching document's value for the sort field. Without docValues, the first sort on a field builds that column in memory, in a field cache with no size limit:
+
+```
+ BEFORE: field cache               AFTER: docValues
+ ┌── Java heap (100 GB) ────┐      ┌── Java heap ──┐
+ │ popularity_area1 column  │      │ small         │
+ │ popularity_area2 column  │      └───────────────┘
+ │ ... grows with every     │      ┌── OS page cache ──────┐
+ │     field sorted on      │      │ columns built at      │
+ │ → out of memory          │      │ index time, read from │
+ └──────────────────────────┘      │ memory-mapped files   │
+                                   └───────────────────────┘
+```
+
+The switch is one attribute in the schema:
+
+```
+<field name="field_name" type="string" indexed="false"
+       stored="false" docValues="true" />
+```
+
+Together with an upgrade from Solr 6 to 7.6, and a fork of Lucene to speed up segment merges on sparse docValues ([LUCENE-7253](https://issues.apache.org/jira/browse/LUCENE-7253)), that gave **10x more throughput per read node**. It cut the cost of their Solr clusters by about 80%, close to ₹30 lakh (about $35,000) a month.
+
+## ③ Reading the query
+
+The text is where the variety is. Indian users type in English, in Hindi written with English letters (called Hinglish), with regional spellings, or by voice. Often all of these mix in one query. Real queries from Zomato's posts, with what they mean:
+
+```
+ "Koi Achcha Sa Sabji Batao"     "suggest a good veg curry"
+ "Burger 150rs wala"             a burger for about ₹150 ($1.75)
+ "Thali lassi k sath"            a set meal with a yogurt drink
+ "hundred ke andar pizza"        pizza under ₹100 ($1.20)
+ "Rajma rice" / "Rajma chawal"   same dish, "chawal" = rice
+ "roomali roti" / "rumali roti"  same flatbread, two spellings
+```
+
+Zomato handles this in four steps. Here is our query going through them:
+
+```
+ "panir tikka"
+      │ ③a type      →  this names a dish
+      │ ③b spelling  →  "panir" becomes "paneer"
+      │ ③c aliases   →  no regional name to map
+      │ ③d tagging   →  dish = "paneer tikka"
+      ▼
+ search the shard for dish "paneer tikka"
+```
+
+### ③a What kind of thing is this word?
+
+A single word can mean four different things on Zomato. This example is from [the 2017 "Search 2.0" write-up](https://medium.com/aroraparas/zomato-search-redux-9f3ee6325599) by Paras Arora, then a product lead there:
+
+```
+ "Chinese"  →  Chinese Mall       a location
+            →  Chinese            a cuisine
+            →  Chinese Chopsuey   a dish
+            →  Chinese Inn        a restaurant
+```
+
+Plain word matching mixes these up. Cities around Delhi name neighbourhoods by number, like Sector 29. Searching `Sector 29` matched "Sector 55 China Town" and "Cafe 29", because each shares one word with the query. Three cities around Delhi (Gurgaon, Noida and Faridabad) each have their own Sector 29 too.
+
+Their "Context Resolution Engine" decides what type of thing a query names: a location, dish, cuisine, chain or restaurant. The target was at least 80% confidence. The share of queries it could parse in Delhi went up 25%, and queries it understood had **2x the click-through rate** of queries matched word by word.
+
+### ③b Spelling: "Paniir" means paneer
+
+The [2022 autocorrect post](https://www.zomato.com/blog/rethinking-zomato-search-pt-1) splits misspellings into two kinds:
+
+```
+ phonetic   "Paniir" → "Paneer"    "Chikan" → "Chicken"
+ keyboard   "Pixxa"  → "Pizza"     "Oaneef" → "Paneer"
+```
+
+Plain edit distance (the number of single-letter changes between two words) ties on each of these. I ran it on their examples, against a second real dish:
+
+```
+ query    right fix   distance    other dish   distance
+ Paniir   Paneer      2           Panini       2
+ Chikan   Chicken     2           Chikki       2
+ Pixxa    Pizza       2           Pista        2
+```
+
+Zomato's custom edit distance gives "special weightage" to sounds that are close in Indian English, their example being `ee` and `i`. Panini is the Italian sandwich, Chikki is a peanut brittle and Pista is pistachio. Lined up letter by letter:
+
+```
+ P a n i i r           P a n i i r
+ P a n e e r           P a n i n i
+       ↑ ↑                   ↑ ↑
+     i→e i→e               i→n r→i
+  sounds alike,         different letters,
+  cheap                 full cost
+```
+
+The same idea works for keyboards. On a QWERTY layout `x` sits next to `z`, and `O` sits next to `P`. The cheap and full costs here are my illustration of the idea.
+
+A Siamese network (a model that learns whether two inputs mean the same thing) adds dish-to-dish similarity on top. Autocorrect then decides by confidence. When it is confident, it rewrites the query and shows "Search instead for". When it is less sure, it shows "Did you mean".
+
+### ③c Aliases: Upit is Upma
+
+India has 22 official languages, so the same dish often has a different name in each state. Zomato keeps a [repository of regional names](https://www.zomato.com/blog/rethinking-zomato-search-pt-2) mapped to one global name:
+
+```
+ "Upit"    →  Upma    a semolina breakfast dish
+ "Payasa"  →  Kheer   rice pudding
+```
+
+The app shows the regional name with the global one in brackets.
+
+### ③d Tagging: restaurant or dish?
+
+Longer queries need to be split into parts. Zomato's [Natural Language Search post](https://www.zomato.com/blog/how-we-make-our-search-more-conversational-and-inclusive) from August 2022 has two queries that differ by one letter:
+
+```
+ "chirkutlal chole bhature"
+  └────── restaurant ──────┘
+
+ "chirkutlal  k  chole bhature"
+  └restaurant┘ of └── dish ───┘
+```
+
+Chirkutlal is a restaurant name, and chole bhature is the chickpea dish from earlier. The `k` is Hindi for "of" (ka/ki), so the second query means "Chirkutlal's chole bhature". One letter turns a restaurant name into a restaurant plus a dish.
+
+The tagger is a BiLSTM-CRF (a small sequence model that labels each word in a sentence, from [Huang et al. 2015](https://arxiv.org/abs/1508.01991)). It reads three inputs:
+
+```
+ word2vec vectors   trained from scratch on Zomato's data
+ BPE subwords       word fragments, so new spellings
+                    still get a vector
+ the city           a string can be a restaurant in one
+                    city and nothing in another
+```
+
+The post calls it "fast (even on CPU)", and an A/B test gave "an upside in the click-through rate". Each query lands in one of three classes:
+
+```
+ several dishes       "Burger with cold drink"
+ dish + restaurant    "Samosa chai palace"
+ name + extra words   "best joe's pizza outlet near me"
+```
+
+Voice search feeds the same tagger. Speech-to-text comes from Google on Android and Apple's speech framework on iOS, then Zomato's own models pull out the dish and restaurant. Zomato says voice queries are common in India's smaller cities, which is where queries like "Koi Achcha Sa Sabji Batao" (suggest a good veg curry) come from.
+
+## ④ Finding and ranking restaurants
+
+### Finding: go to one shard
+
+When Zomato [moved to SolrCloud](https://www.zomato.com/blog/explained-how-zomato-handles-100-million-daily-search-queries-part-three), it sharded by locality. A request goes straight to its own shard (`shards=shard1&shard.preference=local`), with search across shards turned off. The localities in each shard below are my example:
+
+```
+  "paneer tikka" from Koramangala
+            │
+            ▼
+  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+  │   shard 1    │  │   shard 2    │  │   shard 3    │
+  │ Koramangala, │  │ Whitefield,  │  │ Indiranagar, │
+  │ HSR Layout   │  │ Marathahalli │  │ Domlur       │
+  └──────────────┘  └──────────────┘  └──────────────┘
+     answers           not touched       not touched
+```
+
+Inside that shard, the block join from ② finds restaurants with a "paneer tikka" dish and keeps the ones that deliver to you.
+
+### Ranking: what goes into the score
+
+The [December 2019 redesign](https://www.zomato.com/blog/all-new-search-and-discovery-on-zomato) merged delivery, pickup and dining into one search box, with three scores per result: text match, popularity and intent. By 2022 a [learning-to-rank model](https://www.zomato.com/blog/rethinking-zomato-search-pt-1) combined the signals. Learning to rank means training a model on past behaviour to score results, instead of hand-tuning a formula.
+
+```
+ text match                   ─┐
+ popularity in your region    ─┤
+   (Delhi, Pune, ...)          │
+ searches, orders, page views ─┼──►  gradient-boosted  ──►  order
+ your order history           ─┤     model
+ time of day, day of week,    ─┤
+   session, location           │
+```
+
+When one result scores far above the rest, Zomato treats it as the "leader" and drops weaker candidates. In 2019 they found a leader for about 65% of queries and aimed for 90%. Search for `Cafes` and you also get suggested filters like "Nearest to me", "WiFi" and "Outdoor Seating".
+
+### Ranking: how the model learns
+
+The model learns from pairs. Given two restaurants, which one did the customer pick? The labels come from a "dropout factor", which I read as where in the list the customer stopped.
+
+Zomato's [restaurant ads post](https://www.zomato.com/blog/powering-restaurant-ads-on-zomato) shows how they build the pairs. Their negatives are the restaurants ranked just above and just below the one the customer ordered from:
+
+```
+ customer saw                 pairs the model learns
+ 1. Restaurant A              B beats A
+ 2. Restaurant B  ← ordered
+ 3. Restaurant C              B beats C
+```
+
+A and C are close calls, so they teach the model more than random restaurants would. Pointwise models score each restaurant alone, and listwise models score the whole list at once. On promoted restaurants, pairwise was **14% better than pointwise** on Accuracy@5 (how often the clicked restaurant lands in the top 5) and 8% better than listwise.
+
+For personalisation, Zomato also [embeds customers and restaurants](https://www.zomato.com/blog/connecting-the-dots-strengthening-recommendations-for-our-customers-part-two) from a graph of who ordered where. GraphSAGE (a graph neural network) took about 20 hours to train for the Delhi area alone. Cleora, which averages each node's neighbours a few times with no training, built the same embeddings in under 5 minutes. The post names search ranking as the next place to use them.
+
+## ⑤ Keeping it up at the dinner peak
+
+### From one master to SolrCloud
+
+The first setup was one master that indexed and many replicas that served reads. Each replica had 120 GB of RAM with a 100 GB Java heap. Long garbage-collection pauses hurt tail latency, and a new replica took about 10 minutes to come up, which is slow when lunch traffic arrives.
+
+SolrCloud with neighbourhood shards (from ④) helped on every count:
+
+```
+ smaller index per shard     →  ~75% less CPU and memory per node
+ each query hits one shard   →  ~75% fewer requests per node
+ scaling up a node           →  ~20% faster
+```
+
+Average and tail latency both dropped.
+
+### Running on spot instances
+
+They ran SolrCloud on AWS spot instances, which AWS can take back at any time. One day the leader of a shard was taken back, and the new leader happened to be a replica that had just joined. Every other replica had to re-sync to it at once:
+
+```
+ NRT replicas (before)          TLOG + PULL replicas (after)
+
+ leader ✗ taken back            leader ✗ taken back
+ new leader: newest replica     TLOG replica → new leader
+   ├─ replica: re-syncing GBs     ├─ PULL: keeps serving
+   ├─ replica: re-syncing GBs     ├─ PULL: keeps serving
+   └─ all reads hit the leader    └─ reads keep flowing
+```
+
+NRT (near real-time) replicas each index every update themselves, so any of them can become leader and the rest must re-sync to it. TLOG and PULL replicas copy index files from the leader instead, and PULL replicas keep serving reads even with no leader. The cost is that new data shows up a little later.
+
+New nodes now start from an index snapshot in S3 and then pull only the changes. That lets them add hundreds of replicas at once before a peak, and restore a single shard to an earlier point in time.
+
+### A 10 MB fallback
+
+For the rare minutes Solr is unavailable ("a couple of times a year for 5-10 minutes", per [a former Zomato search engineer](https://www.linkedin.com/posts/saurav-singh-25317625_explained-how-zomato-handles-100-million-activity-7317804832466075650-1f75)), every search container has a backup. At boot it loads an in-memory trie (a prefix tree) of the top ~1000 dishes, with the spellings people use for them:
+
+```
+ p ─ a ─ n ─┬─ e ─ e ─ r           → Paneer
+            └─ i ─ r               → Paneer   ("panir")
+ s ─┬─ c ─ h ─ e ─ z ─ w ─ a ─ n   → Schezwan
+    └─ e ─ z ─ w ─ a ─ n           → Schezwan ("sezwan")
+```
+
+It is under 10 MB, answers in under a millisecond, and ranks by each dish's popularity across all of India. Our `panir tikka` still finds paneer here. This works because of the 99% number from the start: a thousand dishes cover almost every dish search, so a 10 MB fallback covers almost every dish search too.
+
+## LLMs and the MCP server
+
+Everything above is classic search: keyword match, a tagger, a ranking model. Zomato's LLM features sit on top of it, as new ways to ask.
+
+```
+ Zomato AI chat          ─┐
+ Natural Language Search ─┼──►  ③ read  ──►  ④ find and rank
+ AI agents over MCP      ─┘
+```
+
+[Zomato AI](https://www.zomato.com/blog/introducing-zomato-ai-your-foodie-buddy) (2023) is a chat assistant, first for members of Zomato Gold (its paid membership), for questions like "What should I eat when I'm hungover?" It runs on an internal LLM orchestrator called Firefly, with one agent per task calling into Zomato's data, plus a vector database. Ask it for a dish and it returns a widget of restaurants that serve it, so the lookup still goes through regular search.
+
+Natural Language Search (typing a full sentence instead of keywords) and [Healthy Mode](https://www.business-standard.com/companies/news/zomato-launches-healthy-mode-feature-nutritional-meal-ratings-125092900533_1.html) (2025) follow the same idea. In the [April 2026 shareholder letter](https://b.zmtcdn.com/investor-relations/Eternal_Limited_Shareholders_Letter_Q4FY26_Results.pdf), founder and CEO Deepinder Goyal wrote that conversational interfaces let customers "express intent in full sentences rather than two-word search queries", and named both as early examples. Healthy Mode scores each dish from "Low" to "Super" on protein density, ingredient quality, cooking method and carbohydrate quality. The search bar also suggests prompts like "Comfort food" and "Netflix and chill", which [change with the time of day](https://www.linkedin.com/posts/rohitverma141_productmanagement-productdesign-ux-activity-7469978337034022913-5aYf).
+
+The [MCP server](https://github.com/Zomato/mcp-server-manifest) (September 2025) lets AI agents search and order on Zomato. MCP (Model Context Protocol) is a standard way for an LLM agent to call an app's functions. Its [search tools](https://medium.com/@sirsho29/all-things-about-zomato-mcp-faa6b337a5bd) give a small outside view of Zomato's search API:
+
+```
+ get_all_restaurants           browse, no query
+ get_restaurants_for_keyword   name, cuisine, dish, or
+                               rating, distance, price
+ get_dynamic_search_filters    the suggested filters
+```
+
+Browsing and searching are separate tools, like the home page and the search bar in the app. The keyword tool takes price as a constraint, so an agent can handle "hundred ke andar pizza" (pizza under ₹100) by passing the dish and the price limit separately. That's my reading of the tool list.
+
+<details>
+<summary>
+
+### Blinkit runs a different stack
+
+</summary>
+
+Blinkit is owned by the same parent company, Eternal. It delivers groceries in about 10 minutes from small local warehouses. Its search is a separate system on OpenSearch, and its team has shared detailed numbers.
+
+It ran self-managed Elasticsearch (version 2.4 by the end) from its days as Grofers, its old name, until a [zero-downtime move](https://lambda.blinkit.com/journey-of-zero-downtime-migration-of-elasticsearch-at-blinkit-a2d3c874e78f) to AWS OpenSearch in 2022. At the time, search took about 36,000 requests a minute. By the [OpenSearchCon India 2024 talk](https://www.youtube.com/watch?v=kG8PK6dTb4w) by Harshit Prasad, the cluster served about 750,000 search operations a minute normally, and over 1 million at peak:
+
+```
+ 30 data nodes, 3 availability zones
+ product index ~50 GB, 2 primary shards, 14 replicas
+ reads  < 6 ms
+ writes ~ 1 ms, 250k write ops/min from Kafka (price, stock)
+```
+
+Two fixes from that talk are worth stealing. Cleaning up which fields are indexed shrank the index from 48 GB to 32 GB. Batching the real-time stock and price updates cut write latency from 15-20 ms to 2-3 ms. They also learnt to always add nodes in multiples of 3. The cluster spans 3 zones, so any other count leaves one zone with an extra node. Traffic was uneven across zones, and that imbalance caused client timeouts.
+
+In 2026 they moved to [several OpenSearch clusters](https://lambda.blinkit.com/blinkit-at-opensearchcon-india-2026-37fd0046c318) to handle festive peaks. Learning to rank is next on their list.
+
+On LinkedIn, Blinkit engineers describe an in-house BERT model called BlinkBERT. It handles rare queries with misspellings and Hinglish, with a reported 15 ms p95 latency and 2x conversion on those queries.
+
+</details>
+
+## Key Takeaways
+
+- **The search space is tiny and local.** About 99% of dish searches are for fewer than 1000 dishes, and about 95% of queries need only one neighbourhood's shard. Keyword search on self-managed Solr does the retrieval.
+- **The modelling effort goes into the query.** Phonetic edit distance, an alias table and a small BiLSTM-CRF tagger turn "Paniir", "Upit" and "chirkutlal k chole bhature" into clean dish and restaurant names.
+- **The infra lessons are about Solr's memory.** Moving per-area popularity to `docValues` and child documents gave 10x throughput per node and cut Solr cost by about 80%. Locality shards cut each node's CPU and memory by about 75%.
+- **LLMs are a new way to ask, on top of the same search.** Zomato AI, Natural Language Search, Healthy Mode and the MCP server all hand off to the same restaurant and dish lookups.
