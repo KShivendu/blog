@@ -734,7 +734,9 @@ body {
   font-weight: 600;
   background: var(--tty-hair);
   border-bottom: 1px solid var(--tty-border);
-  white-space: nowrap;
+  /* Long headers wrap instead of pushing the table past the column
+     ("30% overhead for 20B docs (monthly)" made exa-napkin-math 969px in 830px). */
+  white-space: normal;
 }
 .prose-tty tbody tr {
   border-bottom: 1px solid var(--tty-border);
@@ -782,6 +784,22 @@ body {
     width: max-content;
     max-width: 100%;
     overflow-x: auto;
+  }
+}
+
+/* Phones: tighter cells so most tables fit with no sideways scroll at all.
+   Check with: node scripts/check_table_overflow.mjs <post url> */
+@media (max-width: 640px) {
+  .prose-tty table {
+    font-size: 0.8rem;
+  }
+  .prose-tty th,
+  .prose-tty td {
+    padding: 0.45rem 0.5rem;
+  }
+  .prose-tty thead th {
+    font-size: 0.65rem;
+    letter-spacing: 0;
   }
 }
 
