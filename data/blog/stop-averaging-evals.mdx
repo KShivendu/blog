@@ -1,6 +1,6 @@
 ---
 title: 'Stop Averaging Search Evals'
-subtitle: 'Report p25/p50 and debug your queries'
+subtitle: 'Report p25/p50 and know your queries'
 date: '2026-08-27'
 lastmod: '2026-08-27'
 tags: ['search', 'evals', 'evaluation', 'metrics']
@@ -12,6 +12,8 @@ authors: ['kshivendu']
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
 Any serious team tracks latency as p50, p90, p99. Reporting just "our average latency is 40ms" is naive, because it hides the p99 150ms tail that's hurting real users. Yet we report search relevance as a single average NDCG all the time, and somehow that's normal. Relevance has a tail too, but the average hides it.
+
+I'll use search as the example, but this applies to any eval with graded scores, like LLM-judge ratings.
 
 ## Average can't represent the distribution
 

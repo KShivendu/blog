@@ -85,6 +85,15 @@ module.exports = withBundleAnalyzer({
   eslint: {
     dirs: ['pages', 'components', 'lib', 'layouts', 'scripts'],
   },
+  async redirects() {
+    return [
+      {
+        source: '/blog/relevance-tail',
+        destination: '/blog/stop-averaging-evals',
+        permanent: true,
+      },
+    ]
+  },
   async headers() {
     return [
       {
