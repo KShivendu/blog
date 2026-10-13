@@ -1,0 +1,67 @@
+---
+title: 'Revisiting Exa Search Cost in 2026'
+date: '2026-10-14'
+lastmod: '2026-10-14'
+tags: ['search', 'internals', 'infra']
+draft: true
+summary: 'New index and request numbers change the Exa napkin math. Here is what they tell us, and what I still need to measure.'
+images: ['/static/images/blogs/exa-clean.jpg']
+authors: ['kshivendu']
+---
+
+![Exa Napkin Math Blog Cover Image](/static/images/blogs/exa-clean.jpg)
+
+My [first Exa cost estimate](/blog/exa-napkin-math) used a 20B-page index and 300M API requests per month. Exa has since shared numbers for both. It now says it serves a **100B-page index** and handles **2B requests per month**. That's enough to revisit the math, but the price of running that system still depends on how many pages enter each index and what each request does.
+
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
+
+## 📦 How many pages are we counting?
+
+Exa said it crawled and parsed [tens of billions of pages](https://exa.ai/blog/exa-api-2-0) around the time I wrote the first post. In 2026, it reported [100B pages in its served index and 1.4T URLs tracked](https://exa.ai/blog/exa-firefox). The tracked URLs are a much larger pool. I wouldn't multiply every per-page index cost by 1.4T.
+
+The 100B pages are also not the whole data footprint. Exa reports [over 400B historical webpage snapshots](https://exa.ai/blog/exa-snapshot). Its data pipeline stores [derived data for pages](https://exa.ai/blog/exa-d), such as model outputs, and can update selected fields without rebuilding every field. The snapshot count, served-page count and derived-data count measure different things. They need separate byte-size assumptions before I can add them to one storage bill.
+
+Exa has other searchable collections too: [350M publications and 30M authors](https://exa.ai/blog/publications-search), plus [211M places](https://exa.ai/blog/places-search). An [interview about entity search](https://zilliz.com.cn/blog/exa-zilliz-cloud-agent-search) describes a separate path for people and companies. Exa creates dense and sparse vectors, combines their search results, and attaches structured fields. Its main web index runs on Exa's own infrastructure, while the entity path uses a managed search service. I need to cost those collections separately from web pages.
+
+## 🔢 What the request count tells us
+
+Exa says it serves **2B requests per month** and has passed [**$100M in annualized revenue**](https://www.linkedin.com/company/exa-ai/). Over a 30-day month, 2B requests average about **772 external requests per second**. That's an average across its products. It doesn't give us the peak rate or the number of internal retrieval calls per request.
+
+At the [Instant list price of $4 per 1,000 requests](https://exa.ai/pricing), 2B requests would be $8M per month, or $96M annualized. To clear $100M at exactly 2B requests a month, revenue would need to average more than **$4.17 per 1,000 requests**. Exa also sells Fast, Deep, Contents and Agent requests at different prices, and large customers can have custom contracts. So the public numbers fit together, but they don't tell us the Search API's average selling price.
+
+My old 3KB response example scales to 6TB of egress at 2B requests, or **$600/month** at the assumed $0.10/GB. This is only for small responses. Contents and Agent responses can carry much more data.
+
+Exa's [newer search pipeline](https://exa.ai/blog/composing-a-search-engine) can run dense and sparse retrieval in parallel, combine their results, and choose different branches by request. That makes the share of requests taking each path more useful than one average "search cost." [Dynamic Highlights](https://exa.ai/blog/dynamic-highlights) can also run a model over retrieved content to select snippets. Exa reports 95% fewer output tokens than full pages in its evaluation, but that model work isn't in my table below.
+
+## 💰 A first pass at the new scale
+
+Here is what happens if I take the per-page rates from the [first post](/blog/exa-napkin-math) and apply them to all 100B served pages. This is a stress test of those assumptions, not Exa's bill:
+
+| Cost in this scenario                                       | Monthly amount |
+| ----------------------------------------------------------- | -------------- |
+| Content, lexical index, vectors and metadata for 100B pages | $515,280       |
+| Re-embedding 30% of pages                                   | $292,500       |
+| 2B responses of 3KB each                                    | $600           |
+| **Subtotal**                                                | **$808,380**   |
+
+The first row is charged on the **whole index every month**. The 30% rate applies only to new embeddings. The table assumes every served page gets the same BM25 index, vector stages, metadata and RAM allocation as in my old model. That's the biggest thing I need to check. It also leaves out crawling, replicas, query compute, training and the other collections above.
+
+The embedding assumption has a capacity problem worth testing. At 780 tokens per page, refreshing 30B pages means processing **23.4T tokens per month**. At the [Qwen benchmark](https://www.tensoreconomics.com/p/why-are-embeddings-so-cheap)'s 33,488 tokens/s per GPU, 144 continuously busy GPUs would need about **56 days**. The 144-GPU figure comes from Exa's [2025 cluster post](https://exa.ai/blog/meet-the-exacluster). Exa now says it has [hundreds of H200s](https://exa.ai/about). Its own model, GPU throughput and true refresh rate could all differ from this example.
+
+Queries could change the cost more than the small-response egress line. As one proxy, scoring 100 full pages of 780 tokens with a 10-token query gives 79,000 reranker input tokens per search. At the [public $0.01 per million token price](https://deepinfra.com/Qwen/Qwen3-Reranker-0.6B) for a small Qwen reranker, doing that on every one of 2B requests would cost **$1.58M/month**. Doing it on 10% would cost **$158k/month**. Exa trains [its own rerankers](https://exa.ai/blog/evals-at-exa), and the 2B count includes different products. These two figures show why I need the request mix and candidate lengths before folding reranking into the table.
+
+If the reranker instead sees 100 passages of 100 tokens, the input falls to 11,000 tokens per search. At the same public price and 2B searches, that would be **$220k/month**. The passage length changes the answer by more than sevenfold.
+
+## 🧪 What I still need to test
+
+- **Index coverage:** how much of the served index gets lexical postings, compressed vectors and full-precision vectors? My table assumes 100% for each.
+- **Embedding throughput:** rerun the 780-token benchmark on hardware and a model closer to Exa's setup. The old H100 result is only a proxy.
+- **Refresh rate:** sample how often useful page text changes. A page update doesn't always require a new embedding, and a model change can trigger a much larger rebuild.
+- **Query work:** measure candidate counts, passage lengths and response sizes for Instant, Fast, Deep and Contents separately. A single 3KB Search response can't represent them all.
+- **Other storage:** estimate bytes for snapshots, derived fields and the separate entity, publications and places collections without counting the same page twice.
+
+## Key Takeaways
+
+- Exa's disclosed scale is **100B served pages and 2B monthly requests**. Those are different units, and neither gives a direct infrastructure bill.
+- Scaling my old per-page assumptions gives **about $808k/month** before several major costs. The result depends heavily on which structures each page actually gets.
+- The next useful step is to retest index coverage, embedding throughput and query work. Those measurements will move the estimate more than another decimal place in the storage rates.
