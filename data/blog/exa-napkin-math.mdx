@@ -13,19 +13,19 @@ authors: ['kshivendu']
 
 > Looking for the short version? Check [key takeaways](/blog/exa-napkin-math#key-takeaways)
 
-[Exa](https://exa.ai/) is a cool web search engine company. They [raised 85M\$ for Series B](https://exa.ai/blog/announcing-series-b) in September 2025. There are multiple parts of Exa AI architecture that they have described in their [blogs](https://exa.ai/blog). I've compiled them together and added some of my own notes and lots of assumptions for infra cost [napkin math](https://www.youtube.com/watch?v=IxkSlnrRFqc) as a fun exercise for myself. Please **take my estimates with a grain of salt** since it's not possible to be 100% right and my goal is to just get in the right ballpark. Also feel free to DM me on [X](http://kshivendu.dev/x) or [Linkedin](http://kshivendu.dev/linkedin) if you see any wrong or suboptimal assumptions :)
+[Exa](https://exa.ai/) is a cool web search engine company. They recently [raised 85M\$ for Series B](https://exa.ai/blog/announcing-series-b). There are multiple parts of Exa AI architecture that they have described in their [blogs](https://exa.ai/blog). I've compiled them together and added some of my own notes and lots of assumptions for infra cost [napkin math](https://www.youtube.com/watch?v=IxkSlnrRFqc) as a fun exercise for myself. Please **take my estimates with a grain of salt** since it's not possible to be 100% right and my goal is to just get in the right ballpark. Also feel free to DM me on [X](http://kshivendu.dev/x) or [Linkedin](http://kshivendu.dev/linkedin) if you see any wrong or suboptimal assumptions :)
 
-Update (October 2026): Exa has published more about its [index size](https://exa.ai/blog/what-is-web-indexing), [data pipeline](https://exa.ai/blog/exa-d), and [search pipeline](https://exa.ai/blog/composing-a-search-engine). I've rechecked the numbers below using what they shared. The cost tables still depend on my assumptions about hardware prices and which structures each page gets. So enjoy!
+Update: Exa recently did [improvements](https://exa.ai/blog/exa-api-2-0) across their pipeline to make search faster and more relevant. This means some of my assumptions might be slightly outdated now, but the fundamentals are still applicable. So enjoy!
 
 ## 📦 Content Storage
 
 Let’s estimate the storage requirements for large-scale text datasets:
 
 - [Fineweb](https://huggingface.co/datasets/HuggingFaceFW/fineweb)
-  - The [current default dataset](https://datasets-server.huggingface.co/size?dataset=HuggingFaceFW/fineweb) has 25.9B rows in 53.4 TB of Parquet files. That's about 2.06 TB per 1B docs. I originally used 44 TB from an [older release](https://huggingfacefw-blogpost-fineweb-v1.static.hf.space/index.html) alongside the newer token count, which made each doc look smaller.
-  - The [dataset card](https://huggingface.co/datasets/HuggingFaceFW/fineweb) reports over 18.5T GPT-2 tokens. Assuming 18.5T and the standard rule of 1 word = 1.3 tokens, 26B docs ~= 14.2T words.
+  - The [current default dataset](https://datasets-server.huggingface.co/size?dataset=HuggingFaceFW/fineweb) has 25.9B documents in 53.4 TB of Parquet files, or about 2.06KB per document. The files also include metadata, so this is only a rough proxy for page storage.
+  - The [dataset card](https://huggingface.co/datasets/HuggingFaceFW/fineweb) reports over 18.5T GPT-2 tokens. At 1.3 tokens per word, that is roughly 14.2T words.
     - 1 doc ~= 712 tokens ~= 547 words.
-    - English words on [avg](https://www.wyliecomm.com/whats-the-best-length-of-a-word-online/) have 5 chars and 1 char = 1 byte, so 547 \* 5 bytes ~= 2.7KB / doc before spaces and punctuation
+    - English words on [avg](https://www.wyliecomm.com/whats-the-best-length-of-a-word-online/) have 5 chars, so 547 \* 5 bytes ~= 2.7KB / doc before spaces and punctuation.
     - 1B docs ~= 2.7TB (estimated uncompressed)
 - [English Wikipedia](https://en.wikipedia.org/wiki/Wikipedia:Statistics#Articles)
   - 7M docs occupy 24 GB (compressed), 1B docs ~= 3.42 TB (compressed)
@@ -34,19 +34,19 @@ Let’s estimate the storage requirements for large-scale text datasets:
     - 708 \* 6 bytes ([reason](https://en.wikipedia.org/wiki/Wikipedia:Size_of_Wikipedia#Number_of_words)) = 4248 bytes
     - 1B docs => 4.2TB (estimated uncompressed)
 
-Given these, let’s assume Exa’s crawlers curate pages and extract text efficiently enough such that:
+Given these, let’s assume Exa’s crawlers curate pages and extract their text efficiently enough such that:
 
 - They are similar to [Fineweb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) but a little more dense.
-- 1B docs require 3TB (uncompressed) and 2.1TB (compressed)
-- On avg **1 page ~= 600 words ~= 780 tokens**. The letters alone take about 3KB before spaces and punctuation. I'll assume 2.1KB per page when compressed, close to FineWeb's file size per row. Those rows contain metadata too, so this is a rough proxy.
+- 1B docs require at least 3TB of letters alone (uncompressed) and around 2.1TB compressed.
+- On avg **1 page ~= 600 words ~= 780 tokens**. At 5 bytes per word, the letters alone take 3KB before spaces and punctuation. I'm using 2.1KB per compressed page as a rough assumption.
 
 | Resource          | Rate       | Volume for 1B docs | Cost/Month |
 | ----------------- | ---------- | ------------------ | ---------- |
 | **S3 storage**    | $0.02 / GB | 2.1 \* 1e3 GB      | $42        |
-| **Ephemeral SSD** | $0.08 / GB allocated | 2.1 \* 1e3 GB | $168 |
+| **Ephemeral SSD** | $0.08 / GB | 2.1 \* 1e3 GB      | $168       |
 | Total             |            |                    | $210       |
 
-The SSD rate is my allocation assumption. On AWS, [instance-store SSD is included in the instance price](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html). The $0.02 S3 rate is also rounded from the [published US tiers](https://aws.amazon.com/blogs/aws/aws-storage-update-s3-glacier-price-reductions/) of about $0.021-$0.023 / GB-month.
+The SSD rate is my allocation assumption. On AWS, [instance-store SSD comes with the instance](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html), rather than having a separate per-GB bill.
 
 ## 🔍 Lexical/Keyword search (BM25):
 
@@ -56,14 +56,14 @@ The SSD rate is my allocation assumption. On AWS, [instance-store SSD is include
 
 ### Napkin math
 
-- Postings lists are a large part of the BM25 index, but Exa also found meaningful overhead in the data structures around them.
+- Postings lists take a lot of BM25 memory, but the data structures around them also add overhead.
 - As per [their blog](https://exa.ai/blog/bm25-optimization#:~:text=a%20single%20byte.-,Assuming%20the), each posting list entry takes:
   - doc_id → 4 bytes (uint32)
-  - term_freq → 1 byte
+  - term_freq → 1 byte (fp8)
   - 5 bytes total
-- If the old 1.8 TB index held only 5-byte entries, it would have 1.8 TB / 5 bytes / 1B docs = 360 terms per doc. But the RAM figure also includes padding, allocations, and metadata. I can't use it to count distinct terms.
-- If 10M vocabulary terms averaged 5 bytes each, their strings would take 50MB. The lookups and short posting lists take more space.
-- Exa mentioned `uint32` doc IDs in the old representation. They could be local to each shard, so their width doesn't tell us the global doc count. [Delta encoding](https://exa.ai/blog/bm25-optimization#:~:text=2.%20Variable%2Dlength%20%2B-,Delta%20Encoding,-for%20Document%20IDs) later reduced the average ID to 1.3 bytes in that design.
+- Dividing 1.8 TB by 5 bytes gives 360 entries per doc, but only if postings were the entire index. Exa also counts padding, allocations and metadata in that RAM figure, so it doesn't tell us the actual number of unique terms per doc.
+- If 10M vocabulary terms averaged 5 bytes each, their strings alone would take 50MB. The lookup structures and posting lists add more.
+- Exa used `uint32` document IDs in that design. IDs can be local to each shard, so this doesn't tell us the total number of indexed documents. [Delta encoding](https://exa.ai/blog/bm25-optimization#:~:text=2.%20Variable%2Dlength%20%2B-,Delta%20Encoding,-for%20Document%20IDs) later reduced the average ID size.
 - I'm assuming that 100% of index is kept in RAM for faster iteration on posting lists (~2-5x faster compared to sequential reads in SSD - [source](https://github.com/sirupsen/napkin-math))
 
 | Resource | Rate      | Volume | Cost/Month for 1B docs |
@@ -81,22 +81,22 @@ The SSD rate is my allocation assumption. On AWS, [instance-store SSD is include
 - As per [this](https://exa.ai/blog/building-web-scale-vector-db), they use [binary quantization](https://qdrant.tech/articles/binary-quantization) (BQ) and some clever CPU tricks for vector distance calculations ([SIMD](https://en.wikipedia.org/wiki/Single_instruction,_multiple_data) + precomputing possible outputs and keeping them in CPU registers for skipping calculation).
 - They train [Matryoshka embeddings](https://huggingface.co/blog/matryoshka) with 4096 dims but only keep first 256 dims BQ vectors for index
 - They use [IVF Index](https://youtu.be/chz74Mtd1AA?si=DvvDE3rO9HvVvox7&t=429) (also used in FAISS & pgvector) which an Approximate Nearest Neighbours Algorithm. It basically relies on k-means clustering, and during search time, finds the relevant clusters by comparing distance with respective cluster centroids, and only queries few of those clusters.
-- They say they fetch extra results and re-rank them with uncompressed vectors. I assume a 1024d BQ stage and a 2048d f16 stage below to put numbers on the cost. Those stages are my guesses.
+- For the storage estimate, I'll assume a first re-ranking stage with 1024d BQ vectors and a second stage with 2048d fp16 vectors. Exa describes re-ranking with less compressed vectors, but these exact sizes are my assumptions.
 
 ### Napkin math
 
-- I use [Qwen3-Embedding-8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B) as a cost and speed proxy. Its vector size fits [Exa's description](https://exa.ai/blog/building-web-scale-vector-db#:~:text=4096%20floating%2Dpoint%20numbers), but Exa [trains its own model](https://exa.ai/blog/exa-api-2-0).
-  - For this calculation, I assume one page becomes one vector. Qwen's 32K-token context length doesn't tell us how Exa splits long pages.
+- I'll use [Qwen3-Embedding-8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B) as a compute cost proxy. Exa describes [4,096-dimensional embeddings](https://exa.ai/blog/building-web-scale-vector-db), but the dimension alone doesn't identify its model.
+- I'll assume one vector per page. Longer pages could need chunking, so the real vector count might be higher.
 - Let's estimate the storage requirements of vectors
-  - Each original vector would take 4096 dims \* 2 bytes (assuming fp16) = 8192 bytes. This means 1B vectors would take 8.192 TB for 1B docs.
-  - By truncating matryoshka to 256 dims it becomes 512 GB for 1B vectors.
+  - Each original vector would take 4096 dims \* 2 bytes (assuming fp16) = 8KB by default. This means 1B vectors would take 8 \* 10^3 bytes \* 10^9 = 8 \* 10^12 = 8 TB for 1B docs.
+  - By truncating matryoshka to 256 dims it becomes, 8 / (4096 / 256) TB = 8 / 16 TB = 512 GB for 1B vectors.
   - With binary quantization, 16 bits (since fp16) becomes 1 bit. So 512 GB / 16 = 32 GB per 1B vectors or **32 bytes (256 bits) per vector**
   - Note how MRL truncation + BQ led to 16\*16=256x reduction
 - For IVF index with MRL truncated 256d BQ vectors for their "neural search"
-  - IVF Index needs centroids generated from k-means clustering algos. Exa reported [100k clusters](https://exa.ai/blog/building-web-scale-vector-db) for its older system. For this 20B-vector calculation, let's assume **200k clusters, each having 100k vectors**. That newer cluster count is my guess.
+  - IVF Index needs centroids generated from k-means clustering algos, If they have 20B vectors, they should have **200k clusters, each having 100K vectors** since it becomes very hard to brute-force compare vectors in segments larger than 100k within their latency budget.
   - Each cluster will have a centroid and I'm assuming they compare with uncompressed centroid vectors for maximizing recall.
   - Centroids will require 200k \* 4096 \* 2 bytes (f16) ~= 1.64 GB
-  - Each vector ID needs to be stored in the IVF Index. Assuming 8-byte IDs, 20B \* 8 bytes = 160 GB. Local shard IDs could be smaller.
+  - If IDs take 8 bytes each, 20B \* 8 bytes = 160 GB. This is an assumption for the estimate, since shard-local IDs could be smaller.
   - Each 256d truncated + BQ compressed vector will take 32bytes (256 bits), so 20B \* 32 bytes = 640 GB
   - So total requirements are like 1.64 + 160 + 640 GB ~= 802 GB for 20B vectors
     - This is 40GB for 1B vectors
@@ -104,9 +104,9 @@ The SSD rate is my allocation assumption. On AWS, [instance-store SSD is include
 - For 1st stage re-ranking with 1024 dim MRL truncated BQ vectors:
   - Storage for 1B vectors takes 128GB (1024 / 8 \* 1B / 1e9)
 - For 2nd stage re-ranking with 2048 f16 vectors:
-  - Storage for 1B docs takes 4096GB (8.192TB/2). This is okay for disk but storing all of them in RAM would be too costly.
-  - Let's assume 25% (1024 GB) is cached in RAM.
-- In this cost scenario I keep the index and 1024d BQ vectors in RAM, plus a quarter of the 2048d vectors. I also count local disk and S3 copies. [Exa-d](https://exa.ai/blog/exa-d) uses S3 for its data pipeline. I'm assuming the serving copies.
+  - Storage for 1B docs takes 4000GB (8TB/2). This is okay for disk but storing all of them in RAM would be too costly.
+  - I'll assume the frequently accessed 25% (1000 GB) is cached in RAM. The actual hot set could be different.
+- Some of these components must be cached in RAM for fast queries and all the components must be kept on local (ephemeral) disk for paging in/out of memory quickly and handle a node crash. The ultimate source of truth can be S3 which is regularly updated to keep the index, vectors, and content fresh.
 
 | Component                        | Rate      | Volume | Cost/Month for 1B docs |
 | -------------------------------- | --------- | ------ | ---------------------- |
@@ -114,60 +114,59 @@ The SSD rate is my allocation assumption. On AWS, [instance-store SSD is include
 | Index Ephemeral SSD + S3         | $0.1 / GB | 40GB   | $4                     |
 | 1024d BQ Vectors in RAM          | $2 / GB   | 128GB  | $256                   |
 | 1024d BQ Vectors in SSD + S3     | $0.1 / GB | 128GB  | $12.8                  |
-| 2048d Vectors RAM                | $2 / GB   | 1024GB | $2048                  |
-| 2048d Vectors Ephemeral SSD + S3 | $0.1 / GB | 4096GB | $409.6                 |
-| Total                            |           |        | $2810.4                |
+| 2048d Vectors RAM                | $2 / GB   | 1000GB | $2000                  |
+| 2048d Vectors Ephemeral SSD + S3 | $0.1 / GB | 4000GB | $400                   |
+| Total                            |           |        | $2752.8                |
 
-At $2,810/month per 1B docs, this vector setup costs about **1.5x** the $1,890 lexical index. The assumed 2048d vectors in RAM account for **73%** of the vector cost. Count their disk copy too, and it's **87%**.
+Note how this is 2.8k / 1.9k = **~1.5x of lexical search**. The 2048d vector RAM cache contributes $2,000, or about **73% of the vector total** under these assumptions.
 
 ## 🗂️ Metadata storage:
 
 - For each web page, they also need to store metadata like title, url, publishedDate, author, id, image, favicon, text, summary, etc.
-- Their [search API example](https://docs.exa.ai/reference/search) returns page attributes such as title, URL, and dates. Let's assume 512 bytes per page for metadata, with full text and summaries counted separately.
-- So total metadata storage on disk + S3 is 1B docs \* 512 bytes = 512GB for 1B doc metadata
-- Assuming that metadata for the same 25% points are cached, we need 128GB of RAM
+- Their [search API example](https://docs.exa.ai/reference/search) returns page attributes that can be stored in < 300 bytes. It's a tiny overhead so let's assume 512bytes (0.5KB)
+- So total metadata storage on disk + S3 is 1B docs \* 0.5KB = 0.5TB for 1B doc metadata
+- Assuming that metadata for the same 25% points are cached, we need 125GB of RAM
 
 | Component                   | Rate      | Volume | Cost/Month for 1B docs |
 | --------------------------- | --------- | ------ | ---------------------- |
-| Metadata RAM                | $2 / GB   | 128GB  | $256                   |
-| Metadata Ephemeral SSD + S3 | $0.1 / GB | 512GB  | $51.2                  |
-| Total                       |           |        | $307.2                 |
+| Metadata RAM                | $2 / GB   | 125GB  | $250                   |
+| Metadata Ephemeral SSD + S3 | $0.1 / GB | 500GB  | $50                    |
+| Total                       |           |        | $300                   |
 
 ## 🌐📤 Network egress costs:
 
 The APIs respond back to the user and that also costs money. [Napkin math](https://github.com/sirupsen/napkin-math) says it's `$0.1` per GB for "internet egress"
 
-I measured a response of about 3KB from one basic search API call. In [October 2026, Exa said](https://www.linkedin.com/company/exa-ai/) it handles 2B requests per month. Over 30 days, that's about **772 requests per second on average**. This is across Exa's products. It doesn't tell us how many are web searches, how high the peaks are, or how many internal searches one request triggers.
+I did a basic search API call with Exa and response size was around 3KB. If they serve 300M requests / month, that's about 116 requests/s on average. I'll assume a provisioned peak of 300 requests/s.
 
-If all 2B responses were 3KB, they would send 6,000 GB per month. At the assumed $0.10/GB, that's **$600/month**. Full page contents and agent outputs can be much larger than my sample.
+3 KB \* 300M => 900 GB of egress => 900 \* 0.1 \$ = 90 \$ / month for 300M requests which is very cheap!
 
 ## 🔢 Embedding generation:
 
 - As we [previously](#-content-storage) derived/assumed, let's say each Exa doc has 780 tokens.
 - If they were to embed 1B docs with OpenAI `text-embedding-3-large` embedding in batches (see [pricing](https://platform.openai.com/docs/pricing#embeddings))
   - 780 \* 1B \* 0.065 \$ / M token = 50.7k \$ for 1B docs (insane!)
-  - Exa uses its own model, so this gives us a public API comparison.
-- In [this benchmark](https://www.tensoreconomics.com/p/why-are-embeddings-so-cheap#:~:text=a%20million%20tokens.-,In%20Tab.%202), Qwen3-Embedding-8B on an H100 processed 33,488 tokens/s with 1040-token inputs and batch size 4. At 100% utilization and \$2 / GPU-hour, that works out to $0.0166 / 1M tokens. My assumed 780-token pages and Exa's model may run differently.
-  - 780 tokens/doc \* 1B docs / 1M \* $0.0166 ~= **$13k for one full embedding pass**.
-  - This is much better! One $13k embedding pass is still more than one month of storage for 1B docs in my tables, about $5.2k. Embedding runs when a vector is created or refreshed. Storage costs recur every month.
-  - Exa bought/built their [Exacluster](https://exa.ai/blog/meet-the-exacluster) for embedding and training workloads:
-    - [Vast's GPU prices](https://vast.ai/pricing) vary by machine and reservation type. The $2 / H100-hour above comes from the Qwen benchmark.
-    - Exa says the cluster cost [5M\$](https://exa.ai/blog/meet-the-exacluster) for 144 H200s and draws about 100kW. Spreading $5M over three years of 24/7 use gives about $1.32 / GPU-hour. At my assumed $0.10 / kWh, power adds about $0.07 / GPU-hour. That's $1.39 before hosting, repairs, and idle time.
-    - I'll use $1.50 / GPU-hour for the napkin math. At the benchmark's speed, 0.0166 / 2 \* 1.5 ~= $0.0125 / 1M tokens. This is optimistic once the cluster's other costs and jobs are included.
-    - Exa also disclosed an older cluster with 80 A100s. The benchmark ran on an H100, so I'm only using its throughput as a proxy for these machines.
+  - At this price, OpenAI's batch API costs about 3.9x the rented-H100 proxy below. Exa uses its own model.
+- As per [this blog](https://www.tensoreconomics.com/p/why-are-embeddings-so-cheap#:~:text=a%20million%20tokens.-,In%20Tab.%202), assuming 100% utilization with H100 GPUs rented at \$ 2 / hr, the cost is $ 0.0166 / 1 M tokens.
+  - 780 \* 1000 \* 0.0166 \$ / M token ~= 13k $ for 1B docs.
+  - This is much better! However, notice that this still surpasses all the costs.
+  - Exa built its [Exacluster](https://exa.ai/blog/meet-the-exacluster) for model training and embedding work:
+    - One of the cheapest H100 is [offered](https://vast.ai/pricing) at 1.87\$ / hr. But general pricing is 2-4\$ / hr.
+    - I'll assume $1.50 per productive GPU-hour for this scenario. Scaling the rented-GPU proxy gives 0.0166 / 2 \* 1.5 = 0.0125 \$ / 1M tokens. Exa's actual cost also depends on power, hosting and utilization.
+    - Exacluster has H200s & A100 instead of H100s. But let's assume the same rates.
     - Note that the Exacluster is also used for training embedding model and re-ranker so there's more value to be derived from the Exacluster.
 
-| Embedding model               | Rate             | Tokens    | Cost for 1B docs |
-| ----------------------------- | ---------------- | --------- | ---------------- |
-| OpenAI `text-embedding-3-large` Batch | $0.0650 / 1M tok | 780 \* 1B | $50.7k |
-| Qwen on Rented H100 GPUs      | $0.0166 / 1M tok | 780 \* 1B | $13k             |
-| Qwen proxy at Exacluster GPU cost | $0.0125 / 1M tok | 780 \* 1B | $9.75k       |
+| Embedding model                       | Rate             | Tokens    | Cost for 1B docs |
+| ------------------------------------- | ---------------- | --------- | ---------------- |
+| OpenAI `text-embedding-3-large` Batch | $0.0650 / 1M tok | 780 \* 1B | $50.7k           |
+| Qwen on Rented H100 GPUs              | $0.0166 / 1M tok | 780 \* 1B | $13k             |
+| Qwen on Exacluster                    | $0.0125 / 1M tok | 780 \* 1B | $9.75k           |
 
-The two Qwen rows differ by **$3.25k per 1B docs** embedded. For 20B docs, that's **$65k per full pass**. At 30% monthly refresh, it would be **$234k/year**. This compares two assumed GPU prices, so it's a scenario rather than Exa's measured saving.
+At these assumed GPU rates, Exacluster saves **$3.25k per 1B docs embedded**, or **$65k for one complete pass over 20B docs**. The saving depends on how much of the cluster's time and cost goes to embedding.
 
 ## Re-ranker:
 
-- I use a [Qwen Reranker](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B#qwen3-embedding-series-model-list) as another cost proxy. Exa says it trained its [own reranking models](https://exa.ai/blog/evals-at-exa).
+- They might be using something like the [Qwen Rerankers](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B#qwen3-embedding-series-model-list)
 - Public [providers](https://deepinfra.com/Qwen/Qwen3-Reranker-0.6B) charge \$ 0.010 \/ 1M tokens for the 0.6B model. Let's assume the same rates.
 - It compares 1 query (same 10 tokens) against 100 documents (each with 780 tokens avg). Total tokens: 100 \* (780 + 10) = 79k
 - Note: This is purely a **search time cost** unlike document embeddings which have to be stored/maintained beforehand.
@@ -178,59 +177,37 @@ The two Qwen rows differ by **$3.25k per 1B docs** embedded. For 20B docs, that'
 | `Qwen3-Reranker-4B`   | $0.0250 / 1M tok | 79k            | 1.975 \$           |
 | `Qwen3-Reranker-8B`   | $0.0500 / 1M tok | 79k            | 3.950 \$           |
 
-At the public price above, re-ranking 100 full documents costs **$0.79 per 1,000 searches**. Apply that to 2B searches and it becomes **$1.58M/month**. If one in ten requests takes this path, it becomes **$158k/month**. For 100 shorter passages, each with 100 tokens, the input falls to 100 \* (100 + 10) = 11k tokens per search. Applying the same price to 2B searches gives **$220k/month**. Exa uses its own model, and its requests include more than search. These examples show how the number and length of candidates change the cost.
+At an assumed $5 per 1k queries, the $0.79 small-reranker example would take about 16% of the price. This doesn't tell us which model Exa uses or how many candidates it re-ranks.
 
 ## 🕷️ Crawling updates
 
-- This [research paper](https://snap.stanford.edu/class/cs224w-readings/Fetterfly03PageEvolution.pdf) found that web page changes vary a lot by page and domain, and many changes are trivial or just markup. It doesn't establish a 25% monthly re-embedding rate for Exa.
+- [Web pages change at different rates](https://snap.stanford.edu/class/cs224w-readings/Fetterfly03PageEvolution.pdf), and many changes don't require a new embedding.
 - There might be a single digit **monthly growth of the dataset - say 2%** (assuming aggressive crawling)
 - Content disappearance: ~0.5% monthly
-- Overall let's assume **30% monthly re-embedding** for changed and new content. [Exa-d](https://exa.ai/blog/exa-d) can update specific derived fields and can also rebuild embeddings for the whole index when Exa changes models. Exa's actual refresh fraction could differ.
+- Overall let's assume **30% of documents need new embeddings each month** as a scenario for freshness and growth.
 
 ## 💰📊 Overall costs:
 
-I used 20B docs for the [Exa 2.0 launch](https://exa.ai/blog/exa-api-2-0), when they said they crawled and parsed tens of billions of pages. In [August 2026](https://exa.ai/blog/exa-firefox), Exa said it served an index of **100B documents** and tracked **1.4T URLs**. The URL count includes pages beyond the served index, so I'll run the cost model at 20B and 100B pages. Both cases assume every page gets the storage and index structures in my tables.
+For this estimate, I'm assuming 20B docs based on Exa saying it crawled and parsed [tens of billions of pages](https://exa.ai/blog/exa-api-2-0#:~:text=now%20crawl%20%2B%20parse-,tens%20of%20billions) around the Exa 2.0 launch.
 
-The 30% monthly refresh applies only to new embeddings. RAM and storage are charged on the **full index** each month. I use 2B requests per month for egress. For re-ranking, I'll show what happens if different shares of those requests are searches.
+Storage and RAM costs recur on the full 20B-doc index each month. Only the embedding row uses the assumed 30% refresh rate. The egress row uses the separate assumption of 300M requests per month.
 
-| Component | Monthly for 1B docs | Monthly for 20B docs | Monthly for 100B docs |
-| --------- | ------------------- | -------------------- | --------------------- |
-| Content storage | $210 | $4,200 | $21,000 |
-| Lexical storage | $1,890 | $37,800 | $189,000 |
-| Vector storage | $2,810.4 | $56,208 | $281,040 |
-| Metadata storage | $307.2 | $6,144 | $30,720 |
-| Re-embedding 30% | $2,925 | $58,500 | $292,500 |
-| Egress at 2B small responses | independent of doc count | $600 | $600 |
-| **Subtotal** | | **$163,452** | **$814,860** |
+| Component                       | Monthly cost for 20B docs |
+| ------------------------------- | ------------------------- |
+| Content storage                 | $4,200                    |
+| Lexical storage                 | $37,800                   |
+| Vector storage                  | $55,056                   |
+| Metadata storage                | $6,000                    |
+| Re-embedding 30% of docs        | $58,500                   |
+| Egress for 300M small responses | $90                       |
+| **Total**                       | **$161,646**              |
 
-The first full embedding pass is **$195k for 20B docs** or **$975k for 100B docs** under the assumed $9.75k / 1B rate. It's a one-time compute job. The storage rows above recur every month, even when the pages don't change.
+Notes:
 
-The 100B case also needs a capacity check. Refreshing 30% means embedding **30B pages**, or 23.4T tokens, each month. At the [Qwen benchmark's](https://www.tensoreconomics.com/p/why-are-embeddings-so-cheap) 33,488 tokens/s per GPU, **144 GPUs would need about 56 days**. That matches the size of Exa's [2025 H200 cluster](https://exa.ai/blog/meet-the-exacluster), though the benchmark ran on H100s with a different model. Exa's [current about page](https://exa.ai/about) says it has hundreds of H200s. So 56 days checks this old-cluster example, while Exa's current capacity and model throughput remain unknown.
-
-Now add the re-ranking examples to the table's subtotal:
-
-| Re-ranking assumption at 2B requests/month | Total for 20B pages | Total for 100B pages |
-| ------------------------------------------ | ------------------- | -------------------- |
-| No re-ranking | $163k/month | $815k/month |
-| 10% of requests score 100 full docs | $321k/month | $973k/month |
-| Every request scores 100 short passages | $383k/month | $1.03M/month |
-| Every request scores 100 full docs | $1.74M/month | $2.39M/month |
-
-The last row uses the public API price for a 0.6B reranker. It shows how expensive full-document scoring at this volume could be. Exa's own model and request mix will set its real cost.
-
-Exa also [said it passed $100M in annualized revenue](https://www.linkedin.com/company/exa-ai/). That works out to more than **$8.33M/month** at the current run rate. Dividing by 2B monthly requests gives more than **$4.17 per 1,000 requests**. At Exa's [Instant list price of $4 per 1,000 requests](https://exa.ai/pricing), 2B requests would bring in $8M/month, or $96M annualized. That's close. Exa also sells Fast, Deep, Contents, and Agent requests at different prices, with custom contracts for large customers. The implied $4.17 figure blends revenue from all of these products.
-
-At the $100M run rate, the $815k subtotal for the 100B-page case is about 9.8% of monthly revenue. The all-full-document example above is about 28.7%. Those are comparisons with a revenue run rate, rather than margin estimates. Crawling, replicas, query compute, and other costs are still missing.
-
-Exa also has a [separate search path for entities](https://zilliz.com.cn/blog/exa-zilliz-cloud-agent-search) such as people and companies. Its ML pipeline creates both dense and sparse vectors for each entity. For a query, it searches those vectors, combines the two result lists, and attaches structured data such as company details. The interview calls the list-combining step reciprocal-rank fusion. That's different from the model re-ranker above, which scores the text of each candidate.
-
-Exa says its main web index stays on its own infrastructure. The entity path uses a managed search service that supports frequent updates and metadata filters. Those entity collections and their serving cost are additional to my web-page table.
-
-Exa also reports an index of [350M publications and 30M authors](https://exa.ai/blog/publications-search), plus [211M places with structured fields](https://exa.ai/blog/places-search). These are different records from web pages and may overlap with them. I need their storage sizes and update rates before putting a cost on them.
-
-[Dynamic Highlights](https://exa.ai/blog/dynamic-highlights) is another per-query cost. It runs a model over retrieved content to choose short snippets. Exa reports 95% fewer output tokens than returning full pages in its evaluation. My 3KB response sample and cost table don't account for the model work or these other response sizes.
-
-The table covers only the costs I could put numbers on. Crawling, replicas, query compute, model training, extra artifacts in [exa-d](https://exa.ai/blog/exa-d), and LLM calls in Deep add more. Exa also reports [over 400B historical webpage snapshots](https://exa.ai/blog/exa-snapshot), while my content row counts one current copy. The $2/GB RAM and SSD rates are my own allocations. All of this keeps the subtotal from being an estimate of Exa's actual bill.
+- The first complete embedding pass costs **$195k** at the assumed rate. That is a one-time compute job. The storage rows above recur every month.
+- These assumptions give **about $162k/month, or $1.94M/year**, before re-ranking, crawling, clustering, replicas and query compute.
+- The total also leaves out Exacluster costs beyond my assumed GPU-hour rate, query CPU and GPU work, LLMs for websets, and observability.
+- At a much larger index, the storage and refresh costs in this model would rise with the number of indexed pages. The rates here are assumptions, so I wouldn't treat the result as a minimum bill.
 
 ## ⏱️ Search latency analysis:
 
@@ -252,63 +229,52 @@ globalping http api.exa.ai from World --host api.exa.ai --path '/search' --limit
 
 ### Lexical search latency
 
-The [Exa blog](https://exa.ai/blog/bm25-optimization) says they get sub-500ms latency for retrieving thousands of top results with lexical search. It doesn't label that number p50. Exa's [newer pipeline description](https://exa.ai/blog/composing-a-search-engine) shows dense and sparse retrieval running in parallel in one example, so I can't infer that Fast uses only neural search from the BM25 latency alone.
+The [Exa blog](https://exa.ai/blog/bm25-optimization) says they retrieve thousands of top results with lexical search in under 500ms. It doesn't label that number as p50, and it doesn't tell us which retrievers run in Fast mode.
 
-BM25 can have more latency variation than vector search in some setups, especially with:
+BM25 latency can vary more than vector search in some setups, especially with:
 
 - Longer queries (More posting lists to scan. This downside can be saturated using [wAND](https://izihawa.github.io/summa/blog/how-search-engines-work) but you still see more variance in latency)
 - More data (less pronounced. But this happens especially if you get common but non-stopword terms)
 
-For example, [this Vespa benchmark](https://blog.vespa.ai/pretrained-transformer-language-models-for-search-part-4/#:~:text=Benchmarking%20Results) used 9M MS Marco passages and measured end-to-end latency under roughly 70% CPU load:
+For example effect of longer queries part can be seen in [this benchmark](https://blog.vespa.ai/pretrained-transformer-language-models-for-search-part-4/#:~:text=Benchmarking%20Results):
 
 | Retriever      | Average latency (ms) | p999 latency (ms) |
 | -------------- | -------------------- | ----------------- |
 | Lexical (WAND) | 16.83                | 209.40            |
 | Dense (ANN)    | 18.58                | 28.70             |
 
-You can see how avg latency is similar for both vector search and lexical search but p999 is **7.3x** more for lexical search in this benchmark. Exa uses a different index, corpus and hardware, so this ratio can't predict its tail latency.
+You can see how average latency is similar here, while lexical search has **7.3x higher p999 latency**. This is one benchmark with its own corpus and hardware, so the ratio doesn't predict Exa's latency.
 
-At tens of billions of docs, I would expect posting list shards queried in parallel and then merged, but Exa hasn't published that shard layout.
+Also, if Exa operates with 20B+ docs (with Exa 2.0), I can imagine that they split 20B docs into multiple "posting list shards" and query them in parallel and combine results afterwards.
 
 ### Neural search latency (Exa fast)
 
-[Previously](https://exa.ai/blog/fastest-search-api) Exa Fast search had p50 = 423ms and p95 = 604ms in the published chart, measured from us-west-1.
+[Previously](https://exa.ai/blog/fastest-search-api) Exa Fast search had p50 = 423ms and p95 = 604ms in its published chart.
 
-[With Exa 2.0](https://exa.ai/blog/exa-api-2-0), the chart shows p50 = 346ms and **p90 = 462ms**, measured from us-west-2. So the two p50 values differ by 77ms, though the benchmark setups also changed. We can't subtract 462 from the old p95 of 604ms: p90 and p95 measure different parts of the latency distribution.
+[With Exa 2.0](https://exa.ai/blog/exa-api-2-0), the chart shows p50 = 346ms and p90 = 462ms. The p50 values differ by 77ms, although the benchmark regions also changed. We can't compare the old p95 with the new p90 directly.
 
-What happened inside that 423ms? This diagram is my sketch of possible components, not a measured Exa trace:
+Here are the main steps I would expect in a Fast search. This is a pipeline sketch, not a measured breakdown of the 423ms:
 
 ![Exa Search Pipeline](/static/images/blogs/exa-search-pipeline.svg)
 
-- Network latency: They measured roughly 50ms from their benchmark region.
-- Query embedding generation with as per [this](https://www.tensoreconomics.com/p/why-are-embeddings-so-cheap#:~:text=despite%20batch%20size%20increasing) on H100 SXM:
-  - 1040 tokens with batch size = 1 => 25RPS => 40ms
-  - 520 tokens with batch size = 1 => 34RPS => 29ms
-  - 260 tokens with batch size = 1 => 37RPS => 27ms
-  - 260 tokens with batch size = 8 => 63RPS => 15ms
-  - 260 tokens with batch size = 16 => 77RPS => 12ms
-  - The benchmark uses Qwen3-Embedding-8B on an H100, with at least 260 input tokens. A 10-token Exa query on Exa's own model doesn't have a measured time here.
-- Vector retrieval, fetching content, and re-ranking also take time. Exa now says independent search nodes can run [concurrently](https://exa.ai/blog/composing-a-search-engine), so subtracting guessed sequential stages from the 423ms p50 would give a false breakdown.
-- Exa 2.0 mentioned new clustering, lexical compression, and assembly optimizations. I can't split the p50 change between those and model or reranker changes from the public numbers, especially with two different benchmark setups.
-- In [February 2026](https://exa.ai/blog/exa-instant), Exa launched Instant at sub-200ms. That's a different endpoint, so I wouldn't compare it as a direct Fast regression or improvement.
+- Network round trip and request handling.
+- Query embedding and retrieval from the vector index.
+- Fetching candidates and re-ranking them.
+
+The public p50 covers all of these steps. Without timings for each one, I can't assign the 77ms difference to a particular optimization.
 
 ## What if Exa used HNSW instead of IVF?
 
-- In [this billion-scale KNN benchmark](https://blog.vespa.ai/billion-scale-knn-part-two/), a 72 vCPU machine handles 1B binary vectors:
-
-  - Search latency of HNSW: 2ms with recall 50% and 4ms with 90% recall with k=10
-  - HNSW indexing lowers write throughput and raises memory use compared with the no-HNSW setup. The article's indexing graph shows the tradeoff, but it doesn't give a per-write latency from dividing CPU count by throughput.
-
-- I previously projected 100-200ms IVF search and around 5ms HNSW search at 10B docs from `sqrt(N)` and `log(N)` ratios. That was too much to infer from those asymptotic expressions. The real comparison needs the same vectors, recall target, filters, hardware, shard layout and update load. Exa's clustering design trades extra candidate scanning for a smaller index that's easier to shard and filter.
+- In [this billion-scale KNN benchmark](https://blog.vespa.ai/billion-scale-knn-part-two/), HNSW reaches about 4ms average search latency at 90% recall for top 10 results on one setup. The same article shows that maintaining the graph reduces indexing throughput.
+- IVF searches selected clusters. HNSW follows graph links. Their latency and recall at 20B pages depend on the shard layout, hardware, filters, update rate and recall target. A small-scale benchmark alone can't give us Exa's latency at that size.
 - Similar flaws of scaling IVF were also demonstrated in [my previous benchmark blog with Nirant](https://nirantk.com/writing/pgvector-vs-qdrant) that compared Qdrant's HNSW and PGVector's IVF Index and our blog accelerated the implementation of HNSW in pgvector.
-- If Exa switched to HNSW, it would likely pay more for graph memory and indexing CPU. Whether recall or latency improved would need a like-for-like benchmark. Exa kept improving its clustered index at [tens of billions of pages](https://exa.ai/blog/exa-api-2-0), so HNSW isn't an obvious free win here.
+- If Exa switched to HNSW, graph memory and indexing work would be added to the bill. Whether search got faster at the same recall would need a like-for-like benchmark.
 
 ## Key takeaways:
 
 - Exa applies heavy compression through matryoshka embeddings and binary quantization, then offsets the loss with uncompressed vectors and re-ranking.
-- The public docs show dense and sparse retrieval, fusion and re-ranking. At 2B monthly requests, scoring 100 full documents on every request would add $1.58M/month at the public proxy price. The share of requests that take that path drives this cost.
-- Documents on the web change over time and cost of re-indexing (document embedding generation + k-means clustering) is high. To mitigate this, Exa built their ExaCluster.
-- Exa now says it serves a 100B-page index. Under my assumptions, storage, refresh, and small-response egress add to $815k/month at that size. The bill will depend on how many pages get each index structure and what share of requests use each product.
+- In the query pipeline, compressed vector search keeps the index small. Re-ranking more candidates can add substantial work per request.
+- Documents change over time, so embedding work keeps recurring. At the assumed 30% monthly refresh, the 20B-page model lands at about **$162k/month** before crawling, replicas, training and query compute.
 
 ## Closing remarks:
 
