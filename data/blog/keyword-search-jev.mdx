@@ -15,7 +15,7 @@ Both guesses can be wrong. For the query "How do I improve on my math skills?", 
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-I asked [Jev](https://openrouter.ai/docs/guides/community/jev), TypeSafe's decision model, how much each word matters in its query. One answer can fix both guesses. It raises the weight of the words that matter, and it tells which words are safe to drop. Then I trained a small model to copy the weights, so it's cheap enough to run on every query.
+I asked [Jev](https://openrouter.ai/docs/guides/community/jev), TypeSafe's decision model, how much each word matters in its query. It raises the weight of the words that matter, and it tells which words are safe to drop. Then I distilled the weights into a small model, which is cheaper and faster to run on every query.
 
 ## Give the important words more weight
 
