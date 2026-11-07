@@ -9,11 +9,13 @@ summary: 'BM25 uses rarity as a proxy for term importance. Jev adds context, and
 authors: ['kshivendu']
 ---
 
-Some words matter more than others in a search query. BM25 uses rarity as a guess for query term importance. But for the query "How do I improve on my math skills?", a rare word like `skills` matters very little, and a common word like `math` matters a lot.
+Some words matter more than others in a search query. BM25 guesses which ones in two ways. It gives rare words more weight, and it drops common words like `the` and `will` using a fixed stopword list.
+
+Both guesses can be wrong. For the query "How do I improve on my math skills?", a rare word like `skills` matters very little, and a common word like `math` matters a lot. For `"shall" vs. "will"`, the stopword list throws away `will`, which is half the question.
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-I tried using [Jev](https://openrouter.ai/docs/guides/community/jev), TypeSafe's decision model, to judge which words matter. Then I used its judgments to train a small model. The goal is better keyword search with a model cheap enough to run on every query.
+I asked [Jev](https://openrouter.ai/docs/guides/community/jev), TypeSafe's decision model, how much each word matters in its query. One answer can fix both guesses. It raises the weight of the words that matter, and it tells which words are safe to drop. Then I trained a small model to copy the weights, so it's cheap enough to run on every query.
 
 ## Give the important words more weight
 
@@ -78,7 +80,24 @@ The replacement is **`df` → `df × (1 − importance)`**. BM25 uses the new we
 
 Here `ln` is the natural logarithm. The `+0.5` and `+1` are the usual [IDF smoothing](https://lucene.apache.org/core/10_2_2/core/org/apache/lucene/search/similarities/BM25Similarity.html). They keep the weight finite even at 100% importance. At zero importance, we get ordinary IDF back.
 
-The adjusted count changes the score. `Venice` still matches the same 53 documents. BM25's match strength, stemming, and static stopword list stay the same. The default settings are `k₁ = 1.2` and `b = 0.75`.
+The adjusted count changes the score. `Venice` still matches the same 53 documents. BM25's match strength and stemming stay the same. The default settings are `k₁ = 1.2` and `b = 0.75`.
+
+## Let Jev pick the stopwords
+
+Search for `"shall" vs. "will"`. The static stopword list removes `will`, even though comparing those two words is the whole query. If Jev decides which words to keep instead, the relevant result, **“I will” or “I shall”**, moves to first place. This query's nDCG@10 rises from **0 to 71.38**.
+
+To ask for this directly, I replace the first label in the prompt:
+
+```python
+question["criteria"][0] = (
+    "Stopword: grammar or conversational filler; "
+    "dropping it leaves the search intent unchanged"
+)
+```
+
+The other two labels stay the same. Jev gives `will` an Essential probability of **87%**, so it stays. The rule is simple. Turn off the static list, and drop a word only when Jev gives it **exactly 0%**. Every word that stays gets the same weight formula as above. When words share a stem, the stem stays if any of them is above zero.
+
+Dropping words is a separate choice from weighting them, so I test it on its own [below](#does-jev-beat-the-stopword-list). The weighting results and the distilled model use the static list.
 
 ## Distill Jev into a local model
 
@@ -138,7 +157,7 @@ The same stemming and stopword rules apply to every method. Words sharing a stem
 
 ## Does it improve search?
 
-I compared the methods on the same **645 queries** across 13 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets. They use the same stemming and stopword list. The default arms use the BM25 settings shown above.
+I compared the methods on the same **645 queries** across 13 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets. They use the same stemming and the static stopword list. The default arms use the BM25 settings shown above.
 
 I also tuned `k₁` and `b` separately for BM25, BM25 + Jev, and BM25 + the distilled model. For each dataset, I split the queries into five groups. I chose settings using four groups, then scored the fifth. Every query is scored using settings chosen on other queries.
 
@@ -255,33 +274,20 @@ The NanoBEIR results are exploratory because I selected the weighting formula on
 
 The chart also includes two full [CQADupStack](https://huggingface.co/datasets/BeIR/cqadupstack) collections. English has **1,570 queries and 40,221 documents**. Android has **699 queries and 22,998 documents**. Both use default BM25 settings and every official test query. Jev raises mean quality from 36.28 to 37.23 on English, and from 39.90 to 40.64 on Android.
 
-## Can Jev replace the stopword list?
+### Does Jev beat the stopword list?
 
-Search for `"shall" vs. "will"`. A static stopword list removes `will`, even though comparing those two words is the whole query. With Jev choosing which words to keep, the relevant result, **“I will” or “I shall”**, moves to first place. This query's nDCG@10 rises from **0 to 71.38**.
+Now the static list is off, and Jev's 0% rule decides which words to drop. Both columns use Jev's weights. On NanoBEIR, each column gets its own tuned `k₁` and `b`, the same way as above. The full collections use the default settings. Each cell shows **p25 / median / mean nDCG@10**.
 
-To make this decision explicit, I replace the first label in the earlier prompt:
+| Dataset                     |           Static list | Jev picks the stopwords |
+| --------------------------- | --------------------: | ----------------------: |
+| NanoBEIR, 645 queries       | 33.92 / 63.09 / 61.39 |   33.92 / 63.09 / 60.77 |
+| Full FiQA, 648 queries      |     0 / 13.03 / 26.68 |       0 / 14.13 / 27.11 |
+| Full English, 1,570 queries |     0 / 15.80 / 37.23 |       0 / 22.20 / 38.58 |
+| Full Android, 699 queries   |     0 / 31.83 / 40.64 |       0 / 31.55 / 40.13 |
 
-```python
-question["criteria"][0] = (
-    "Stopword: grammar or conversational filler; "
-    "dropping it leaves the search intent unchanged"
-)
-```
+English gains **1.35 mean points**, with a 95% bootstrap interval of +0.77 to +1.93. FiQA gains 0.43. NanoBEIR loses 0.63 (interval −1.56 to +0.25) and Android loses 0.51. So Jev doesn't replace the list everywhere yet.
 
-The other two labels stay the same. For this query, Jev gives `will` an Essential probability of **87%**, so it stays. I disable the static query stopword list and drop words with **exactly 0% Essential probability**. The remaining words use the same weighting formula above. When words share a stem, I keep that stem if any of them has a probability above zero.
-
-Here is the comparison across **3,562 query evaluations**. Both columns use Jev. The left uses the original prompt and static list, while the right uses the revised prompt and 0% filter. Each cell shows **p25 / median / mean nDCG@10**, on a 0 to 100 scale.
-
-BM25 settings stay fixed between columns. NanoBEIR uses the earlier tuned settings, and the full collections use `k₁ = 1.2, b = 0.75`.
-
-| Dataset                     |           Static list |       Jev's 0% filter |
-| --------------------------- | --------------------: | --------------------: |
-| NanoBEIR, 645 queries       | 33.92 / 63.09 / 61.39 | 33.33 / 63.09 / 60.94 |
-| Full FiQA, 648 queries      |     0 / 13.03 / 26.68 |     0 / 14.13 / 27.11 |
-| Full English, 1,570 queries |     0 / 15.80 / 37.23 |     0 / 22.20 / 38.58 |
-| Full Android, 699 queries   |     0 / 31.83 / 40.64 |     0 / 31.55 / 40.13 |
-
-English gains **1.35 mean points**, with a 95% bootstrap interval of +0.77 to +1.93. FiQA gains 0.43, while NanoBEIR loses 0.46 and Android loses 0.51. For example, Android's “How to Install App as System App” moves its relevant result from rank 1 to 9, dropping quality from 100 to 30.10.
+The rule drops a word only at exactly 0%, so small words that get 1% or 2% stay in. Sometimes that helps. In "can a ucc be filed on an individual", Jev keeps `a`, `be`, `on` and `an`, and quality rises from 20.44 to 60.53. Sometimes it hurts. Android's “How to Install App as System App” moves its relevant result from rank 1 to 9, and quality drops from 100 to 30.10.
 
 <details>
 <summary>Wins, losses, and queries with no relevant top-10 result</summary>
@@ -290,18 +296,18 @@ Gains and losses add the query-level quality changes, using the same definitions
 
 | Dataset      | Wins / losses / ties | Total gains | Total losses | No relevant result |
 | ------------ | -------------------: | ----------: | -----------: | -----------------: |
-| NanoBEIR     |        86 / 78 / 481 |     +766.93 |    −1,061.12 |    13.18% → 13.49% |
+| NanoBEIR     |      133 / 105 / 407 |   +1,288.18 |    −1,691.72 |    13.18% → 13.49% |
 | Full FiQA    |        94 / 62 / 492 |     +942.87 |      −665.37 |    47.99% → 47.22% |
 | Full English |    188 / 114 / 1,268 |   +3,947.55 |    −1,830.12 |    48.66% → 46.94% |
 | Full Android |        52 / 74 / 573 |     +742.98 |    −1,101.05 |    42.06% → 42.63% |
 
-The [stopword evaluation data](/static/data/jev-stopword-eval.json) include the revised-prompt control with the static list still enabled, plus per-query quality and recall. These are exploratory results on the same previously exposed collections.
+The [stopword evaluation data](/static/data/jev-stopword-eval.json) include the revised-prompt control with the static list still enabled, plus per-query quality and recall. Its NanoBEIR rows use one fixed set of tuned settings for both columns. These are exploratory results on the same previously exposed collections.
 
 </details>
 
 Keeping contextually useful words also costs retrieval work. On English, median retrieval time rises from **1.75 to 2.42 ms** in this separate run, excluding the Jev API call. The filter retains more words than the static list on average across all four collections.
 
-This section evaluates Jev's revised prompt and filter. The other charts use the original prompt and static list. The distilled model has not been retrained for this filter.
+The other charts use the original prompt and the static list. The distilled model has not been retrained for the stopword rule.
 
 ## How fast is the distilled model?
 
@@ -380,4 +386,5 @@ The run used an Intel Core Ultra 7 155H CPU with two threads and warm indexes an
 
 - BM25 uses rarity as a proxy for importance. Jev uses the query's context to adjust those weights. For "films shot in Venice", it gives `Venice` more weight than `shot` and improves the ranking.
 - Use `df × (1 − importance)` as the effective document frequency, then apply the usual IDF smoothing. With both methods tuned, Jev raises mean quality from **59.79 to 61.39** on NanoBEIR.
+- Letting Jev pick the stopwords keeps `will` in `"shall" vs. "will"`. It helps full English (**+1.35**) and FiQA (+0.43) but costs NanoBEIR (−0.63) and Android (−0.51), so the static list stays for now.
 - The two-layer distilled model reaches 60.26 and takes **3.19 ms median** per complete search, compared with about 508 ms for Jev. Its smaller quality gain has a bootstrap interval that includes zero.
