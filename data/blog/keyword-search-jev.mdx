@@ -9,9 +9,9 @@ summary: 'BM25 uses rarity as a proxy for term importance. Jev adds context, and
 authors: ['kshivendu']
 ---
 
-Some words matter more than others in a search query. BM25 guesses which ones in two ways. It gives rare words more weight, and it drops common words like `the` and `will` using a fixed stopword list.
+Some words matter more than others in a search query. BM25 guesses which ones in two ways. It gives rare words more weight, and it drops common words like `the`, `to` and `not` using a fixed stopword list.
 
-Both guesses can be wrong. For the query "How do I improve on my math skills?", a rare word like `skills` matters very little, and a common word like `math` matters a lot. For `"shall" vs. "will"`, the stopword list throws away `will`, which is half the question.
+Both guesses can be wrong. For the query "How do I improve on my math skills?", a rare word like `skills` matters very little, and a common word like `math` matters a lot. For "to be or not to be", the stopword list throws away every word, and nothing is left to search.
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
@@ -84,9 +84,7 @@ The adjusted count changes the score. `Venice` still matches the same 53 documen
 
 ## Let Jev pick the stopwords
 
-Search for `"shall" vs. "will"`. The static stopword list removes `will`, even though comparing those two words is the whole query. If Jev decides which words to keep instead, the relevant result, **“I will” or “I shall”**, moves to first place. This query's nDCG@10 rises from **0 to 71.38**.
-
-To ask for this directly, I replace the first label in the prompt:
+Instead of a fixed list, I ask Jev which words are filler. I replace the first label in the prompt:
 
 ```python
 question["criteria"][0] = (
@@ -95,7 +93,11 @@ question["criteria"][0] = (
 )
 ```
 
-The other two labels stay the same. Jev gives `will` an Essential probability of **87%**, so it stays. The rule is simple. Turn off the static list, and drop a word only when Jev gives it **exactly 0%**. Every word that stays gets the same weight formula as above. When words share a stem, the stem stays if any of them is above zero.
+The other two labels stay the same. The rule is simple. Turn off the static list, and drop a word only when Jev gives it **exactly 0%** Essential. Every word that stays gets the same weight formula as above. When words share a stem, the stem stays if any of them is above zero.
+
+Take "to be or not to be" again. The static list drops every word. Jev keeps them all. It gives `to` 33%, `be` 68%, `or` 42% and `not` 61%.
+
+The benchmarks have a real case too. Search for `"shall" vs. "will"`. The static list removes `will`, even though comparing those two words is the whole query. Jev gives `will` **87%**, so it stays. The relevant result, **“I will” or “I shall”**, moves to first place, and this query's nDCG@10 rises from **0 to 71.38**.
 
 Dropping words is a separate choice from weighting them, so I test it on its own [below](#does-jev-beat-the-stopword-list). The weighting results and the distilled model use the static list.
 
@@ -386,5 +388,5 @@ The run used an Intel Core Ultra 7 155H CPU with two threads and warm indexes an
 
 - BM25 uses rarity as a proxy for importance. Jev uses the query's context to adjust those weights. For "films shot in Venice", it gives `Venice` more weight than `shot` and improves the ranking.
 - Use `df × (1 − importance)` as the effective document frequency, then apply the usual IDF smoothing. With both methods tuned, Jev raises mean quality from **59.79 to 61.39** on NanoBEIR.
-- Letting Jev pick the stopwords keeps `will` in `"shall" vs. "will"`. It helps full English (**+1.35**) and FiQA (+0.43) but costs NanoBEIR (−0.63) and Android (−0.51), so the static list stays for now.
+- Letting Jev pick the stopwords keeps every word of "to be or not to be", which the static list drops. It helps full English (**+1.35**) and FiQA (+0.43) but costs NanoBEIR (−0.63) and Android (−0.51), so the static list stays for now.
 - The two-layer distilled model reaches 60.26 and takes **3.19 ms median** per complete search, compared with about 508 ms for Jev. Its smaller quality gain has a bootstrap interval that includes zero.
