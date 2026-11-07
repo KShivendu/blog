@@ -45,6 +45,7 @@ import WeightHandoff from './WeightHandoff'
 import Term from './Term'
 import GroundedExpansionAnim from './GroundedExpansionAnim'
 import PassageColors from './PassageColors'
+import JevSearchExplorer from './JevSearchExplorer'
 
 export const MDXComponents = {
   Image,
@@ -93,6 +94,7 @@ export const MDXComponents = {
   Term,
   GroundedExpansionAnim,
   PassageColors,
+  JevSearchExplorer,
   wrapper: ({ components, layout, ...rest }) => {
     const Layout = require(`../layouts/${layout}`).default
     return <Layout {...rest} />

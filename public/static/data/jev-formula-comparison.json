@@ -1,0 +1,549 @@
+{
+  "formulas": {
+    "rarity-smoothed product": "q=((df+0.5)/(N+1))*(1-p)",
+    "smoothed product": "q=(df*(1-p)+0.5)/(N+1)",
+    "raw product": "q=(df/N)*(1-p)"
+  },
+  "word_weight": "-ln(q)",
+  "importance": "Original frozen Jev Essential probabilities, maximum per stem",
+  "eligible_queries": 3532,
+  "total_queries": 3562,
+  "excluded_queries": 30,
+  "endpoint": "Retained p=1 terms produce infinite weights in both uncapped products. The same queries are excluded from every arm.",
+  "settings": "Nano uses frozen held-out tuned BM25 parameters. Full FiQA and CQADupStack use k1=1.2, b=0.75. No independent retuning between formulas.",
+  "score_units": "nDCG@10 points on a 0 to 100 scale",
+  "weighted_changes": "Gain points sum positive per-query deltas. Loss points sum magnitudes of negative deltas. Weighted win share is gains/(gains+losses).",
+  "data_role": "Exploratory comparisons on previously exposed benchmarks",
+  "control_metric_matches": 16696,
+  "quality": {
+    "NanoBEIR": {
+      "rarity-smoothed product": {
+        "mean": 61.07566717225324,
+        "p25": 33.91602052736161,
+        "median": 63.092975357145754,
+        "queries": 632
+      },
+      "smoothed product": {
+        "mean": 60.98278495976703,
+        "p25": 33.91602052736161,
+        "median": 63.092975357145754,
+        "queries": 632
+      },
+      "raw product": {
+        "mean": 61.14057349268913,
+        "p25": 33.91602052736161,
+        "median": 63.092975357145754,
+        "queries": 632
+      }
+    },
+    "FiQA": {
+      "rarity-smoothed product": {
+        "mean": 26.755105450236112,
+        "p25": 0.0,
+        "median": 13.032376591037062,
+        "queries": 642
+      },
+      "smoothed product": {
+        "mean": 26.71818097767532,
+        "p25": 0.0,
+        "median": 13.022522462053558,
+        "queries": 642
+      },
+      "raw product": {
+        "mean": 26.75861105721813,
+        "p25": 0.0,
+        "median": 13.032376591037062,
+        "queries": 642
+      }
+    },
+    "CQADupStack-english": {
+      "rarity-smoothed product": {
+        "mean": 37.27831313903761,
+        "p25": 0.0,
+        "median": 15.642624200758547,
+        "queries": 1569
+      },
+      "smoothed product": {
+        "mean": 37.21600584499588,
+        "p25": 0.0,
+        "median": 15.642624200758547,
+        "queries": 1569
+      },
+      "raw product": {
+        "mean": 37.27869938947678,
+        "p25": 0.0,
+        "median": 15.642624200758547,
+        "queries": 1569
+      }
+    },
+    "CQADupStack-android": {
+      "rarity-smoothed product": {
+        "mean": 40.11655462933886,
+        "p25": 0.0,
+        "median": 31.546487678572877,
+        "queries": 689
+      },
+      "smoothed product": {
+        "mean": 40.1310197883908,
+        "p25": 0.0,
+        "median": 31.546487678572877,
+        "queries": 689
+      },
+      "raw product": {
+        "mean": 40.111645686144534,
+        "p25": 0.0,
+        "median": 31.546487678572877,
+        "queries": 689
+      }
+    }
+  },
+  "comparisons": {
+    "rarity-smoothed product vs raw product": {
+      "NanoBEIR": {
+        "queries": 632,
+        "wins": 3,
+        "losses": 4,
+        "ties": 625,
+        "gain_points": 10.511499109189032,
+        "loss_points": 51.53229362467121,
+        "net_points": -41.02079451548218,
+        "count_win_share": 0.42857142857142855,
+        "weighted_win_share": 0.16942064058331507,
+        "average_win": 3.503833036396344,
+        "average_loss": 12.883073406167803,
+        "examples": [
+          {
+            "dataset": "NanoSCIDOCS",
+            "qid": "484550334c626a749bada57e51a0db4a29085f87",
+            "query": "Global outer-urban navigation with OpenStreetMap",
+            "baseline": 43.71994911049732,
+            "candidate": 33.91602052736161,
+            "delta": -9.803928583135708
+          }
+        ]
+      },
+      "FiQA": {
+        "queries": 642,
+        "wins": 1,
+        "losses": 2,
+        "ties": 639,
+        "gain_points": 0.36206891220498666,
+        "loss_points": 2.6126685946652572,
+        "net_points": -2.2505996824602708,
+        "count_win_share": 0.3333333333333333,
+        "weighted_win_share": 0.12171457527555889,
+        "average_win": 0.36206891220498666,
+        "average_loss": 1.3063342973326286,
+        "examples": [
+          {
+            "dataset": "FiQA",
+            "qid": "8834",
+            "query": "Pros/Cons of Buying Discounted Company Stock",
+            "baseline": 8.747171410140819,
+            "candidate": 9.109240322345807,
+            "delta": 0.36206891220498666
+          },
+          {
+            "dataset": "FiQA",
+            "qid": "2316",
+            "query": "What exchange rate does El Al use when converting final payment amount to shekels?",
+            "baseline": 85.03449055347546,
+            "candidate": 83.15546295836225,
+            "delta": -1.879027595113214
+          }
+        ]
+      },
+      "CQADupStack-english": {
+        "queries": 1569,
+        "wins": 0,
+        "losses": 1,
+        "ties": 1568,
+        "gain_points": 0,
+        "loss_points": 0.6060269390608262,
+        "net_points": -0.6060269390608262,
+        "count_win_share": 0.0,
+        "weighted_win_share": 0.0,
+        "average_win": null,
+        "average_loss": 0.6060269390608262,
+        "examples": [
+          {
+            "dataset": "CQADupStack-english",
+            "qid": "45445",
+            "query": "\"There's something wrong among us\" or \"There's something wrong between us\"?",
+            "baseline": 11.305340175787205,
+            "candidate": 10.699313236726377,
+            "delta": -0.6060269390608262
+          }
+        ]
+      },
+      "CQADupStack-android": {
+        "queries": 689,
+        "wins": 2,
+        "losses": 0,
+        "ties": 687,
+        "gain_points": 3.3822618608907673,
+        "loss_points": 0,
+        "net_points": 3.3822618608907673,
+        "count_win_share": 1.0,
+        "weighted_win_share": 1.0,
+        "average_win": 1.6911309304453837,
+        "average_loss": null,
+        "examples": [
+          {
+            "dataset": "CQADupStack-android",
+            "qid": "7081",
+            "query": "Are there any \"iptables like\" firewall for Android?",
+            "baseline": 35.620718710802215,
+            "candidate": 38.68528072345416,
+            "delta": 3.064562012651945
+          }
+        ]
+      },
+      "All": {
+        "queries": 3532,
+        "wins": 6,
+        "losses": 7,
+        "ties": 3519,
+        "gain_points": 14.255829882284786,
+        "loss_points": 54.750989158397296,
+        "net_points": -40.49515927611251,
+        "count_win_share": 0.46153846153846156,
+        "weighted_win_share": 0.20658581398862114,
+        "average_win": 2.3759716470474643,
+        "average_loss": 7.821569879771042,
+        "examples": [
+          {
+            "dataset": "CQADupStack-android",
+            "qid": "7081",
+            "query": "Are there any \"iptables like\" firewall for Android?",
+            "baseline": 35.620718710802215,
+            "candidate": 38.68528072345416,
+            "delta": 3.064562012651945
+          },
+          {
+            "dataset": "NanoSCIDOCS",
+            "qid": "484550334c626a749bada57e51a0db4a29085f87",
+            "query": "Global outer-urban navigation with OpenStreetMap",
+            "baseline": 43.71994911049732,
+            "candidate": 33.91602052736161,
+            "delta": -9.803928583135708
+          }
+        ]
+      }
+    },
+    "smoothed product vs raw product": {
+      "NanoBEIR": {
+        "queries": 632,
+        "wins": 15,
+        "losses": 22,
+        "ties": 595,
+        "gain_points": 81.01870501195684,
+        "loss_points": 180.74105781872996,
+        "net_points": -99.72235280677312,
+        "count_win_share": 0.40540540540540543,
+        "weighted_win_share": 0.30951550435336356,
+        "average_win": 5.401247000797123,
+        "average_loss": 8.215502628124089,
+        "examples": [
+          {
+            "dataset": "NanoNFCorpus",
+            "qid": "PLAIN-3026",
+            "query": "Vitamin C-Enriched Bacon",
+            "baseline": 63.092975357145754,
+            "candidate": 100.0,
+            "delta": 36.907024642854246
+          },
+          {
+            "dataset": "NanoSciFact",
+            "qid": "475",
+            "query": "Glycolysis is one of the primary glycometabolic pathways in cells.",
+            "baseline": 28.906482631788787,
+            "candidate": 0.0,
+            "delta": -28.906482631788787
+          }
+        ]
+      },
+      "FiQA": {
+        "queries": 642,
+        "wins": 3,
+        "losses": 8,
+        "ties": 631,
+        "gain_points": 14.188685268902784,
+        "loss_points": 40.14479633538786,
+        "net_points": -25.956111066485075,
+        "count_win_share": 0.2727272727272727,
+        "weighted_win_share": 0.2611407340364937,
+        "average_win": 4.729561756300928,
+        "average_loss": 5.018099541923482,
+        "examples": [
+          {
+            "dataset": "FiQA",
+            "qid": "10152",
+            "query": "What does a high operating margin but a small but positive ROE imply about a company?",
+            "baseline": 50.0,
+            "candidate": 63.092975357145754,
+            "delta": 13.092975357145754
+          },
+          {
+            "dataset": "FiQA",
+            "qid": "766",
+            "query": "Will the ex-homeowner still owe money after a foreclosure?",
+            "baseline": 13.565197343244778,
+            "candidate": 0.0,
+            "delta": -13.565197343244778
+          }
+        ]
+      },
+      "CQADupStack-english": {
+        "queries": 1569,
+        "wins": 6,
+        "losses": 9,
+        "ties": 1554,
+        "gain_points": 30.952690763763012,
+        "loss_points": 129.31886205428862,
+        "net_points": -98.3661712905256,
+        "count_win_share": 0.4,
+        "weighted_win_share": 0.1931265419191519,
+        "average_win": 5.158781793960502,
+        "average_loss": 14.368762450476513,
+        "examples": [
+          {
+            "dataset": "CQADupStack-english",
+            "qid": "42120",
+            "query": "Using exclamation points as part of a brand name",
+            "baseline": 46.92787260227564,
+            "candidate": 60.49306994552042,
+            "delta": 13.565197343244773
+          },
+          {
+            "dataset": "CQADupStack-english",
+            "qid": "93137",
+            "query": "When do you use 'monies' in plural?",
+            "baseline": 100.0,
+            "candidate": 63.092975357145754,
+            "delta": -36.907024642854246
+          }
+        ]
+      },
+      "CQADupStack-android": {
+        "queries": 689,
+        "wins": 7,
+        "losses": 4,
+        "ties": 678,
+        "gain_points": 59.544375615316284,
+        "loss_points": 46.19561916763566,
+        "net_points": 13.348756447680621,
+        "count_win_share": 0.6363636363636364,
+        "weighted_win_share": 0.5631206596665768,
+        "average_win": 8.506339373616612,
+        "average_loss": 11.548904791908916,
+        "examples": [
+          {
+            "dataset": "CQADupStack-android",
+            "qid": "67157",
+            "query": "How does the Heartbleed security vulnerability affect my Android device?",
+            "baseline": 50.0,
+            "candidate": 100.0,
+            "delta": 50.0
+          },
+          {
+            "dataset": "CQADupStack-android",
+            "qid": "23055",
+            "query": "What is error code 495 on Google Play and the YouTube app?",
+            "baseline": 63.092975357145754,
+            "candidate": 35.620718710802215,
+            "delta": -27.472256646343535
+          }
+        ]
+      },
+      "All": {
+        "queries": 3532,
+        "wins": 31,
+        "losses": 43,
+        "ties": 3458,
+        "gain_points": 185.70445665993893,
+        "loss_points": 396.4003353760421,
+        "net_points": -210.69587871610318,
+        "count_win_share": 0.4189189189189189,
+        "weighted_win_share": 0.31902238085073203,
+        "average_win": 5.990466343868998,
+        "average_loss": 9.218612450605631,
+        "examples": [
+          {
+            "dataset": "CQADupStack-android",
+            "qid": "67157",
+            "query": "How does the Heartbleed security vulnerability affect my Android device?",
+            "baseline": 50.0,
+            "candidate": 100.0,
+            "delta": 50.0
+          },
+          {
+            "dataset": "CQADupStack-english",
+            "qid": "93137",
+            "query": "When do you use 'monies' in plural?",
+            "baseline": 100.0,
+            "candidate": 63.092975357145754,
+            "delta": -36.907024642854246
+          }
+        ]
+      }
+    },
+    "rarity-smoothed product vs smoothed product": {
+      "NanoBEIR": {
+        "queries": 632,
+        "wins": 20,
+        "losses": 13,
+        "ties": 599,
+        "gain_points": 133.59113927794388,
+        "loss_points": 74.88958098665296,
+        "net_points": 58.70155829129092,
+        "count_win_share": 0.6060606060606061,
+        "weighted_win_share": 0.6407841411349424,
+        "average_win": 6.679556963897194,
+        "average_loss": 5.760736998973305,
+        "examples": [
+          {
+            "dataset": "NanoSciFact",
+            "qid": "475",
+            "query": "Glycolysis is one of the primary glycometabolic pathways in cells.",
+            "baseline": 0.0,
+            "candidate": 28.906482631788787,
+            "delta": 28.906482631788787
+          },
+          {
+            "dataset": "NanoNFCorpus",
+            "qid": "PLAIN-3026",
+            "query": "Vitamin C-Enriched Bacon",
+            "baseline": 100.0,
+            "candidate": 63.092975357145754,
+            "delta": -36.907024642854246
+          }
+        ]
+      },
+      "FiQA": {
+        "queries": 642,
+        "wins": 6,
+        "losses": 2,
+        "ties": 634,
+        "gain_points": 37.5321277407226,
+        "loss_points": 13.826616356697798,
+        "net_points": 23.705511384024803,
+        "count_win_share": 0.75,
+        "weighted_win_share": 0.730783596840479,
+        "average_win": 6.2553546234537665,
+        "average_loss": 6.913308178348899,
+        "examples": [
+          {
+            "dataset": "FiQA",
+            "qid": "766",
+            "query": "Will the ex-homeowner still owe money after a foreclosure?",
+            "baseline": 0.0,
+            "candidate": 13.565197343244778,
+            "delta": 13.565197343244778
+          },
+          {
+            "dataset": "FiQA",
+            "qid": "10152",
+            "query": "What does a high operating margin but a small but positive ROE imply about a company?",
+            "baseline": 63.092975357145754,
+            "candidate": 50.0,
+            "delta": -13.092975357145754
+          }
+        ]
+      },
+      "CQADupStack-english": {
+        "queries": 1569,
+        "wins": 8,
+        "losses": 6,
+        "ties": 1555,
+        "gain_points": 128.7128351152278,
+        "loss_points": 30.952690763763012,
+        "net_points": 97.76014435146477,
+        "count_win_share": 0.5714285714285714,
+        "weighted_win_share": 0.80614042641101,
+        "average_win": 16.089104389403474,
+        "average_loss": 5.158781793960502,
+        "examples": [
+          {
+            "dataset": "CQADupStack-english",
+            "qid": "50637",
+            "query": "Can alumnus be used for both men and women?",
+            "baseline": 63.092975357145754,
+            "candidate": 100.0,
+            "delta": 36.907024642854246
+          },
+          {
+            "dataset": "CQADupStack-english",
+            "qid": "42120",
+            "query": "Using exclamation points as part of a brand name",
+            "baseline": 60.49306994552042,
+            "candidate": 46.92787260227564,
+            "delta": -13.565197343244773
+          }
+        ]
+      },
+      "CQADupStack-android": {
+        "queries": 689,
+        "wins": 4,
+        "losses": 5,
+        "ties": 680,
+        "gain_points": 46.19561916763566,
+        "loss_points": 56.16211375442552,
+        "net_points": -9.966494586789857,
+        "count_win_share": 0.4444444444444444,
+        "weighted_win_share": 0.4513153803710233,
+        "average_win": 11.548904791908916,
+        "average_loss": 11.232422750885103,
+        "examples": [
+          {
+            "dataset": "CQADupStack-android",
+            "qid": "23055",
+            "query": "What is error code 495 on Google Play and the YouTube app?",
+            "baseline": 35.620718710802215,
+            "candidate": 63.092975357145754,
+            "delta": 27.472256646343535
+          },
+          {
+            "dataset": "CQADupStack-android",
+            "qid": "67157",
+            "query": "How does the Heartbleed security vulnerability affect my Android device?",
+            "baseline": 100.0,
+            "candidate": 50.0,
+            "delta": -50.0
+          }
+        ]
+      },
+      "All": {
+        "queries": 3532,
+        "wins": 38,
+        "losses": 26,
+        "ties": 3468,
+        "gain_points": 346.03172130152996,
+        "loss_points": 175.83100186153928,
+        "net_points": 170.20071943999068,
+        "count_win_share": 0.59375,
+        "weighted_win_share": 0.6630703936931774,
+        "average_win": 9.10609792898763,
+        "average_loss": 6.762730840828434,
+        "examples": [
+          {
+            "dataset": "CQADupStack-english",
+            "qid": "50637",
+            "query": "Can alumnus be used for both men and women?",
+            "baseline": 63.092975357145754,
+            "candidate": 100.0,
+            "delta": 36.907024642854246
+          },
+          {
+            "dataset": "CQADupStack-android",
+            "qid": "67157",
+            "query": "How does the Heartbleed security vulnerability affect my Android device?",
+            "baseline": 100.0,
+            "candidate": 50.0,
+            "delta": -50.0
+          }
+        ]
+      }
+    }
+  }
+}
