@@ -9,7 +9,7 @@ summary: 'BM25 uses rarity as a proxy for term importance. Jev adds context, and
 authors: ['kshivendu']
 ---
 
-Some words matter more than others in a search query. BM25 guesses which ones in two ways. It gives rare words more weight, and it drops common words like `the`, `to` and `not` using a fixed stopword list.
+Some words matter more than others in a search query. Keyword search with BM25 doesn't really understand language, so it has to guess which ones. It gives rare words more weight, and it drops common words like `the`, `to` and `not` using a fixed stopword list.
 
 Both guesses can be wrong. For the query "How do I improve on my math skills?", a rare word like `skills` matters very little, and a common word like `math` matters a lot. For "to be or not to be", the stopword list throws away every word, and nothing is left to search.
 
