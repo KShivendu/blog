@@ -1,6 +1,6 @@
 ---
 title: 'Keyword Search with Jev'
-subtitle: 'Teach BM25 which words matter'
+subtitle: 'Teach BM25 which words are important'
 date: '2026-10-14'
 lastmod: '2026-10-16'
 tags: ['search', 'bm25', 'sparse-retrieval', 'nlp']
@@ -11,17 +11,17 @@ authors: ['kshivendu']
 
 Some words are more important than others in a search query. Keyword search with BM25 doesn't really understand language, so it has to guess which ones. It treats rarity as a proxy for importance, so rare words get more weight. It also drops common words like `the`, `to` and `not` using a fixed stopword list.
 
-Both guesses can be wrong. For the query "How do I improve on my math skills?", a rare word like `skills` matters very little, and a common word like `math` matters a lot. For "to be or not to be", the stopword list throws away every word, and nothing is left to search.
+Both guesses can be wrong. For the query "How do I improve on my math skills?", a rare word like `skills` is not very important, and a common word like `math` is very important. For "to be or not to be", the stopword list throws away every word, and nothing is left to search.
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-I asked [Jev](https://openrouter.ai/docs/guides/community/jev), TypeSafe's decision model, how much each word matters in its query. It raises the weight of the words that matter, and it tells which words are safe to drop. Then I distilled the weights into a small model, which is cheaper and faster to run on every query.
+I asked [Jev](https://openrouter.ai/docs/guides/community/jev), TypeSafe's decision model, for the importance of each word in its query. It raises the weight of the important words, and it tells which words are safe to drop. Then I distilled the weights into a small model, which is cheaper and faster to run on every query.
 
 ## Give the important words more weight
 
 Take "films shot in Venice". In [a set of Wikipedia abstracts](https://huggingface.co/datasets/zeta-alpha-ai/NanoDBPedia), [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) weights each word by its rarity, called inverse document frequency or IDF. `shot` is rarer, so it gets 5.39, while `Venice` gets 4.73.
 
-But the location matters. A film shot in Malta doesn't answer this query. Can a model use the whole query to make a better guess about each word's importance?
+But the location is important. A film shot in Malta doesn't answer this query. Can a model use the whole query to make a better guess about each word's importance?
 
 I send Jev the whole query as context, with one question per word. Short queries fit in a single API request. For `Venice`, the prompt is:
 
@@ -111,7 +111,7 @@ Here are Jev and the two-layer student's predictions for the same Venice query:
 
 <BarChart
   orientation="horizontal"
-  title='Which words matter in "films shot in Venice"?'
+  title='Which words are important in "films shot in Venice"?'
   valueLabel="probability of essential (%)"
   valueMax={112}
   valueTicks={[0, 25, 50, 75, 100]}
