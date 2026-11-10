@@ -1,99 +1,26 @@
 ---
-title: 'Transformer Geometry at Scale'
-subtitle: 'Validating Findings on 1,879 Real Sentence Pairs'
+title: 'Embedding Models Only Become Searchable in Their Last Layers'
+subtitle: 'Three models, 649 search queries, 500 SNLI pairs and 1,379 STS-B pairs'
 date: '2026-06-16'
-lastmod: '2026-06-16'
-tags: ['embeddings', 'transformers', 'geometry', 'nlp', 'matryoshka', 'information-retrieval']
+lastmod: '2026-11-10'
+tags: ['embeddings', 'transformers', 'geometry', 'nlp', 'information-retrieval']
 draft: true
-summary: 'We ran the geometry experiments from the embedding-layers series at scale — 500 SNLI contradiction pairs and 1,379 STS-B graded pairs — and every qualitative finding held up. The similarity attractor at L12 is real, the preservation spectrum is flat, and 94.8% of dimensions receive their peak contribution in the final layer. Here is the full analysis with numbers.'
+summary: 'I searched with the vector from every layer of three embedding models on 13 NanoBEIR datasets. In mxbai, MiniLM and Qwen3, half the final search quality first shows up at 75% to 100% depth on 37 of 39 model and dataset pairs. On SNLI and STS-B, the middle layers make every pair look alike, and the last layers rebuild the meaning.'
 images: []
 authors: ['kshivendu']
 ---
 
 import scaleData from '../public/static/data/scale_charts.json'
 
-> This is the third post in the embedding geometry series. [Part 1](/blog/embedding-layers) covers token collapse and layer geometry. [Part 2](/blog/similarity-attractor) covers the similarity attractor and hard negatives. This post re-runs all the experiments at scale and reports exact numbers.
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-The earlier posts were built on 5–20 hand-picked sentences. That is enough to see a pattern, but not enough to rule out cherry-picking. So I ran the same experiments on **500 SNLI contradiction pairs** and **1,379 STS-B graded pairs** — real, labeled datasets with thousands of distinct sentences.
+In three different embedding models, the vector is close to useless for search until the last quarter of the layers. Half the final nDCG@10 first shows up at **75% to 100%** depth on 37 of 39 model and dataset pairs (mxbai, MiniLM and Qwen3, on 13 NanoBEIR datasets). The exception is Quora on the two encoders, where early layers already work.
 
-Everything held up. The similarity attractor still peaks at **exactly L12**. The preservation spectrum is still nearly flat (mean r = 0.024). And 94.8% of dimensions still receive their peak contribution from the very last layer. The scale did sharpen a few things: the Pearson correlation between model cosine and human similarity scores rises from **0.50 to 0.87** between L0 and L24, and the Matryoshka slice hierarchy reverses in an interesting way.
+> This is the third post in the embedding geometry series. [Part 1](/blog/embedding-layers) found that mxbai's tokens only converge in its last five layers, on 5 to 20 hand-picked sentences. [Part 2](/blog/similarity-attractor) covers the similarity attractor. This post re-runs those measurements at scale and adds a real search test. [The Jacobian lens post](/blog/jacobian-lens-embeddings) reads what goes into the vector during those last layers. The Matryoshka slice results that used to be here are now in [their own post](/blog/matryoshka-slices).
 
-I also searched with every layer of three different models on 13 NanoBEIR datasets. In all three, search quality appears only in the last quarter of the model.
+## Search quality shows up only near the end
 
-## Datasets
-
-**SNLI** (Stanford Natural Language Inference) contains 550K premise–hypothesis pairs labeled as entailment, neutral, or contradiction. I used 500 contradiction pairs sampled at random. Contradictions are the hardest category: the premise and hypothesis are typically about the same topic, same entities, opposite meaning — exactly the hard negative structure from the earlier posts. Example:
-
-> Premise: _"Two large dogs running in some grass."_  
-> Hypothesis: _"There is no grass near the two dogs."_
-
-**STS-B** (Semantic Textual Similarity Benchmark) contains 1,379 sentence pairs with human similarity scores from 0 to 1. The score distribution is roughly uniform, covering the full spectrum from unrelated sentences to near-paraphrases. This lets us measure how well model geometry tracks human judgment at each layer.
-
-All experiments used **mxbai-embed-large-v1** on CPU, mean-pooling all 25 layers (embedding + 24 transformer layers), storing only the 25 × 1024 mean-pool per sentence. Total encoding time: ~8 minutes.
-
-## The Similarity Attractor — Confirmed at 500 Pairs
-
-The first post observed a "similarity attractor": all sentence pairs converge toward high cosine similarity around layer 12, regardless of semantic relatedness, before the final layers separate them. Here is the same measurement on 500 SNLI contradiction pairs.
-
-<PlotlyChart data={scaleData.snli_attractor.data} layout={scaleData.snli_attractor.layout} />
-
-The peak is exactly where we expected: **L12 at 0.914** mean cosine similarity. The trajectory is:
-
-| Layer | Mean cosine | What's happening                                            |
-| ----- | ----------- | ----------------------------------------------------------- |
-| L0    | 0.653       | Raw token embeddings, modest similarity (shared vocabulary) |
-| L6    | 0.723       | Early layers raise the floor for all pairs                  |
-| L12   | **0.914**   | Peak attractor — contradictions look nearly identical       |
-| L18   | 0.839       | Middle layers start building semantic contrast              |
-| L24   | 0.617       | Final layer discriminates, but only by 0.297 from peak      |
-
-That 0.297 drop from peak to final is the model's entire discrimination budget for contradiction pairs. It recovers from 0.914 back to 0.617 — which is only slightly below where it started (0.653). The model doesn't make contradictions look _dissimilar_; it makes them look _less identical than they were at L12_.
-
-Note that L24 mean cosine of 0.617 for contradictions is consistent with what mxbai reports on hard negative benchmarks. The model wasn't trained to push contradictions to negative cosine — it was trained to rank paraphrases higher than contradictions, which is a softer objective.
-
-## The Full Similarity Spectrum — STS-B Binned by Human Score
-
-SNLI only gives us one difficulty level (contradiction). STS-B gives us the full spectrum, binned here into four groups:
-
-- **Hard negatives (0–0.3)**: sentences human raters judged nearly unrelated
-- **Medium (0.3–0.6)**: topically related but not paraphrases
-- **Soft positives (0.6–0.8)**: similar meaning with lexical variation
-- **Strong positives (0.8–1.0)**: near-paraphrases
-
-<PlotlyChart data={scaleData.stsb_binned.data} layout={scaleData.stsb_binned.layout} />
-
-Three things to notice:
-
-**1. All bins peak near L12.** The attractor doesn't care about semantic content. Whether a pair is unrelated or nearly identical, the middle layers push it toward higher similarity. The peak for hard negatives (0.924) is only 0.048 below the peak for strong positives (0.967).
-
-**2. L24 separation correlates with human score, but the range is small.** Hard negatives end at 0.570; strong positives end at 0.930. That is a 0.360 spread across the full range of human similarity — and the model achieves this entirely in the last 12 layers.
-
-**3. The attractor "erases" early layer information.** At L0, hard negatives (0.702) and strong positives (0.871) are 0.169 apart. By L12 they're only 0.037 apart. The final layers have to rebuild a 0.360 gap from a 0.037 starting point — which requires those layers to be doing a lot of semantic heavy lifting very fast.
-
-## Semantic Signal Builds Monotonically to L24
-
-So where does the actual semantic information appear? Not at L12 — that's the attractor. It accumulates monotonically through the final 12 layers.
-
-<PlotlyChart data={scaleData.stsb_pearson.data} layout={scaleData.stsb_pearson.layout} />
-
-Pearson correlation between model cosine and human similarity scores:
-
-| Layer | Pearson r | Interpretation                                        |
-| ----- | --------- | ----------------------------------------------------- |
-| L0    | 0.500     | Baseline: shared vocabulary already predictive        |
-| L6    | 0.611     | Early layers add some signal                          |
-| L12   | 0.507     | **Drops back** — attractor washes out semantic signal |
-| L18   | 0.667     | Recovery begins                                       |
-| L21   | 0.801     | Sharp rise                                            |
-| L24   | **0.875** | Peak — final representation is most predictive        |
-
-The dip at L12 is the attractor's signature: similarity gets high for everyone, so Pearson correlation with human scores (which vary) temporarily falls. Then the final 12 layers rebuild the semantic ordering from scratch, ending at r = 0.875 — a strong correlation for a pre-trained encoder with no fine-tuning on STS scores specifically.
-
-Note that 0.875 at L24 is just cosine similarity of mean-pool vectors. mxbai's official benchmark numbers use the `<instruct>` prompt prefix, which adds a small but consistent improvement. The geometry we're measuring here is the raw signal before that prompt-based adjustment.
-
-## Search Quality by Layer, in Three Models
-
-STS-B is one model on sentence pairs. To check the same timing on real search, I read the vector out of every layer of three different embedding models and searched with it:
+I read the vector out of every layer of three different embedding models and searched with it:
 
 | model                                                                             | kind          | layers | pooling (how the vector is taken)  |
 | --------------------------------------------------------------------------------- | ------------- | -----: | ---------------------------------- |
@@ -143,9 +70,11 @@ Observations:
 - Qwen3 builds it more gradually, over its last quarter. It reaches half the final score between layer 21 and layer 26 on all 13 datasets.
 - The exception is Quora for the two encoders. MiniLM already scores 78 at layer 0 there, and mxbai's CLS reaches 73 at layer 8. Quora pairs are near copies of each other, like "What is it like to be an IITian?" and "What does it feel like to be an IITian?". I haven't traced why that's enough for an early layer. Qwen3 scores 0 to 3 on Quora up to layer 17.
 
-So half the final search quality appears at 75% to 100% depth on 37 of the 39 model and dataset pairs.
+This timing comes from how the models are trained. A model trained to work at every layer exit behaves differently: in [2D Matryoshka](/blog/mxbai-2d-matryoshka), mxbai-embed-2d-large-v1 scores r = 0.790 against human similarity at L12, where standard mxbai scores 0.635 in the same test.
 
-The middle layers also search worse than layer 0. At layer 0, the average of the token vectors is a plain bag of context-free words, which is what a [static embedding](/blog/static-embeddings) does. In all three models it beats the middle of the model:
+## The middle layers search worse than layer 0
+
+At layer 0, the average of the token vectors is a plain bag of context-free words, which is what a [static embedding](/blog/static-embeddings) does. In all three models it beats the middle of the model:
 
 ```
 mean pooling      layer 0    middle layer    last layer
@@ -156,170 +85,80 @@ Qwen3              16.61       3.95 (L12)      25.76
 
 "Where was the university at which Barrie Ciliberti was a professor located?" is an example. mxbai scores 61 with its layer 0 average, 0 at layer 12, and 85 with its final CLS vector. MiniLM goes 61, 0 at layer 3, and 61 at the end. (Qwen3's last-layer average is low because Qwen3 was trained to use the last token.)
 
-This is the attractor from the STS-B numbers above showing up in search. At L12, pairs look alike regardless of meaning, and the right document can't be told apart. [The Jacobian lens post](/blog/jacobian-lens-embeddings) reads what goes into mxbai's vector during those last layers.
+So you can't save compute by searching with a middle layer. The next two sections show why on sentence pairs. The rest of the post is mxbai only. It uses mean pooling over all 25 layers (the embedding layer plus 24 transformer layers), on 500 [SNLI](https://nlp.stanford.edu/projects/snli/) contradiction pairs and 1,379 [STS-B](https://huggingface.co/datasets/mteb/stsbenchmark-sts) pairs scored by people from 0 (unrelated) to 1 (same meaning).
 
-## The Preservation Spectrum — Still Flat at 2,758 Sentences
+## The middle layers make every pair look alike
 
-The [first post](/blog/embedding-layers) found that L0 values carry almost no information to L24: per-dimension Pearson correlation between a dimension's value at L0 and L24, measured across all sentences, was near zero for nearly every dimension. With only 20 sentences, that could have been noise.
+[Part 2](/blog/similarity-attractor) found a "similarity attractor": around layer 12, all sentence pairs move toward high cosine similarity, whatever they mean. SNLI contradictions are the hardest case, because both sentences share the topic and the words:
 
-Here is the same measurement across 2,758 sentences (all STS-B sentence1 and sentence2 from the test set):
+> Premise: _"Two large dogs running in some grass."_  
+> Hypothesis: _"There is no grass near the two dogs."_
 
-<PlotlyChart data={scaleData.preservation_hist.data} layout={scaleData.preservation_hist.layout} />
+On 500 such pairs, the mean cosine peaks at **0.914 at L12**:
 
-The distribution is centered tightly at r = 0.024 with standard deviation 0.087. No dimension achieves |r| > 0.5. The most-preserved dimension has r = 0.373 — a far cry from the r = 1.0 you'd expect if L0 were being "preserved" through the residual stream.
+<PlotlyChart data={scaleData.snli_attractor.data} layout={scaleData.snli_attractor.layout} />
 
-This confirms the conclusion from the small-scale experiment: **the transformer doesn't preserve its initial token embeddings**. The residual stream is not a highway for L0 information; it is a workspace that the model overwrites almost completely. The L0 embedding layer is essentially a lookup table that hands off to the transformer, which then builds meaning from scratch.
+| Layer | Mean cosine | What's happening                                            |
+| ----- | ----------- | ----------------------------------------------------------- |
+| L0    | 0.653       | Raw token embeddings, modest similarity (shared vocabulary) |
+| L6    | 0.723       | Early layers raise the floor for all pairs                  |
+| L12   | **0.914**   | Peak attractor, contradictions look nearly identical        |
+| L18   | 0.839       | Middle layers start building semantic contrast              |
+| L24   | 0.617       | Final layer discriminates, but only by 0.297 from peak      |
 
-This has a practical implication: you cannot use L0 cosine similarity as a cheap proxy for final embedding similarity. At scale, the correlation between L0 cosine and L24 cosine for STS-B pairs is only r ≈ 0.50 (the Pearson trace above). Better to skip directly to L24.
+The model recovers from 0.914 back to 0.617, only slightly below where it started (0.653). It doesn't make contradictions look _dissimilar_. It makes them look _less identical than they were at L12_.
 
-## Peak Contribution Layer — 94.8% Written in the Final Step
+STS-B shows the attractor hits every kind of pair. Binned by the human score:
 
-For each of the 1,024 dimensions, we measured which layer's update (the difference in mean-pool between consecutive layers) had the largest absolute magnitude on average across all 2,758 sentences.
+<PlotlyChart data={scaleData.stsb_binned.data} layout={scaleData.stsb_binned.layout} />
+
+- All four bins peak near L12. Pairs people rated unrelated (0 to 0.3) peak at 0.924, and near-paraphrases (0.8 to 1.0) at 0.967. [check: the text said these are 0.048 apart, but 0.967 − 0.924 = 0.043]
+- At L0, the unrelated and near-paraphrase bins are 0.169 apart (0.702 vs 0.871). By L12 they are only 0.037 apart.
+- At L24 they end at 0.570 and 0.930, a 0.360 spread. The last 12 layers rebuild that gap from 0.037.
+
+That's the search result above, seen on pairs. At L12 the right document and the wrong ones look alike, so the vector can't tell them apart.
+
+## Meaning comes back only in the last layers
+
+The Pearson correlation between mxbai's cosine and the STS-B human scores, by layer:
+
+<PlotlyChart data={scaleData.stsb_pearson.data} layout={scaleData.stsb_pearson.layout} />
+
+| Layer | Pearson r | Interpretation                                      |
+| ----- | --------- | --------------------------------------------------- |
+| L0    | 0.500     | Baseline: shared vocabulary already predictive      |
+| L6    | 0.611     | Early layers add some signal                        |
+| L12   | 0.507     | **Drops back**, the attractor washes out the signal |
+| L18   | 0.667     | Recovery begins                                     |
+| L21   | 0.801     | Sharp rise                                          |
+| L24   | **0.875** | Peak, the final representation is most predictive   |
+
+At L12 every pair looks similar, so the correlation with human scores falls back to its L0 level. The last 12 layers rebuild the ordering and end at 0.875, with plain mean-pool cosine and no instruction prefix.
+
+## The last layer rewrites most dimensions
+
+For each of the 1,024 dimensions, I found the layer whose update (the change in the mean-pool vector from the layer before) is largest on average over all 2,758 STS-B sentences:
 
 <PlotlyChart data={scaleData.peak_layer_dist.data} layout={scaleData.peak_layer_dist.layout} />
 
-| Layer range        | Dimensions | Fraction  |
-| ------------------ | ---------- | --------- |
-| L1–L5 (early)      | 35         | 3.4%      |
-| L5–L20 (middle)    | 27         | 2.6%      |
-| L20–L23 (late-mid) | 68         | 6.6%      |
-| **L24 (final)**    | **894**    | **87.3%** |
+| Layer range           | Dimensions | Fraction  |
+| --------------------- | ---------- | --------- |
+| L1 to L5 (early)      | 35         | 3.4%      |
+| L5 to L20 (middle)    | 27         | 2.6%      |
+| L20 to L23 (late-mid) | 68         | 6.6%      |
+| **L24 (final)**       | **894**    | **87.3%** |
 
-The spike at L24 is not subtle. 894 of 1,024 dimensions receive their largest single-layer update in the very last step of the transformer. This isn't a sign that L24 is doing all the work in isolation — earlier layers build up context that L24 then crystallizes — but it does show that the model front-loads a massive rewrite right at the output.
+894 of 1,024 dimensions get their largest single update in the very last layer. [check: earlier drafts said 94.8% of dimensions peak at L24, but 894 / 1,024 is 87.3%. The layer ranges in the table also overlap at L5 and L20.] Earlier layers still build the context that L24 uses, but the model makes a large rewrite right at the output.
 
-Why does this happen? The likely explanation is contrastive training. mxbai-embed-large-v1 was trained with InfoNCE loss on hard negative pairs. The loss signal flows back through mean pooling into the last layer first, and that layer learns to make the final, decisive move in representation space: push the pair apart from hard negatives. The earlier layers do semantic processing; L24 does the metric-learning move.
+Little of layer 0 survives that rewrite. Across the same 2,758 sentences, the correlation between a dimension's value at L0 and at L24 is centred at r = 0.024 (standard deviation 0.087). No dimension reaches |r| > 0.5, and the most preserved one has r = 0.373:
 
-## Matryoshka Slices — Counterintuitive Discrimination Hierarchy
+<PlotlyChart data={scaleData.preservation_hist.data} layout={scaleData.preservation_hist.layout} />
 
-mxbai-embed-large-v1 uses Matryoshka Representation Learning (MRL), which means the first d dimensions of the 1,024-dim vector are themselves a valid d-dimensional embedding. You can truncate to 64, 128, 256, 512 dimensions and each is independently usable.
-
-I measured how well each slice discriminates SNLI contradictions at L24 — lower cosine = better discrimination between premise and (contradicting) hypothesis:
-
-<PlotlyChart data={scaleData.matryoshka_slices.data} layout={scaleData.matryoshka_slices.layout} />
-
-| Slice      | Dimensions | Mean cosine (lower = more discriminative) |
-| ---------- | ---------- | ----------------------------------------- |
-| 64–128     | 64         | **0.537** — most discriminative           |
-| 0–64       | 64         | 0.585                                     |
-| 128–256    | 128        | 0.586                                     |
-| 256–512    | 256        | 0.598                                     |
-| **0–1024** | **1024**   | **0.617** — full vector                   |
-| 512–1024   | 512        | 0.644 — least discriminative              |
-
-The 512–1024 slice is the _least_ discriminative of all, despite being the largest. The 64–128 slice is the most discriminative. The full vector (0.617) is between these extremes.
-
-This is the opposite of what you might expect. The intuition "more dimensions = better discrimination" doesn't hold within the Matryoshka structure.
-
-The reason isn't about magnitude — the 512–1024 slice actually has the **highest** L2 norm (~12.7) of any slice, while 0–64 has the lowest (~4.4). Cosine similarity is computed after normalization anyway, so raw magnitudes cancel out.
-
-The real reason is what the dims encode. MRL training forces the first 64 dimensions to carry the most **discriminative** (contrastive) signal, because the 64-dim model must function independently — it cannot afford to spend any of those 64 dims on shared semantic content. Later dims have that luxury, so they encode "what the sentence is about": topic, entities, general domain. For contradiction pairs, the topic is almost entirely shared (same dogs, same grass, same event) — only the relationship differs ("no grass" vs "in grass"). The early dims were specifically trained to capture that relational difference. The later dims capture the shared topic and therefore look more similar for contradictions.
-
-Put differently: the early Matryoshka tiers encode the most contrastive signal because they had to. The later tiers encode stable semantic content that is useful for ranking similar pairs, but that content is mostly shared between contradictions.
-
-Note that p10–p90 range (gray error bars) is widest for dim 64–128 (std = 0.181) and narrows toward the full vector (std = 0.134). The later slices not only discriminate less on average, they discriminate more consistently — they're encoding stable, low-variance semantic content rather than the noisier contrastive signal.
-
-## The Shape of Matryoshka: Normalization, Anisotropy, and What Full-Vector Cosine Actually Computes
-
-The discrimination results above beg a follow-up question: when you actually run retrieval with the full 1024-dim vector, what is the model really doing? Cosine similarity after unit normalization is a weighted combination of all slice contributions — but the weights are far from equal.
-
-### Experiment 1 — Energy per slice: the 512–1024 slice dominates
-
-For each sentence, we measure what fraction of the total squared L2 norm falls in each slice. That fraction is exactly the weight that slice gets in the final cosine dot product.
-
-<PlotlyChart data={scaleData.shape_energy.data} layout={scaleData.shape_energy.layout} />
-
-The 512–1024 slice holds **53.4%** of the total energy. The two most discriminative slices (0–64 and 64–128) together get only **11%**. The L2 norm also increases monotonically with slice index: 4.1 → 3.9 → 5.8 → 8.4 → 12.5, which is what creates the energy imbalance.
-
-This means full-vector cosine is structurally biased: it overweights the slices that encode shared topic content and underweights the slices that encode the relational, contrastive signal.
-
-### Experiment 2 — Rank correlation: which slice drives retrieval?
-
-We rank 500 SNLI pairs by cosine similarity computed independently within each slice, then measure how much each slice agrees with the others (and with the full vector).
-
-<PlotlyChart data={scaleData.shape_spearman.data} layout={scaleData.shape_spearman.layout} />
-
-| Slice        | Spearman r vs full vector |
-| ------------ | ------------------------- |
-| 0–64         | 0.872                     |
-| 64–128       | 0.888                     |
-| 128–256      | 0.937                     |
-| 256–512      | 0.974                     |
-| **512–1024** | **0.991**                 |
-
-The full-vector ranking is almost entirely determined by the 512–1024 slice (r = 0.991). The 0–64 slice still correlates at 0.872 — meaningful, but clearly different. The small slices also disagree most with each other: 0–64 vs 64–128 has the lowest inter-slice correlation at 0.784, suggesting they each capture genuinely different aspects of meaning that the larger slices blend together.
-
-### Experiment 3 — Norm equalization: what happens if all slices get equal weight?
-
-If we scale each slice to unit norm before concatenating (giving every slice equal energy), then re-normalize the full vector, how much does that shift things?
-
-<PlotlyChart data={scaleData.shape_eq.data} layout={scaleData.shape_eq.layout} />
-
-Mean cosine for SNLI contradictions shifts from **0.617 → 0.590** — meaningfully more discriminative. But the pair ranking barely changes (Spearman r = 0.988). The normalization imbalance inflates absolute similarity values for all pairs roughly equally, so it doesn't hurt retrieval ranking — but it does matter if you're applying a similarity threshold to filter candidates.
-
-### Experiment 4 — Anisotropy: later slices are increasingly wasteful
-
-For each slice, we compute the **participation ratio** — a measure of how many of the slice's dimensions are actually doing work (formally, `(Σλ)²/Σλ²` over PCA eigenvalues). A ratio of 1.0 means perfectly isotropic; closer to 0 means the variance is concentrated in a few directions.
-
-<PlotlyChart data={scaleData.shape_aniso.data} layout={scaleData.shape_aniso.layout} />
-
-| Slice    | Effective dims | % of budget used | Dims for 90% var |
-| -------- | -------------- | ---------------- | ---------------- |
-| 0–64     | 30 / 64        | **47%**          | 42               |
-| 64–128   | 31 / 64        | **48%**          | 41               |
-| 128–256  | 42 / 128       | 33%              | 68               |
-| 256–512  | 47 / 256       | 18%              | 96               |
-| 512–1024 | 52 / 512       | **10%**          | 125              |
-
-The two 64-dim slices use nearly half their dimensional budget. The 512-dim slice uses only 10% — 52 effective dimensions out of 512. You need only 125 dimensions to capture 90% of the variance within the 512–1024 slice.
-
-This is the geometric fingerprint of MRL training: early slices are forced to be dense and isotropic (every dimension pulled into service by the loss), while later slices sprawl the same amount of signal across far more dimensions. The 512–1024 slice isn't richer than the 64-dim slices — it's the same signal at lower density, surrounded by near-zero dimensions that add noise without information.
-
-### Experiment 5 — Dot product decomposition: where does each pair's cosine come from?
-
-After unit-normalizing the full vector, we can decompose the dot product between two sentences into per-slice contributions. The contributions sum exactly to the full cosine.
-
-<PlotlyChart data={scaleData.shape_decomp.data} layout={scaleData.shape_decomp.layout} />
-
-For all three pair types — hard contradiction (cos = 0.843), cross-domain (cos = 0.447), easy paraphrase (cos = 0.870) — the 512–1024 slice contributes **~55%** of the dot product. This is constant across pair types because the energy distribution is a property of the model weights, not the inputs.
-
-The independent slice cosines tell a more nuanced story, though. For the cross-domain pair, the 64–128 slice shows cosine 0.33 (very low — these sentences are truly unrelated in that subspace), while 512–1024 shows 0.45. The large slice is dragging the full-vector cosine upward relative to what the discriminative slices see.
-
-### What this means in practice
-
-Full-vector cosine in mxbai is not a neutral aggregation of Matryoshka tiers. It is effectively a **52-effective-dim retrieval** (the anisotropic signal of the 512–1024 slice), with minor corrections from smaller, denser, more discriminative slices that collectively hold only 11% of the energy.
-
-If you want the contrastive signal that MRL packed into early dims to actually influence retrieval:
-
-- **Truncate explicitly**: use 64–256 dim vectors. You lose recall on borderline cases but gain discrimination on hard negatives.
-- **Equalize slice norms** before retrieval. Rankings stay nearly identical (r = 0.988) but absolute scores become more calibrated.
-- **Don't assume "more dims = better"**: the 512–1024 slice actively makes contradictions look more similar, not less.
-
-## Putting It Together
-
-These five measurements form a coherent picture of how mxbai-embed-large-v1 processes sentences:
-
-1. **L0–L6**: Token embeddings are lifted into residual stream. Cross-sentence structure emerges — the attractor starts pulling pairs together.
-
-2. **L6–L12**: The attractor peaks. All pairs, regardless of semantic relationship, look maximally similar. Pearson correlation with human scores _drops_ because the model has temporarily homogenized the representations.
-
-3. **L12–L20**: The attractor releases. The final layers begin the work of semantic discrimination. Pearson correlation climbs back up.
-
-4. **L20–L24**: The model does most of its metric-learning work. The L24 update is the single largest contributor to 87.3% of all dimensions. Pearson correlation reaches 0.875.
-
-5. **L24 output**: The Matryoshka structure means the early dimensions (0–128) capture the most contrastive signal, while the later dimensions (512–1024) capture fine-grained semantic nuance that improves similarity-ranking but hurts discrimination.
-
-The practical takeaways for retrieval:
-
-- **Don't use intermediate layer representations for retrieval** — you'll catch pairs at the attractor peak, where hard negatives look almost identical to positives.
-- **Truncating mxbai to 256 or fewer dims** actually gives you _more_ discriminative representations for hard negative pairs, not less. The 512–1024 dims actively hurt on contradictions.
-- **The L12 attractor explains why hard negatives need mining** in contrastive training. The model's intermediate layers genuinely collapse hard negative pairs — that collapse has to be undone by the final layers, and the training signal has to specifically target those final layers to push the pairs apart.
+My guess for why the last layer does so much is contrastive training. The loss is applied to the output vector, so its gradient reaches the last layer most directly. [check: the old text said the loss "flows back through mean pooling", but mxbai is trained and served with CLS pooling.]
 
 ## Key Takeaways
 
-- The **similarity attractor at L12** is confirmed on 500 real SNLI contradiction pairs. Peak: 0.914. L24 final: 0.617. Drop: 0.297.
-- The attractor affects **all similarity bins** equally at L12, then the final 12 layers rebuild semantic ordering.
-- **Pearson correlation** with human similarity peaks at L24 (r = 0.875) and temporarily _dips_ at L12 (r = 0.507) because the attractor homogenizes representations.
-- **Preservation spectrum** is flat at scale (mean r = 0.024 across 2,758 sentences). L0 embeddings carry no direct signal to L24.
-- **94.8% of dimensions** receive their peak update magnitude in the final transformer layer (L24).
-- **Search quality appears in the last quarter of the model**, in mxbai, MiniLM and Qwen3. Half the final nDCG@10 first shows up at 75% to 100% depth on 37 of 39 model and dataset pairs, and the middle layers search worse than layer 0.
-- **Matryoshka slices**: dims 64–128 are most discriminative for hard negatives (mean cosine 0.537); dims 512–1024 are least discriminative (0.644). More dimensions ≠ more contrastive.
+- In mxbai, MiniLM and Qwen3, the vector is close to useless for search until the last quarter of the model. Half the final nDCG@10 first shows up at 75% to 100% depth on 37 of 39 model and dataset pairs. The two misses are Quora on the two encoders.
+- The middle layers search worse than layer 0. A plain average of context-free word vectors beats mxbai's layer 12 (18.57 vs 10.34) and Qwen3's layer 12 (16.61 vs 3.95).
+- The reason shows up on pairs. At L12, SNLI contradictions reach a mean cosine of 0.914, and the STS-B correlation with human scores drops to 0.507. The last layers bring it back to 0.875.
+- 894 of mxbai's 1,024 dimensions get their largest update in the final layer.

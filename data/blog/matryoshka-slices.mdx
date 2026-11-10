@@ -1,0 +1,108 @@
+---
+title: "Full-Vector Cosine Mostly Reads mxbai's Last 512 Dimensions"
+subtitle: 'Which Matryoshka slices separate contradictions, and which ones drive the ranking'
+date: '2026-06-16'
+lastmod: '2026-11-10'
+tags: ['embeddings', 'matryoshka', 'geometry', 'nlp', 'information-retrieval']
+draft: true
+summary: "In mxbai-embed-large-v1, dimensions 512 to 1024 hold 53.4% of each vector's energy and set the full-vector ranking almost alone (Spearman r = 0.991). They are also the slice that separates SNLI contradictions worst. Dimensions 64 to 128 separate them best, yet they and dimensions 0 to 64 hold only 11% of the energy together."
+images: []
+authors: ['kshivendu']
+---
+
+import scaleData from '../public/static/data/scale_charts.json'
+
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
+
+In [mxbai-embed-large-v1](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1), dimensions 512 to 1024 hold **53.4%** of each vector's energy, so they set the full-vector cosine ranking almost alone (Spearman r = 0.991 with the full vector). They are also the slice that separates SNLI contradictions worst. Dimensions 64 to 128 separate them best. All numbers are on 500 [SNLI](https://nlp.stanford.edu/projects/snli/) contradiction pairs at the final layer.
+
+> This split out of [Embedding Models Only Become Searchable in Their Last Layers](/blog/transformer-geometry-at-scale). mxbai uses Matryoshka Representation Learning (MRL): the first d dimensions of its 1,024-dim vector are themselves a valid d-dimensional embedding, so you can cut it to 64, 128, 256 or 512 dimensions.
+
+## The smallest slices separate contradictions best
+
+For each slice, I took the cosine between premise and contradicting hypothesis. Lower means the slice tells them apart better:
+
+<PlotlyChart data={scaleData.matryoshka_slices.data} layout={scaleData.matryoshka_slices.layout} />
+
+| Slice      | Dimensions | Mean cosine (lower = more discriminative) |
+| ---------- | ---------- | ----------------------------------------- |
+| 64-128     | 64         | **0.537**, most discriminative            |
+| 0-64       | 64         | 0.585                                     |
+| 128-256    | 128        | 0.586                                     |
+| 256-512    | 256        | 0.598                                     |
+| **0-1024** | **1024**   | **0.617**, full vector                    |
+| 512-1024   | 512        | 0.644, least discriminative               |
+
+The 512-1024 slice is the largest and the least discriminative. The full vector (0.617) sits between the extremes. So more dimensions doesn't mean more separation within the Matryoshka structure.
+
+Magnitude doesn't explain it, because cosine normalizes it away. My reading of why is about what the dimensions encode. MRL training makes the small prefixes work on their own, so they can't spend dimensions on shared topic. The later dimensions can, and they encode what the sentence is about: topic, entities, domain. In a contradiction pair the topic is shared (same dogs, same grass) and only the relation differs ("no grass" vs "in grass"), so the topic dimensions see the pair as similar. [check: this explains why 0-64 should be best, but 64-128 is best in the table]
+
+The p10 to p90 range (grey error bars) is widest for 64-128 (std = 0.181) and narrows toward the full vector (std = 0.134). The later slices separate less on average and more consistently.
+
+## The 512-1024 slice holds most of the energy
+
+For each sentence, I measured what share of the vector's squared length falls in each slice. After normalization, that share is exactly the weight the slice gets in the cosine.
+
+<PlotlyChart data={scaleData.shape_energy.data} layout={scaleData.shape_energy.layout} />
+
+The 512-1024 slice holds **53.4%** of the energy. The two most discriminative slices (0-64 and 64-128) together get 11%. The slice norms by index are 4.1, 3.9, 5.8, 8.4 and 12.5. [check: elsewhere the norms were given as about 4.4 for 0-64 and 12.7 for 512-1024]
+
+So full-vector cosine weights the shared-topic dimensions most and the contrastive dimensions least.
+
+## The big slice sets the ranking
+
+I ranked the 500 pairs by cosine within each slice, and compared each ranking with the full vector's:
+
+<PlotlyChart data={scaleData.shape_spearman.data} layout={scaleData.shape_spearman.layout} />
+
+| Slice        | Spearman r vs full vector |
+| ------------ | ------------------------- |
+| 0-64         | 0.872                     |
+| 64-128       | 0.888                     |
+| 128-256      | 0.937                     |
+| 256-512      | 0.974                     |
+| **512-1024** | **0.991**                 |
+
+The full-vector ranking is almost exactly the 512-1024 slice's ranking. The two small slices agree least with each other (0-64 vs 64-128 at 0.784), so each captures something the larger slices blend together.
+
+For three example pairs, a hard contradiction (cosine 0.843), a cross-domain pair (0.447) and an easy paraphrase (0.870), the 512-1024 slice gives about 55% of the dot product each time:
+
+<PlotlyChart data={scaleData.shape_decomp.data} layout={scaleData.shape_decomp.layout} />
+
+The share stays the same for every pair, because the model's weights set it. The slices disagree inside, though. For the cross-domain pair, 64-128 alone gives cosine 0.33 and 512-1024 gives 0.45, so the big slice pulls the full cosine up.
+
+## Equal slice weights change scores, not rankings
+
+If I scale each slice to unit length before joining them, then normalize the whole vector, the mean contradiction cosine drops from **0.617 to 0.590**. The ranking barely moves (Spearman r = 0.988 with the original).
+
+<PlotlyChart data={scaleData.shape_eq.data} layout={scaleData.shape_eq.layout} />
+
+So equal weights don't help top-k search, but they matter if you filter candidates with a fixed similarity threshold.
+
+## The later slices use few of their dimensions
+
+The participation ratio, `(Σλ)²/Σλ²` over a slice's PCA eigenvalues, counts how many dimensions carry real variance:
+
+<PlotlyChart data={scaleData.shape_aniso.data} layout={scaleData.shape_aniso.layout} />
+
+| Slice    | Effective dims | % of budget used | Dims for 90% var |
+| -------- | -------------- | ---------------- | ---------------- |
+| 0-64     | 30 / 64        | **47%**          | 42               |
+| 64-128   | 31 / 64        | **48%**          | 41               |
+| 128-256  | 42 / 128       | 33%              | 68               |
+| 256-512  | 47 / 256       | 18%              | 96               |
+| 512-1024 | 52 / 512       | **10%**          | 125              |
+
+The two 64-dim slices use about half of their dimensions. The 512-1024 slice uses 10%: 52 effective dimensions out of 512. So full-vector cosine in mxbai is close to a 52-dimension comparison, with small corrections from the denser slices.
+
+## What to do with it
+
+- To make the contrastive dimensions count, cut the vector to 64 to 256 dimensions. You trade recall on borderline cases for better separation of hard negatives.
+- Equalize slice norms if you filter with a similarity threshold. Rankings stay nearly the same (r = 0.988).
+- Don't assume more dimensions separate better. On contradictions, the 512-1024 slice makes pairs look more similar.
+
+## Key Takeaways
+
+- Dimensions 512 to 1024 hold 53.4% of mxbai's vector energy and set the full-vector ranking (Spearman r = 0.991).
+- They separate SNLI contradictions worst (mean cosine 0.644). Dimensions 64 to 128 separate them best (0.537).
+- The 512-1024 slice uses 52 of its 512 dimensions, so full-vector cosine is close to a 52-dimension comparison.

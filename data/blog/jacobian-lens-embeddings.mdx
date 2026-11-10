@@ -13,7 +13,7 @@ authors: ['kshivendu']
 
 Anthropic's [Jacobian lens](https://transformer-circuits.pub/2026/workspace/index.html) reads what a language model holds at each layer. I ported it to an embedding model, [mxbai-embed-large-v1](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1), to read what each word adds to the sentence vector. On "A man is playing a guitar on stage.", each word reads as itself up to layer 20. In layers 21 to 23, every word folds onto the topic: at layer 23, even `is` reads as **guitarist, guitar, musician**. The result rests on one sentence.
 
-> This is part of the embedding geometry series. [Layer by Layer](/blog/embedding-layers) found that mxbai's sentences only separate in its last layers (separability 0.22 at layer 20, 3.66 at layer 24). [Transformer Geometry at Scale](/blog/transformer-geometry-at-scale) showed search quality appears at 75% to 100% depth in three different models. Those posts measure when the sentence vector forms. This one reads what goes into it.
+> This is part of the embedding geometry series. [Layer by Layer](/blog/embedding-layers) found that mxbai's sentences only separate in its last layers (separability 0.22 at layer 20, 3.66 at layer 24). [Embedding Models Only Become Searchable in Their Last Layers](/blog/transformer-geometry-at-scale) showed search quality appears at 75% to 100% depth in three different models. Those posts measure when the sentence vector forms. This one reads what goes into it.
 
 ## How the lens reads an embedding model
 
