@@ -1,0 +1,278 @@
+---
+title: 'Does an Embedding Model Have a Workspace? Porting the Jacobian Lens to a Bi-Encoder'
+date: '2026-07-07'
+lastmod: '2026-07-07'
+tags: ['embeddings', 'transformers', 'interpretability', 'geometry', 'information-retrieval', 'nlp']
+draft: true
+summary: "Anthropic's Jacobian lens reads the concepts a language model silently holds before it speaks. But it's defined entirely in terms of next-token prediction — and a bi-encoder never predicts a token. We adapt the J-lens to mxbai-embed-large-v1, watch what each token contributes to the sentence vector at every layer, then test the obvious idea it suggests — pool a mid-stack 'workspace' layer instead of the final one. It loses: a full per-layer SciFact sweep shows retrieval quality is manufactured entirely in the final ~4 layers, CLS is dead weight until L21, and mean-pool traces a U from bag-of-words at L0 through a mid-stack crater back to the top. The workspace is a concept representation, not a retrieval one."
+images: []
+authors: ['kshivendu']
+---
+
+import crystalData from '../public/static/data/jlens-crystallization.json'
+import sweepData from '../public/static/data/jlens-scifact-sweep.json'
+
+> Part of the embedding-geometry series. [Layer by layer](/blog/embedding-layers) covers how tokens
+> collapse into a sentence vector. [Inside the cone](/blog/embedding-anisotropy) covers anisotropy.
+> This post borrows an interpretability tool built for decoder LLMs and points it at an embedding model.
+
+On July 6 2026, Anthropic published [_Verbalizable Representations Form a Global Workspace in Language
+Models_](https://transformer-circuits.pub/2026/workspace/index.html). The headline was consciousness-adjacent
+— a "J-space" of concepts Claude silently holds — but the tool underneath it is what caught my eye: the
+**Jacobian lens**. Unlike the logit lens or the tuned lens, which only decode the _immediate next token_, the
+J-lens reads what a layer's activation causally pushes the model toward saying **now or at any point in the
+future**. It surfaces concepts that appear nowhere in the input or output: "ERROR" while reading buggy code,
+a protein's function from its raw sequence, "injection" while reading a prompt-injection attack.
+
+I work on vector search. My question was narrower and a little contrarian: **the J-lens is defined entirely in
+terms of next-token prediction. An embedding model never predicts a token. Can the lens tell us anything about
+a bi-encoder at all — and if we force it to, does an embedding model have a "workspace" the way a generative
+model does?**
+
+Short answer: yes, with a change of basis, and what comes back is not a workspace so much as a **late, sudden
+commitment**. It lines up almost exactly with a claim from [the first post in this series](/blog/embedding-layers)
+— that a sentence embedding is built in its final four or five layers — but now we can watch it happen in
+_concept space_ instead of _cosine space_. And it suggests one tempting optimization — read the vector out of a
+mid-stack "workspace" layer instead of the trained final one — which I then tested with a full per-layer SciFact
+sweep. It loses, cleanly, and _why_ it loses is the most useful thing in this post.
+
+## The Jacobian lens, in one equation
+
+The logit lens takes a hidden state `h` at layer `ℓ`, skips the remaining layers, and decodes it straight
+through the unembedding: `logits ≈ W_U · h`. It answers "if the model had to speak right now, from this
+layer, what would it say?" It's biased (mojibake mid-stack) and myopic (only the next token).
+
+The Jacobian lens replaces the identity map "layer ℓ → final" with the model's own **average linearized map**
+between them:
+
+```
+lens_ℓ(h) = W_U · ( J̄_ℓ · h )        where   J̄_ℓ = E_corpus[ ∂h_final / ∂h_ℓ ]
+```
+
+`J̄_ℓ` is the Jacobian of the final hidden state with respect to the layer-ℓ hidden state, **averaged over a
+large corpus** of contexts and positions (Anthropic sum the cotangents over current _and future_ target
+positions, then average over source positions — that "and future" is what lets it read concepts the model is
+merely _disposed_ to say). Two things matter:
+
+1. **It reads influence on the future, not just the next token.** A concept the model is holding for later
+   surfaces even if it isn't about to be emitted.
+2. **The averaging is not optional — it's the whole trick.** A single-context Jacobian is dominated by the
+   anisotropic rogue directions that plague these models (see [the cone post](/blog/embedding-anisotropy)) and
+   comes back as pure noise. Averaging cancels the idiosyncratic directions and leaves the _typical_ transport.
+
+I verified point 2 the hard way: my single-prompt implementation returned mojibake at every layer. Only after
+averaging over a 12-sentence corpus × 30 (prompt, position) samples did interpretable concepts appear. This
+reproduces Anthropic's central methodological claim on a 0.5B open model.
+
+## Sanity check: the three regimes on Qwen
+
+Before touching an embedding model, I confirmed the lens behaves as the paper describes on a decoder —
+`Qwen2.5-0.5B`, prompt `"A man is playing a guitar on stage."`, probing the ` a` token before `guitar`, target
+concept `guitar`. Rank of `guitar` in the J-lens readout, by layer band:
+
+| band (layers) | regime        | what the lens reads out                                                     | rank of `guitar` |
+| ------------- | ------------- | --------------------------------------------------------------------------- | ---------------: |
+| L0–L4         | **sensory**   | noise / mojibake (≈ raw logit lens)                                         |         ~100,000 |
+| L5–L16        | **workspace** | magician, piano, melody, chess, playlist, racket, cricket, poker, carnival… |       ~850 → 500 |
+| L17–L24       | **motor**     | game, games, video, card, musical, board                                    |      25 → 14 → 9 |
+
+Three regimes, exactly as the paper reports: **sensory** (raw input, uninterpretable) → **workspace** (abstract,
+persistent content) → **motor** (aligned with the imminent output). And a nice bonus finding — the model never
+privileges `guitar` (context can't pin the exact noun), but it clearly holds _the category of playable things_:
+instruments, games, sports, performance. It reasons over the **kind** of thing, not the literal word. Good; the
+lens works. Now the interesting part.
+
+## Why this shouldn't work on a bi-encoder — and the one change that fixes it
+
+`mxbai-embed-large-v1` is a BERT-large encoder with CLS pooling. There is **no unembedding matrix and no next
+token.** The output is a 1024-d vector, compared by cosine. So `W_U` is undefined and `∂h_final/∂h_ℓ` has no
+"logits" to land in.
+
+The fix is a change of basis. The bi-encoder's "output" is the pooled CLS vector, so we differentiate _that_:
+
+```
+embedding J-lens:   Δcls_ℓ(token v) = E_corpus[ ∂cls / ∂h_ℓ(v) ]
+```
+
+i.e. **how much does perturbing token _v_ at layer ℓ move the final sentence vector?** That gives a direction
+in embedding space, not a logit vector. To make it _readable_, we decode it against a **concept dictionary**:
+4,000 whole-word lowercase terms from the BERT vocabulary, each encoded once through mxbai's own CLS pooling.
+The concept whose vector best aligns with `Δcls_ℓ(v)` is what token `v` is "contributing" to the sentence at
+that layer. Finite-difference the Jacobian (inject `ε·v`, measure ΔCLS), average over the corpus, decode.
+
+So the LLM J-lens asks _"what is the model about to say?"_ and the embedding J-lens asks _"what does each token
+push the sentence vector toward?"_ Same machinery, retargeted from the vocabulary onto a concept dictionary.
+
+## Does a bi-encoder have a workspace? The mxbai J-lens
+
+Probe sentence: **"A man is playing a guitar on stage."** For each token, the top concept its contribution
+decodes to, per layer:
+
+| token     | WE/L0     | L3        | L6           | L9        | L12       | L15     | L18      | L21          | L23           |
+| --------- | --------- | --------- | ------------ | --------- | --------- | ------- | -------- | ------------ | ------------- |
+| `guitar`  | guitarist | guitar    | guitar       | guitarist | guitar    | guitar  | guitar   | _agents_     | **guitar**    |
+| `stage`   | stage     | stage     | stage        | stage     | stage     | stage   | stage    | stage        | **stage**     |
+| `man`     | producers | producers | party        | labour    | man       | man     | man      | _movies_     | **man**       |
+| `playing` | pitch     | farmers   | guitar       | guitarist | guitarist | playing | musician | _ambassador_ | **guitar**    |
+| `on`      | russell   | actor     | studios      | opera     | breathing | tennis  | student  | _worry_      | **stage**     |
+| `a`       | professor | studios   | agricultural | piano     | human     | subject | student  | _nba_        | **guitar**    |
+| `is`      | meeting   | producers | crowd        | producers | ethnic    | opera   | students | _taiwan_     | **guitarist** |
+
+Read it top to bottom and two populations separate cleanly:
+
+**Content anchors are locked from the embedding layer.** `guitar` decodes to guitar/guitarist at _every_ layer
+including L0; `stage` is `stage` from L0 to L23, immovable. These are context-free lexical identities — the
+token embedding already points at the concept, and attention barely perturbs it. (We proved the context-free
+part directly elsewhere: an identical token in two different sentences has cosine distance _exactly zero_ at L0.)
+
+**Function words are noise that migrates toward the anchors.** `playing` starts at "pitch" (a wrong sense —
+sports pitch), becomes "guitar/guitarist" by L6, "musician" at L18, and lands on "guitar" by L23. `on` starts as
+the name "russell", wanders through studios/opera/tennis, and only commits to "stage" at L23. `a`, `is` — pure
+noise early, absorbed into the sentence's content late. These tokens have no meaning of their own; they _acquire_
+it from context, and you can watch the acquisition happen.
+
+**Note the L21 column.** Right before the end, the readout goes briefly _noisy_ again — agents, movies,
+ambassador, nba, taiwan. This isn't a bug; it coincides with the geometry collapsing (next section). The tokens
+are being crushed toward a shared direction, and mid-collapse the nearest dictionary concept is unstable. By L23
+it snaps onto the actual content. So the "workspace" in a bi-encoder is not a clean, stable mid-stack band like
+the LLM's — it's a **brief, turbulent commitment crammed into the last few layers.**
+
+## The sentence vector wanders, then commits
+
+The per-token view says content converges late. The CLS vector itself says the same thing, more starkly. Two
+measurements across the 24 layers:
+
+- **diversity°** — the mean angular spread of the token directions (high = tokens point different ways = distinct
+  concepts held; low = collapsed onto one direction).
+- **cos→final** — cosine of the CLS vector at layer ℓ to its _own final form_. How much of the finished sentence
+  embedding exists yet.
+
+<PlotlyChart data={crystalData.data} layout={crystalData.layout} />
+
+| layer      |  L0 |   L6 |  L12 |  L17 |  L18 |  L19 |  L20 |  L21 |  L22 |      L23 |
+| ---------- | --: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | -------: |
+| diversity° |  74 |   69 |   74 |    — |   70 |   74 |   70 |   58 |   55 |   **46** |
+| cos→final  |  ~0 | 0.02 | 0.05 | 0.08 | 0.13 | 0.23 | 0.34 | 0.47 | 0.53 | **0.67** |
+
+Two things jump out.
+
+**The finished embedding does not exist until the last ~6 layers.** `cos→final` sits under 0.08 for the first
+seventeen layers — the CLS vector is essentially _orthogonal to what it will become_. Then it ramps hard: 0.13 →
+0.34 → 0.67 → 1.0 across L18–L24. Whatever the model is doing for its first 70% of depth, it is **not** building
+the vector we search with.
+
+**It's not that the CLS is sitting still — it's wandering.** The per-layer step angle of the CLS vector is large
+throughout (37°, 44°, 48° at various layers). The vector moves a lot at every layer; almost none of that motion
+is _toward the final direction_ until late. It explores, then commits. Note the contrast: **big steps, near-zero
+progress toward the target** — the definition of a model that hasn't decided yet.
+
+**Token diversity holds high (~70°) until L20, then collapses to 46°.** The tokens keep distinct directions
+through most of the stack — consistent with them carrying separate syntactic/semantic roles — and only fuse into
+the shared sentence direction at the very end. This is [the token-collapse event from Part 1](/blog/embedding-layers)
+seen from the concept side: collapse _is_ the sentence vector forming.
+
+## What this means for vector search
+
+This is where the exercise pays off. Stack the two models' behaviour:
+
+- **Decoder LLM (Qwen):** clean three-regime structure, with a wide **workspace band (≈L5–L16)** that holds
+  abstract, persistent concepts before the motor layers commit to an output token.
+- **Bi-encoder (mxbai):** no stable workspace band. The abstract content _is_ present mid-stack (`playing` →
+  guitarist/musician at L6–L18), but the model keeps every token's direction distinct and uncommitted until a
+  compressed collapse in the final ~6 layers.
+
+The retrieval-relevant takeaway is the same one this series keeps arriving at from different angles: **the vector
+you search with is a last-mile artifact.** cos→final < 0.08 for seventeen layers means the entire discriminative
+sentence representation is manufactured in the final stretch — and [we've shown elsewhere](/blog/embedding-anisotropy)
+that this final stretch is exactly where anisotropy is injected and where near-duplicate discrimination gets
+pushed into the low-variance tail dimensions.
+
+That suggested a concrete, testable idea: **pool the workspace, not the last layer.** The mid-stack layers hold a
+higher-diversity, less-collapsed, more concept-faithful representation of _what's in the sentence_ — maybe better
+for semantic matching than the final layer, which has been squeezed to satisfy a contrastive-cosine objective. A
+"workspace embedding" (mean-pooled from a mid layer) is a near-free experiment: same forward pass, different
+read-out layer. So I ran it.
+
+### I tested it. The workspace loses — but the shape is the real finding.
+
+I embedded the full [SciFact](https://github.com/allenai/scifact) corpus (5,183 docs, 300 queries) with mxbai,
+captured **all 25 hidden states in one forward pass**, pooled every layer two ways (CLS token and mean over
+tokens), and measured nDCG@10 at each. The final-layer CLS number reproduces the standard mxbai baseline (0.738),
+so the pipeline is honest.
+
+<PlotlyChart data={sweepData.data} layout={sweepData.layout} />
+
+| read-out     |       L0 |   L6 |  L13 |  L18 |  L21 |  L23 | **L24 (final)** |
+| ------------ | -------: | ---: | ---: | ---: | ---: | ---: | --------------: |
+| CLS nDCG@10  |     0.00 | 0.01 | 0.00 | 0.00 | 0.07 | 0.66 |       **0.738** |
+| mean nDCG@10 | **0.42** | 0.33 | 0.01 | 0.21 | 0.56 | 0.71 |       **0.745** |
+
+The hypothesis is **wrong**: no mid-stack layer beats the trained final layer. The best result is L24 (mean-pool,
+0.745; CLS, 0.738) — the last mile is doing essential work, not just cosmetic over-collapse. If you want mxbai's
+retrieval quality, you have to run all 24 layers. But three things fall out that are more interesting than the
+hypothesis would have been:
+
+1. **CLS is dead weight until L21.** Its nDCG is ~0.00 through _twenty layers_ — the CLS token literally carries
+   no retrieval signal until L21, then rockets 0.07 → 0.34 → 0.66 → 0.74 in the final four. This is the
+   `cos→final` crystallization curve seen from the retrieval side: identical shape, independent measurement.
+2. **Mean-pool traces a U.** At **L0 — just averaged input embeddings, a pure bag-of-words — mean pooling already
+   scores 0.42**, more than half the final nDCG, on lexical overlap alone. Then the middle layers _destroy_ it
+   (down to 0.01 at L13) as they scramble lexical identity into contextual/syntactic features, and only the final
+   ~4 layers rebuild a semantic representation that finally _beats_ bag-of-words. The model gets worse at
+   retrieval before it gets better.
+3. **Mean-pool ≥ CLS at every single layer, including the last** (0.745 vs 0.738). mxbai is trained and shipped
+   with CLS pooling, yet plain mean-pooling of the final layer edges it out on SciFact — a small, free win, and a
+   reminder that the trained pooling head isn't sacred.
+
+So the workspace band is real _as a concept representation_ (the J-lens shows abstract content held mid-stack)
+but it is **not a usable retrieval representation** — those are different things, and conflating them was the
+error in the hypothesis. The retrieval signal is genuinely a last-mile artifact: the final four layers convert a
+held, high-diversity concept cloud into a single collapsed, anisotropic, searchable vector. Everything this
+series has found points the same way — [the sentence forms in the final five layers](/blog/embedding-layers),
+[the cone is injected there](/blog/embedding-anisotropy), and now: **retrieval quality is manufactured there too,
+and nowhere earlier.**
+
+The still-open lever isn't _which layer to pool_ — it's _what operator to compare with_. The final vector wins,
+but it's crushed into the anisotropic cone, so cosine over-weights the shared hub. That's the thread the
+[beyond-cosine work](/blog/embedding-anisotropy) picks up: a learned/whitened metric on the final layer, not a
+different read-out layer.
+
+## Honest limitations
+
+- **The concept-dictionary decode is lossy.** It can only name single dictionary terms; a contribution that is a
+  blend of concepts gets rounded to its nearest neighbour. Anthropic hit the same wall (single-token vocab) and
+  call it out as their main limitation. The noisy L21 column is partly this.
+- **One probe sentence, one small model.** The three-regime Qwen result and the mxbai result each rest on a
+  single sentence. The _shape_ is robust to the corpus averaging inside the lens, but I have not swept many
+  probe sentences or larger encoders yet.
+- **`∂cls/∂h` is a linearization.** The finite-difference Jacobian assumes local linearity around the operating
+  point; large `ε` would leave the valid regime. I kept `ε` small and averaged, but this is an approximation of
+  a nonlinear map, not the map itself.
+- **"Workspace" is an analogy, not a claim.** I'm borrowing Anthropic's vocabulary to describe an embedding
+  model's mid-stack; I am _not_ claiming a bi-encoder has a global workspace in their functional sense (report,
+  modulation, flexible reasoning). It doesn't generate, so most of those tests don't even apply.
+
+## Key takeaways
+
+- **The Jacobian lens ports to an embedding model** by differentiating the pooled vector instead of the logits
+  and decoding against a concept dictionary. Corpus-averaging is mandatory — single-context is noise.
+- **A bi-encoder has no clean workspace band.** Where a decoder LLM holds abstract concepts across a wide
+  mid-stack (Qwen L5–L16), mxbai keeps tokens distinct and uncommitted, then collapses them in a turbulent final
+  ~6 layers.
+- **The searchable vector is a last-mile artifact.** `cos→final` stays under 0.08 for seventeen of twenty-four
+  layers, then ramps to 1.0. The CLS wanders (large step angles) with almost no progress toward its final
+  direction until the end.
+- **Content anchors are context-free; function words acquire meaning late.** `guitar`/`stage` decode correctly
+  from L0; `a`/`is`/`on`/`playing` start as noise and migrate onto the sentence's content by L23.
+- **The workspace is a concept representation, not a retrieval one — I tested it and it loses.** Per-layer
+  SciFact nDCG@10 shows no mid-stack layer beats the trained final layer (best: L24 mean-pool 0.745 vs CLS
+  0.738). CLS carries ~0 retrieval signal until L21; mean-pool starts at 0.42 (bag-of-words), craters mid-stack,
+  and only the final ~4 layers rebuild a vector that beats lexical overlap. The last mile is essential.
+- **Free win noticed along the way:** mean-pooling mxbai's final layer edges out its shipped CLS pooling on
+  SciFact (0.745 vs 0.738). The trained pooling head isn't sacred.
+- **The real lever is the operator, not the layer.** The final vector wins but sits in the anisotropic cone;
+  the open opportunity is a learned/whitened metric on it, not a different read-out layer.
+
+_Tools: `bake_tinystories_modal.py` (J-lens on Modal), `quant_eval_modal.py` (`run_scifact_layers` — the
+per-layer retrieval sweep), `jlens_heatmap.html` (interactive layer × token concept grid). Companion to
+Anthropic's [reference implementation](https://github.com/anthropics/jacobian-lens)._
