@@ -1,0 +1,104 @@
+---
+title: 'Reading an Embedding Model with the Jacobian Lens'
+subtitle: 'What each word adds to the sentence vector, layer by layer'
+date: '2026-11-10'
+lastmod: '2026-11-10'
+tags: ['embeddings', 'transformers', 'interpretability', 'nlp']
+draft: true
+summary: "I ported Anthropic's Jacobian lens to mxbai-embed-large-v1 to read what each word adds to the sentence vector at each layer. Averaged over 20 contexts, each word reads as itself up to layer 20. In layers 21 to 23, every word folds onto the topic of the sentence: at layer 23, even 'is' reads as guitarist, guitar, musician."
+authors: ['kshivendu']
+---
+
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
+
+Anthropic's [Jacobian lens](https://transformer-circuits.pub/2026/workspace/index.html) reads what a language model holds at each layer. I ported it to an embedding model, [mxbai-embed-large-v1](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1), to read what each word adds to the sentence vector. On "A man is playing a guitar on stage.", each word reads as itself up to layer 20. In layers 21 to 23, every word folds onto the topic: at layer 23, even `is` reads as **guitarist, guitar, musician**. The result rests on one sentence.
+
+> This is part of the embedding geometry series. [Layer by Layer](/blog/embedding-layers) found that mxbai's sentences only separate in its last layers (separability 0.22 at layer 20, 3.66 at layer 24). [Transformer Geometry at Scale](/blog/transformer-geometry-at-scale) showed search quality appears at 75% to 100% depth in three different models. Those posts measure when the sentence vector forms. This one reads what goes into it.
+
+## How the lens reads an embedding model
+
+The Jacobian lens was built for language models. It asks which output tokens move if you push on a hidden state. An embedding model has no output tokens. It returns one vector, taken from the CLS token (a special token BERT puts in front of every input). So I measure how a word moves that vector instead:
+
+```
+ ① take "guitar" at layer 12 in the probe sentence
+
+   "A man is playing a guitar on stage."
+                          │
+                          │ h  (its hidden state,
+                          │     1,024 numbers)
+                          ▼
+ ② add 0.01 × h at layer 12 of another sentence
+
+   "The children are running in the park."
+                     ▲
+                     └── + 0.01 × h
+                          │
+                          ▼
+ ③ run layers 13 to 24 and watch the CLS vector
+
+   Δ = (new CLS − old CLS) / 0.01
+                          │
+                          ▼
+ ④ repeat at 20 spots in 12 sentences, average Δ
+                          │
+                          ▼
+ ⑤ find the 3 closest of 4,000 words (by cosine)
+
+   guitar, guitarist, musician
+```
+
+Δ is what "guitar" at layer 12 adds to a sentence vector. The 4,000 words are the first lowercase words in BERT's vocabulary, each embedded by mxbai.
+
+## The lens only works averaged
+
+Steps ② and ④ are the part that makes it work, as the paper also found. If I nudge "guitar" inside its own sentence only, the readout is noise. `guitar` at layer 0 decodes to kitchen, violin, anger, and `man` at layer 12 decodes to build, joy, read.
+
+The angle between the seven words' Δs shows it without any dictionary. Two random directions in 1,024 dimensions sit about 90° apart. Measured in the one sentence, the words are 90° to 95° apart from layer 0 to layer 17, as unrelated as random vectors. Averaged over the 12 other sentences, they are 64° to 75° apart, and the readout makes sense.
+
+## Each word reads as itself until layer 20
+
+Drag the slider. Each word in the sentence points to the dictionary word shown in bold, with the next two in grey. All of it is real lens output.
+
+<JLensLayers />
+
+At layer 12, the four content words read as themselves:
+
+```
+man      man, men, brothers
+playing  guitarist, guitar, playing
+guitar   guitar, guitarist, musician
+stage    stage, broadway, stages
+```
+
+- `guitar` and `stage` are right from layer 0. `stage` has stage as its top word at every layer from 0 to 23.
+- `playing` starts at layer 0 as pitch, writer, player, the sports sense. By layer 5 it reads musician, guitarist, guitar, because its hidden state has taken in the words around it.
+- `a`, `is` and `on` stay noise in the middle. At layer 12, `on` reads breathing, child, institution.
+
+## Layers 21 to 23 fold every word onto the topic
+
+At layer 23, every word reads as the sentence's topic:
+
+```
+a        guitar, guitarist, musician
+is       guitarist, guitar, musician
+on       stage, guitar, guitarist
+man      man, guitarist, male
+```
+
+The angle between the words falls from 74.5° at layer 0 to 58° at layer 21 and 46° at layer 23. The seven words stop pointing seven ways and start pointing one way.
+
+These are the same layers where mxbai's vector becomes usable for search. In the [per-layer search test](/blog/transformer-geometry-at-scale), its CLS vector finds nothing relevant in the top 10 for 95.2% of NanoBEIR queries at layer 20, and for 9.7% at layer 24.
+
+## Limits
+
+- One probe sentence on one model. One of the 12 context sentences, "The band is performing on a small stage.", is close to it.
+- Layer 21 is noisy. Six of seven words lose their meaning there (`guitar` reads agents, montreal, about), while layers 20 and 22 read cleanly. I don't know why yet.
+- Layer 24 can't be read. A nudge after the last layer can't reach the CLS vector, so Δ is zero for every word.
+- Δ comes from one nudge of size 0.01, which treats the model as linear around that point.
+
+## Key Takeaways
+
+- The Jacobian lens works on an embedding model if you measure how each word moves the sentence vector, and decode that against words embedded by the same model.
+- It only works averaged. In one sentence, the words point 90° to 95° apart, as randomly as noise.
+- Up to layer 20, each word in mxbai reads as itself. At layer 12, `man` reads man, men, brothers.
+- In layers 21 to 23, every word folds onto the topic. At layer 23, `is` reads guitarist, guitar, musician.

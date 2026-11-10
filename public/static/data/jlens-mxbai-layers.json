@@ -1,0 +1,502 @@
+{
+  "model": "mixedbread-ai/mxbai-embed-large-v1",
+  "prompt": "A man is playing a guitar on stage.",
+  "tokens": ["a", "man", "is", "playing", "guitar", "on", "stage"],
+  "stages": [
+    "WE/L0",
+    "L1",
+    "L2",
+    "L3",
+    "L4",
+    "L5",
+    "L6",
+    "L7",
+    "L8",
+    "L9",
+    "L10",
+    "L11",
+    "L12",
+    "L13",
+    "L14",
+    "L15",
+    "L16",
+    "L17",
+    "L18",
+    "L19",
+    "L20",
+    "L21",
+    "L22",
+    "L23",
+    "L24"
+  ],
+  "single": {
+    "dict_size": 117,
+    "top3": [
+      {
+        "a": ["guitar", "dancer", "horse"],
+        "man": ["chess", "stage", "jump"],
+        "is": ["animal", "dog", "dinner"],
+        "playing": ["drink", "dog", "animal"],
+        "guitar": ["kitchen", "violin", "anger"],
+        "on": ["band", "drum", "concert"],
+        "stage": ["wedding", "band", "fish"]
+      },
+      {
+        "a": ["dance", "dancer", "chess"],
+        "man": ["theater", "speak", "drink"],
+        "is": ["ride", "sit", "dancer"],
+        "playing": ["festival", "ride", "horse"],
+        "guitar": ["tennis", "play", "stage"],
+        "on": ["road", "window", "car"],
+        "stage": ["number", "sing", "door"]
+      },
+      {
+        "a": ["piano", "dance", "chess"],
+        "man": ["theater", "dancer", "child"],
+        "is": ["festival", "chess", "stand"],
+        "playing": ["theater", "laugh", "throw"],
+        "guitar": ["ride", "park", "drink"],
+        "on": ["room", "jump", "theater"],
+        "stage": ["musician", "song", "concert"]
+      },
+      {
+        "a": ["tool", "speak", "guitar"],
+        "man": ["concert", "performance", "dancer"],
+        "is": ["melody", "guitar", "toy"],
+        "playing": ["dancer", "tennis", "dance"],
+        "guitar": ["soccer", "race", "anger"],
+        "on": ["jump", "run", "soccer"],
+        "stage": ["car", "door", "guitar"]
+      },
+      {
+        "a": ["instrument", "joy", "melody"],
+        "man": ["stage", "stand", "theater"],
+        "is": ["stand", "guitar", "dinner"],
+        "playing": ["theater", "chess", "horse"],
+        "guitar": ["ride", "sleep", "fear"],
+        "on": ["theater", "concert", "audience"],
+        "stage": ["anger", "play", "game"]
+      },
+      {
+        "a": ["festival", "musician", "music"],
+        "man": ["musician", "concert", "song"],
+        "is": ["house", "song", "drum"],
+        "playing": ["drum", "beach", "animal"],
+        "guitar": ["ride", "sport", "tennis"],
+        "on": ["band", "theater", "drum"],
+        "stage": ["game", "run", "drive"]
+      },
+      {
+        "a": ["melody", "violin", "joy"],
+        "man": ["artist", "park", "tennis"],
+        "is": ["song", "band", "park"],
+        "playing": ["chess", "game", "tennis"],
+        "guitar": ["sing", "theater", "stand"],
+        "on": ["fire", "horse", "dancer"],
+        "stage": ["concert", "door", "anger"]
+      },
+      {
+        "a": ["computer", "sing", "drum"],
+        "man": ["piano", "child", "girl"],
+        "is": ["band", "theater", "fear"],
+        "playing": ["dancer", "man", "horse"],
+        "guitar": ["theater", "jump", "stage"],
+        "on": ["drum", "instrument", "melody"],
+        "stage": ["guitar", "soccer", "dinner"]
+      },
+      {
+        "a": ["chess", "horse", "piano"],
+        "man": ["girl", "game", "show"],
+        "is": ["jump", "soccer", "dancer"],
+        "playing": ["cat", "ride", "party"],
+        "guitar": ["stage", "dancer", "race"],
+        "on": ["play", "laugh", "fun"],
+        "stage": ["dance", "band", "dancer"]
+      },
+      {
+        "a": ["piano", "melody", "chair"],
+        "man": ["play", "fun", "laugh"],
+        "is": ["person", "artist", "door"],
+        "playing": ["tree", "song", "car"],
+        "guitar": ["dance", "stage", "theater"],
+        "on": ["soccer", "band", "drum"],
+        "stage": ["guitar", "band", "car"]
+      },
+      {
+        "a": ["tennis", "piano", "cook"],
+        "man": ["melody", "piano", "musician"],
+        "is": ["stand", "horse", "hold"],
+        "playing": ["stage", "dancer", "theater"],
+        "guitar": ["violin", "dance", "dancer"],
+        "on": ["theater", "show", "audience"],
+        "stage": ["guitar", "game", "chess"]
+      },
+      {
+        "a": ["toy", "guitar", "drive"],
+        "man": ["people", "cook", "computer"],
+        "is": ["dancer", "crowd", "musician"],
+        "playing": ["song", "horse", "car"],
+        "guitar": ["dancer", "fun", "soccer"],
+        "on": ["theater", "audience", "crowd"],
+        "stage": ["show", "window", "room"]
+      },
+      {
+        "a": ["friend", "band", "guitar"],
+        "man": ["build", "joy", "read"],
+        "is": ["window", "write", "drink"],
+        "playing": ["stage", "night", "anger"],
+        "guitar": ["theater", "laugh", "dancer"],
+        "on": ["jump", "garden", "tennis"],
+        "stage": ["cook", "stage", "dance"]
+      },
+      {
+        "a": ["song", "sing", "piano"],
+        "man": ["chess", "sing", "sleep"],
+        "is": ["people", "woman", "crowd"],
+        "playing": ["stage", "wedding", "table"],
+        "guitar": ["play", "game", "theater"],
+        "on": ["throw", "door", "piano"],
+        "stage": ["stage", "race", "show"]
+      },
+      {
+        "a": ["musician", "concert", "song"],
+        "man": ["toy", "laugh", "fire"],
+        "is": ["people", "laugh", "woman"],
+        "playing": ["man", "crowd", "jump"],
+        "guitar": ["stage", "laugh", "match"],
+        "on": ["piano", "room", "dancer"],
+        "stage": ["festival", "concert", "guitar"]
+      },
+      {
+        "a": ["sing", "song", "concert"],
+        "man": ["girl", "child", "guitar"],
+        "is": ["table", "wedding", "man"],
+        "playing": ["dancer", "song", "stage"],
+        "guitar": ["dance", "dancer", "theater"],
+        "on": ["door", "show", "stage"],
+        "stage": ["man", "woman", "guitar"]
+      },
+      {
+        "a": ["crowd", "laugh", "sing"],
+        "man": ["musician", "friend", "boy"],
+        "is": ["run", "anger", "chess"],
+        "playing": ["stage", "wedding", "people"],
+        "guitar": ["stage", "theater", "table"],
+        "on": ["cook", "show", "game"],
+        "stage": ["guitar", "man", "car"]
+      },
+      {
+        "a": ["people", "audience", "crowd"],
+        "man": ["concert", "stage", "festival"],
+        "is": ["build", "guitar", "computer"],
+        "playing": ["garden", "mountain", "stage"],
+        "guitar": ["sport", "theater", "dancer"],
+        "on": ["musician", "artist", "sleep"],
+        "stage": ["street", "guitar", "tree"]
+      },
+      {
+        "a": ["write", "people", "fire"],
+        "man": ["cat", "celebration", "garden"],
+        "is": ["stage", "road", "match"],
+        "playing": ["ball", "sport", "play"],
+        "guitar": ["race", "audience", "crowd"],
+        "on": ["artist", "person", "number"],
+        "stage": ["fire", "stage", "jump"]
+      },
+      {
+        "a": ["computer", "instrument", "drum"],
+        "man": ["musician", "artist", "person"],
+        "is": ["people", "crowd", "woman"],
+        "playing": ["sleep", "dance", "sing"],
+        "guitar": ["concert", "anger", "child"],
+        "on": ["crowd", "people", "stand"],
+        "stage": ["theater", "dancer", "story"]
+      },
+      {
+        "a": ["instrument", "tool", "drum"],
+        "man": ["man", "home", "street"],
+        "is": ["dance", "performance", "soccer"],
+        "playing": ["play", "game", "chess"],
+        "guitar": ["song", "friend", "artist"],
+        "on": ["jump", "sit", "soccer"],
+        "stage": ["stage", "race", "anger"]
+      },
+      {
+        "a": ["guitar", "musician", "band"],
+        "man": ["man", "crowd", "match"],
+        "is": ["sing", "performance", "musician"],
+        "playing": ["performance", "band", "musician"],
+        "guitar": ["guitar", "tree", "horse"],
+        "on": ["performance", "stand", "sing"],
+        "stage": ["stage", "theater", "concert"]
+      },
+      {
+        "a": ["guitar", "piano", "musician"],
+        "man": ["man", "celebration", "crowd"],
+        "is": ["musician", "piano", "sing"],
+        "playing": ["play", "instrument", "piano"],
+        "guitar": ["guitar", "horse", "car"],
+        "on": ["stage", "theater", "audience"],
+        "stage": ["stage", "theater", "audience"]
+      },
+      {
+        "a": ["guitar", "musician", "instrument"],
+        "man": ["man", "people", "woman"],
+        "is": ["play", "performance", "musician"],
+        "playing": ["play", "guitar", "musician"],
+        "guitar": ["guitar", "musician", "instrument"],
+        "on": ["stage", "home", "performance"],
+        "stage": ["stage", "theater", "show"]
+      },
+      {
+        "a": ["throw", "hold", "stand"],
+        "man": ["throw", "hold", "stand"],
+        "is": ["throw", "hold", "stand"],
+        "playing": ["throw", "hold", "stand"],
+        "guitar": ["throw", "hold", "stand"],
+        "on": ["throw", "hold", "stand"],
+        "stage": ["throw", "hold", "stand"]
+      }
+    ],
+    "diversity": [
+      90.56, 93.24, 94.49, 94.98, 93.61, 92.73, 90.97, 90.9, 91.56, 93.04, 94.07, 94.44, 93.63,
+      94.63, 93.77, 93.71, 93.48, 93.03, 82.34, 92.26, 91.38, 72.33, 82.11, 71.05, 90.0
+    ]
+  },
+  "averaged": {
+    "dict_size": 4000,
+    "n_samples": 20,
+    "top3": [
+      {
+        "a": ["professor", "restaurant", "producers"],
+        "man": ["producers", "actors", "jews"],
+        "is": ["meeting", "meetings", "authorities"],
+        "playing": ["pitch", "writer", "player"],
+        "guitar": ["guitarist", "guitar", "filmed"],
+        "on": ["russell", "principal", "judge"],
+        "stage": ["stage", "stages", "broadway"]
+      },
+      {
+        "a": ["producers", "commune", "teachers"],
+        "man": ["producers", "actors", "vampires"],
+        "is": ["authorities", "producers", "officials"],
+        "playing": ["pitch", "fields", "field"],
+        "guitar": ["guitarist", "filmed", "guitar"],
+        "on": ["actors", "roles", "role"],
+        "stage": ["stage", "stages", "producer"]
+      },
+      {
+        "a": ["producers", "teachers", "producer"],
+        "man": ["producers", "musicians", "teachers"],
+        "is": ["producers", "teachers", "producer"],
+        "playing": ["fields", "farmers", "producer"],
+        "guitar": ["guitarist", "guitar", "studio"],
+        "on": ["actors", "broadway", "hollywood"],
+        "stage": ["stage", "stages", "producer"]
+      },
+      {
+        "a": ["studios", "producers", "chair"],
+        "man": ["producers", "crowd", "labour"],
+        "is": ["producers", "producer", "directors"],
+        "playing": ["farmers", "producer", "producers"],
+        "guitar": ["guitar", "guitarist", "recording"],
+        "on": ["actor", "cinema", "opera"],
+        "stage": ["stage", "producer", "broadway"]
+      },
+      {
+        "a": ["studios", "studio", "producers"],
+        "man": ["crowd", "labour", "males"],
+        "is": ["producers", "producer", "producing"],
+        "playing": ["player", "speaker", "musician"],
+        "guitar": ["guitarist", "guitar", "filmed"],
+        "on": ["cinema", "arena", "archbishop"],
+        "stage": ["stage", "producer", "producers"]
+      },
+      {
+        "a": ["teachers", "teacher", "produce"],
+        "man": ["party", "baron", "males"],
+        "is": ["factory", "producers", "producer"],
+        "playing": ["musician", "guitarist", "guitar"],
+        "guitar": ["guitarist", "guitar", "songwriter"],
+        "on": ["studios", "launched", "launch"],
+        "stage": ["stage", "producer", "stages"]
+      },
+      {
+        "a": ["agricultural", "rural", "produce"],
+        "man": ["party", "males", "baron"],
+        "is": ["crowd", "producers", "protest"],
+        "playing": ["guitar", "musician", "guitarist"],
+        "guitar": ["guitar", "guitarist", "musician"],
+        "on": ["studios", "hull", "launched"],
+        "stage": ["stage", "stages", "broadway"]
+      },
+      {
+        "a": ["piano", "teachers", "actors"],
+        "man": ["baron", "comedy", "party"],
+        "is": ["producers", "producer", "comedy"],
+        "playing": ["guitar", "stage", "guitarist"],
+        "guitar": ["guitarist", "guitar", "musician"],
+        "on": ["actors", "theater", "scenes"],
+        "stage": ["stage", "broadway", "stages"]
+      },
+      {
+        "a": ["piano", "credit", "dance"],
+        "man": ["men", "males", "labour"],
+        "is": ["producers", "producer", "songwriter"],
+        "playing": ["guitarist", "guitar", "player"],
+        "guitar": ["guitarist", "guitar", "musician"],
+        "on": ["scenes", "actors", "studios"],
+        "stage": ["stage", "broadway", "stages"]
+      },
+      {
+        "a": ["piano", "dance", "credit"],
+        "man": ["labour", "factor", "driver"],
+        "is": ["producers", "artist", "flows"],
+        "playing": ["guitarist", "playing", "player"],
+        "guitar": ["guitarist", "guitar", "songwriter"],
+        "on": ["opera", "factory", "theater"],
+        "stage": ["stage", "stages", "broadway"]
+      },
+      {
+        "a": ["piano", "agricultural", "credit"],
+        "man": ["men", "man", "males"],
+        "is": ["songwriter", "artist", "falls"],
+        "playing": ["guitarist", "guitar", "playing"],
+        "guitar": ["guitarist", "guitar", "songwriter"],
+        "on": ["administration", "elementary", "emperor"],
+        "stage": ["stage", "broadway", "stages"]
+      },
+      {
+        "a": ["credit", "piano", "child"],
+        "man": ["men", "man", "brothers"],
+        "is": ["artist", "festival", "artists"],
+        "playing": ["playing", "guitarist", "guitar"],
+        "guitar": ["guitar", "guitarist", "acoustic"],
+        "on": ["elementary", "breathing", "institution"],
+        "stage": ["stage", "broadway", "stages"]
+      },
+      {
+        "a": ["human", "violin", "child"],
+        "man": ["man", "men", "brothers"],
+        "is": ["ethnic", "artist", "metro"],
+        "playing": ["guitarist", "guitar", "playing"],
+        "guitar": ["guitar", "guitarist", "musician"],
+        "on": ["breathing", "child", "institution"],
+        "stage": ["stage", "broadway", "stages"]
+      },
+      {
+        "a": ["violin", "jews", "humans"],
+        "man": ["men", "brothers", "man"],
+        "is": ["ethnic", "crowd", "victims"],
+        "playing": ["playing", "players", "guitarist"],
+        "guitar": ["guitar", "guitarist", "musician"],
+        "on": ["employed", "opera", "employment"],
+        "stage": ["stage", "broadway", "stages"]
+      },
+      {
+        "a": ["chinese", "subject", "killing"],
+        "man": ["men", "man", "lieutenant"],
+        "is": ["opera", "ethnic", "islamic"],
+        "playing": ["guitarist", "playing", "guitar"],
+        "guitar": ["guitarist", "guitar", "musician"],
+        "on": ["educated", "statue", "cathedral"],
+        "stage": ["stage", "stages", "broadway"]
+      },
+      {
+        "a": ["subject", "meat", "guitar"],
+        "man": ["man", "men", "lieutenant"],
+        "is": ["opera", "cultural", "critic"],
+        "playing": ["playing", "guitarist", "musician"],
+        "guitar": ["guitar", "guitarist", "musician"],
+        "on": ["tennis", "student", "subject"],
+        "stage": ["stage", "stages", "broadway"]
+      },
+      {
+        "a": ["horse", "pick", "bible"],
+        "man": ["man", "men", "priest"],
+        "is": ["opera", "classification", "sweden"],
+        "playing": ["playing", "guitarist", "performing"],
+        "guitar": ["guitar", "guitarist", "musician"],
+        "on": ["studied", "studying", "pope"],
+        "stage": ["stage", "stages", "broadway"]
+      },
+      {
+        "a": ["subject", "hearing", "whether"],
+        "man": ["man", "men", "males"],
+        "is": ["newspaper", "ethnic", "crime"],
+        "playing": ["playing", "musician", "guitar"],
+        "guitar": ["guitar", "guitarist", "musician"],
+        "on": ["passengers", "student", "students"],
+        "stage": ["stage", "broadway", "stages"]
+      },
+      {
+        "a": ["student", "horse", "child"],
+        "man": ["man", "guy", "professor"],
+        "is": ["students", "student", "children"],
+        "playing": ["musician", "musicians", "playing"],
+        "guitar": ["guitar", "guitarist", "musician"],
+        "on": ["student", "scholar", "journalist"],
+        "stage": ["stage", "stages", "producer"]
+      },
+      {
+        "a": ["studying", "student", "funding"],
+        "man": ["man", "guy", "male"],
+        "is": ["studying", "isn", "swedish"],
+        "playing": ["playing", "recording", "performing"],
+        "guitar": ["guitar", "guitarist", "recording"],
+        "on": ["studying", "isbn", "student"],
+        "stage": ["stage", "stages", "stand"]
+      },
+      {
+        "a": ["movie", "student", "documentary"],
+        "man": ["man", "guy", "him"],
+        "is": ["isn", "holiday", "horse"],
+        "playing": ["trying", "guitar", "isbn"],
+        "guitar": ["guitar", "musician", "ambassador"],
+        "on": ["concert", "isbn", "scholar"],
+        "stage": ["stage", "isbn", "broadway"]
+      },
+      {
+        "a": ["nba", "taiwan", "resolution"],
+        "man": ["movies", "movie", "hollywood"],
+        "is": ["taiwan", "ships", "marine"],
+        "playing": ["ambassador", "islands", "satellite"],
+        "guitar": ["agents", "montreal", "about"],
+        "on": ["worry", "concentration", "nose"],
+        "stage": ["stage", "worry", "couch"]
+      },
+      {
+        "a": ["guitar", "instrument", "instrumental"],
+        "man": ["man", "male", "guy"],
+        "is": ["solo", "concert", "himself"],
+        "playing": ["musician", "instrument", "concert"],
+        "guitar": ["guitar", "guitarist", "musician"],
+        "on": ["stage", "concert", "arena"],
+        "stage": ["stage", "stages", "broadway"]
+      },
+      {
+        "a": ["guitar", "guitarist", "musician"],
+        "man": ["man", "guitarist", "male"],
+        "is": ["guitarist", "guitar", "musician"],
+        "playing": ["guitar", "guitarist", "musician"],
+        "guitar": ["guitar", "guitarist", "musician"],
+        "on": ["stage", "guitar", "guitarist"],
+        "stage": ["stage", "stages", "broadway"]
+      },
+      {
+        "a": ["the", "and", "was"],
+        "man": ["the", "and", "was"],
+        "is": ["the", "and", "was"],
+        "playing": ["the", "and", "was"],
+        "guitar": ["the", "and", "was"],
+        "on": ["the", "and", "was"],
+        "stage": ["the", "and", "was"]
+      }
+    ],
+    "diversity": [
+      74.47, 67.42, 65.84, 66.38, 68.59, 70.8, 69.24, 65.27, 69.86, 67.79, 70.46, 72.87, 73.94,
+      70.75, 72.55, 72.82, 69.92, 64.6, 69.62, 74.35, 70.49, 58.07, 55.29, 46.11, 90.0
+    ]
+  },
+  "source": "axiom-labs/mxbai-analysis/tokens-and-layers/jina/embjlens_mxbai.json + embjlens_avg_mxbai.json (bake_tinystories_modal.py embjlens / embjlensavg)"
+}

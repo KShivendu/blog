@@ -18,6 +18,8 @@ The earlier posts were built on 5–20 hand-picked sentences. That is enough to 
 
 Everything held up. The similarity attractor still peaks at **exactly L12**. The preservation spectrum is still nearly flat (mean r = 0.024). And 94.8% of dimensions still receive their peak contribution from the very last layer. The scale did sharpen a few things: the Pearson correlation between model cosine and human similarity scores rises from **0.50 to 0.87** between L0 and L24, and the Matryoshka slice hierarchy reverses in an interesting way.
 
+I also searched with every layer of three different models on 13 NanoBEIR datasets. In all three, search quality appears only in the last quarter of the model.
+
 ## Datasets
 
 **SNLI** (Stanford Natural Language Inference) contains 550K premise–hypothesis pairs labeled as entailment, neutral, or contradiction. I used 500 contradiction pairs sampled at random. Contradictions are the hardest category: the premise and hypothesis are typically about the same topic, same entities, opposite meaning — exactly the hard negative structure from the earlier posts. Example:
@@ -88,6 +90,73 @@ Pearson correlation between model cosine and human similarity scores:
 The dip at L12 is the attractor's signature: similarity gets high for everyone, so Pearson correlation with human scores (which vary) temporarily falls. Then the final 12 layers rebuild the semantic ordering from scratch, ending at r = 0.875 — a strong correlation for a pre-trained encoder with no fine-tuning on STS scores specifically.
 
 Note that 0.875 at L24 is just cosine similarity of mean-pool vectors. mxbai's official benchmark numbers use the `<instruct>` prompt prefix, which adds a small but consistent improvement. The geometry we're measuring here is the raw signal before that prompt-based adjustment.
+
+## Search Quality by Layer, in Three Models
+
+STS-B is one model on sentence pairs. To check the same timing on real search, I read the vector out of every layer of three different embedding models and searched with it:
+
+| model                                                                             | kind          | layers | pooling (how the vector is taken)  |
+| --------------------------------------------------------------------------------- | ------------- | -----: | ---------------------------------- |
+| [mxbai-embed-large-v1](https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1) | BERT encoder  |     24 | the CLS token, put before the text |
+| [all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) | small encoder |      6 | the average of all token vectors   |
+| [Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B)          | LLM decoder   |     28 | the last token                     |
+
+The data is [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai/nanobeir-66e1a0af21dfd93e620cd9f6): 13 small versions of the BEIR datasets, 649 queries in all, up to 5,000 documents each.
+
+Take the SciFact claim "Headaches are not correlated with cognitive impairment." Here is its nDCG@10 (from 0 to 100) with each model's vector read out at different depths:
+
+```
+depth          0%    50%    75%    90%   100%
+mxbai           0      0      0     30    100
+MiniLM          0      0      0      0    100
+Qwen3           0      0      0    100    100
+```
+
+It finds nothing for three quarters of every model, then finds the right abstract at the top. It's one of 83 queries, out of 649, that score 0 through the first half of all three models and 100 at the end.
+
+Over all 649 queries, with each model's own pooling. "No hit" is the share of queries with no relevant document in the top 10:
+
+```
+               depth   layer   nDCG@10 p25   p50   mean   no hit
+mxbai           0%      L0          0      0     0.45    98.3%
+                50%     L12         0      0     1.75    95.8%
+                75%     L18         0      0     0.53    96.9%
+                92%     L22         0  21.40    33.11    40.4%
+               100%     L24     38.69  70.20    66.06     9.7%
+
+MiniLM          0%      L0          0      0    16.15    67.8%
+                50%     L3          0      0    12.56    74.4%
+                83%     L5          0      0    16.88    66.4%
+               100%     L6      30.10  60.83    56.91    14.2%
+
+Qwen3           0%      L0          0      0     0.40    98.5%
+                50%     L14         0      0     0.64    97.1%
+                75%     L21         0      0    23.14    52.4%
+                89%     L25     16.81  50.88    51.29    20.6%
+               100%     L28     38.69  63.09    64.91     9.4%
+```
+
+Observations:
+
+- mxbai gets its search vector in the last 3 of 24 layers. Its median query scores 0 until layer 22, and half of the final score first shows up at layer 22 or 23 on 12 of the 13 datasets.
+- MiniLM gets it in its last layer alone. It reaches half its final score at layer 6 on 12 of 13 datasets. Before that, 66% to 77% of queries find nothing.
+- Qwen3 builds it more gradually, over its last quarter. It reaches half the final score between layer 21 and layer 26 on all 13 datasets.
+- The exception is Quora for the two encoders. MiniLM already scores 78 at layer 0 there, and mxbai's CLS reaches 73 at layer 8. Quora pairs are near copies of each other, like "What is it like to be an IITian?" and "What does it feel like to be an IITian?". I haven't traced why that's enough for an early layer. Qwen3 scores 0 to 3 on Quora up to layer 17.
+
+So half the final search quality appears at 75% to 100% depth on 37 of the 39 model and dataset pairs.
+
+The middle layers also search worse than layer 0. At layer 0, the average of the token vectors is a plain bag of context-free words, which is what a [static embedding](/blog/static-embeddings) does. In all three models it beats the middle of the model:
+
+```
+mean pooling      layer 0    middle layer    last layer
+mxbai              18.57      10.34 (L12)      65.65
+MiniLM             16.15      11.65 (L2)       56.91
+Qwen3              16.61       3.95 (L12)      25.76
+```
+
+"Where was the university at which Barrie Ciliberti was a professor located?" is an example. mxbai scores 61 with its layer 0 average, 0 at layer 12, and 85 with its final CLS vector. MiniLM goes 61, 0 at layer 3, and 61 at the end. (Qwen3's last-layer average is low because Qwen3 was trained to use the last token.)
+
+This is the attractor from the STS-B numbers above showing up in search. At L12, pairs look alike regardless of meaning, and the right document can't be told apart. [The Jacobian lens post](/blog/jacobian-lens-embeddings) reads what goes into mxbai's vector during those last layers.
 
 ## The Preservation Spectrum — Still Flat at 2,758 Sentences
 
@@ -252,4 +321,5 @@ The practical takeaways for retrieval:
 - **Pearson correlation** with human similarity peaks at L24 (r = 0.875) and temporarily _dips_ at L12 (r = 0.507) because the attractor homogenizes representations.
 - **Preservation spectrum** is flat at scale (mean r = 0.024 across 2,758 sentences). L0 embeddings carry no direct signal to L24.
 - **94.8% of dimensions** receive their peak update magnitude in the final transformer layer (L24).
+- **Search quality appears in the last quarter of the model**, in mxbai, MiniLM and Qwen3. Half the final nDCG@10 first shows up at 75% to 100% depth on 37 of 39 model and dataset pairs, and the middle layers search worse than layer 0.
 - **Matryoshka slices**: dims 64–128 are most discriminative for hard negatives (mean cosine 0.537); dims 512–1024 are least discriminative (0.644). More dimensions ≠ more contrastive.

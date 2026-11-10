@@ -45,6 +45,7 @@ import WeightHandoff from './WeightHandoff'
 import Term from './Term'
 import GroundedExpansionAnim from './GroundedExpansionAnim'
 import PassageColors from './PassageColors'
+import JLensLayers from './JLensLayers'
 import JevSearchExplorer from './JevSearchExplorer'
 
 export const MDXComponents = {
@@ -94,6 +95,7 @@ export const MDXComponents = {
   Term,
   GroundedExpansionAnim,
   PassageColors,
+  JLensLayers,
   JevSearchExplorer,
   wrapper: ({ components, layout, ...rest }) => {
     const Layout = require(`../layouts/${layout}`).default
