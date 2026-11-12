@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import DATA from '../data/isbpe-blog.json'
 import { LABEL, MONO, chipStyle, labChrome } from '../lib/wordpiece-lab'
 
-// Glue entries for is-bpe.mdx. Drag K and three things move together: the
+// Glue entries for isbpe.mdx. Drag K and three things move together: the
 // token count against the three BPE baselines, the xz size, and the list of
 // punctuation-word pairs that just got their own entry. The list is the point:
 // a reader can see that the first entries are `#(#self` and `:#param`, which

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import DATA from '../data/isbpe-blog.json'
 import { LABEL, MONO, chipStyle, labChrome, segButton } from '../lib/wordpiece-lab'
 
-// Other scripts for is-bpe.mdx. Chinese: switch between BPE, ISBPE, and ISBPE
+// Other scripts for isbpe.mdx. Chinese: switch between BPE, ISBPE, and ISBPE
 // without the no-space rule on the same sentence. Red chips are strings that
 // vocabulary holds twice (with and without the leading mark), which is the
 // waste the rule removes. Hindi: GPT-2's pretokenizer against ours, where the
