@@ -52,8 +52,8 @@ export default function FlagSide() {
       <div style={{ display: 'flex', gap: 5, marginBottom: 14 }}>
         {[
           ['bpe', 'BPE'],
-          ['single', 'mark on the right'],
-          ['dual', 'mark on the left'],
+          ['single', 'mark on the word'],
+          ['dual', 'mark on the token before'],
         ].map(([k, label]) => (
           <button key={k} onClick={() => setScheme(k)} style={segButton(c, scheme === k)}>
             {label}
@@ -67,11 +67,12 @@ export default function FlagSide() {
             key={i}
             style={{
               ...chipStyle(c, { tint: isWord(p) ? green : undefined }),
+              whiteSpace: 'pre',
               transition: 'all 220ms ease',
             }}
           >
             {p.l ? <span style={{ opacity: 0.55 }}>#</span> : null}
-            {p.s === ' ' ? '·' : p.s}
+            {p.s}
             {p.r ? <span style={{ opacity: 0.55 }}>#</span> : null}
           </span>
         ))}
@@ -95,7 +96,7 @@ export default function FlagSide() {
         {scheme !== 'bpe' && row.single.length !== row.dual.length ? (
           <span style={{ color: c.ink }}>
             {'  '}
-            (right-marked needs {row.single.length}, left-marked needs {row.dual.length})
+            (right-marked needs {row.single.length}, ISBPE needs {row.dual.length})
           </span>
         ) : null}
       </div>

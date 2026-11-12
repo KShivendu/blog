@@ -6,11 +6,11 @@
       "note": "one word, two positions, and BPE needs an entry for each",
       "bpe": [
         { "s": "the", "l": false, "r": false },
-        { "s": "·cat", "l": false, "r": false },
-        { "s": "·sat", "l": false, "r": false },
-        { "s": "·on", "l": false, "r": false },
-        { "s": "·the", "l": false, "r": false },
-        { "s": "·mat", "l": false, "r": false }
+        { "s": " cat", "l": false, "r": false },
+        { "s": " sat", "l": false, "r": false },
+        { "s": " on", "l": false, "r": false },
+        { "s": " the", "l": false, "r": false },
+        { "s": " mat", "l": false, "r": false }
       ],
       "isbpe": [
         { "s": "the", "l": false, "r": false },
@@ -22,11 +22,11 @@
       ],
       "bpe_slots": [
         { "k": "the", "s": "the", "l": false, "r": false },
-        { "k": "·cat", "s": "·cat", "l": false, "r": false },
-        { "k": "·sat", "s": "·sat", "l": false, "r": false },
-        { "k": "·on", "s": "·on", "l": false, "r": false },
-        { "k": "·the", "s": "·the", "l": false, "r": false },
-        { "k": "·mat", "s": "·mat", "l": false, "r": false }
+        { "k": " cat", "s": " cat", "l": false, "r": false },
+        { "k": " sat", "s": " sat", "l": false, "r": false },
+        { "k": " on", "s": " on", "l": false, "r": false },
+        { "k": " the", "s": " the", "l": false, "r": false },
+        { "k": " mat", "s": " mat", "l": false, "r": false }
       ],
       "isbpe_slots": [
         { "k": "the", "s": "the", "l": false, "r": false },
@@ -44,8 +44,8 @@
         { "s": "self", "l": false, "r": false },
         { "s": ".", "l": false, "r": false },
         { "s": "account", "l": false, "r": false },
-        { "s": "·=", "l": false, "r": false },
-        { "s": "·account", "l": false, "r": false }
+        { "s": " =", "l": false, "r": false },
+        { "s": " account", "l": false, "r": false }
       ],
       "isbpe": [
         { "s": "self", "l": false, "r": false },
@@ -58,8 +58,8 @@
         { "k": "self", "s": "self", "l": false, "r": false },
         { "k": ".", "s": ".", "l": false, "r": false },
         { "k": "account", "s": "account", "l": false, "r": false },
-        { "k": "·=", "s": "·=", "l": false, "r": false },
-        { "k": "·account", "s": "·account", "l": false, "r": false }
+        { "k": " =", "s": " =", "l": false, "r": false },
+        { "k": " account", "s": " account", "l": false, "r": false }
       ],
       "isbpe_slots": [
         { "k": "self", "s": "self", "l": false, "r": false },
@@ -102,20 +102,20 @@
     "slots_used": 31012,
     "share": 47.3,
     "examples": [
-      "Create",
-      "transa",
-      "idates",
-      "semver",
-      "Yellow",
-      "broker",
-      "cipher",
-      "rvalue",
-      "Method",
-      "django",
-      "repoze",
-      "Before",
-      "merged",
-      "finder"
+      "theore",
+      "Delete",
+      "Inside",
+      "stderr",
+      "flavor",
+      "Extent",
+      "Number",
+      "ladder",
+      "georel",
+      "Zhuyin",
+      "graphe",
+      "MATLAB",
+      "winner",
+      "colons"
     ]
   },
   "flagside": [
@@ -205,8 +205,8 @@
       ],
       "bpe": [
         { "s": "the", "l": false, "r": false },
-        { "s": "·cat", "l": false, "r": false },
-        { "s": "·sat", "l": false, "r": false }
+        { "s": " cat", "l": false, "r": false },
+        { "s": " sat", "l": false, "r": false }
       ]
     }
   ],
@@ -457,29 +457,29 @@
         { "s": "्", "l": false, "r": false },
         { "s": "द", "l": false, "r": false },
         { "s": "ी", "l": false, "r": false },
-        { "s": "·भ", "l": false, "r": false },
+        { "s": " भ", "l": false, "r": false },
         { "s": "ा", "l": false, "r": false },
         { "s": "ष", "l": false, "r": false },
         { "s": "ा", "l": false, "r": false },
-        { "s": "·म", "l": false, "r": false },
+        { "s": " म", "l": false, "r": false },
         { "s": "ें", "l": false, "r": false },
-        { "s": "·ल", "l": false, "r": false },
+        { "s": " ल", "l": false, "r": false },
         { "s": "ि", "l": false, "r": false },
         { "s": "ख", "l": false, "r": false },
         { "s": "ा", "l": false, "r": false },
-        { "s": "·गय", "l": false, "r": false },
+        { "s": " गय", "l": false, "r": false },
         { "s": "ा", "l": false, "r": false },
-        { "s": "·ल", "l": false, "r": false },
+        { "s": " ल", "l": false, "r": false },
         { "s": "े", "l": false, "r": false },
         { "s": "ख", "l": false, "r": false }
       ],
       "bpe": [
         { "s": "हिन्दी", "l": false, "r": false },
-        { "s": "·भाषा", "l": false, "r": false },
-        { "s": "·में", "l": false, "r": false },
-        { "s": "·लिखा", "l": false, "r": false },
-        { "s": "·गया", "l": false, "r": false },
-        { "s": "·लेख", "l": false, "r": false }
+        { "s": " भाषा", "l": false, "r": false },
+        { "s": " में", "l": false, "r": false },
+        { "s": " लिखा", "l": false, "r": false },
+        { "s": " गया", "l": false, "r": false },
+        { "s": " लेख", "l": false, "r": false }
       ],
       "isbpe": [
         { "s": "हिन्दी", "l": false, "r": false },

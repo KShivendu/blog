@@ -23,6 +23,7 @@ function Chips({ pieces, c, showDoubled }) {
           key={i}
           style={{
             ...chipStyle(c, { tint: showDoubled && p.d ? c.bad : undefined }),
+            whiteSpace: 'pre',
             transition: 'all 220ms ease',
           }}
         >
