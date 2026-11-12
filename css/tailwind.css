@@ -644,13 +644,13 @@ body {
    theme's specificity so it wins there too. Non-linked inline code and code
    BLOCKS are untouched. */
 .prose-tty a code {
-  color: #8a4b08; /* same warm text as plain inline code */
+  color: #111815; /* same text as plain inline code */
   font-weight: 400;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 .dark .prose-tty a code {
-  color: #e6c07b; /* same warm text as plain inline code */
+  color: #d4ddd7; /* same text as plain inline code */
 }
 .prose-tty a:hover code,
 .dark .prose-tty a:hover code {

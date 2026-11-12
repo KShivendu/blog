@@ -121,9 +121,8 @@ module.exports = {
               backgroundColor: theme('colors.gray.800'),
             },
             code: {
-              // Warm text, no border: inline code reads as a word, not a button,
-              // and its colour differs from the green links.
-              color: '#8a4b08',
+              // No border, so inline code reads as a word, not a button.
+              color: theme('colors.gray.900'),
               backgroundColor: theme('colors.gray.100'),
               border: '0',
               paddingLeft: '4px',
@@ -198,8 +197,8 @@ module.exports = {
               backgroundColor: theme('colors.gray.800'),
             },
             code: {
-              color: '#e6c07b',
-              backgroundColor: 'rgba(230, 192, 123, 0.08)',
+              color: '#d4ddd7',
+              backgroundColor: 'rgba(221, 230, 224, 0.07)',
               border: '0',
             },
             details: {
