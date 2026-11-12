@@ -3,14 +3,14 @@
     {
       "text": "the cat sat on the mat",
       "corpus": "en",
-      "note": "one word, two positions, and BPE needs a slot for each",
+      "note": "one word, two positions, and BPE needs an entry for each",
       "bpe": [
         { "s": "the", "l": false, "r": false },
-        { "s": "\u00b7cat", "l": false, "r": false },
-        { "s": "\u00b7sat", "l": false, "r": false },
-        { "s": "\u00b7on", "l": false, "r": false },
-        { "s": "\u00b7the", "l": false, "r": false },
-        { "s": "\u00b7mat", "l": false, "r": false }
+        { "s": "·cat", "l": false, "r": false },
+        { "s": "·sat", "l": false, "r": false },
+        { "s": "·on", "l": false, "r": false },
+        { "s": "·the", "l": false, "r": false },
+        { "s": "·mat", "l": false, "r": false }
       ],
       "isbpe": [
         { "s": "the", "l": false, "r": false },
@@ -22,11 +22,11 @@
       ],
       "bpe_slots": [
         { "k": "the", "s": "the", "l": false, "r": false },
-        { "k": "\u00b7cat", "s": "\u00b7cat", "l": false, "r": false },
-        { "k": "\u00b7sat", "s": "\u00b7sat", "l": false, "r": false },
-        { "k": "\u00b7on", "s": "\u00b7on", "l": false, "r": false },
-        { "k": "\u00b7the", "s": "\u00b7the", "l": false, "r": false },
-        { "k": "\u00b7mat", "s": "\u00b7mat", "l": false, "r": false }
+        { "k": "·cat", "s": "·cat", "l": false, "r": false },
+        { "k": "·sat", "s": "·sat", "l": false, "r": false },
+        { "k": "·on", "s": "·on", "l": false, "r": false },
+        { "k": "·the", "s": "·the", "l": false, "r": false },
+        { "k": "·mat", "s": "·mat", "l": false, "r": false }
       ],
       "isbpe_slots": [
         { "k": "the", "s": "the", "l": false, "r": false },
@@ -44,8 +44,8 @@
         { "s": "self", "l": false, "r": false },
         { "s": ".", "l": false, "r": false },
         { "s": "account", "l": false, "r": false },
-        { "s": "\u00b7=", "l": false, "r": false },
-        { "s": "\u00b7account", "l": false, "r": false }
+        { "s": "·=", "l": false, "r": false },
+        { "s": "·account", "l": false, "r": false }
       ],
       "isbpe": [
         { "s": "self", "l": false, "r": false },
@@ -58,8 +58,8 @@
         { "k": "self", "s": "self", "l": false, "r": false },
         { "k": ".", "s": ".", "l": false, "r": false },
         { "k": "account", "s": "account", "l": false, "r": false },
-        { "k": "\u00b7=", "s": "\u00b7=", "l": false, "r": false },
-        { "k": "\u00b7account", "s": "\u00b7account", "l": false, "r": false }
+        { "k": "·=", "s": "·=", "l": false, "r": false },
+        { "k": "·account", "s": "·account", "l": false, "r": false }
       ],
       "isbpe_slots": [
         { "k": "self", "s": "self", "l": false, "r": false },
@@ -71,7 +71,7 @@
     {
       "text": "get_attraction",
       "corpus": "en",
-      "note": "the case that forced the rule: which side carries the mark",
+      "note": "the case that decides which side carries the mark",
       "bpe": [
         { "s": "get", "l": false, "r": false },
         { "s": "_", "l": false, "r": false },
@@ -98,24 +98,24 @@
   ],
   "slots": {
     "vocab": 65536,
-    "pairs": 15430,
-    "slots_used": 30860,
-    "share": 47.1,
+    "pairs": 15506,
+    "slots_used": 31012,
+    "share": 47.3,
     "examples": [
-      "cookie",
-      "Shards",
-      "exempt",
-      "nonnan",
-      "imshow",
-      "locker",
-      "lstBse",
-      "Resets",
-      "System",
-      "stroke",
-      "bottle",
-      "bigram",
-      "Cancel",
-      "metodo"
+      "Create",
+      "transa",
+      "idates",
+      "semver",
+      "Yellow",
+      "broker",
+      "cipher",
+      "rvalue",
+      "Method",
+      "django",
+      "repoze",
+      "Before",
+      "merged",
+      "finder"
     ]
   },
   "flagside": [
@@ -205,208 +205,291 @@
       ],
       "bpe": [
         { "s": "the", "l": false, "r": false },
-        { "s": "\u00b7cat", "l": false, "r": false },
-        { "s": "\u00b7sat", "l": false, "r": false }
+        { "s": "·cat", "l": false, "r": false },
+        { "s": "·sat", "l": false, "r": false }
       ]
     }
   ],
   "sweep": {
     "code": [
-      { "v": 2048, "bpe_tokens": 435683, "isbpe_tokens": 431252 },
-      { "v": 4096, "bpe_tokens": 392140, "isbpe_tokens": 363186 },
-      { "v": 8192, "bpe_tokens": 365856, "isbpe_tokens": 332773 },
-      { "v": 16384, "bpe_tokens": 350468, "isbpe_tokens": 317341 },
-      { "v": 32768, "bpe_tokens": 341372, "isbpe_tokens": 309772 },
-      { "v": 49152, "bpe_tokens": 338406, "isbpe_tokens": 307168 },
-      { "v": 65536, "bpe_tokens": 336736, "isbpe_tokens": 305810 }
+      { "v": 2048, "bpe_tokens": 435647, "isbpe_tokens": 430866 },
+      { "v": 4096, "bpe_tokens": 392065, "isbpe_tokens": 362409 },
+      { "v": 8192, "bpe_tokens": 365699, "isbpe_tokens": 331922 },
+      { "v": 16384, "bpe_tokens": 350306, "isbpe_tokens": 316251 },
+      { "v": 32768, "bpe_tokens": 341139, "isbpe_tokens": 308331 },
+      { "v": 49152, "bpe_tokens": 338150, "isbpe_tokens": 305626 },
+      { "v": 65536, "bpe_tokens": 336466, "isbpe_tokens": 304228 }
     ],
-    "crossing": 7658,
-    "ref": 65536,
-    "note": "ISBPE emits as few tokens at V=7,658 as BPE does at V=65,536"
-  },
-  "ratio_dist": {
-    "chunk_bytes": 4096,
-    "by_corpus": {
-      "English (C4)": {
-        "BPE + gpt2 regex": {
-          "mean": 2.6941,
-          "p50": 2.7108,
-          "p90": 2.9405,
-          "p99": 3.164,
-          "p25": 2.5875,
-          "p10": 2.4309,
-          "n": 317
-        },
-        "ISBPE single-flag": {
-          "mean": 2.7008,
-          "p50": 2.7202,
-          "p90": 2.9408,
-          "p99": 3.1658,
-          "p25": 2.5912,
-          "p10": 2.4492,
-          "n": 317
-        },
-        "ISBPE dual-flag": {
-          "mean": 2.7166,
-          "p50": 2.7307,
-          "p90": 2.9652,
-          "p99": 3.207,
-          "p25": 2.6052,
-          "p10": 2.4605,
-          "n": 317
-        }
-      },
-      "Python code": {
-        "BPE + gpt2 regex": {
-          "mean": 2.4448,
-          "p50": 2.4553,
-          "p90": 2.6912,
-          "p99": 2.9192,
-          "p25": 2.3161,
-          "p10": 2.1828,
-          "n": 317
-        },
-        "ISBPE single-flag": {
-          "mean": 2.6311,
-          "p50": 2.6417,
-          "p90": 2.9177,
-          "p99": 3.1862,
-          "p25": 2.4832,
-          "p10": 2.327,
-          "n": 317
-        },
-        "ISBPE dual-flag": {
-          "mean": 2.6767,
-          "p50": 2.6912,
-          "p90": 2.9891,
-          "p99": 3.2095,
-          "p25": 2.5354,
-          "p10": 2.3614,
-          "n": 317
-        }
-      }
-    }
-  },
-  "pareto": {
-    "Python code": {
-      "rows": [
-        { "v": 2048, "bpe": 435683, "dual": 431252, "single": 414640 },
-        { "v": 4096, "bpe": 392140, "dual": 363186, "single": 363883 },
-        { "v": 8192, "bpe": 365856, "dual": 332773, "single": 335386 },
-        { "v": 16384, "bpe": 350468, "dual": 317341, "single": 319892 },
-        { "v": 32768, "bpe": 341372, "dual": 309772, "single": 310994 },
-        { "v": 49152, "bpe": 338406, "dual": 307168, "single": 308124 },
-        { "v": 65536, "bpe": 336736, "dual": 305810, "single": 306575 }
-      ],
-      "ref_tokens": 336736,
-      "ref_v": 65536,
-      "crossing": { "dual": 7658, "single": 7998 },
-      "dominates": { "dual": true, "single": true }
-    },
-    "English (C4)": {
-      "rows": [
-        { "v": 2048, "bpe": 436271, "dual": 475656, "single": 442443 },
-        { "v": 4096, "bpe": 378652, "dual": 388655, "single": 379713 },
-        { "v": 8192, "bpe": 336859, "dual": 337606, "single": 336123 },
-        { "v": 16384, "bpe": 308416, "dual": 306511, "single": 307408 },
-        { "v": 32768, "bpe": 290344, "dual": 288830, "single": 289945 },
-        { "v": 49152, "bpe": 283778, "dual": 282232, "single": 283504 },
-        { "v": 65536, "bpe": 280162, "dual": 279047, "single": 280204 }
-      ],
-      "ref_tokens": 280162,
-      "ref_v": 65536,
-      "crossing": { "dual": 59800, "single": null },
-      "dominates": { "dual": false, "single": false }
-    }
-  },
-  "bpb_sweep": {
-    "Python code": [
-      {
-        "v": 2048,
-        "bpe": { "tokens": 435683, "freq": 1.9045, "xz": 1.4935, "distinct": 1568 },
-        "single": { "tokens": 414640, "freq": 1.9814, "xz": 1.4806, "distinct": 1494 },
-        "dual": { "tokens": 431252, "freq": 1.9371, "xz": 1.4489, "distinct": 1176 }
-      },
-      {
-        "v": 4096,
-        "bpe": { "tokens": 392140, "freq": 2.0735, "xz": 1.4663, "distinct": 3090 },
-        "single": { "tokens": 363883, "freq": 2.1918, "xz": 1.4494, "distinct": 3033 },
-        "dual": { "tokens": 363186, "freq": 2.2104, "xz": 1.4058, "distinct": 3009 }
-      },
-      {
-        "v": 8192,
-        "bpe": { "tokens": 365856, "freq": 2.2137, "xz": 1.4418, "distinct": 6099 },
-        "single": { "tokens": 335386, "freq": 2.3669, "xz": 1.4218, "distinct": 6096 },
-        "dual": { "tokens": 332773, "freq": 2.4004, "xz": 1.3743, "distinct": 6555 }
-      },
-      {
-        "v": 16384,
-        "bpe": { "tokens": 350468, "freq": 2.3177, "xz": 1.4224, "distinct": 12123 },
-        "single": { "tokens": 319892, "freq": 2.4869, "xz": 1.4026, "distinct": 12190 },
-        "dual": { "tokens": 317341, "freq": 2.536, "xz": 1.3543, "distinct": 13717 }
-      },
-      {
-        "v": 32768,
-        "bpe": { "tokens": 341372, "freq": 2.3891, "xz": 1.4079, "distinct": 24514 },
-        "single": { "tokens": 310994, "freq": 2.566, "xz": 1.3878, "distinct": 24752 },
-        "dual": { "tokens": 309772, "freq": 2.6117, "xz": 1.3403, "distinct": 28275 }
-      },
-      {
-        "v": 49152,
-        "bpe": { "tokens": 338406, "freq": 2.4139, "xz": 1.4014, "distinct": 37360 },
-        "single": { "tokens": 308124, "freq": 2.5944, "xz": 1.3822, "distinct": 37680 },
-        "dual": { "tokens": 307168, "freq": 2.6396, "xz": 1.3341, "distinct": 43262 }
-      },
-      {
-        "v": 65536,
-        "bpe": { "tokens": 336736, "freq": 2.4279, "xz": 1.3977, "distinct": 49977 },
-        "single": { "tokens": 306575, "freq": 2.6111, "xz": 1.3787, "distinct": 50490 },
-        "dual": { "tokens": 305810, "freq": 2.6548, "xz": 1.3303, "distinct": 58517 }
-      }
+    "english": [
+      { "v": 2048, "bpe_tokens": 434604, "isbpe_tokens": 474047 },
+      { "v": 4096, "bpe_tokens": 376452, "isbpe_tokens": 386268 },
+      { "v": 8192, "bpe_tokens": 334177, "isbpe_tokens": 334386 },
+      { "v": 16384, "bpe_tokens": 305239, "isbpe_tokens": 302767 },
+      { "v": 32768, "bpe_tokens": 286898, "isbpe_tokens": 284545 },
+      { "v": 49152, "bpe_tokens": 280203, "isbpe_tokens": 277891 },
+      { "v": 65536, "bpe_tokens": 276524, "isbpe_tokens": 274531 }
     ],
-    "English (C4)": [
-      {
-        "v": 2048,
-        "bpe": { "tokens": 436271, "freq": 1.8249, "xz": 2.4158, "distinct": 1808 },
-        "single": { "tokens": 442443, "freq": 1.8131, "xz": 2.4045, "distinct": 1659 },
-        "dual": { "tokens": 475656, "freq": 1.7404, "xz": 2.419, "distinct": 1196 }
-      },
-      {
-        "v": 4096,
-        "bpe": { "tokens": 378652, "freq": 2.0206, "xz": 2.3669, "distinct": 3672 },
-        "single": { "tokens": 379713, "freq": 2.022, "xz": 2.3527, "distinct": 3551 },
-        "dual": { "tokens": 388655, "freq": 1.9848, "xz": 2.3549, "distinct": 3106 }
-      },
-      {
-        "v": 8192,
-        "bpe": { "tokens": 336859, "freq": 2.2197, "xz": 2.3147, "distinct": 7362 },
-        "single": { "tokens": 336123, "freq": 2.2323, "xz": 2.2982, "distinct": 7365 },
-        "dual": { "tokens": 337606, "freq": 2.2238, "xz": 2.2919, "distinct": 6939 }
-      },
-      {
-        "v": 16384,
-        "bpe": { "tokens": 308416, "freq": 2.4101, "xz": 2.2653, "distinct": 14561 },
-        "single": { "tokens": 307408, "freq": 2.4261, "xz": 2.2487, "distinct": 14803 },
-        "dual": { "tokens": 306511, "freq": 2.4347, "xz": 2.2374, "distinct": 14597 }
-      },
-      {
-        "v": 32768,
-        "bpe": { "tokens": 290344, "freq": 2.5702, "xz": 2.2136, "distinct": 28560 },
-        "single": { "tokens": 289945, "freq": 2.5826, "xz": 2.1983, "distinct": 29339 },
-        "dual": { "tokens": 288830, "freq": 2.5955, "xz": 2.1848, "distinct": 29943 }
-      },
-      {
-        "v": 49152,
-        "bpe": { "tokens": 283778, "freq": 2.6366, "xz": 2.1869, "distinct": 42150 },
-        "single": { "tokens": 283504, "freq": 2.6482, "xz": 2.1733, "distinct": 43736 },
-        "dual": { "tokens": 282232, "freq": 2.6634, "xz": 2.1589, "distinct": 45213 }
-      },
-      {
-        "v": 65536,
-        "bpe": { "tokens": 280162, "freq": 2.6771, "xz": 2.1706, "distinct": 55661 },
-        "single": { "tokens": 280204, "freq": 2.6849, "xz": 2.1583, "distinct": 57966 },
-        "dual": { "tokens": 279047, "freq": 2.7002, "xz": 2.144, "distinct": 60410 }
-      }
+    "crossing": 7388,
+    "ref": 65536
+  },
+  "glue": {
+    "steps": [
+      { "k": 0, "tokens": 304228, "xz": 1.3187, "ratio": 2.668 },
+      { "k": 250, "tokens": 287295, "xz": 1.3224, "ratio": 2.731 },
+      { "k": 500, "tokens": 283078, "xz": 1.3245, "ratio": 2.754 },
+      { "k": 1000, "tokens": 278617, "xz": 1.3271, "ratio": 2.778 },
+      { "k": 2000, "tokens": 274601, "xz": 1.3309, "ratio": 2.803 },
+      { "k": 4000, "tokens": 270816, "xz": 1.3342, "ratio": 2.83 }
+    ],
+    "baselines": [
+      { "name": "BPE", "tokens": 336466, "xz": 1.386 },
+      { "name": "BPE, cl100k (GPT-4)", "tokens": 283269, "xz": 1.3938 },
+      { "name": "BPE, o200k (GPT-4o)", "tokens": 282847, "xz": 1.3921 }
+    ],
+    "top": [
+      ["#(#", "self", 17758],
+      [":#", "param", 10247],
+      ["#=#", "None", 8262],
+      ["#_#", "name", 6898],
+      ["#.#", "get", 5928],
+      ["#_#", "id", 5625],
+      ["#.#", "append", 4060],
+      ["#_#", "data", 3662],
+      ["#_#", "type", 3569],
+      [":#", "type", 3312],
+      ["#_#", "path", 3238],
+      ["#_#", "file", 3133],
+      ["#.#", "path", 2832],
+      ["'#", "string", 2683],
+      ["#=#", "True", 2657],
+      ["#=#", "False", 2601],
+      ["%#", "s", 2581],
+      ["#_#", "dict", 2233],
+      ["#_#", "to", 2202],
+      ["#_#", "list", 2153],
+      ["#_#", "url", 2152],
+      [":#", "return", 2049],
+      ["**#", "kwargs", 2029],
+      ["#[#", "i", 2000],
+      ["#=#", "self", 1825],
+      ["#_#", "index", 1804],
+      ["#_#", "size", 1784],
+      ["#_#", "dir", 1717],
+      ["#_#", "value", 1617],
+      ["#.#", "add", 1606],
+      ["#_#", "key", 1590],
+      ["#_#", "string", 1528],
+      ["#.#", "name", 1476],
+      ["(#", "string", 1470],
+      ["#.#", "debug", 1449],
+      ["#.#", "info", 1372],
+      ["#.#", "shape", 1330],
+      ["#(#", "data", 1244],
+      ["#(#", "value", 1232],
+      ["#.#", "split", 1223]
     ]
+  },
+  "scripts": {
+    "chinese": [
+      {
+        "text": "位于梅州市，于1997年开通。",
+        "gloss": "located in Meizhou, opened in 1997",
+        "bpe": [
+          { "s": "位于", "l": false, "r": false },
+          { "s": "梅", "l": false, "r": false },
+          { "s": "州市", "l": false, "r": false },
+          { "s": "，", "l": false, "r": false },
+          { "s": "于", "l": false, "r": false },
+          { "s": "1997", "l": false, "r": false },
+          { "s": "年开通", "l": false, "r": false },
+          { "s": "。", "l": false, "r": false }
+        ],
+        "isbpe": [
+          { "s": "位于", "l": false, "r": false, "d": false },
+          { "s": "梅", "l": false, "r": false, "d": false },
+          { "s": "州市", "l": false, "r": false, "d": false },
+          { "s": "，", "l": false, "r": false, "d": true },
+          { "s": "于", "l": false, "r": false, "d": true },
+          { "s": "1997", "l": true, "r": true, "d": true },
+          { "s": "年开通", "l": false, "r": false, "d": false },
+          { "s": "。", "l": false, "r": false, "d": true }
+        ],
+        "norule": [
+          { "s": "位于", "l": false, "r": false, "d": true },
+          { "s": "梅", "l": true, "r": false, "d": true },
+          { "s": "州市", "l": true, "r": false, "d": false },
+          { "s": "，", "l": true, "r": true, "d": true },
+          { "s": "于", "l": false, "r": false, "d": true },
+          { "s": "1997", "l": true, "r": true, "d": true },
+          { "s": "年开通", "l": false, "r": false, "d": false },
+          { "s": "。", "l": true, "r": false, "d": true }
+        ]
+      },
+      {
+        "text": "他是一位日本演員。",
+        "gloss": "he is a Japanese actor",
+        "bpe": [
+          { "s": "他", "l": false, "r": false },
+          { "s": "是一位", "l": false, "r": false },
+          { "s": "日本演員", "l": false, "r": false },
+          { "s": "。", "l": false, "r": false }
+        ],
+        "isbpe": [
+          { "s": "他", "l": false, "r": false, "d": false },
+          { "s": "是一位", "l": false, "r": false, "d": false },
+          { "s": "日本演員", "l": false, "r": false, "d": false },
+          { "s": "。", "l": false, "r": false, "d": true }
+        ],
+        "norule": [
+          { "s": "他", "l": false, "r": false, "d": true },
+          { "s": "是一位", "l": true, "r": false, "d": true },
+          { "s": "日本", "l": true, "r": false, "d": true },
+          { "s": "演員", "l": true, "r": false, "d": true },
+          { "s": "。", "l": true, "r": false, "d": true }
+        ]
+      },
+      {
+        "text": "该站位于北京市海淀区，是地铁4号线的车站。",
+        "gloss": "the station is in Haidian, Beijing, on metro line 4",
+        "bpe": [
+          { "s": "该", "l": false, "r": false },
+          { "s": "站", "l": false, "r": false },
+          { "s": "位于", "l": false, "r": false },
+          { "s": "北京市", "l": false, "r": false },
+          { "s": "海淀", "l": false, "r": false },
+          { "s": "区", "l": false, "r": false },
+          { "s": "，", "l": false, "r": false },
+          { "s": "是", "l": false, "r": false },
+          { "s": "地铁", "l": false, "r": false },
+          { "s": "4", "l": false, "r": false },
+          { "s": "号线", "l": false, "r": false },
+          { "s": "的", "l": false, "r": false },
+          { "s": "车站", "l": false, "r": false },
+          { "s": "。", "l": false, "r": false }
+        ],
+        "isbpe": [
+          { "s": "该", "l": false, "r": false, "d": false },
+          { "s": "站", "l": false, "r": false, "d": false },
+          { "s": "位于", "l": false, "r": false, "d": false },
+          { "s": "北京市", "l": false, "r": false, "d": false },
+          { "s": "海淀", "l": false, "r": false, "d": false },
+          { "s": "区", "l": false, "r": false, "d": true },
+          { "s": "，", "l": false, "r": false, "d": true },
+          { "s": "是", "l": false, "r": false, "d": true },
+          { "s": "地铁", "l": false, "r": false, "d": false },
+          { "s": "4", "l": true, "r": true, "d": true },
+          { "s": "号线", "l": false, "r": false, "d": false },
+          { "s": "的", "l": false, "r": false, "d": true },
+          { "s": "车站", "l": false, "r": false, "d": false },
+          { "s": "。", "l": false, "r": false, "d": true }
+        ],
+        "norule": [
+          { "s": "该", "l": false, "r": false, "d": true },
+          { "s": "站", "l": true, "r": false, "d": true },
+          { "s": "位于", "l": true, "r": false, "d": true },
+          { "s": "北京市", "l": true, "r": false, "d": true },
+          { "s": "海", "l": true, "r": false, "d": true },
+          { "s": "淀", "l": true, "r": false, "d": true },
+          { "s": "区", "l": true, "r": false, "d": true },
+          { "s": "，", "l": true, "r": true, "d": true },
+          { "s": "是", "l": false, "r": false, "d": true },
+          { "s": "地铁", "l": true, "r": false, "d": true },
+          { "s": "4", "l": true, "r": true, "d": true },
+          { "s": "号线", "l": false, "r": false, "d": false },
+          { "s": "的", "l": true, "r": false, "d": true },
+          { "s": "车站", "l": true, "r": false, "d": false },
+          { "s": "。", "l": true, "r": false, "d": true }
+        ]
+      },
+      {
+        "text": "1990年出生于上海，毕业于复旦大学。",
+        "gloss": "born in Shanghai in 1990, graduated from Fudan University",
+        "bpe": [
+          { "s": "1990", "l": false, "r": false },
+          { "s": "年出生", "l": false, "r": false },
+          { "s": "于", "l": false, "r": false },
+          { "s": "上海", "l": false, "r": false },
+          { "s": "，", "l": false, "r": false },
+          { "s": "毕业于", "l": false, "r": false },
+          { "s": "复旦大学", "l": false, "r": false },
+          { "s": "。", "l": false, "r": false }
+        ],
+        "isbpe": [
+          { "s": "1990", "l": false, "r": true, "d": true },
+          { "s": "年出生", "l": false, "r": false, "d": false },
+          { "s": "于", "l": false, "r": false, "d": true },
+          { "s": "上海", "l": false, "r": false, "d": false },
+          { "s": "，", "l": false, "r": false, "d": true },
+          { "s": "毕业于", "l": false, "r": false, "d": false },
+          { "s": "复旦大学", "l": false, "r": false, "d": false },
+          { "s": "。", "l": false, "r": false, "d": true }
+        ],
+        "norule": [
+          { "s": "1990", "l": false, "r": true, "d": true },
+          { "s": "年出生", "l": false, "r": false, "d": false },
+          { "s": "于上海", "l": true, "r": false, "d": false },
+          { "s": "，", "l": true, "r": true, "d": true },
+          { "s": "毕业", "l": false, "r": false, "d": true },
+          { "s": "于", "l": true, "r": false, "d": true },
+          { "s": "复", "l": true, "r": false, "d": true },
+          { "s": "旦大学", "l": true, "r": false, "d": false },
+          { "s": "。", "l": true, "r": false, "d": true }
+        ]
+      }
+    ],
+    "chinese_totals": {
+      "bpe": 298947,
+      "isbpe": 299398,
+      "norule": 309380,
+      "o200k": 285281,
+      "doubled_isbpe": 1875,
+      "distinct_isbpe": 62545,
+      "doubled_norule": 12431,
+      "distinct_norule": 51958
+    },
+    "hindi": {
+      "text": "हिन्दी भाषा में लिखा गया लेख",
+      "gloss": "an article written in the Hindi language",
+      "gpt2": [
+        { "s": "ह", "l": false, "r": false },
+        { "s": "ि", "l": false, "r": false },
+        { "s": "न", "l": false, "r": false },
+        { "s": "्", "l": false, "r": false },
+        { "s": "द", "l": false, "r": false },
+        { "s": "ी", "l": false, "r": false },
+        { "s": "·भ", "l": false, "r": false },
+        { "s": "ा", "l": false, "r": false },
+        { "s": "ष", "l": false, "r": false },
+        { "s": "ा", "l": false, "r": false },
+        { "s": "·म", "l": false, "r": false },
+        { "s": "ें", "l": false, "r": false },
+        { "s": "·ल", "l": false, "r": false },
+        { "s": "ि", "l": false, "r": false },
+        { "s": "ख", "l": false, "r": false },
+        { "s": "ा", "l": false, "r": false },
+        { "s": "·गय", "l": false, "r": false },
+        { "s": "ा", "l": false, "r": false },
+        { "s": "·ल", "l": false, "r": false },
+        { "s": "े", "l": false, "r": false },
+        { "s": "ख", "l": false, "r": false }
+      ],
+      "bpe": [
+        { "s": "हिन्दी", "l": false, "r": false },
+        { "s": "·भाषा", "l": false, "r": false },
+        { "s": "·में", "l": false, "r": false },
+        { "s": "·लिखा", "l": false, "r": false },
+        { "s": "·गया", "l": false, "r": false },
+        { "s": "·लेख", "l": false, "r": false }
+      ],
+      "isbpe": [
+        { "s": "हिन्दी", "l": false, "r": false },
+        { "s": "भाषा", "l": false, "r": false },
+        { "s": "में", "l": false, "r": false },
+        { "s": "लिखा", "l": false, "r": false },
+        { "s": "गया", "l": false, "r": false },
+        { "s": "लेख", "l": false, "r": false }
+      ],
+      "totals": { "gpt2": 336376, "bpe": 123133, "isbpe": 122000 }
+    }
   }
 }

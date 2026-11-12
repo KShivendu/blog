@@ -394,9 +394,9 @@ export default function SpaceSlotHero() {
           </>
         ) : null}
         Across a real vocabulary that is{' '}
-        <b style={{ color: red }}>{DATA.slots.pairs.toLocaleString()}</b> words held in both forms,{' '}
-        <b style={{ color: red }}>{DATA.slots.share}%</b> of all {DATA.slots.vocab.toLocaleString()}{' '}
-        slots, on 20 MB of Python.
+        <b style={{ color: red }}>{DATA.slots.pairs.toLocaleString('en-US')}</b> strings held in
+        both forms, <b style={{ color: red }}>{DATA.slots.share}%</b> of all{' '}
+        {DATA.slots.vocab.toLocaleString('en-US')} slots, on 20 MB of Python.
       </div>
     </div>
   )

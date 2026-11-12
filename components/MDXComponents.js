@@ -38,6 +38,8 @@ import QueryExplorer from './QueryExplorer'
 import SpaceSlotHero from './SpaceSlotHero'
 import { ClosedLoopChart, OpenLoopChart, BadHarnessChart } from './LoadTestCharts'
 import VocabSweep from './VocabSweep'
+import GlueSlider from './GlueSlider'
+import ScriptSpaces from './ScriptSpaces'
 import WordpieceSplit from './WordpieceSplit'
 import ThreeChannels from './ThreeChannels'
 import PieceDerivation from './PieceDerivation'
@@ -88,6 +90,8 @@ export const MDXComponents = {
   OpenLoopChart,
   BadHarnessChart,
   VocabSweep,
+  GlueSlider,
+  ScriptSpaces,
   WordpieceSplit,
   ThreeChannels,
   PieceDerivation,

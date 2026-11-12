@@ -2,16 +2,16 @@
 title: 'Implicit Space BPE'
 subtitle: "Fixing BPE's duplicate tokens"
 date: '2026-09-17'
-lastmod: '2026-10-01'
+lastmod: '2026-11-12'
 tags: ['nlp', 'compression', 'tokenization', 'internals']
 draft: true
-summary: 'Every tokenizer I checked holds `the` and ` the` as two separate tokens, and four out of five tokens they emit are of a string stored twice like that. I mark the absence of a space instead of storing it. That beats a properly-trained BPE baseline by 9.4% on code and 0.9% on English, it reaches the same token counts with a vocabulary of 7,658 instead of 65,536, and it is the only variant that also wins on text it never saw.'
+summary: "Every tokenizer I checked holds `the` and ` the` as two separate tokens, and four out of five tokens they emit are of a string stored twice like that. I mark the absence of a space instead of storing it. Against BPE trained the same way with the same pretokenizer, that is 9.6% fewer tokens on code and 0.7% on English, the same token count from a vocabulary 8x smaller, and with 4,000 glue entries 4.4% fewer tokens than BPE with GPT-4's pretokenizer."
 authors: ['kshivendu']
 ---
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-`the` and `·the` are two different tokens in GPT-2's vocabulary. So are `and` and `·and`, `for` and `·for`, `that` and `·that`. BPE glues the leading space onto the front of a word, so every common word occupies **two** slots, one for when it follows a space and one for when it doesn't. Retrain BPE on 20 MB of Python at 65,536 slots and **45.9% of the vocabulary** goes to pairs like that.
+`the` and `·the` are two different tokens in GPT-2's vocabulary. So are `and` and `·and`, `for` and `·for`, `that` and `·that`. BPE glues the leading space onto the front of a word, so every common word occupies **two** slots, one for when it follows a space and one for when it doesn't. Retrain BPE on 20 MB of Python at 65,536 slots and **47.3% of the vocabulary** goes to pairs like that.
 
 <SpaceSlotHero />
 
@@ -19,7 +19,7 @@ The space is not just the most common character in English text, it's also the c
 
 **This is not a GPT-2 quirk.** I checked nine shipped vocabularies across three vendors and both space conventions, and every one holds `the` and `·the` as two separate tokens. Same for `and`, `for`, `that`, `value`, `count` and eight more everyday words I tried.
 
-It is not a rare event either. That 45.9% counts slots. Counting instead how often the duplication is actually hit, by tokenizing 20 MB of C4 and asking what share of the emitted tokens are of a string the vocabulary holds both ways:
+It is not a rare event either. That 47.3% counts slots. Counting instead how often the duplication is actually hit, by tokenizing 20 MB of C4 and asking what share of the emitted tokens are of a string the vocabulary holds both ways:
 
 ```
                                     of emitted tokens, a
@@ -44,23 +44,22 @@ A space is the **default** separator between tokens and is never stored. Only it
 
 ```
 'the cat sat'     ->  the | cat | sat
-'hello . world'   ->  hello | . | world
 'a, b) c: d'      ->  a | #, | b | #) | c | #: | d
-'tokenization'    ->  token | #ization
+'tokenizations'   ->  token | #izations
 ```
 
-Decoding is one rule: emit a space before each token unless it's the first one, or it carries a `#`, or the previous token was whitespace.
+Decoding is one rule: emit a space before each token unless it's the first one, it carries a `#` on that side, or the previous token was whitespace. (There is one more case for Chinese and Japanese, which [comes later](#scripts-without-spaces).)
 
-Two properties I kept deliberately, because I tried dropping both and both were bad:
+Two properties I kept deliberately:
 
-- **Pretokenization stays GPT-2's regex.** Punctuation, digits and letters never mix in one token, and no token spans a word boundary. Removing that barrier is what [SuperBPE](https://arxiv.org/abs/2503.13423) does, and it gains 19% on English. I don't want a tokenizer where `of the ` is one symbol, and that gain doesn't transfer across domains anyway.
+- **Punctuation, digits and letters never mix in one chunk**, and no token spans a word boundary. Removing that barrier is what [SuperBPE](https://arxiv.org/abs/2503.13423) does, and it gains 19% on English. I don't want a tokenizer where `of the ` is one symbol. The exact text-splitting rule is GPT-2's with two small changes, covered [below](#the-pretokenizer).
 - **Every byte stays pinned in every flag combination** before training and can never be evicted. That's what makes byte fallback, and therefore losslessness, structural rather than hoped-for. Note that this costs me real budget: ISBPE pins 1,024 byte forms (256 bytes x 4 flag combinations) where BPE pins 256, inside the same 65,536.
 
-All numbers below are against BPE retrained on the same corpus, at the same vocabulary size, with the same GPT-2 pretokenization regex and all 256 byte forms pinned. I verified my regex produces a byte-identical pretoken sequence to the original GPT-2 one over 800 KB of mixed code and prose.
+All numbers below are against BPE retrained on the same 20 MB, at the same vocabulary size, with **the same pretokenizer**, so the only thing that differs is how the space is handled. I checked that the BPE baseline cuts every test file into exactly the same chunks as ISBPE does.
 
 ## The failure that pointed at the real fix
 
-Here's where the first version breaks. A word needs **both** forms to be position-independent, and its counts split by context, so a word that mostly appears after a space only ever earns its plain form:
+Here's where the first version breaks. If the word itself carries the `#`, a word needs **both** forms to be position-independent, and its counts split by context, so a word that mostly appears after a space only ever earns its plain form:
 
 ```
 'get_attraction'   ->  get | #_ | #att | #raction
@@ -68,7 +67,7 @@ Here's where the first version breaks. A word needs **both** forms to be positio
 
 `attraction` is in the vocabulary. `#attraction` is not, because in prose `attraction` almost always follows a space. So inside `get_attraction` the word shatters.
 
-I tried the obvious fix first, which is to force every string into both forms. That halves the number of distinct strings from 57,966 to 32,768, and it does fix `get_attraction`. It also evicts `reconnaissance`, `Nero`, `Squadron` and `colossal`. Net **-1.9% on C4** and **-4.7% on WikiText**. Wrong trade.
+I tried the obvious fix first, which is to force every string into both forms. That halves the number of distinct strings from 57,966 to 32,768, and it does fix `get_attraction`. It also evicts `reconnaissance`, `Nero`, `Squadron` and `colossal`. Net **-1.9% on C4** and **-4.7% on WikiText** (measured with GPT-2's pretokenizer). Wrong trade.
 
 The fix that worked came from asking which side of the boundary should carry the mark.
 
@@ -80,54 +79,54 @@ Instead of the word carrying `#`, let the thing **before** it say "no space afte
 
 `split` is now the plain token, the same one used in ` split`. Which side carries the flag is decided by what's on the right: **a word on the right means the flag goes left.**
 
-The reason this is exact rather than a heuristic is structural. A word pretoken is ` ?\p{L}++`, which is **maximal**, so the character before a spaceless word can never be a letter. It has to be punctuation, a digit, or one of the seven contraction strings the GPT-2 regex splits off, and all of those sit on the left where they can carry the flag. I measured the leak: **206 boundaries out of 805,820** on code, every one of them a contraction, and [there's a free fix for those](#gpt-2s-regex-eats-the-first-letter-of-a-quoted-string) further down.
+The reason this is exact rather than a heuristic is structural. A word chunk is a **maximal** run of letters, so the character before a spaceless word can never be a letter. It has to be punctuation, a digit, or the end of a contraction like `don't`, and all of those sit on the left where they can carry the flag. I measured it on the code corpus: all **805,857** word starts with no space before them follow such a token, with zero exceptions. GPT-2's original regex breaks this 206 times, and [the reason is a small bug](#the-pretokenizer).
 
-So **a word never needs a `#` form at all.** On code that makes 12,439 word slots reclaimable and pools **780,827 token occurrences** onto single ids. `format` stops being 1,433 uses in one slot plus 5,740 in another and becomes 7,173 in one.
+So **a word never needs a `#` form at all.** `format` stops being 1,433 uses in one slot (after a space) plus 5,740 in another (after punctuation) and becomes **7,162** uses of one slot.
 
-Note that the trained vocabulary banks about two thirds of that. Measured after training, strings held in two forms fall from 15,046 to **6,214**, and distinct strings held rise from 50,490 to **58,517**, a net gain of roughly 8,000 slots rather than the full 12,439. The merge process spends the rest elsewhere.
+A piece _inside_ a longer word still carries the leading mark, like `#izations`, so a string that is both a word and a word-piece keeps two forms. Measured after training on code, strings held in more than one form fall from BPE's **15,506** to ISBPE's **6,354** (that count includes the 256 single bytes).
 
 **Which side you pick is not a question I invented.** [Jacobs and Pinter (2022)](https://arxiv.org/abs/2208.01561) asked exactly this for SentencePiece, word-initial mark against word-final, and settled it with a sweep. What's different here is that I'm marking absence rather than presence, so the answer is forced by the pretokenizer wherever a word follows, and the residual is a count I can state rather than a preference.
 
 <BarChart
   orientation="horizontal"
-  title="Compression vs raw UTF-8, per 4 KB chunk of held-out text"
-  subtitle="every tokenizer trained on the same 20 MB, verified lossless · toggle the statistic →"
+  title="Compression of the held-out test file"
+  subtitle="every tokenizer trained on the same 20 MB with the same pretokenizer, 65,536 entries · toggle the statistic →"
   categories={['English (C4)', 'Python code']}
   views={[
     {
-      label: 'mean',
-      default: true,
-      valueLabel: 'compression ratio vs raw UTF-8 (higher is better)',
-      valueMax: 3.3,
-      valueTicks: [0, 1, 2, 3],
-      categories: ['English (C4)', 'Python code'],
-      series: [
-        { name: 'BPE + gpt2 regex', role: 'series1', values: [2.694, 2.445] },
-        { name: 'ISBPE single-flag', role: 'seriesAlt0', values: [2.701, 2.631] },
-        { name: 'ISBPE dual-flag', role: 'series0', values: [2.717, 2.677] },
-      ],
-    },
-    {
       label: 'gain over BPE',
-      valueLabel: 'compression gain over BPE at the same vocabulary size, mean, %',
+      default: true,
+      valueLabel: 'compression gain over BPE at the same vocabulary size, %',
       valueMax: 12,
       valueTicks: [0, 3, 6, 9, 12],
       categories: ['English (C4)', 'Python code'],
       series: [
-        { name: 'ISBPE single-flag', role: 'seriesAlt0', values: [0.26, 7.61] },
-        { name: 'ISBPE dual-flag', role: 'series0', values: [0.85, 9.49] },
+        { name: 'right-marked', role: 'seriesAlt0', values: [0.48, 7.91] },
+        { name: 'ISBPE', role: 'series0', values: [1.1, 9.81] },
       ],
     },
     {
-      label: 'p50',
+      label: 'whole file',
       valueLabel: 'compression ratio vs raw UTF-8 (higher is better)',
       valueMax: 3.3,
       valueTicks: [0, 1, 2, 3],
       categories: ['English (C4)', 'Python code'],
       series: [
-        { name: 'BPE + gpt2 regex', role: 'series1', values: [2.711, 2.455] },
-        { name: 'ISBPE single-flag', role: 'seriesAlt0', values: [2.72, 2.642] },
-        { name: 'ISBPE dual-flag', role: 'series0', values: [2.731, 2.691] },
+        { name: 'BPE', role: 'series1', values: [2.698, 2.429] },
+        { name: 'right-marked', role: 'seriesAlt0', values: [2.711, 2.622] },
+        { name: 'ISBPE', role: 'series0', values: [2.728, 2.668] },
+      ],
+    },
+    {
+      label: 'p50 per 4 KB chunk',
+      valueLabel: 'compression ratio vs raw UTF-8 (higher is better)',
+      valueMax: 3.3,
+      valueTicks: [0, 1, 2, 3],
+      categories: ['English (C4)', 'Python code'],
+      series: [
+        { name: 'BPE', role: 'series1', values: [2.736, 2.458] },
+        { name: 'right-marked', role: 'seriesAlt0', values: [2.742, 2.654] },
+        { name: 'ISBPE', role: 'series0', values: [2.763, 2.697] },
       ],
     },
     {
@@ -137,21 +136,21 @@ Note that the trained vocabulary banks about two thirds of that. Measured after 
       valueTicks: [0, 1, 2, 3],
       categories: ['English (C4)', 'Python code'],
       series: [
-        { name: 'BPE + gpt2 regex', role: 'series1', values: [2.431, 2.183] },
-        { name: 'ISBPE single-flag', role: 'seriesAlt0', values: [2.449, 2.327] },
-        { name: 'ISBPE dual-flag', role: 'series0', values: [2.461, 2.361] },
+        { name: 'BPE', role: 'series1', values: [2.455, 2.183] },
+        { name: 'right-marked', role: 'seriesAlt0', values: [2.461, 2.35] },
+        { name: 'ISBPE', role: 'series0', values: [2.482, 2.366] },
       ],
     },
     {
-      label: 'p90, the easy chunks',
-      valueLabel: 'compression ratio vs raw UTF-8 (higher is better)',
-      valueMax: 3.3,
-      valueTicks: [0, 1, 2, 3],
+      label: 'xz bits per byte',
+      valueLabel: 'xz bits per byte of text (lower is better)',
+      valueMax: 2.4,
+      valueTicks: [0, 0.6, 1.2, 1.8, 2.4],
       categories: ['English (C4)', 'Python code'],
       series: [
-        { name: 'BPE + gpt2 regex', role: 'series1', values: [2.941, 2.691] },
-        { name: 'ISBPE single-flag', role: 'seriesAlt0', values: [2.941, 2.918] },
-        { name: 'ISBPE dual-flag', role: 'series0', values: [2.965, 2.989] },
+        { name: 'BPE', role: 'series1', values: [2.1362, 1.386] },
+        { name: 'right-marked', role: 'seriesAlt0', values: [2.1231, 1.3674] },
+        { name: 'ISBPE', role: 'series0', values: [2.1046, 1.3187] },
       ],
     },
   ]}
@@ -159,15 +158,15 @@ Note that the trained vocabulary banks about two thirds of that. Measured after 
 
 Observations:
 
-1. **Dual-flag wins on both corpora, and on every statistic.** Mean, median, the hard chunks and the easy ones all point the same way. Use the "gain over BPE" view, because the absolute bars start at zero and a 9.49% difference on a 2.4x ratio is a sliver at the end of a long bar. These are per-chunk numbers, so they sit slightly off the whole-file ratios the rest of the post quotes.
-2. **The gain is broad, not carried by a few chunks.** On code the hard tenth of chunks goes 2.183x to 2.361x and the easy tenth 2.691x to 2.989x, so the whole distribution shifts. On English it's +1.2% at p10 and +0.8% at p90, small everywhere rather than large somewhere.
-3. **The English win is half id coding.** In raw token counts the two arms are 9.18% and 0.40% apart, against 9.37% and 0.86% here, because the ids are re-ranked by training frequency so small ids cost fewer bytes. It's still the first time anything I built beat a properly-trained BPE on English, and it's one run with no confidence interval, so read it as directional.
-4. **The `get_attraction` failure is gone.** It now tokenizes as `get | #_# | attraction`, three tokens with the word whole, against single-flag's four.
-5. **Code gains 10x more than English**, and the reason is countable: 45.9% of the code vocabulary sits in duplicate pairs against **23.1%** of the English one. English words nearly all carry a space already, so there's less for the left-flag to pool.
+1. **ISBPE wins on both corpora, and on every statistic.** On code it emits **304,228** tokens against BPE's 336,466, which is **9.6% fewer**, and its compression ratio is 9.8% higher. On English it's 274,531 against 276,524, 0.7% fewer.
+2. **The gain is broad, not carried by a few chunks.** On code the median 4 KB chunk goes from 2.458x to 2.697x and the hard tenth from 2.183x to 2.366x, so the whole distribution shifts.
+3. **The id stream gets more predictable too.** Compressing the token ids with `xz` gives 1.3187 bits per byte of text against BPE's 1.3860, **4.9% smaller** on code and 1.5% on English. `xz` finds repeats anywhere in the file, so a smaller number means a stream that's easier to model. I use it as a rough stand-in for a language model.
+4. **Left beats right, and `xz` shows it more than the token count.** The two variants emit almost the same number of tokens on code (304,228 against 304,554), but ISBPE's stream is 3.6% smaller under `xz` (1.3187 against 1.3674). The `get_attraction` failure is gone too. It now tokenizes as `get | #_# | attraction`, three tokens with the word whole.
+5. **Code gains far more than English**, and the reason is countable: 47.3% of the code vocabulary sits in duplicate pairs against **30.0%** of the English one. English words nearly all carry a space already, so there's less for the left-flag to pool.
 
 ## GPT-4's regex deletes the same token and pays for it in slots
 
-Everything above compares against BPE with GPT-2's 2019 regex. GPT-4 and everything after it use a different one, and it goes after the same waste from the other side. So the fair question is what marking the absence buys once the baseline is current.
+GPT-4 and everything after it use a different pretokenizer, and it goes after the same waste from the other side. So the fair question is what marking the absence buys once the baseline is current.
 
 GPT-2 lets only a space begin a word. cl100k lets any character that is not a letter, a digit or a newline begin one:
 
@@ -186,52 +185,51 @@ value    ·value   .value   _value   (value   )value
 =value   [value   $value   \tvalue
 ```
 
-GPT-2 holds two. Retrain both at the same 65,536 slots on the same 20 MB of Python and the glue takes multi-form slots from **44.2%** of the vocabulary to **54.1%**.
+GPT-2 holds two. Counting every entry that is a word with at most one leading symbol, words held in more than one form take **47.8%** of cl100k's vocabulary against 30.6% of GPT-2's. o200k holds the same sixteen forms of `value` that cl100k does.
 
-In the shipped vocabularies the same shows up as 47.8% for cl100k against 30.6% for GPT-2. o200k reads 27.8%, which is lower than GPT-2's, because its 200,000 slots carry a long dead tail that dilutes the denominator. The per-word count is the cleaner read, and o200k holds the same sixteen forms of `value` that cl100k does.
+So both designs delete a token and both pay for it in slots. Trained on the same 20 MB of Python at the same 65,536 vocabulary, they turn out to be worth almost the same amount. Adding only cl100k's punctuation joining to our pretokenizer takes 336,466 tokens down to **303,655**, a 9.8% cut. The left flag takes it to **304,228**, a 9.6% cut. Two different mechanisms, 0.2 points apart.
 
-So both designs delete a token and both pay for it in slots. Trained on the same 20 MB of Python at the same 65,536 vocabulary, they turn out to be worth almost the same amount. Changing only GPT-2's word clause to allow the glue takes 336,736 tokens down to **303,927**, a 9.74% cut. The dual flag takes it to **305,810**, a 9.18% cut. Two different mechanisms, 0.6 points apart.
+**On sequence length the full cl100k pretokenizer wins and ISBPE alone does not.** 283,269 tokens and 2.711x compression against ISBPE's 304,228 and 2.668x. cl100k's other rules (digits, line endings) add the remaining 6 points.
 
-**On sequence length the modern regex wins and my scheme does not.** 283,269 tokens and 2.711x compression against ISBPE's 305,810 and 2.655x. The 9.4% I quoted earlier is against a pretokenizer from 2019.
-
-It splits the other way on the two numbers that are not sequence length. The first is bits per byte, the held-out cross-entropy divided by the byte count of the text rather than by the token count, which is the only way to compare two tokenizers that chop text at different rates. ISBPE reaches **1.3205 against cl100k's 1.3937**, which is 5.25% better, and [later on](#does-any-of-this-help-an-llm) it is the number I argue is the one to watch.
-
-The other is word integrity. Take the 3,000 most frequent camelCase identifiers in the held-out Python and encode each one on its own. cl100k returns **2.93%** of them as a single token and ISBPE returns **10.28%**. That is the friendliest possible test for a scheme whose whole point is one canonical form, and it is a different measurement from the in-context Java count in [what it costs](#what-it-costs), where BPE is 1.01 points ahead. The glue buys its tokens by spending slots on `(self`, `_name` and `.get`, and those are slots a long identifier never gets.
+It splits the other way on the two numbers that are not sequence length. The first is `xz` size: ISBPE reaches **1.3187 bits per byte against cl100k's 1.3938**, which is 5.4% smaller. The other is word integrity. For every occurrence of the 3,000 most common camelCase identifiers in the held-out Python, encoded in its real context, ISBPE keeps **15.86%** as a single token and cl100k keeps 13.39%. o200k splits every word at a capital letter, so it keeps **none** of them whole. The joining buys its tokens by spending slots on `(self`, `_name` and `.get`, and those are slots a long identifier never gets.
 
 ### Take both
 
-The obvious move is to put the flag on top of cl100k's regex, and it does not work. The dual-flag mark needs the punctuation to be its own pretoken so it has somewhere to sit. Under cl100k, `.split` is one pretoken, so there is no left token to mark.
+The obvious move is to put the flag on top of cl100k's regex, and it does not work. The left flag needs the punctuation to be its own chunk so it has somewhere to sit. Under cl100k, `.split` is one chunk, so there is no left token to mark.
 
-I tried taking one of cl100k's other clauses for free instead. It also absorbs the line ending into the punctuation run before it, which is worth 6.1 points to plain BPE and never touches the word clause. On ISBPE it emits **312,522** tokens against 305,810, which is 2.2% worse. It bought 2,237 slots and only **532** of them ever fire on held-out text, and strings held both bare and newline-suffixed went from 4 to **916**. The clause recreated the duplication the flag had just removed.
+I tried taking one of cl100k's other rules for free instead. It absorbs the line ending into the punctuation before it, so `):` and a newline become one chunk, and it never touches words. On ISBPE it emits **312,522** tokens against 305,810, which is 2.2% worse (measured with GPT-2's pretokenizer). It creates a second form of every punctuation string, with and without the line ending, and of 2,214 such entries only **528** ever appear in the test code. The rule recreated the duplication the flag had just removed.
 
-So a merge has to be earned. The two fixes are not alternatives: the flag removes the second form of every word, the glue removes the separate punctuation token, and nothing stops doing both.
+So a merge has to be earned. The two fixes are not alternatives: the flag removes the second form of every word, the joining removes the separate punctuation token, and nothing stops doing both.
 
-Keep GPT-2's word clause and the dual flag exactly as they are. Train at 65,536 minus K. Then spend those K slots on the most frequent punctuation-word pairs measured on the training corpus.
+Keep the word rule and the left flag exactly as they are. Train at 65,536 minus K. Then spend those K slots on the most frequent punctuation-word pairs measured on the training corpus. I call these **glue entries**.
 
-The word keeps one canonical form. `split` is still a single slot, and `.split` is an extra token that had to fire often enough to earn one. That is the whole difference from cl100k, where the glue sits in the regex so `value` never exists on its own.
+The word keeps one canonical form. `split` is still a single slot, and `.split` is an extra token that had to fire often enough to earn one. That is the whole difference from cl100k, where the joining sits in the regex so `value` never exists on its own. Drag K and watch which pairs earn a slot first:
 
-| arm, 20 MB Python, V=65,536 | tokens      | compression | bits/byte  | whole alone |
-| --------------------------- | ----------- | ----------- | ---------- | ----------- |
-| BPE + GPT-2 regex           | 336,736     | 2.428x      | 1.3864     | 7.00%       |
-| BPE + cl100k regex          | 283,269     | 2.711x      | 1.3937     | 2.93%       |
-| ISBPE dual-flag             | 305,810     | 2.655x      | **1.3205** | **10.28%**  |
-| ISBPE + 500 earned glue     | 283,386     | 2.751x      | 1.3255     | 10.02%      |
-| ISBPE + 4,000 earned glue   | **271,120** | **2.827x**  | 1.3352     | 10.02%      |
+<GlueSlider />
 
-Two notes on that table. Bits per byte here is measured on the frequency-remapped id stream, so the absolute numbers sit a little below the [vocabulary sweep below](#the-same-win-read-as-vocabulary-size), 1.3864 against 1.3977 for BPE. The gap between arms is the same either way, 4.8% against 4.75%. And "whole alone" is the standalone encoding described above, not the in-context Java count.
+| 20 MB Python, 65,536 entries | tokens      | compression | xz bits/byte | identifiers whole |
+| ---------------------------- | ----------- | ----------- | ------------ | ----------------- |
+| BPE, GPT-2 pretokenizer      | 336,736     | 2.428x      | 1.3868       | 14.63%            |
+| BPE, same pretokenizer       | 336,466     | 2.429x      | 1.3860       | 14.63%            |
+| BPE, cl100k pretokenizer     | 283,269     | 2.711x      | 1.3938       | 13.39%            |
+| BPE, o200k pretokenizer      | 282,847     | 2.715x      | 1.3921       | 0.00%             |
+| ISBPE                        | 304,228     | 2.668x      | **1.3187**   | **15.86%**        |
+| ISBPE + 500 glue entries     | 283,078     | 2.754x      | 1.3245       | **15.86%**        |
+| ISBPE + 4,000 glue entries   | **270,816** | **2.830x**  | 1.3342       | **15.86%**        |
 
 Observations:
 
-- **500 slots is 0.76% of the vocabulary.** It lands 117 tokens behind cl100k, 283,386 against 283,269, with better compression (2.751x against 2.711x) and 3.4x as many identifiers kept whole.
-- **4,000 slots beats cl100k by 4.3% on tokens and 4.3% on compression.** The gain is broad: per 4 KB chunk the median goes from cl100k's 2.755x to 2.888x, and the hard tenth from 2.410x to 2.528x.
-- **Bits per byte is the number that moves the wrong way**, 1.3205 to 1.3352, and identifiers whole slips a little too, 10.28% to 10.02%. Both are still far ahead of cl100k's 1.3937 and 2.93%. On English the same 4,000 slots move bits per byte the other way, 2.1090 to 2.1070, so I would not call it a rule.
-- **English saturates almost at once.** 250 slots gets 275,113 tokens and 4,000 gets 274,414, which is 699 tokens for sixteen times the budget. The glue fires on **2.4%** of English word pretokens against **26.3%** on code, and the leading characters there are apostrophes and hyphens rather than `_` and `(`.
+- **The first entries are pure code.** `(self` (17,758 times in training), `:param`, `=None`, `_name`, `.get`, `_id`, `.append`. The slider shows them in the order they are added.
+- **500 slots is 0.76% of the vocabulary.** That already beats cl100k, 283,078 tokens against 283,269, with better compression (2.754x against 2.711x). o200k takes 1,000 slots to pass: 278,617 against 282,847.
+- **4,000 slots beats cl100k by 4.4% on tokens and o200k by 4.3%.** The gain is broad: per 4 KB chunk the median goes from cl100k's 2.755x to 2.889x, and the hard tenth from 2.410x to 2.526x.
+- **`xz` is the number that moves the wrong way**, 1.3187 to 1.3342 as K grows, because every glue entry removes a token but adds a new symbol to predict. It's still far below cl100k's 1.3938.
+- **English saturates almost at once.** 500 slots gets 272,874 tokens and 4,000 gets 272,401, which is 473 tokens for eight times the budget.
 
-Two limits worth naming. The merges are single level, so `.` and `get` become `.get` but `.get` cannot merge again, which understates the result. And the earned glue is measured but not shipped. It patches the vocabulary after training rather than changing the trainer, so the library below does not do it yet.
+Two limits worth naming. The merges are single level, so `.` and `get` become `.get` but `.get` cannot merge again, which understates the result. And the glue entries are measured but not shipped. They patch the vocabulary after training rather than changing the trainer, so the library below does not do it yet.
 
 ## Where the win actually comes from
 
-The driver is compound identifiers. Line starts are the obvious guess and they are only 1,495 of the 30,926 tokens saved, under 5%.
+The driver is compound identifiers. Line starts are the obvious guess and they are only 1,495 of the 30,926 tokens saved, under 5%. (This section was measured with GPT-2's pretokenizer.)
 
 ```
 'self.accountemail:'
@@ -252,52 +250,82 @@ Train the vocabulary on 20 MB of Python, then run it over English prose it has n
 ```
 'This is a lot of what I do with the college students I see.'
 
-  BPE          19 tokens
-  single-flag  18
-  dual-flag    16
+  BPE           19 tokens
+  right-marked  18
+  ISBPE         16
 ```
 
 The word `students` carries most of that gap. A code corpus does contain the word, in identifiers, comments and docstrings, but almost always glued to something rather than sitting after a space. BPE therefore learns the glued form and never earns a space-prefixed one, so in prose the word shatters:
 
 ```
-  BPE          st | udent | s      3 pieces
-  single-flag  stud | #ents        2
-  dual-flag    students            1, the word whole
+  BPE           ·st | udent | s     3 pieces
+  right-marked  stud | #ents        2
+  ISBPE         students            1, the word whole
 ```
 
 Across the whole held-out file, every arm trained on the same 20 MB:
 
-| vocabulary trained on | tested on         | dual       | single | BPE        | dual vs BPE |
-| --------------------- | ----------------- | ---------- | ------ | ---------- | ----------- |
-| code                  | Python, in domain | **2.655x** | 2.609x | 2.428x     | **+9.37%**  |
-| code                  | C4, unseen        | **2.035x** | 1.992x | 1.995x     | **+1.97%**  |
-| English               | C4, in domain     | **2.700x** | 2.685x | 2.677x     | **+0.86%**  |
-| English               | Python, unseen    | **1.695x** | 1.653x | 1.672x     | **+1.36%**  |
-| English               | WikiText, unseen  | 2.387x     | 2.438x | **2.444x** | **-2.35%**  |
+| vocabulary trained on | tested on         | ISBPE      | right-marked | BPE        | ISBPE vs BPE |
+| --------------------- | ----------------- | ---------- | ------------ | ---------- | ------------ |
+| code                  | Python, in domain | **2.668x** | 2.622x       | 2.429x     | **+9.8%**    |
+| code                  | C4, unseen        | **2.067x** | 2.032x       | 2.026x     | **+2.0%**    |
+| English               | C4, in domain     | **2.728x** | 2.711x       | 2.698x     | **+1.1%**    |
+| English               | Python, unseen    | **1.695x** | 1.663x       | 1.675x     | **+1.2%**    |
+| English               | WikiText, unseen  | 2.390x     | **2.440x**   | **2.440x** | **-2.1%**    |
 
 Observations:
 
-- **Dual-flag wins both of the unseen rows that are real text.** A code vocabulary reads English 1.97% better than BPE does, and an English vocabulary reads Python 1.36% better.
-- **Single-flag loses both**, 1.992x against BPE's 1.995x on C4 and 1.653x against 1.672x on Python. In domain the two schemes sit within 2% of each other. Out of domain only the two-sided mark survives, which is the clearest argument for putting the mark on the left.
-- **WikiText is the exception and it costs 2.35%.** Its detokenized punctuation is spaced, which is a corpus artifact rather than a property of prose. More on that in [what it costs](#what-it-costs).
+- **ISBPE wins both of the unseen rows that are real text.** A code vocabulary reads English 2.0% better than BPE does, and an English vocabulary reads Python 1.2% better. It also beats cl100k BPE on both (1.986x and 1.611x).
+- **Right-marked barely survives the move.** It edges BPE on C4 (2.032x against 2.026x) and loses on Python (1.663x against 1.675x). Out of domain the left mark holds its gain and the right mark mostly doesn't, which is the clearest argument for putting the mark on the left.
+- **WikiText is the exception and it costs 2.1%.** Its detokenized punctuation is spaced, which is a corpus artifact rather than a property of prose. More on that in [what it costs](#what-it-costs).
+
+## Other scripts
+
+Hindi puts spaces between words like English. Chinese doesn't put any. Both were worth testing, and they teach different things.
+
+<ScriptSpaces />
+
+**Hindi: most of the win is the pretokenizer.** GPT-2's regex cuts a Hindi word at every vowel sign, because a vowel sign is a combining mark and not a letter. o200k counts marks as letters, and so does our pretokenizer. That alone takes BPE from **336,376** tokens to **123,133** on the Hindi test file, 63% fewer. That gain is the regex's, and BPE gets it too. On top of it, ISBPE emits 122,000, another 0.9%, and its `xz` size is 1.8% smaller. About the same as English, which makes sense for a language with spaces.
+
+### Scripts without spaces
+
+Chinese is where the plain rule breaks. The pretokenizer makes a whole clause one chunk, so a character inside a clause carries the leading mark, like `#izations` does, while the same character after punctuation doesn't. Every common character then needs two entries, `梅` and `#梅`. With the rule as described so far, **12,431 of 51,958** distinct strings in the Chinese vocabulary are held both ways. ISBPE then emits **3.5% more** tokens than BPE.
+
+The fix is one more decoding case: **between two Chinese or Japanese characters, no space is implied.** A real space there is rare and becomes its own whitespace token. The decoder looks at the bytes on both sides of each gap, so this needs no extra mark. On text with no such characters it never fires.
+
+```
+'位于梅州市，于1997年开通。'   (located in Meizhou, opened in 1997)
+
+space implied everywhere   位于 | #梅 | #州市 | #，# | 于 | #1997# | 年开通 | #。
+no space between Chinese   位于 | 梅 | 州市 | ， | 于 | #1997# | 年开通 | 。
+```
+
+Strings held both ways drop to **1,875 of 62,545**, and the vocabulary spends the freed slots on more Chinese. ISBPE now emits **299,398** tokens against BPE's 298,947, which is 0.15% more, and its `xz` size is 1.1% larger (2.3963 against 2.3710). So on Chinese ISBPE is level with BPE.
+
+The tokens also respect Chinese words as often as BPE's do. I split the test file into words with the [jieba](https://github.com/fxsjy/jieba) segmenter and checked every place a token ends between two Chinese characters. **80.9%** of ISBPE's token ends land on a word boundary, against 81.1% for BPE, and both keep 56% of multi-character words as one token. They make the same mistakes: both glue `年出生` ("year" + "born") into one token 430 times.
+
+Note that o200k does better on Chinese than either, **4.7% fewer tokens than ISBPE**. It's the same punctuation joining as on code: 21,356 of its tokens are a punctuation mark plus the Chinese text after it, like `，在` (comma + "at"). I haven't tried glue entries on Chinese yet.
 
 ## What it costs
 
-A post called "Improving BPE" that lists no losses is an advertisement. Three, all measured:
+A post called "Improving BPE" that lists no losses is an advertisement. Four, all measured:
 
-- **WikiText loses 2.35%.** Its detokenized punctuation is spaced, so `,` and `.` appear 23,262 times against C4's 136. The "no space after" forms almost never fire and the slots spent on them are dead. That's a corpus artifact rather than a property of prose, but I have no second clean English holdout to prove it.
+- **WikiText loses 2.1%.** Its detokenized punctuation is spaced, so `,` and `.` appear 23,262 times against C4's 136. The "no space after" forms almost never fire and the slots spent on them are dead. That's a corpus artifact rather than a property of prose, but I have no second clean English holdout to prove it.
+- **Chinese is level, not better**, and o200k beats both by 4.7%. See [above](#scripts-without-spaces).
 - **Word boundaries get slightly worse.** On 5 MB of held-out Java, scoring every boundary a programmer marked with a capital, plain BPE keeps 73.11% of those words whole against ISBPE's 72.10%. It goes both ways. ISBPE splits `tagName` into `tag | #Name` and `CodeType` into `Code | #Type`, where BPE holds each whole. BPE splits `hasProperty` into `has | Property` and `FedoraResource` into `Fed | or | aResource`, where ISBPE holds each whole. The net is 1.01 points against ISBPE. If your downstream task wants morpheme-aligned pieces, measure this before adopting the scheme.
 - **Digits are marginally worse.** 83,003 digit tokens against BPE's 80,432 on English, once counted fairly.
 
+The Java and digit numbers were measured with GPT-2's pretokenizer.
+
 ## The same win, read as vocabulary size
 
-Compression is one way to spend the freed slots. The other is to not spend them. Everything in this section is against BPE with GPT-2's pretokenizer, the 2019 baseline, because that is the sweep I ran.
+Compression is one way to spend the freed slots. The other is to not spend them.
 
 <VocabSweep />
 
 <LineChart
   title="Token count vs vocabulary size"
-  subtitle="held out, same 20 MB training corpus per arm · down and left is better · toggle the corpus →"
+  subtitle="held out, same 20 MB training corpus and same pretokenizer per arm · down and left is better · toggle the corpus →"
   xLabel="vocabulary size"
   xScale="log"
   xTicks={[
@@ -312,8 +340,8 @@ Compression is one way to spend the freed slots. The other is to not spend them.
     {
       label: 'Python code',
       default: true,
-      yMin: 296635,
-      yMax: 444396,
+      yMin: 296000,
+      yMax: 444000,
       series: [
         {
           name: 'BPE at V=65,536',
@@ -321,58 +349,44 @@ Compression is one way to spend the freed slots. The other is to not spend them.
           dashed: true,
           showMarkers: false,
           points: [
-            [2048, 336736],
-            [65536, 336736],
+            [2048, 336466],
+            [65536, 336466],
           ],
         },
         {
-          name: 'BPE + gpt2 regex',
+          name: 'BPE',
           role: 'series1',
           marker: 'circle',
           points: [
-            [2048, 435683],
-            [4096, 392140],
-            [8192, 365856],
-            [16384, 350468],
-            [32768, 341372],
-            [49152, 338406],
-            [65536, 336736],
+            [2048, 435647],
+            [4096, 392065],
+            [8192, 365699],
+            [16384, 350306],
+            [32768, 341139],
+            [49152, 338150],
+            [65536, 336466],
           ],
         },
         {
-          name: 'ISBPE single-flag',
-          role: 'seriesAlt0',
-          marker: 'square',
-          points: [
-            [2048, 414640],
-            [4096, 363883],
-            [8192, 335386],
-            [16384, 319892],
-            [32768, 310994],
-            [49152, 308124],
-            [65536, 306575],
-          ],
-        },
-        {
-          name: 'ISBPE dual-flag',
+          name: 'ISBPE',
           role: 'series0',
           marker: 'diamond',
           points: [
-            [2048, 431252],
-            [4096, 363186],
-            [8192, 332773],
-            [16384, 317341],
-            [32768, 309772],
-            [49152, 307168],
-            [65536, 305810],
+            [2048, 430866],
+            [4096, 362409],
+            [8192, 331922],
+            [16384, 316251],
+            [32768, 308331],
+            [49152, 305626],
+            [65536, 304228],
           ],
         },
       ],
     },
     {
       label: 'English (C4)',
-      yMin: 270675,
-      yMax: 485169,
+      yMin: 268000,
+      yMax: 484000,
       series: [
         {
           name: 'BPE at V=65,536',
@@ -380,50 +394,36 @@ Compression is one way to spend the freed slots. The other is to not spend them.
           dashed: true,
           showMarkers: false,
           points: [
-            [2048, 280162],
-            [65536, 280162],
+            [2048, 276524],
+            [65536, 276524],
           ],
         },
         {
-          name: 'BPE + gpt2 regex',
+          name: 'BPE',
           role: 'series1',
           marker: 'circle',
           points: [
-            [2048, 436271],
-            [4096, 378652],
-            [8192, 336859],
-            [16384, 308416],
-            [32768, 290344],
-            [49152, 283778],
-            [65536, 280162],
+            [2048, 434604],
+            [4096, 376452],
+            [8192, 334177],
+            [16384, 305239],
+            [32768, 286898],
+            [49152, 280203],
+            [65536, 276524],
           ],
         },
         {
-          name: 'ISBPE single-flag',
-          role: 'seriesAlt0',
-          marker: 'square',
-          points: [
-            [2048, 442443],
-            [4096, 379713],
-            [8192, 336123],
-            [16384, 307408],
-            [32768, 289945],
-            [49152, 283504],
-            [65536, 280204],
-          ],
-        },
-        {
-          name: 'ISBPE dual-flag',
+          name: 'ISBPE',
           role: 'series0',
           marker: 'diamond',
           points: [
-            [2048, 475656],
-            [4096, 388655],
-            [8192, 337606],
-            [16384, 306511],
-            [32768, 288830],
-            [49152, 282232],
-            [65536, 279047],
+            [2048, 474047],
+            [4096, 386268],
+            [8192, 334386],
+            [16384, 302767],
+            [32768, 284545],
+            [49152, 277891],
+            [65536, 274531],
           ],
         },
       ],
@@ -433,50 +433,61 @@ Compression is one way to spend the freed slots. The other is to not spend them.
 
 Observations:
 
-- **On code both ISBPE variants sit below BPE at every size.** The gap is smallest at V=2,048 (+1.02%) and widens to +9.45% by V=16,384.
-- **English barely moves.** Dual-flag needs 59,800 slots to match BPE's 65,536, only 8.8% smaller, and single-flag never reaches it at any size in this sweep.
+- **On code ISBPE sits below BPE at every size.** The gap is smallest at V=2,048 (1.1%) and is 9 to 10% at every size from 8,192 up.
+- **English barely moves.** ISBPE needs about 55,000 slots to match BPE's 65,536, only 16% smaller.
 
-**ISBPE with 8,192 slots emits fewer tokens on held-out Python than BPE with 65,536.** Interpolating, it matches BPE's exact token count at **V=7,658**, a vocabulary 88.3% smaller at the same sequence length. Measured by how well the id stream compresses instead of by token count, the crossing moves further left still, to **V=5,149**.
+**ISBPE with 8,192 slots emits fewer tokens on held-out Python than BPE with 65,536**, 331,922 against 336,466. Interpolating, it matches BPE's exact token count at about **V=7,400**, a vocabulary 89% smaller at the same sequence length. That's 57,344 fewer rows in a model's embedding table at V=8,192.
 
-There is a floor. At V=2,048 the scheme **loses** on English by 4.63% on compression and 9.03% on tokens, because the mark costs a dimension on every id whatever the budget, and at that size that costs more than the pooling saves. On code the sign never flips, since 45.9% of that vocabulary was duplicate pairs to begin with. This is a scheme for vocabularies large enough to have been wasting slots in the first place.
+There is a floor. At V=2,048 ISBPE **loses** on English by 9.1% on tokens, because each mark creates new variants of an entry, and at that size the variants cost more than the pooling saves. On code the sign never flips, since 47.3% of that vocabulary was duplicate pairs to begin with. This is a scheme for vocabularies large enough to have been wasting slots in the first place.
 
 ## Does any of this help an LLM?
 
-Compression ratio is the wrong metric for that question, so I measured **bits per byte**, defined above. That normalisation is the whole game. A word-level tokenizer has the lowest bits per **token** of anything I measured, and the highest bits per **byte**. It chops text finer, so each guess is easier and there are more of them.
+Compression ratio is the wrong metric for that question, so I measured **bits per byte**. That's the held-out cross-entropy divided by the byte count of the text rather than by the token count. It's the only way to compare two tokenizers that chop text at different rates. That normalisation is the whole game. A word-level tokenizer has the lowest bits per **token** of anything I measured, and the highest bits per **byte**. It chops text finer, so each guess is easier and there are more of them.
 
-I expected a token-count win to show up proportionally in bits per byte. It does not, and there is no fixed conversion either. Across variant, corpus and instrument the surviving fraction runs from **7% to over 100%**, so there is no factor that turns one into the other.
+I expected a token-count win to show up proportionally in bits per byte. It does not, and there is no fixed conversion either. Across variant, corpus and instrument the surviving fraction runs from **7% to over 100%**, so there is no factor that turns one into the other. (Measured with GPT-2's pretokenizer.)
 
 <details>
 <summary>The full survival table, and why no single number comes out of it</summary>
 
 | variant, corpus    | token win | survives, order-3 n-gram | survives, xz |
 | ------------------ | --------- | ------------------------ | ------------ |
-| single-flag, code  | 8.96%     | 15%                      | 15%          |
-| dual-flag, code    | 9.18%     | **7%**                   | **53%**      |
-| dual-flag, English | 0.40%     | 165%                     | 308%         |
+| right-marked, code | 8.96%     | 15%                      | 15%          |
+| ISBPE, code        | 9.18%     | **7%**                   | **53%**      |
+| ISBPE, English     | 0.40%     | 165%                     | 308%         |
 
 Observations:
 
 - **Any single number you pull out of this table is one cell**, and quoting it as a rule is how you end up telling people to divide token-count claims by seven.
-- **For single-flag on code the instrument makes no difference**, 15% either way, despite one model seeing two tokens of context and the other seeing the whole file.
-- **One cell moves, and it's the interesting one.** Dual-flag on code goes 7% to 53%. It buys longer literal repeats in the id stream, which a long-range coder feeds on. The cost is splitting `.` and `.#` into separate conditioning contexts, and those contexts are all a two-token model can see.
+- **For right-marked on code the instrument makes no difference**, 15% either way, despite one model seeing two tokens of context and the other seeing the whole file.
+- **One cell moves, and it's the interesting one.** ISBPE on code goes 7% to 53%. It buys longer literal repeats in the id stream, which a long-range coder feeds on. The cost is splitting `.` and `.#` into separate conditioning contexts, and those contexts are all a two-token model can see.
 - **The English row has a tiny denominator.** A 0.40% token win is about 1,100 tokens, so the size of that ratio means little. Both instruments agree on its sign.
 
 </details>
 
-A short-context proxy also can't rank the two variants. Measured with an order-3 n-gram, single-flag beats dual-flag on bits per byte by **0.75%**, which reads like a clean verdict. Three long-range coders reverse it, all in dual-flag's favour. xz says **-3.51%**, bz2 **-2.12%** and zlib **-2.36%**. So the ranking is not stable under the choice of instrument, which is a different claim from saying the n-gram is wrong. Settling it needs a training run I haven't done.
+A short-context proxy also can't rank the two variants. Measured with an order-3 n-gram, right-marked beats ISBPE on bits per byte by **0.75%**, which reads like a clean verdict. Three long-range coders reverse it, all in ISBPE's favour. xz says **-3.51%**, bz2 **-2.12%** and zlib **-2.36%**. So the ranking is not stable under the choice of instrument, which is a different claim from saying the n-gram is wrong. Settling it needs a training run I haven't done.
 
 Note the obvious counter. [Goldman et al. (2024)](https://aclanthology.org/2024.findings-acl.134/) pretrained models and found compression does correlate with downstream performance. Where we appear to disagree, theirs is the stronger evidence, because they trained models and I ran n-grams and compressors.
 
-## GPT-2's regex eats the first letter of a quoted string
+## The pretokenizer
 
-Those 206 leaking boundaries are all the same bug, and fixing it moves compression by under 0.01% either way.
+ISBPE cuts text into chunks with GPT-2's regex plus two changes, both taken from o200k:
 
 ```
-pretokens of  b'test'   ->   [b'b', b"'t", b'est', b"'"]
+ ?[\p{L}\p{M}]++(?:['’](?i:[sdmt]|ll|ve|re)(?!\p{L}))?   a word
+ ?\p{N}++                                               a number
+ ?[^\s\p{L}\p{N}]++                                     punctuation
+\s++$|\s+(?!\S)|\s                                      whitespace
 ```
 
-GPT-2's regex offers the contraction `'(?:[sdmt]|ll|ve|re)` as a **standalone** alternative, so it fires inside quoted string literals and eats the first letter of the word. Every one of the 206 leaks is this:
+**Combining marks count as letters** (`\p{M}`). That's the Hindi fix [above](#other-scripts). **A contraction stays on the end of its word**, with a straight or curly apostrophe and in any case, so `don't` and `don’t` are one chunk each. GPT-2 gives `don | ’ | t` for the curly one.
+
+The guard at the end, `(?!\p{L})`, is there because of a bug in GPT-2's regex that eats the first letter of a quoted string:
+
+```
+GPT-2's chunks of  b'test'   ->   b | 't | est | '
+```
+
+GPT-2's regex offers the contraction `'(?:[sdmt]|ll|ve|re)` as a **standalone** alternative, so it fires inside quoted string literals. Those are the 206 leaks from [earlier](#let-the-left-token-declare-it), and every one is this:
 
 ```
 count   left   word           the literal it came from
@@ -487,22 +498,18 @@ count   left   word           the literal it came from
     3   'd     ata            'data'
 ```
 
-A lookbehind doesn't help, since the character before the quote (`b`) is a letter. [o200k](https://github.com/openai/tiktoken) doesn't fix it either, it attaches the contraction as a word suffix and gives `b't | est | '`. What works is requiring the contraction not to be followed by another letter:
+A lookbehind doesn't help, since the character before the quote (`b`) is a letter. o200k doesn't fix it either: it attaches the contraction as a word suffix and gives `b't | est | '`. What works is requiring the contraction not to be followed by another letter. `don't` still matches, `b'test'` falls through to punctuation, and `test` comes out whole. With the guard, the leak count on code is **0**.
 
-```
-'(?:[sdmt]|ll|ve|re)   ->   '(?:[sdmt]|ll|ve|re)(?!\p{L})
-```
-
-`don't` still matches. `b'test'` falls through to punctuation and `test` comes out whole. Pretoken **counts are identical** on 20 MB of code and of C4, only 206 and 34 boundaries move, and compression changes by +0.004% and -0.007%. With the fix the leak count on code is **0**, so the structural argument above has no exceptions left.
+I did not take o200k's split at capital letters, which costs 0.5% on code, or its punctuation joining, which glue entries replace.
 
 ## What I'd actually use
 
-I packaged the implementation as a small library with both modes:
+I packaged the implementation as a small Python library and a Rust port that encodes about 19x faster:
 
 ```python
 from isbpe import ISBPE
 
-tok = ISBPE(mode="dual").train(corpus_bytes, vocab_size=65536)
+tok = ISBPE().train(corpus_bytes, vocab_size=65536)
 ids = tok.encode("self.fireEvent")
 tok.decode(ids)                      # exact bytes back, always
 
@@ -510,14 +517,14 @@ tok.explain("self.fireEvent")
 # self.fireEvent -> self | #.# | fire | #Event
 ```
 
-`mode="dual"` is the one to use, and the contraction fix is the default pattern. Losslessness is verified on three corpora plus 2,000 random byte strings per mode, and the packaged library reproduces every number in this post to the token except the earned-glue rows, which patch the vocabulary after training and are not in the library.
+The defaults are the left mark, the pretokenizer above and the Chinese rule. Every table in this post comes from the Rust trainer, which builds exactly the same vocabulary as the Python library, checked on code, English and Chinese. Losslessness is checked on every test file plus 2,000 random strings per model, with invalid UTF-8, mixed scripts and partial characters among them.
 
-The honest limitations. A custom tokenizer produces ids no existing model can read, so if your reader is an LLM you need the lab to ship the vocabulary. Everything here is one 20 MB corpus per domain, one held-out file, one deterministic build, with no variance reported. And the headline comparison is against GPT-2's 2019 pretokenizer, which [a modern one beats on its own](#gpt-4s-regex-deletes-the-same-token-and-pays-for-it-in-slots). For a storage layer where you control both ends, none of that applies and you can use it today.
+The honest limitations. A custom tokenizer produces ids no existing model can read, so if your reader is an LLM you need the lab to ship the vocabulary. Everything here is one 20 MB corpus per language, one held-out file, one deterministic build, with no variance reported. And no language model was trained on any of these vocabularies. For a storage layer where you control both ends, none of that applies and you can use it today.
 
 ## Key Takeaways
 
 - **Every tokenizer stores the same word twice**, and it is most of what they emit. Nine shipped vocabularies across three vendors all hold `the` and `·the` as separate tokens, and four out of five tokens they emit on C4 are of a string stored twice like that.
-- **Marking the absence removes that second form. A modern pretokenizer removes a different token instead.** Gluing punctuation onto the word is worth 9.74% on held-out Python, and the dual flag is worth 9.18%. Two mechanisms, 0.6 points apart, aimed at the same waste.
-- **Doing both beats doing either.** ISBPE plus 4,000 slots of earned glue reaches **271,120 tokens** and **2.827x**, against the modern baseline's 283,269 and 2.711x, while keeping 3.4x as many identifiers whole. Measured by patching the vocabulary after training rather than in the shipped library.
-- **The same win, spent differently, is an 8x smaller vocabulary.** ISBPE needs **7,658 slots** to emit as few tokens on held-out Python as BPE with GPT-2's regex needs 65,536 for. Measured in bits per byte it needs **5,149**.
+- **Marking the absence of a space removes the second form.** Against BPE trained the same way with the same pretokenizer, ISBPE emits **9.6% fewer tokens** on Python and its `xz` size is 4.9% smaller. English and Hindi gain about 1%, and Chinese is level once no space is implied between Chinese characters.
+- **Doing both beats doing either.** ISBPE plus 4,000 glue entries reaches **270,816 tokens** and **2.830x**, against cl100k BPE's 283,269 and 2.711x, with a smaller `xz` size and more identifiers kept whole.
+- **The same win, spent differently, is an 8x smaller vocabulary.** ISBPE with 8,192 slots emits fewer tokens on held-out Python than BPE with 65,536.
 - **A flag pays only when it removes a form from the vocabulary.** The space flag deletes a form per word and wins. Absorbing the line ending into the punctuation before it adds a form instead, and that cost 2.2%.

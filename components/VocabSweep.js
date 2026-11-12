@@ -46,7 +46,7 @@ export default function VocabSweep() {
       <span
         style={{ fontFamily: MONO, fontSize: 12.5, color: c.ink, width: 74, textAlign: 'right' }}
       >
-        {n.toLocaleString()}
+        {n.toLocaleString('en-US')}
       </span>
     </div>
   )
@@ -67,10 +67,10 @@ export default function VocabSweep() {
         tokens emitted on 1.3 MB of held-out Python, lower is better
       </div>
 
-      {bar(row.bpe_tokens, c.off, `BPE @ ${row.v.toLocaleString()}`)}
-      {bar(row.isbpe_tokens, green, `ISBPE @ ${row.v.toLocaleString()}`)}
+      {bar(row.bpe_tokens, c.off, `BPE @ ${row.v.toLocaleString('en-US')}`)}
+      {bar(row.isbpe_tokens, green, `ISBPE @ ${row.v.toLocaleString('en-US')}`)}
       <div style={{ opacity: 0.55 }}>
-        {bar(ref.bpe_tokens, c.axis, `BPE @ ${ref.v.toLocaleString()}`)}
+        {bar(ref.bpe_tokens, c.axis, `BPE @ ${ref.v.toLocaleString('en-US')}`)}
       </div>
 
       <input
@@ -83,9 +83,9 @@ export default function VocabSweep() {
         style={{ width: '100%', marginTop: 12, accentColor: green }}
       />
       <div style={{ display: 'flex', justifyContent: 'space-between', ...LABEL, color: c.muted }}>
-        <span>{rows[0].v.toLocaleString()}</span>
+        <span>{rows[0].v.toLocaleString('en-US')}</span>
         <span>vocabulary size</span>
-        <span>{ref.v.toLocaleString()}</span>
+        <span>{ref.v.toLocaleString('en-US')}</span>
       </div>
 
       <div
@@ -100,21 +100,21 @@ export default function VocabSweep() {
       >
         {beatsRef ? (
           <>
-            ISBPE with <b style={{ color: green }}>{row.v.toLocaleString()}</b> slots emits{' '}
+            ISBPE with <b style={{ color: green }}>{row.v.toLocaleString('en-US')}</b> slots emits{' '}
             <b style={{ color: green }}>
-              {(ref.bpe_tokens - row.isbpe_tokens).toLocaleString()} fewer
+              {(ref.bpe_tokens - row.isbpe_tokens).toLocaleString('en-US')} fewer
             </b>{' '}
-            tokens than BPE with {ref.v.toLocaleString()}.
+            tokens than BPE with {ref.v.toLocaleString('en-US')}.
           </>
         ) : (
           <>
-            At {row.v.toLocaleString()} slots ISBPE still emits{' '}
-            {(row.isbpe_tokens - ref.bpe_tokens).toLocaleString()} more tokens than BPE at{' '}
-            {ref.v.toLocaleString()}.
+            At {row.v.toLocaleString('en-US')} slots ISBPE still emits{' '}
+            {(row.isbpe_tokens - ref.bpe_tokens).toLocaleString('en-US')} more tokens than BPE at{' '}
+            {ref.v.toLocaleString('en-US')}.
           </>
         )}{' '}
         <span style={{ color: c.muted }}>
-          The crossing is at V={DATA.sweep.crossing.toLocaleString()}, a vocabulary{' '}
+          The crossing is at V={DATA.sweep.crossing.toLocaleString('en-US')}, a vocabulary{' '}
           {(100 * (1 - DATA.sweep.crossing / DATA.sweep.ref)).toFixed(1)}% smaller.
         </span>
       </div>
