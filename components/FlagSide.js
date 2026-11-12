@@ -7,7 +7,8 @@ import { LABEL, MONO, chipStyle, labChrome, segButton } from '../lib/wordpiece-l
 // Widget 2 for improving-bpe.mdx: which side of the boundary carries the mark.
 // The post can only tell you that putting the flag on the LEFT token keeps the
 // word whole. This lets you switch the two schemes on the same string and watch
-// it happen, which is the argument the post is actually making.
+// it happen, which is the argument the post is actually making. Both rows
+// show at once so the reader compares without clicking.
 //
 // All three tokenizations per string are real output from the trained
 // vocabularies (tokenizer/exp89_blog_data.py). `get_attraction` is the case
@@ -21,15 +22,14 @@ export default function FlagSide() {
   const c = labChrome(dark)
 
   const [pick, setPick] = useState(0)
-  const [scheme, setScheme] = useState('dual')
   const row = DATA.flagside[pick]
-  const pieces = row[scheme]
   const green = c.channel[0]
 
   // A piece is "whole" when it is a letter run with no mark inside it. That is
   // exactly what the dual-flag rule is supposed to protect, so it gets the
   // colour and everything else stays neutral.
-  const isWord = (p) => /^[A-Za-z]{2,}$/.test(p.s)
+  const words = new Set(row.text.match(/[A-Za-z]+/g) || [])
+  const isWord = (p) => words.has(p.s.trim())
 
   return (
     <div
@@ -49,54 +49,59 @@ export default function FlagSide() {
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 5, marginBottom: 14 }}>
-        {[
-          ['bpe', 'BPE'],
-          ['dual', 'ISBPE'],
-        ].map(([k, label]) => (
-          <button key={k} onClick={() => setScheme(k)} style={segButton(c, scheme === k)}>
+      {[
+        ['bpe', 'BPE'],
+        ['dual', 'ISBPE'],
+      ].map(([k, label]) => (
+        <div
+          key={k}
+          style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}
+        >
+          <span style={{ ...LABEL, color: c.muted, width: 48, flexShrink: 0, paddingTop: 8 }}>
             {label}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 32 }}>
-        {pieces.map((p, i) => (
+          </span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, flex: 1, minHeight: 32 }}>
+            {row[k].map((p, i) => (
+              <span
+                key={i}
+                style={{
+                  ...chipStyle(c, { tint: isWord(p) ? green : undefined }),
+                  whiteSpace: 'pre',
+                }}
+              >
+                {p.l ? <span style={{ opacity: 0.55 }}>#</span> : null}
+                {p.s}
+                {p.r ? <span style={{ opacity: 0.55 }}>#</span> : null}
+              </span>
+            ))}
+          </div>
           <span
-            key={i}
             style={{
-              ...chipStyle(c, { tint: isWord(p) ? green : undefined }),
-              whiteSpace: 'pre',
-              transition: 'all 220ms ease',
+              fontFamily: MONO,
+              fontSize: 12.5,
+              color: c.muted,
+              flexShrink: 0,
+              paddingTop: 8,
+              whiteSpace: 'nowrap',
             }}
           >
-            {p.l ? <span style={{ opacity: 0.55 }}>#</span> : null}
-            {p.s}
-            {p.r ? <span style={{ opacity: 0.55 }}>#</span> : null}
+            {row[k].length} tokens
           </span>
-        ))}
-      </div>
+        </div>
+      ))}
 
       <div
         style={{
-          marginTop: 12,
+          marginTop: 4,
           paddingTop: 10,
           borderTop: `1px solid ${c.border}`,
-          fontSize: 12.5,
+          ...LABEL,
           color: c.muted,
-          fontFamily: MONO,
+          lineHeight: 1.6,
         }}
       >
-        {pieces.length} tokens
-        <span style={{ color: c.muted }}>
-          {'   '}
-          {row.corpus === 'en' ? 'English vocabulary' : 'code vocabulary'}
-        </span>
-      </div>
-
-      <div style={{ ...LABEL, color: c.muted, marginTop: 10, lineHeight: 1.6 }}>
-        green means a whole word came out in one piece. switch between BPE and ISBPE and watch which
-        one keeps it.
+        {row.corpus === 'en' ? 'English vocabulary' : 'code vocabulary'}, 65,536 slots. green means
+        a whole word came out in one piece.
       </div>
     </div>
   )
