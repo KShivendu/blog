@@ -21,8 +21,8 @@ import { LABEL, MONO, labChrome, segButton } from '../lib/wordpiece-lab'
  * slideshow rather than as an event.
  *
  * Pieces come from the real trained vocabularies via tokenizer/exp89_blog_data.py.
- * `get_attraction` runs on the English vocabulary on purpose: on the code one
- * the word is absent and dual-flag gives `get #_# att #raction`.
+ * It shows only the post's running example, `self.account = account`, so the
+ * hero and the method section agree.
  */
 
 // Phase boundaries as fractions of the cycle. Both lanes use the same ones, so
@@ -290,19 +290,23 @@ export default function SpaceSlotHero() {
         }}
       >
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-          {heroes.map((x, i) => (
-            <button
-              key={x.text}
-              onClick={() => {
-                setPick(i)
-                clockRef.current = 0
-                setProgress(0)
-              }}
-              style={segButton(c, i === pick)}
-            >
-              {x.text}
-            </button>
-          ))}
+          {heroes.length === 1 ? (
+            <span style={{ ...LABEL, color: c.muted, alignSelf: 'center' }}>python</span>
+          ) : null}
+          {heroes.length > 1 &&
+            heroes.map((x, i) => (
+              <button
+                key={x.text}
+                onClick={() => {
+                  setPick(i)
+                  clockRef.current = 0
+                  setProgress(0)
+                }}
+                style={segButton(c, i === pick)}
+              >
+                {x.text}
+              </button>
+            ))}
         </div>
         <button onClick={() => setPlaying((v) => !v)} style={{ ...segButton(c, false) }}>
           {playing ? 'pause' : 'play'}

@@ -1,45 +1,9 @@
 {
   "hero": [
     {
-      "text": "the cat sat on the mat",
-      "corpus": "en",
-      "note": "one word, two positions, and BPE needs an entry for each",
-      "bpe": [
-        { "s": "the", "l": false, "r": false },
-        { "s": " cat", "l": false, "r": false },
-        { "s": " sat", "l": false, "r": false },
-        { "s": " on", "l": false, "r": false },
-        { "s": " the", "l": false, "r": false },
-        { "s": " mat", "l": false, "r": false }
-      ],
-      "isbpe": [
-        { "s": "the", "l": false, "r": false },
-        { "s": "cat", "l": false, "r": false },
-        { "s": "sat", "l": false, "r": false },
-        { "s": "on", "l": false, "r": false },
-        { "s": "the", "l": false, "r": false },
-        { "s": "mat", "l": false, "r": false }
-      ],
-      "bpe_slots": [
-        { "k": "the", "s": "the", "l": false, "r": false },
-        { "k": " cat", "s": " cat", "l": false, "r": false },
-        { "k": " sat", "s": " sat", "l": false, "r": false },
-        { "k": " on", "s": " on", "l": false, "r": false },
-        { "k": " the", "s": " the", "l": false, "r": false },
-        { "k": " mat", "s": " mat", "l": false, "r": false }
-      ],
-      "isbpe_slots": [
-        { "k": "the", "s": "the", "l": false, "r": false },
-        { "k": "cat", "s": "cat", "l": false, "r": false },
-        { "k": "sat", "s": "sat", "l": false, "r": false },
-        { "k": "on", "s": "on", "l": false, "r": false },
-        { "k": "mat", "s": "mat", "l": false, "r": false }
-      ]
-    },
-    {
       "text": "self.account = account",
       "corpus": "code",
-      "note": "same word glued and spaced, which is what code does constantly",
+      "note": "one word, two positions: BPE needs a slot for each, ISBPE one",
       "bpe": [
         { "s": "self", "l": false, "r": false },
         { "s": ".", "l": false, "r": false },
@@ -66,33 +30,6 @@
         { "k": "#.#", "s": ".", "l": true, "r": true },
         { "k": "account", "s": "account", "l": false, "r": false },
         { "k": "=", "s": "=", "l": false, "r": false }
-      ]
-    },
-    {
-      "text": "get_attraction",
-      "corpus": "en",
-      "note": "the case that decides which side carries the mark",
-      "bpe": [
-        { "s": "get", "l": false, "r": false },
-        { "s": "_", "l": false, "r": false },
-        { "s": "att", "l": false, "r": false },
-        { "s": "raction", "l": false, "r": false }
-      ],
-      "isbpe": [
-        { "s": "get", "l": false, "r": false },
-        { "s": "_", "l": true, "r": true },
-        { "s": "attraction", "l": false, "r": false }
-      ],
-      "bpe_slots": [
-        { "k": "get", "s": "get", "l": false, "r": false },
-        { "k": "_", "s": "_", "l": false, "r": false },
-        { "k": "att", "s": "att", "l": false, "r": false },
-        { "k": "raction", "s": "raction", "l": false, "r": false }
-      ],
-      "isbpe_slots": [
-        { "k": "get", "s": "get", "l": false, "r": false },
-        { "k": "#_#", "s": "_", "l": true, "r": true },
-        { "k": "attraction", "s": "attraction", "l": false, "r": false }
       ]
     }
   ],
