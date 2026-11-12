@@ -565,7 +565,16 @@ body {
   /* Darker code surface (gray.900) — the shade the old inner box used — now
      applied to the whole code area. Tighter vertical padding. */
   background: #111815;
-  padding: 6px 16px;
+  /* Room around the code so a block reads as a figure, not a strip of text. */
+  padding: 1.1rem 1.4rem;
+}
+/* On the dark site theme the page is nearly as dark as the code surface, so
+   lift the block a little and give it a visible edge. */
+.dark .tty-codeblock {
+  border-color: #34413a;
+}
+.dark .tty-codeblock pre {
+  background: #141c18;
 }
 /* The <code> inside a <pre> must not carry the inline-code chrome (its own
    darker background + border + padding) — that renders a nested "box in a box".
@@ -582,7 +591,8 @@ body {
 .tty-codeblock pre,
 .tty-codeblock pre code,
 .tty-codeblock .code-line {
-  line-height: 1.5;
+  /* Tight enough that ASCII tables and diagrams join up line to line. */
+  line-height: 1.4;
 }
 /* Copy button: sits in the title-bar top-right, aligned with the language
    label. The code surface (gray.800 #1e2822) is dark in BOTH site themes, so
@@ -634,13 +644,13 @@ body {
    theme's specificity so it wins there too. Non-linked inline code and code
    BLOCKS are untouched. */
 .prose-tty a code {
-  color: #111815; /* gray.900 — normal light inline-code text */
+  color: #8a4b08; /* same warm text as plain inline code */
   font-weight: 400;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 .dark .prose-tty a code {
-  color: #f0f2f0; /* gray.100 — normal dark inline-code text */
+  color: #e6c07b; /* same warm text as plain inline code */
 }
 .prose-tty a:hover code,
 .dark .prose-tty a:hover code {

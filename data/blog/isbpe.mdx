@@ -14,6 +14,8 @@ authors: ['kshivendu']
 Open OpenAI's o200k vocabulary and you find `the` **nine** times:
 
 ```
+o200k entries that spell the word 'the'
+
 'the'   ' the'   '.the'   '(the'   ',the'   '-the'   '/the'   '_the'   '\tthe'
 ```
 
@@ -26,6 +28,9 @@ The root of it is the space. Even a tokenizer that glues nothing but the space h
 Every shipped vocabulary I checked does this, and these duplicates are most of what they write. **Four out of five tokens** they emit on 20 MB of English web text (C4) are a word they also store in another form:
 
 ```
+share of tokens that are a word the vocabulary also stores in another form
+(20 MB of English web text, C4)
+
 r50k          GPT-2, GPT-3                 78.4%
 cl100k        GPT-3.5, GPT-4               79.7%
 o200k         GPT-4o onwards               80.8%
@@ -39,37 +44,35 @@ So why are we storing the space at all, let alone twice?
 
 ## Mark the absence, not the presence
 
-ISBPE (implied-space BPE) never stores a space. The decoder puts one between every two tokens, and a `#` marks where it's missing:
+ISBPE (implied-space BPE) never stores a space. The decoder puts one between every two tokens, and a `#` marks where it's missing. Here is one line of Python, split by both tokenizers:
 
 ```
-'the cat sat'
-  BPE    the | ' cat' | ' sat'                 space stored in the token
-  ISBPE  the | cat | sat                       space implied
+'self.account = account'   (models with 65,536 slots, trained on the same 20 MB of Python)
 
-'a, b) c: d'
-  BPE    a | , | ' b' | ) | ' c' | : | ' d'
-  ISBPE  a | #, | b | #) | c | #: | d          # = no space here
-
-'tokenizations'
-  BPE    token | izations
-  ISBPE  token | #izations
+  BPE     self | . | account | ' =' | ' account'
+  ISBPE   self | #.# | account | = | account
 ```
 
-A `#` on the left of a token means "no space before me", and on the right "no space after me". When a word follows punctuation, the mark goes on the punctuation, so the word keeps the same slot wherever it appears:
+- **BPE** stores the space inside the token, so it needs two slots for one word: `account` after the dot and `' account'` after the space.
+- **ISBPE** uses one slot, `account`, in both places. The dot carries the marks instead, as `#.#`.
+
+A `#` on the left of a token means "no space before me", and on the right "no space after me". When a word follows punctuation, the mark goes on the punctuation, so the word keeps one slot wherever it appears. On the Python test file BPE uses `account` 19 times and `' account'` 33 times. ISBPE uses its one `account` 51 times.
+
+When a name is split into pieces, the mark goes on the later piece. `#email` means "email, glued to the token before". A longer name from the same file:
 
 ```
-'get_attraction'
-  BPE    get | _ | att | raction       ' attraction' is a slot, 'attraction' isn't
-  ISBPE  get | #_# | attraction        same 'attraction' as after a space
+'self.accountemail'
+
+  ISBPE   self | #.# | account | #email
 ```
 
 Try a few more:
 
 <FlagSide />
 
-`split` is now the same slot it uses in `' split'`. This rule is exact. A word chunk is a maximal run of letters, so whatever sits right before a word with no space is punctuation or a digit, and that token can carry the mark. On the code corpus that held **805,857 times out of 805,857**.
+Putting the mark on the punctuation always works. A word chunk is a maximal run of letters, so whatever sits right before a word with no space is punctuation or a digit, and that token can carry the mark. On the code corpus that held **805,857 times out of 805,857**.
 
-So a word never needs a `#` form. `format` used to be split across two slots, one used 1,433 times after a space and one used 5,740 times after punctuation. Now it's one slot used **7,162** times.
+So a whole word never needs a `#` form. The effect is biggest on common words. BPE splits `self` across two slots, `' self'` used 2,627 times and `self` used 1,525 times. ISBPE has one `self`, used **4,145** times.
 
 ## Results
 
@@ -109,15 +112,16 @@ Every baseline is BPE retrained on the same 20 MB, at the same 65,536 slots, wit
 
 Observations:
 
-- **On Python, 9.6% fewer tokens** (304,228 against 336,466). One line from the test file shows where they go:
+- **On Python, 9.6% fewer tokens** (304,228 against 336,466). The longer name from before shows where they go:
 
   ```
-  'self.accountemail:'
+  'self.accountemail:'   (Python test file)
+
     BPE    self | . | ac | coun | te | mail | :     7 tokens
     ISBPE  self | #.# | account | #email | #:      5 tokens
   ```
 
-  BPE learned `account` mostly as `' account'`, so after a dot it shatters.
+  ISBPE finds the same `account` slot it uses everywhere else. BPE's merges break the name into four pieces.
 
 - **The ids are more predictable too.** Compressed with `xz`, ISBPE's id stream is 4.9% smaller on code (1.3187 bits per byte of text against 1.3860). I use `xz` as a rough stand-in for how hard the stream is to model.
 - **English gains under 1%** (0.7% fewer tokens). English puts a space before almost every word, so there's little to pool. Under a third of the English vocabulary is duplicates (30.0%), against almost half of the code one (47.3%).
