@@ -1,5 +1,5 @@
 ---
-title: 'Implicit Space BPE'
+title: 'Implied-Space BPE'
 subtitle: "Fixing BPE's duplicate tokens"
 date: '2026-09-17'
 lastmod: '2026-11-12'
@@ -39,7 +39,7 @@ So why are we storing the space at all, let alone twice?
 
 ## Mark the absence, not the presence
 
-ISBPE (implicit-space BPE) never stores a space. The decoder puts one between every two tokens, and a `#` marks where it's missing:
+ISBPE (implied-space BPE) never stores a space. The decoder puts one between every two tokens, and a `#` marks where it's missing:
 
 ```
 'the cat sat'     ->  the | cat | sat
