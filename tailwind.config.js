@@ -119,10 +119,14 @@ module.exports = {
             },
             pre: {
               backgroundColor: theme('colors.gray.800'),
+              // Same green-grey family as the page; Tailwind's default is a cool blue-grey.
+              color: '#d4ddd7',
             },
             code: {
-              // No border, so inline code reads as a word, not a button.
+              // No border and normal weight, so inline code reads as a word,
+              // not a bold button competing with **bold** emphasis.
               color: theme('colors.gray.900'),
+              fontWeight: '400',
               backgroundColor: theme('colors.gray.100'),
               border: '0',
               paddingLeft: '4px',
@@ -195,6 +199,8 @@ module.exports = {
             },
             pre: {
               backgroundColor: theme('colors.gray.800'),
+              // Same green-grey family as the page; Tailwind's default is a cool blue-grey.
+              color: '#d4ddd7',
             },
             code: {
               color: '#d4ddd7',

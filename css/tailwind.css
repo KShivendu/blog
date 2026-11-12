@@ -566,13 +566,10 @@ body {
      applied to the whole code area. Tighter vertical padding. */
   background: #111815;
   /* Room around the code so a block reads as a figure, not a strip of text. */
-  padding: 1.1rem 1.4rem;
+  padding: 0.9rem 1.25rem;
 }
 /* On the dark site theme the page is nearly as dark as the code surface, so
-   lift the block a little and give it a visible edge. */
-.dark .tty-codeblock {
-  border-color: #34413a;
-}
+   lift the block a little. The edge stays the same hairline as other boxes. */
 .dark .tty-codeblock pre {
   background: #141c18;
 }
