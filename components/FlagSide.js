@@ -52,8 +52,7 @@ export default function FlagSide() {
       <div style={{ display: 'flex', gap: 5, marginBottom: 14 }}>
         {[
           ['bpe', 'BPE'],
-          ['single', 'mark on the word'],
-          ['dual', 'mark on the token before'],
+          ['dual', 'ISBPE'],
         ].map(([k, label]) => (
           <button key={k} onClick={() => setScheme(k)} style={segButton(c, scheme === k)}>
             {label}
@@ -93,17 +92,11 @@ export default function FlagSide() {
           {'   '}
           {row.corpus === 'en' ? 'English vocabulary' : 'code vocabulary'}
         </span>
-        {scheme !== 'bpe' && row.single.length !== row.dual.length ? (
-          <span style={{ color: c.ink }}>
-            {'  '}
-            (right-marked needs {row.single.length}, ISBPE needs {row.dual.length})
-          </span>
-        ) : null}
       </div>
 
       <div style={{ ...LABEL, color: c.muted, marginTop: 10, lineHeight: 1.6 }}>
-        green means a whole word came out in one piece. switch between the two marking rules and
-        watch which one keeps it.
+        green means a whole word came out in one piece. switch between BPE and ISBPE and watch which
+        one keeps it.
       </div>
     </div>
   )

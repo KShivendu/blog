@@ -4,11 +4,9 @@ import { useEffect, useState } from 'react'
 import DATA from '../data/isbpe-blog.json'
 import { LABEL, MONO, chipStyle, labChrome, segButton } from '../lib/wordpiece-lab'
 
-// Other scripts for isbpe.mdx. Chinese: switch between BPE, ISBPE, and ISBPE
-// without the no-space rule on the same sentence. Red chips are strings that
-// vocabulary holds twice (with and without the leading mark), which is the
-// waste the rule removes. Hindi: GPT-2's pretokenizer against ours, where the
-// win is the regex rather than the space handling.
+// Other scripts for isbpe.mdx. Chinese: BPE against ISBPE on the same
+// sentence. Hindi: GPT-2's pretokenizer against ours, where the win is the
+// regex rather than the space handling.
 //
 // Real output of the paper's 65,536-entry models, written by
 // tokenizer/exp89_blog_data.py.
@@ -45,7 +43,7 @@ export default function ScriptSpaces() {
 
   const [script, setScript] = useState('chinese')
   const [pick, setPick] = useState(0)
-  const [zhScheme, setZhScheme] = useState('norule')
+  const [zhScheme, setZhScheme] = useState('isbpe')
   const [hiScheme, setHiScheme] = useState('gpt2')
 
   const zh = DATA.scripts.chinese[pick]
@@ -53,7 +51,6 @@ export default function ScriptSpaces() {
   const hi = DATA.scripts.hindi
   const zhPieces = zh[zhScheme]
   const hiPieces = hi[hiScheme]
-  const doubledHere = zhPieces.filter((p) => p.d).length
 
   const footer = {
     marginTop: 12,
@@ -102,30 +99,18 @@ export default function ScriptSpaces() {
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
             {[
               ['bpe', 'BPE'],
-              ['norule', 'ISBPE, space implied everywhere'],
-              ['isbpe', 'ISBPE, no space between Chinese characters'],
+              ['isbpe', 'ISBPE'],
             ].map(([k, label]) => (
               <button key={k} onClick={() => setZhScheme(k)} style={segButton(c, zhScheme === k)}>
                 {label}
               </button>
             ))}
           </div>
-          <Chips pieces={zhPieces} c={c} showDoubled={zhScheme !== 'bpe'} />
+          <Chips pieces={zhPieces} c={c} showDoubled={false} />
           <div style={footer}>
             <span style={{ color: c.ink }}>{zhPieces.length} tokens</span>
-            {zhScheme !== 'bpe' ? (
-              <span>
-                {'  ·  '}
-                {doubledHere} of them are strings this vocabulary holds both with and without the
-                mark
-              </span>
-            ) : null}
             <br />
-            whole Chinese test file: BPE {fmt(zt.bpe)} · space implied everywhere {fmt(zt.norule)} ·
-            no space between Chinese characters {fmt(zt.isbpe)} tokens
-            <br />
-            strings held both ways: {fmt(zt.doubled_norule)} of {fmt(zt.distinct_norule)} without
-            the rule, {fmt(zt.doubled_isbpe)} of {fmt(zt.distinct_isbpe)} with it
+            whole Chinese test file: BPE {fmt(zt.bpe)} · ISBPE {fmt(zt.isbpe)} tokens
           </div>
         </>
       ) : (
@@ -157,7 +142,7 @@ export default function ScriptSpaces() {
 
       <div style={{ ...LABEL, color: c.muted, marginTop: 10, lineHeight: 1.6 }}>
         {script === 'chinese'
-          ? 'red marks a string the vocabulary stores twice, once with # and once without. the rule removes most of them.'
+          ? 'between two chinese characters ISBPE implies no space, so chinese text needs no # marks.'
           : "GPT-2's pretokenizer cuts at every vowel sign. counting those signs as letters keeps each word in one chunk."}
       </div>
     </div>
