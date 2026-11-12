@@ -72,7 +72,7 @@ export default function GlueSlider() {
               justifyContent: 'space-between',
               fontFamily: MONO,
               fontSize: 12,
-              color: r.ours ? green : c.muted,
+              color: r.ours ? green : r.name === 'BPE' ? c.bad : c.muted,
               marginBottom: 3,
               gap: 8,
             }}
@@ -87,7 +87,7 @@ export default function GlueSlider() {
               style={{
                 width: width(r.tokens),
                 height: '100%',
-                background: r.ours ? green : c.off,
+                background: r.ours ? green : r.name === 'BPE' ? c.bad : c.off,
                 borderRadius: 2,
                 transition: 'width 300ms ease',
               }}

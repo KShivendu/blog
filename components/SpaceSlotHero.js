@@ -21,7 +21,7 @@ import { LABEL, MONO, labChrome, segButton } from '../lib/wordpiece-lab'
  * slideshow rather than as an event.
  *
  * Pieces come from the real trained vocabularies via tokenizer/exp89_blog_data.py.
- * It shows only the post's running example, `self.account = account`, so the
+ * It shows only the post's running example, `self.items = items or self.items`, so the
  * hero and the method section agree.
  */
 
@@ -99,6 +99,7 @@ export default function SpaceSlotHero() {
   const h = heroes[pick]
   const p = progress
   const green = c.channel[0]
+  // BPE is red in every widget and chart of the post, ISBPE green.
   const red = c.bad
 
   // The duplicate is the point: one surface word BPE holds in two slots.
@@ -106,11 +107,15 @@ export default function SpaceSlotHero() {
   // strip both. Testing startsWith(' ') matched nothing and the duplicate was
   // never highlighted, which is the one thing this widget exists to show.
   const core = (str) => str.replace(/^[ \u00b7]+/, '')
-  const dup = (() => {
-    const bare = new Set(h.bpe_slots.filter((x) => x.s === core(x.s)).map((x) => x.s))
-    const hit = h.bpe_slots.find((x) => x.s !== core(x.s) && bare.has(core(x.s)))
-    return hit ? core(hit.s) : null
-  })()
+  // Every word BPE holds in two slots on this line, bare and with the space.
+  // The data lists them; otherwise find them from the slots.
+  const dups = new Set(
+    h.dup ||
+      h.bpe_slots
+        .filter((x) => x.s !== core(x.s))
+        .map((x) => core(x.s))
+        .filter((w) => h.bpe_slots.some((y) => y.s === w))
+  )
 
   const FS = narrow ? 11 : 13
   const CH = FS * 0.62
@@ -150,7 +155,7 @@ export default function SpaceSlotHero() {
     )
   )
   const LANE_X = narrow ? 0 : 62
-  const VB_W = W + LANE_X + 56
+  const VB_W = W + LANE_X + 96 // room for the "7 slots" count
   const VB_H = ROW * 2 + (narrow ? 32 : 26)
 
   const Chip = ({ d, y, tint, o = 1, dim }) => {
@@ -340,7 +345,7 @@ export default function SpaceSlotHero() {
               d={d}
               y={yBPE}
               o={tCut}
-              tint={dup && core(d.s) === dup ? red : undefined}
+              tint={dups.has(core(d.s)) ? red : undefined}
             />
           ))}
           <Count
@@ -358,7 +363,7 @@ export default function SpaceSlotHero() {
               d={d}
               y={yISB}
               o={tCut}
-              tint={tSplit > 0.4 && dup && core(d.s) === dup ? green : undefined}
+              tint={tSplit > 0.4 && dups.has(core(d.s)) ? green : undefined}
             />
           ))}
           <Count
@@ -390,14 +395,7 @@ export default function SpaceSlotHero() {
       />
 
       <div style={{ fontSize: 12.5, color: c.ink, lineHeight: 1.65 }}>
-        <span style={{ color: c.muted }}>{h.note}.</span>{' '}
-        {dup ? (
-          <>
-            BPE needs one slot for <code style={{ fontFamily: MONO }}>{dup}</code> and a second for
-            the same word with the space attached to it.{' '}
-          </>
-        ) : null}
-        Across a real vocabulary that is{' '}
+        <span style={{ color: c.muted }}>{h.note}.</span> Across a real vocabulary that is{' '}
         <b style={{ color: red }}>{DATA.slots.pairs.toLocaleString('en-US')}</b> strings held in
         both forms, <b style={{ color: red }}>{DATA.slots.share}%</b> of all{' '}
         {DATA.slots.vocab.toLocaleString('en-US')} slots, on 20 MB of Python.

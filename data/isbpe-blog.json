@@ -1,35 +1,47 @@
 {
   "hero": [
     {
-      "text": "self.account = account",
+      "text": "self.items = items or self.items",
       "corpus": "code",
-      "note": "one word, two positions: BPE needs a slot for each, ISBPE one",
+      "dup": ["self", "items"],
+      "note": "BPE stores self and items twice, once bare and once with the space. ISBPE stores each once",
       "bpe": [
         { "s": "self", "l": false, "r": false },
         { "s": ".", "l": false, "r": false },
-        { "s": "account", "l": false, "r": false },
+        { "s": "items", "l": false, "r": false },
         { "s": " =", "l": false, "r": false },
-        { "s": " account", "l": false, "r": false }
+        { "s": " items", "l": false, "r": false },
+        { "s": " or", "l": false, "r": false },
+        { "s": " self", "l": false, "r": false },
+        { "s": ".", "l": false, "r": false },
+        { "s": "items", "l": false, "r": false }
       ],
       "isbpe": [
         { "s": "self", "l": false, "r": false },
         { "s": ".", "l": true, "r": true },
-        { "s": "account", "l": false, "r": false },
+        { "s": "items", "l": false, "r": false },
         { "s": "=", "l": false, "r": false },
-        { "s": "account", "l": false, "r": false }
+        { "s": "items", "l": false, "r": false },
+        { "s": "or", "l": false, "r": false },
+        { "s": "self", "l": false, "r": false },
+        { "s": ".", "l": true, "r": true },
+        { "s": "items", "l": false, "r": false }
       ],
       "bpe_slots": [
         { "k": "self", "s": "self", "l": false, "r": false },
         { "k": ".", "s": ".", "l": false, "r": false },
-        { "k": "account", "s": "account", "l": false, "r": false },
+        { "k": "items", "s": "items", "l": false, "r": false },
         { "k": " =", "s": " =", "l": false, "r": false },
-        { "k": " account", "s": " account", "l": false, "r": false }
+        { "k": " items", "s": " items", "l": false, "r": false },
+        { "k": " or", "s": " or", "l": false, "r": false },
+        { "k": " self", "s": " self", "l": false, "r": false }
       ],
       "isbpe_slots": [
         { "k": "self", "s": "self", "l": false, "r": false },
         { "k": "#.#", "s": ".", "l": true, "r": true },
-        { "k": "account", "s": "account", "l": false, "r": false },
-        { "k": "=", "s": "=", "l": false, "r": false }
+        { "k": "items", "s": "items", "l": false, "r": false },
+        { "k": "=", "s": "=", "l": false, "r": false },
+        { "k": "or", "s": "or", "l": false, "r": false }
       ]
     }
   ],

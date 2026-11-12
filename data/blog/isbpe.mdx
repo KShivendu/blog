@@ -40,31 +40,23 @@ SmolLM2       HuggingFace                  78.0%
 Gemma 2       Google                       87.1%
 ```
 
-So why are we storing the space at all, let alone twice?
+So why store the space at all? ISBPE (implied-space BPE) doesn't. It marks only where a space is missing, and on Python it needs **9.6% fewer tokens** than BPE trained the same way.
 
 ## Mark the absence, not the presence
 
-ISBPE (implied-space BPE) never stores a space. The decoder puts one between every two tokens, and a `#` marks where it's missing. Here is one line of Python, split by both tokenizers:
+The decoder puts a space between every two tokens, and a `#` marks where there isn't one. One line of Python, split by both tokenizers:
 
 ```
-'self.account = account'   (models with 65,536 slots, trained on the same 20 MB of Python)
+'self.items = items or self.items'   (65,536-slot models, trained on the same 20 MB of Python)
 
-  BPE     self | . | account | ' =' | ' account'
-  ISBPE   self | #.# | account | = | account
+  BPE     self | . | items | ' =' | ' items' | ' or' | ' self' | . | items     7 slots
+  ISBPE   self | #.# | items | = | items | or | self | #.# | items            5 slots
 ```
 
-- **BPE** stores the space inside the token, so it needs two slots for one word: `account` after the dot and `' account'` after the space.
-- **ISBPE** uses one slot, `account`, in both places. The dot carries the marks instead, as `#.#`.
+- **BPE** stores the space inside the token, so it needs two slots for each word here: `items` and `' items'`, `self` and `' self'`.
+- **ISBPE** uses one slot per word, wherever it appears. The dot carries the marks instead. A `#` on the left means "no space before me", on the right "no space after me", so `#.#` has neither.
 
-A `#` on the left of a token means "no space before me", and on the right "no space after me". When a word follows punctuation, the mark goes on the punctuation, so the word keeps one slot wherever it appears. On the Python test file BPE uses `account` 19 times and `' account'` 33 times. ISBPE uses its one `account` 51 times.
-
-When a name is split into pieces, the mark goes on the later piece. `#email` means "email, glued to the token before". A longer name from the same file:
-
-```
-'self.accountemail'
-
-  ISBPE   self | #.# | account | #email
-```
+When a word follows punctuation, the mark goes on the punctuation. When a name splits into pieces, it goes on the later piece: `fireEvent` is `fire | #Event`.
 
 Try a few more:
 
@@ -72,11 +64,11 @@ Try a few more:
 
 Putting the mark on the punctuation always works. A word chunk is a maximal run of letters, so whatever sits right before a word with no space is punctuation or a digit, and that token can carry the mark. On the code corpus that held **805,857 times out of 805,857**.
 
-So a whole word never needs a `#` form. The effect is biggest on common words. BPE splits `self` across two slots, `' self'` used 2,627 times and `self` used 1,525 times. ISBPE has one `self`, used **4,145** times.
+So a whole word never needs a `#` form, and each word keeps one slot. On the Python test file BPE splits `self` across two, `' self'` used 2,627 times and `self` 1,525 times. ISBPE has one `self`, used **4,145** times.
 
 ## Results
 
-Every baseline is BPE retrained on the same 20 MB, at the same 65,536 slots, with the same pretokenizer. Only the space handling differs.
+The baseline is BPE retrained on the same 20 MB, with the same 65,536 slots and pretokenizer. Only the space handling differs.
 
 <BarChart
   orientation="horizontal"
@@ -92,7 +84,7 @@ Every baseline is BPE retrained on the same 20 MB, at the same 65,536 slots, wit
       valueTicks: [0, 100, 200, 300],
       categories: ['English (C4)', 'Python code'],
       series: [
-        { name: 'BPE', role: 'series1', values: [276.5, 336.5] },
+        { name: 'BPE', role: 'bad', values: [276.5, 336.5] },
         { name: 'ISBPE', role: 'series0', values: [274.5, 304.2] },
       ],
     },
@@ -103,7 +95,7 @@ Every baseline is BPE retrained on the same 20 MB, at the same 65,536 slots, wit
       valueTicks: [0, 0.6, 1.2, 1.8, 2.4],
       categories: ['English (C4)', 'Python code'],
       series: [
-        { name: 'BPE', role: 'series1', values: [2.1362, 1.386] },
+        { name: 'BPE', role: 'bad', values: [2.1362, 1.386] },
         { name: 'ISBPE', role: 'series0', values: [2.1046, 1.3187] },
       ],
     },
@@ -112,7 +104,7 @@ Every baseline is BPE retrained on the same 20 MB, at the same 65,536 slots, wit
 
 Observations:
 
-- **On Python, 9.6% fewer tokens** (304,228 against 336,466). The longer name from before shows where they go:
+- **On Python, 9.6% fewer tokens** (304,228 against 336,466). One line from the test file shows where they go:
 
   ```
   'self.accountemail:'   (Python test file)
@@ -121,9 +113,9 @@ Observations:
     ISBPE  self | #.# | account | #email | #:      5 tokens
   ```
 
-  ISBPE finds the same `account` slot it uses everywhere else. BPE's merges break the name into four pieces.
+  ISBPE keeps `account` whole. BPE's merges break the name into four pieces.
 
-- **The ids are more predictable too.** Compressed with `xz`, ISBPE's id stream is 4.9% smaller on code (1.3187 bits per byte of text against 1.3860). I use `xz` as a rough stand-in for how hard the stream is to model.
+- **The ids are more predictable too.** Compressed with `xz`, a rough stand-in for how hard the stream is to model, ISBPE's ids are 4.9% smaller on code (1.3187 bits per byte of text against 1.3860).
 - **English gains under 1%** (0.7% fewer tokens). English puts a space before almost every word, so there's little to pool. Under a third of the English vocabulary is duplicates (30.0%), against almost half of the code one (47.3%).
 
 **Why not make the space its own token?** That also gives each word one slot, but now every space costs a token. On the Python file that's 35% more tokens than BPE (454,187), and `xz` barely moves (1.3823 against 1.3860).
@@ -132,7 +124,7 @@ Observations:
 
 GPT-4's pretokenizer (cl100k) goes after the same waste from the other side. It lets a punctuation mark join the next word, so `lang.split` is `lang | .split`. That saves a token and costs a slot per form. It's how cl100k ends up with sixteen forms of `value`.
 
-Retrained on my 20 MB, cl100k emits 283,269 tokens against ISBPE's 304,228. You can't stack the two directly, because ISBPE needs `.` to be its own token to carry the mark. So I add the joined tokens only where they pay. Train at 65,536 minus K slots, then give the K slots to the most frequent punctuation-word pairs. `split` keeps its one slot, and `.split` is an extra one. I call these **glue entries**.
+Retrained on my 20 MB, it beats plain ISBPE on tokens (283,269 against 304,228). The two don't stack directly, because ISBPE needs `.` as its own token to carry the mark. So I add joined tokens only where they pay. Train at 65,536 minus K slots, then give the K slots to the most frequent punctuation-word pairs. `split` keeps its one slot, and `.split` is an extra one. I call these **glue entries**.
 
 <GlueSlider />
 
@@ -174,7 +166,7 @@ BPE     位于 | 梅 | 州市 | ， | 于 | 1997 | 年开通 | 。
 ISBPE   位于 | 梅 | 州市 | ， | 于 | #1997# | 年开通 | 。
 ```
 
-ISBPE is level with BPE here, 0.15% more tokens (299,398 against 298,947). Four out of five of its token ends land on a word boundary, the same as BPE's (80.9% against 81.1%, with the [jieba](https://github.com/fxsjy/jieba) segmenter as the reference). o200k needs 4.7% fewer tokens than both, by joining punctuation to the next word, for example `，在`. I haven't tried glue entries on Chinese.
+ISBPE is level with BPE here, 0.15% more tokens (299,398 against 298,947). Four out of five of its token ends land on a word boundary, the same as BPE's (80.9% against 81.1%, with the [jieba](https://github.com/fxsjy/jieba) segmenter as the reference). o200k needs about 4.6% fewer tokens than either (285,281), by joining punctuation to the next word, for example `，在`. I haven't tried glue entries on Chinese.
 
 ## It transfers to text it never saw
 
@@ -199,18 +191,17 @@ Compression ratio here is text bytes per byte of stored ids (frequent ids take 1
 
 ## What it costs
 
-- **WikiText loses 2.1%**, as above.
-- **Chinese is level, not better**, and o200k beats it by 4.7%.
-- **Identifiers take slightly more pieces.** They average 2.42 tokens each on average against BPE's 2.37, although more are kept whole. `accountemail` drops from 4 pieces to 2, while `Segments` goes from 1 to 3 (`S | #eg | #ments`).
+- **WikiText loses 2.1%**, because it puts spaces around punctuation.
+- **Chinese is level with BPE**, and o200k beats both.
+- **Identifiers take slightly more pieces.** They average 2.42 tokens against BPE's 2.37, although more are kept whole. `accountemail` drops from 4 pieces to 2, while `Segments` goes from 1 to 3 (`S | #eg | #ments`).
 - **Small vocabularies lose** on English, from 4,096 slots down.
 
 ## Does it help an LLM?
 
-I don't know yet. I didn't train one. A token saving doesn't carry over fully, because removing a token can make the rest harder to predict. A model that sees only the two tokens before keeps 7% of ISBPE's token saving on code, measured in bits per byte. `xz`, which reads the whole file, keeps 53%. The two even rank the placements differently. Only a trained model can settle it. [Goldman et al. (2024)](https://aclanthology.org/2024.findings-acl.134/) did train models and found compression tracks downstream quality, which is the stronger evidence. (Measured with GPT-2's text-splitting rule.)
+I don't know yet, because I didn't train one. A token saving doesn't carry over fully, since removing a token can make the rest harder to predict. On code, a model that sees only the two previous tokens keeps 7% of ISBPE's saving in bits per byte. `xz` reads the whole file and keeps 53%. Only a trained model can settle it. [Goldman et al. (2024)](https://aclanthology.org/2024.findings-acl.134/) trained models and found compression tracks downstream quality.
 
-## The pretokenizer
-
-ISBPE's text-splitting rule is GPT-2's with three changes:
+<details>
+<summary>The pretokenizer: GPT-2's rule with three changes</summary>
 
 ```
  ?[\p{L}\p{M}]++(?:['’](?i:[sdmt]|ll|ve|re)(?!\p{L}))?   a word
@@ -222,6 +213,8 @@ ISBPE's text-splitting rule is GPT-2's with three changes:
 - **Combining marks count as letters** (`\p{M}`), from o200k. That's the Hindi fix.
 - **A contraction stays on its word**, straight or curly apostrophe, from o200k. `don’t` is one chunk.
 - **The contraction can't be followed by a letter** (`(?!\p{L})`). GPT-2's rule fires inside quoted strings and eats the first letter: `b'test'` becomes `b | 't | est | '`. That broke the "a word always follows punctuation" argument 206 times on code. With the guard it's zero.
+
+</details>
 
 ## Using it
 
@@ -243,3 +236,17 @@ There's a Python library and a Rust port that encodes about 19x faster and build
 - **Tokenizers store each common word many times.** o200k holds `the` nine times and `get` seventeen, and four out of five tokens they write are such a duplicate.
 - **Marking the missing space instead removes the duplicates.** On Python: 9.6% fewer tokens than BPE trained the same way, and with an eighth of the vocabulary it still needs fewer. English and Hindi gain about 1%, and Chinese is level with one extra rule.
 - **Add 4,000 glue entries and it beats GPT-4's pretokenizer** by 4.4% on tokens, with a smaller `xz` size.
+
+## Citation
+
+If you find this useful, please cite:
+
+```bibtex
+@misc{kumar2026isbpe,
+  author       = {Kumar Shivendu},
+  title        = {Implied-Space BPE: Fixing BPE's duplicate tokens},
+  year         = {2026},
+  url          = {https://www.kshivendu.dev/blog/isbpe},
+  note         = {Blog post}
+}
+```
