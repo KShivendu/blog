@@ -1,11 +1,11 @@
 ---
 title: 'Stop Averaging Search Evals'
-subtitle: 'Report p25/p50 and look into your queries'
+subtitle: 'A better average can still hurt queries'
 date: '2026-08-27'
 lastmod: '2026-08-27'
 tags: ['search', 'evals', 'evaluation', 'metrics']
 draft: false
-summary: 'Search evals hide their tail. We track p50/p99 for latency because an average hides the tail, then report search quality as one average NDCG and call it a day. A mean of 27 can sit on top of a quarter of queries finding nothing at all. Track p25 and p50 alongside the mean, then debug the queries that moved.'
+summary: 'Search evals hide their tail. We track p50/p99 for latency because an average hides the tail, then report search quality as one average NDCG and call it a day. A mean of 27 can sit on top of a quarter of queries finding nothing at all. Look at the whole distribution next to the mean, then debug the queries that moved.'
 authors: ['kshivendu']
 ---
 
