@@ -2,7 +2,7 @@
 title: 'Keyword Search with Jev'
 subtitle: 'Teach BM25 which words are important'
 date: '2026-10-14'
-lastmod: '2026-10-16'
+lastmod: '2026-11-14'
 tags: ['search', 'bm25', 'sparse-retrieval', 'nlp']
 draft: true
 summary: 'BM25 uses rarity as a proxy for term importance. Jev adds context, and distilling its judgments into a small model makes those query weights cheaper to serve.'
@@ -50,18 +50,18 @@ Compare the weights below. The relevant film, _Othello_, moves from fourth to th
 
 Observations:
 
-- `Venice` rises from 4.73 to **8.26**, overtaking `shot`, which rises from 5.39 to 5.89.
+- `Venice` rises from 4.73 to **9.32**, overtaking `shot`, which rises from 5.39 to 6.24.
 - The first result stays the same. The changes further down the ranking raise this query's top-10 quality score from **69.37 to 72.73**.
 
 ## Where Jev fits into BM25
 
 BM25 scores each matching word using **strength of the match × word weight**, then adds those contributions. The match strength accounts for how often the word appears and the document's length.
 
-I change the word weight by adjusting the document count used in IDF. For `Venice`:
+I keep IDF and add an importance bonus on top. For `Venice`:
 
 1. It appears in **53 of 6,045 documents**, giving an ordinary IDF weight of **4.73**.
-2. Jev gives it 98% importance. Treat its document count as `53 × (1 − 0.98) = 1.06`.
-3. Recalculate IDF with that count: `ln((6,045 + 1) / (1.06 + 0.5)) ≈ 8.26`.
+2. Jev gives it 98% importance. The bonus is `ln((1 + 0.98) / (1 − 0.98)) = ln(99) ≈ 4.60`.
+3. The new weight is `4.73 + 4.60 ≈ 9.32`.
 
 Here is the change in the formula. `df` counts documents containing the word, `N` is the total documents, and `p` is Jev's importance between 0 and 1:
 
@@ -69,18 +69,50 @@ Here is the change in the formula. `df` counts documents containing the word, `N
 
 $$
 \begin{aligned}
-\text{BM25 weight} &= -\ln\!\left(\frac{\mathrm{df}+0.5}{N+1}\right) \\
-\text{With Jev} &= -\ln\!\left(\frac{\mathrm{df}(1-p)+0.5}{N+1}\right)
+\text{BM25 weight} &= \mathrm{IDF} = \ln\!\left(\frac{N+1}{\mathrm{df}+0.5}\right) \\
+\text{With Jev} &= \mathrm{IDF} + \ln\!\left(\frac{1+p}{1-p}\right)
 \end{aligned}
 $$
 
 </div>
 
-The replacement is **`df` → `df × (1 − importance)`**. BM25 uses the new weight in the same match-strength calculation.
+Here `ln` is the natural logarithm. The bonus depends only on `p`:
 
-Here `ln` is the natural logarithm. The `+0.5` and `+1` are the usual [IDF smoothing](https://lucene.apache.org/core/10_2_2/core/org/apache/lucene/search/similarities/BM25Similarity.html). They keep the weight finite even at 100% importance. At zero importance, we get ordinary IDF back.
+| Jev importance `p` | Bonus added to IDF |
+| -----------------: | -----------------: |
+|                 0% |               0.00 |
+|                50% |               1.10 |
+|                90% |               2.94 |
+|                98% |               4.60 |
 
-The adjusted count changes the score. `Venice` still matches the same 53 documents. BM25's match strength and stemming stay the same. The default settings are `k₁ = 1.2` and `b = 0.75`.
+At zero importance, the bonus is 0 and we get ordinary IDF back. The bonus grows slowly at first and fast near 100%, so only the words Jev is sure about get a large boost. I cap `p` at 99%, so a 100% answer adds at most 5.29 instead of an infinite weight.
+
+<details>
+<summary>Where does the bonus come from?</summary>
+
+The bonus is the missing half of the classic [relevance weight](https://doi.org/10.1002/asi.4630270302) from Robertson and Spärck Jones. That weight adds two parts for each word:
+
+```
+weight = ln(r / (1 − r))  +  ln((1 − q) / q)
+         └─ about the ─┘     └─ about all ──┘
+           right docs            docs ≈ IDF
+
+r = share of the right documents that contain the word
+q = share of all documents that contain the word
+```
+
+BM25 knows nothing about the right documents, so [Croft and Harper](https://doi.org/10.1108/eb026683) set `r = 0.5`, a coin flip. The first part becomes `ln(1) = 0`, and only IDF is left.
+
+Jev's top label, "Essential: documents without it are wrong", is a statement about the right documents: they contain the word. So Jev's answer can fill in `r`. I move `r` from the coin flip halfway towards certainty, `r = (1 + p) / 2`. Then `r / (1 − r) = (1 + p) / (1 − p)`, which is the bonus above.
+
+- At `p = 0`, `r = 0.5`. Jev adds no information, and the weight stays plain IDF.
+- At `p = 0.98`, like `Venice`, `r = 0.99`. Almost every right document should contain the word.
+
+The bonus is never negative. A word Jev rates at 0% keeps its ordinary weight.
+
+</details>
+
+The bonus changes only the word weight. `Venice` still matches the same 53 documents. BM25's match strength and stemming stay the same. The default settings are `k₁ = 1.2` and `b = 0.75`.
 
 ## Let Jev pick the stopwords
 
@@ -165,7 +197,16 @@ I also tuned `k₁` and `b` separately for BM25, BM25 + Jev, and BM25 + the dist
 
 The chart shows nDCG@10 (higher is better). You can switch between [p25, median and mean](/blog/stop-averaging-evals).
 
-export const jevQualityView = (label, nanoValues, fiqaValues, englishValues, androidValues) => ({
+export const jevQualityView = (
+  label,
+  nanoValues,
+  fiqaValues,
+  englishValues,
+  androidValues,
+  msmarcoValues,
+  nqValues,
+  feverValues
+) => ({
   label,
   default: label === 'mean',
   datasets: [
@@ -210,6 +251,9 @@ export const jevQualityView = (label, nanoValues, fiqaValues, englishValues, and
     ...[
       ['Full English', englishValues],
       ['Full Android', androidValues],
+      ['Full MS MARCO', msmarcoValues],
+      ['Full NQ', nqValues],
+      ['Full FEVER', feverValues],
     ].map(([datasetLabel, values]) => ({
       label: datasetLabel,
       categories: ['BM25 + Jev', 'BM25'],
@@ -237,44 +281,148 @@ export const jevQualityView = (label, nanoValues, fiqaValues, englishValues, and
   views={[
     jevQualityView(
       'mean',
-      [61.39, 60.26, 59.79, 59.41, 57.73],
-      [26.68, 25.42, 24.92, 24.8, 24.25],
-      [37.23, 36.28],
-      [40.64, 39.9]
+      [61.51, 60.4, 59.79, 59.44, 57.73],
+      [26.51, 25.63, 24.92, 24.69, 24.25],
+      [37.54, 36.28],
+      [40.65, 39.9],
+      [24.06, 22.87],
+      [30.45, 28.91],
+      [52.01, 50.91]
     ),
     jevQualityView(
       'median',
       [63.09, 63.09, 63.09, 63.09, 61.31],
-      [13.03, 9.67, 0, 0, 0],
-      [15.8, 6.65],
-      [31.83, 30.66]
+      [11.73, 10.7, 0, 0, 0],
+      [18.15, 6.65],
+      [31.55, 30.66],
+      [0, 0],
+      [20.44, 0],
+      [50, 50]
     ),
-    jevQualityView('p25', [33.92, 33.33, 33.01, 31.55, 30.66], [0, 0, 0, 0, 0], [0, 0], [0, 0]),
+    jevQualityView(
+      'p25',
+      [33.92, 31.56, 33.01, 31.55, 30.66],
+      [0, 0, 0, 0, 0],
+      [0, 0],
+      [0, 0],
+      [0, 0],
+      [0, 0],
+      [0, 0]
+    ),
   ]}
 />
 
 Observations:
 
-- Tuning BM25 raises its mean to **59.79**. With both methods tuned, adding Jev raises it to 61.39. On the Venice query, tuned BM25 scores 56.38 and tuned BM25 + Jev scores 72.73.
+- Tuning BM25 raises its mean to **59.79**. With both methods tuned, adding Jev raises it to **61.51**. On the Venice query, tuned BM25 scores 56.38 and tuned BM25 + Jev scores 72.73.
 - The improvement is uneven. "who talks for belle in beauty and the beast" falls **100 → 63.09** with tuned Jev weighting.
-- Tuned BM25 + the distilled model reaches **60.26**. It improves the Venice query 56.38 → 72.73, while "who talks for belle in beauty and the beast" falls 100 → 30.10. It improves 138 queries, lowers 93, and leaves 414 unchanged against tuned BM25. The mean gain is 0.47 points, with a 95% bootstrap interval of −0.37 to +1.29.
+- Tuned BM25 + the distilled model reaches **60.40**. It improves the Venice query 56.38 → 72.73, while "who talks for belle in beauty and the beast" falls 100 → 30.10. It improves 151 queries, lowers 102, and leaves 392 unchanged against tuned BM25. The mean gain is 0.62 points, with a 95% bootstrap interval of −0.22 to +1.44.
+
+A mean can hide one dataset doing all the work. Here is the gain on each NanoBEIR dataset, with both methods tuned:
+
+<BarChart
+  orientation="horizontal"
+  title="Gain from Jev on each dataset"
+  subtitle="Tuned BM25 + Jev minus tuned BM25, about 50 queries per dataset"
+  valueLabel="nDCG@10 points (right is better for Jev)"
+  showLegend={false}
+  categories={[
+    'FiQA',
+    'ArguAna',
+    'MS MARCO',
+    'SciFact',
+    'Quora',
+    'DBPedia',
+    'SCIDOCS',
+    'NFCorpus',
+    'HotpotQA',
+    'Climate-FEVER',
+    'Touché',
+    'FEVER',
+    'NQ',
+  ]}
+  series={[
+    {
+      name: 'Gain',
+      values: [5.99, 4.99, 2.67, 2.59, 1.8, 1.77, 1.68, 1.61, 0.91, 0.7, 0.43, -0.65, -2.16],
+      roles: [
+        'series0',
+        'series0',
+        'series0',
+        'series0',
+        'series0',
+        'series0',
+        'series0',
+        'series0',
+        'series0',
+        'series0',
+        'series0',
+        'muted',
+        'muted',
+      ],
+      text: [
+        '+5.99',
+        '+4.99',
+        '+2.67',
+        '+2.59',
+        '+1.80',
+        '+1.77',
+        '+1.68',
+        '+1.61',
+        '+0.91',
+        '+0.70',
+        '+0.43',
+        '−0.65',
+        '−2.16',
+      ],
+      textPosition: 'outside',
+    },
+  ]}
+/>
+
+Observations:
+
+- "Tax question about selling a car" rises from **38.69 to 100** on FiQA, the dataset with the largest gain, from 41.06 to 47.05.
+- "How do I improve on my math skills?", the query from the start of this post, rises from 55.92 to 97.09. Quora gains 1.80.
+- Jev improves 11 of the 13 datasets. The largest drop is 2.16 points on NQ, where "who appoints the members of the given branch in the united states" falls from 100 to 0.
+- With about 50 queries per dataset, a single bar can move by a point or two by chance. On the full NQ and FEVER test sets, both drops turn into gains, as shown [below](#nq-and-fever).
 
 The table below counts the queries Jev improves, lowers, or leaves unchanged against BM25. "Total gains" adds the nDCG@10 point increases on winning queries. "Total losses" adds the magnitudes of the drops. This shows whether a few large changes outweigh many small ones.
 
-| Dataset                        | Wins / losses / ties | Total gains | Total losses |
-| ------------------------------ | -------------------: | ----------: | -----------: |
-| NanoBEIR, both methods tuned   |       170 / 97 / 378 |   +2,005.65 |      −969.84 |
-| Full FiQA, default settings    |       136 / 66 / 446 |   +1,987.71 |      −846.81 |
-| Full English, default settings |     158 / 65 / 1,347 |   +2,360.32 |      −858.88 |
-| Full Android, default settings |        95 / 60 / 544 |   +1,455.11 |      −939.38 |
+| Dataset                         | Wins / losses / ties | Total gains | Total losses |
+| ------------------------------- | -------------------: | ----------: | -----------: |
+| NanoBEIR, both methods tuned    |       173 / 99 / 373 |   +2,264.09 |    −1,154.37 |
+| Full FiQA, default settings     |       141 / 72 / 435 |   +2,044.05 |    −1,011.30 |
+| Full English, default settings  |     180 / 82 / 1,308 |   +3,052.73 |    −1,073.54 |
+| Full Android, default settings  |       102 / 67 / 530 |   +1,697.21 |    −1,177.49 |
+| Full MS MARCO, default settings |    745 / 365 / 5,870 |  +13,268.74 |    −4,989.78 |
+| Full NQ, default settings       |    513 / 232 / 2,707 |   +8,712.07 |    −3,401.12 |
+| Full FEVER, default settings    |    799 / 477 / 5,390 |  +14,305.46 |    −6,948.64 |
 
 These totals describe the size of the changes within each dataset. Larger datasets have more queries to contribute gains and losses.
 
-On full FiQA, with **648 queries against 57,638 documents**, default BM25 scores **24.92** and BM25 + Jev scores **26.68**. The share of queries with no relevant top-10 result drops from 50.62% to 47.99%. Tuning on 64 development queries selects `k₁ = 1.2, b = 0.5`, which scores lower on the 648 test queries. All three tuned FiQA methods use those frozen settings.
+On full FiQA, with **648 queries against 57,638 documents**, default BM25 scores **24.92** and BM25 + Jev scores **26.51**. The share of queries with no relevant top-10 result drops from 50.62% to 47.99%. Tuning on 64 development queries selects `k₁ = 1.2, b = 0.5`, which scores lower on the 648 test queries. All three tuned FiQA methods use those frozen settings.
 
 The NanoBEIR results are exploratory because I selected the weighting formula on those benchmarks. FiQA uses its full collection and official test queries, including 50 queries already exposed through NanoBEIR. The [saved results](/static/data/jev-keyword-search.json) contain query scores and benchmark details.
 
-The chart also includes two full [CQADupStack](https://huggingface.co/datasets/BeIR/cqadupstack) collections. English has **1,570 queries and 40,221 documents**. Android has **699 queries and 22,998 documents**. Both use default BM25 settings and every official test query. Jev raises mean quality from 36.28 to 37.23 on English, and from 39.90 to 40.64 on Android.
+The chart also includes two full [CQADupStack](https://huggingface.co/datasets/BeIR/cqadupstack) collections. English has **1,570 queries and 40,221 documents**. Android has **699 queries and 22,998 documents**. Both use default BM25 settings and every official test query. Jev raises mean quality from 36.28 to 37.54 on English, and from 39.90 to 40.65 on Android.
+
+The largest test is the full [MS MARCO](https://microsoft.github.io/msmarco/) passage collection, with **6,980 official dev queries against 8,841,823 passages**. It uses default BM25 settings, so nothing was tuned on these queries. BM25 scores 22.87 and BM25 + Jev scores **24.06**, a gain of 1.19 points with a 95% bootstrap interval of +0.98 to +1.39. On MRR@10, the metric MS MARCO usually reports, BM25 scores 18.27 and BM25 + Jev scores **19.25**. The BM25 number is close to the published baseline of about 18.4.
+
+"who recorded the song still the one?" rises from **0 to 100**. Jev gives `still` 76% and `one` 67%, the words of the song title, while `song` gets 2%. "are herpes contagious" falls from 100 to 50, even though Jev rates both of its words as important (`herp` 100%, `contagi` 80%). Most MS MARCO queries have a single relevant passage, and 59 to 61% of them find none in the top 10, so the median and p25 are 0 for both.
+
+### NQ and FEVER
+
+NQ and FEVER are the two NanoBEIR datasets where Jev scores lower, with about 50 queries each. I ran both full test sets with default BM25 settings. [NQ](https://ai.google.com/research/NaturalQuestions) has **3,452 Google questions against 2,681,468 Wikipedia passages**. [FEVER](https://fever.ai/) has **6,666 claims against 5,416,568 Wikipedia pages**, and the relevant page proves or disproves the claim.
+
+| Dataset | NanoBEIR gain | Full test set: BM25 → BM25 + Jev | Gain, 95% bootstrap interval |
+| ------- | ------------: | -------------------------------: | ---------------------------: |
+| NQ      |         −2.16 |                    28.91 → 30.45 |       +1.54 (+1.20 to +1.88) |
+| FEVER   |         −0.65 |                    50.91 → 52.01 |       +1.10 (+0.87 to +1.34) |
+
+Both drops turn into gains on the full sets. "where is cuba located on a world map" rises from **0 to 100** on NQ. Jev gives `cuba` 100%, `map` 10% and `located` 0%. On FEVER, "Olympic medals displayed the Colosseum from Rome." rises from 0 to 100, with `medals` at 95% and `from` at 13%.
+
+FEVER also shows a weakness. "Jerome Flynn was born in July." falls from 100 to 0. The claim is false, because he was born in March. Jev still gives `July` 93%, almost as much as the name, so pages about other people born in July move up.
 
 ### Does Jev beat the stopword list?
 
@@ -282,14 +430,14 @@ Now the static list is off, and Jev's 0% rule decides which words to drop. Both 
 
 | Dataset                     |           Static list | Jev picks the stopwords |
 | --------------------------- | --------------------: | ----------------------: |
-| NanoBEIR, 645 queries       | 33.92 / 63.09 / 61.39 |   33.92 / 63.09 / 60.77 |
-| Full FiQA, 648 queries      |     0 / 13.03 / 26.68 |       0 / 14.13 / 27.11 |
-| Full English, 1,570 queries |     0 / 15.80 / 37.23 |       0 / 22.20 / 38.58 |
-| Full Android, 699 queries   |     0 / 31.83 / 40.64 |       0 / 31.55 / 40.13 |
+| NanoBEIR, 645 queries       | 33.92 / 63.09 / 61.51 |   33.92 / 63.09 / 60.48 |
+| Full FiQA, 648 queries      |     0 / 11.73 / 26.51 |       0 / 14.20 / 27.07 |
+| Full English, 1,570 queries |     0 / 18.15 / 37.54 |       0 / 23.48 / 38.84 |
+| Full Android, 699 queries   |     0 / 31.55 / 40.65 |       0 / 31.27 / 40.06 |
 
-English gains **1.35 mean points**, with a 95% bootstrap interval of +0.77 to +1.93. FiQA gains 0.43. NanoBEIR loses 0.63 (interval −1.56 to +0.25) and Android loses 0.51. So Jev doesn't replace the list everywhere yet.
+English gains **1.31 mean points**, with a 95% bootstrap interval of +0.71 to +1.92. FiQA gains 0.55. NanoBEIR loses 1.03 (interval −1.94 to −0.15) and Android loses 0.59. So Jev doesn't replace the list everywhere yet.
 
-The rule drops a word only at exactly 0%, so small words that get 1% or 2% stay in. Sometimes that helps. In "can a ucc be filed on an individual", Jev keeps `a`, `be`, `on` and `an`, and quality rises from 20.44 to 60.53. Sometimes it hurts. Android's “How to Install App as System App” moves its relevant result from rank 1 to 9, and quality drops from 100 to 30.10.
+The rule drops a word only at exactly 0%, so small words that get 1% or 2% stay in. Sometimes that helps. In "Difference between «so that» and «such that»", the static list drops `such`, `that` and `and`. Jev keeps them all, with `such` at 76% and `that` at 51%. The relevant result moves from outside the top 10 to first place, and quality rises from 0 to 100. Sometimes it hurts. Android's “How to Install App as System App” moves its relevant result from rank 1 to 6, and quality drops from 100 to 35.62.
 
 <details>
 <summary>Wins, losses, and queries with no relevant top-10 result</summary>
@@ -298,12 +446,12 @@ Gains and losses add the query-level quality changes, using the same definitions
 
 | Dataset      | Wins / losses / ties | Total gains | Total losses | No relevant result |
 | ------------ | -------------------: | ----------: | -----------: | -----------------: |
-| NanoBEIR     |      133 / 105 / 407 |   +1,288.18 |    −1,691.72 |    13.18% → 13.49% |
-| Full FiQA    |        94 / 62 / 492 |     +942.87 |      −665.37 |    47.99% → 47.22% |
-| Full English |    188 / 114 / 1,268 |   +3,947.55 |    −1,830.12 |    48.66% → 46.94% |
-| Full Android |        52 / 74 / 573 |     +742.98 |    −1,101.05 |    42.06% → 42.63% |
+| NanoBEIR     |      110 / 116 / 419 |   +1,166.41 |    −1,829.96 |    13.18% → 13.49% |
+| Full FiQA    |        95 / 59 / 494 |     +941.20 |      −581.77 |    47.99% → 47.22% |
+| Full English |    180 / 122 / 1,268 |   +4,043.56 |    −1,989.12 |    48.22% → 46.43% |
+| Full Android |        53 / 74 / 572 |     +714.77 |    −1,124.40 |    42.06% → 43.20% |
 
-The [stopword evaluation data](/static/data/jev-stopword-eval.json) include the revised-prompt control with the static list still enabled, plus per-query quality and recall. Its NanoBEIR rows use one fixed set of tuned settings for both columns. These are exploratory results on the same previously exposed collections.
+The [stopword evaluation data](/static/data/jev-stopword-eval.json) include the revised-prompt control with the static list still enabled, plus per-query quality and recall. Its NanoBEIR comparison tunes each column separately, as in the table above. These are exploratory results on the same previously exposed collections.
 
 </details>
 
@@ -387,6 +535,6 @@ The run used an Intel Core Ultra 7 155H CPU with two threads and warm indexes an
 ## Key Takeaways
 
 - BM25 uses rarity as a proxy for importance. Jev uses the query's context to adjust those weights. For "films shot in Venice", it gives `Venice` more weight than `shot` and improves the ranking.
-- Use `df × (1 − importance)` as the effective document frequency, then apply the usual IDF smoothing. With both methods tuned, Jev raises mean quality from **59.79 to 61.39** on NanoBEIR.
-- Letting Jev pick the stopwords keeps every word of "to be or not to be", which the static list drops. It helps full English (**+1.35**) and FiQA (+0.43) but costs NanoBEIR (−0.63) and Android (−0.51), so the static list stays for now.
-- The two-layer distilled model reaches 60.26 and takes **3.19 ms median** per complete search, compared with about 508 ms for Jev. Its smaller quality gain has a bootstrap interval that includes zero.
+- Add `ln((1 + p) / (1 − p))` to each word's IDF, where `p` is Jev's importance. With both methods tuned, Jev raises mean quality from **59.79 to 61.51** on NanoBEIR and improves 11 of its 13 datasets. On all 8.8 million MS MARCO passages, it raises MRR@10 from **18.27 to 19.25**. NanoBEIR's two drops, NQ and FEVER, become gains of 1.54 and 1.10 points on their full test sets.
+- Letting Jev pick the stopwords keeps every word of "to be or not to be", which the static list drops. It helps full English (**+1.31**) and FiQA (+0.55) but costs NanoBEIR (−1.03) and Android (−0.59), so the static list stays for now.
+- The two-layer distilled model reaches 60.40 and takes **3.19 ms median** per complete search, compared with about 508 ms for Jev. Its smaller quality gain has a bootstrap interval that includes zero.
