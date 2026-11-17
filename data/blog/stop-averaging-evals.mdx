@@ -5,13 +5,13 @@ date: '2026-08-27'
 lastmod: '2026-08-27'
 tags: ['search', 'evals', 'evaluation', 'metrics']
 draft: false
-summary: 'Search evals hide their tail. We track p50/p99 for latency because an average hides the tail, then report search quality as one average NDCG and call it a day. A mean of 52.5 can sit on top of ~20% of queries finding nothing at all. Track p25 and p50 alongside the mean, then debug the queries that moved.'
+summary: 'Search evals hide their tail. We track p50/p99 for latency because an average hides the tail, then report search quality as one average NDCG and call it a day. A mean of 27 can sit on top of a quarter of queries finding nothing at all. Track p25 and p50 alongside the mean, then debug the queries that moved.'
 authors: ['kshivendu']
 ---
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
-Adding a stemmer and a stopword list is standard advice for keyword search. I got a gain of +1.9 in mean #[NDCG@10](a 0 to 100 score for one query, checked against docs that humans labelled relevant. 100 means they sit at the top of the results, 0 means none made the top 10. Scores here are ×100 of the usual 0 to 1 scale, the way IR papers report them) on [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai/nanobeir-66e1a0af21dfd93e620cd9f6), which feels like a clear win. But 22% of queries got worse, and `who sang here i go again` went from a perfect score to zero.
+Adding a #[stemmer](it cuts words down to a shared root, so returns becomes return) and a #[stopword list](it drops common words like the, of and in) is standard advice for keyword search. I got a gain of +3.9 in mean #[NDCG@10](a 0 to 100 score for one query, checked against docs that humans labelled relevant. 100 means the most relevant docs sit at the top of the results, 0 means none made the top 10. Scores here are ×100 of the usual 0 to 1 scale, the way IR papers report them) on [DBPedia](https://huggingface.co/datasets/BeIR/dbpedia-entity), which feels like a clear win. But 29% of queries got worse, and `imdb batman returns` started returning _Return of the Joker_ instead of _Batman Returns_.
 
 Any serious team tracks latency as p50, p90, p99. Reporting just "our average latency is 40ms" is naive, because it hides the p99 150ms tail that's hurting real users. Yet we report search relevance as a single average NDCG all the time, and somehow that's normal. Relevance has a tail too, and the average hides it.
 
@@ -19,38 +19,36 @@ I'll use search as the example, but this applies to any eval with graded scores,
 
 ## Average can't represent the distribution
 
-I ran a plain word-#[BM25](the standard ranking function for keyword search) baseline over 12 #[NanoBEIR](a downsampled version of the BEIR retrieval benchmark, about 50 queries per dataset) datasets (599 queries). Instead of averaging each metric, I calculated percentiles over the per-query scores. The mean NDCG@10 is **52.5**, which _feels_ respectable, as if every query comes back roughly half-right. In reality, they range from perfect to nothing: ~20% of queries retrieve nothing relevant in the top 10, and the average hides this truth.
+I ran a plain #[BM25](the standard ranking function for keyword search) baseline (`word`: lowercase and split into words, nothing else) on the full #[DBPedia-entity](a BEIR retrieval benchmark: 4.6M Wikipedia entity pages, title plus abstract, and 400 queries with graded relevance labels) set: 4.6M Wikipedia pages and 400 queries, with about 16 relevant pages per query. Instead of averaging each metric, I calculated percentiles over the per-query scores. The mean NDCG@10 is **27.1**, which reads like every query finds a couple of the right pages. In reality, 25.5% of queries retrieve #[nothing relevant](nothing the dataset's judges marked relevant. On these zero queries, 68% of the top-10 pages were never judged at all, so some zeros are missing labels, not failures. The stemmed run also lands on judged pages more often, 38% unjudged against 43%, which flatters it a little) in the top 10, and the average hides this truth.
 
 Let's look at the distribution.
 
-<ScoreHistogram />
+<ScoreHistogram src="/static/data/relevance-tail-dbpedia.json" />
 
 Observations:
 
-- 19.9% of queries score exactly 0 and 21.5% score a perfect 100. That's **41% of queries sitting at the two extreme ends.**
-- Almost none land near the mean. Picture a class where half the students score 0 and half score 100. The average is 50, and no student got 50. Here only 7% of queries score within 5 points of 52.5.
-- #[recall@10](the share of a query's relevant docs that show up in the top 10) is even more split, with **63%** of queries at the two ends.
+- 25.5% of queries score exactly 0. That's the tallest bar by far.
+- The rest spread out from 3 to 100, so almost no query scores near the mean of 27.1. It describes a query that barely exists.
+- A perfect score is rare (1.25% of queries), because the top 10 must hold the highest-graded pages, in grade order.
 
 ## The relevance tail
 
-Latency and relevance are the same problem pointed at opposite tails. For latency, higher is worse, so you watch the high end: p90, p99. For relevance, higher is better, so the tail that hurts is the low end. That's the **relevance tail**, the weaker half of your queries. p25 is the middle of that half, so it's the number I watch.
+Latency and relevance are the same problem pointed at opposite tails. For latency, higher is worse, so you watch the high end: p90, p99. For relevance, higher is better, so the tail that hurts is the low end. That's the **relevance tail**, the weaker half of your queries. p25 is the score a quarter of your queries get or worse, so it's the number I watch.
 
-Report p25, not p10. p10 pins at 0 once more than 10% of queries fail, and ~20% do here, so it can't show the tail moving. p25 is 21.9 on NDCG@10 and still moves when the method changes.
-
-I timed this BM25 baseline at **3.2ms p50, 7.2ms p90**. Nobody would report only the 4.4ms mean, because the p90 is the request a real user is waiting on. A p25 relevance score is the score a quarter of your queries get or worse. We just forget to report it.
+Report p25, not p10. p10 pins at 0 once more than 10% of queries fail, and 25.5% do here, so it can't show the tail moving. For plain BM25 even p25 sits at 0 here. It moves once a change pushes the zero-rate (the share of queries with nothing relevant in the top 10) under 25%, and the stemmer below does exactly that.
 
 ## Understanding impact of your changes
 
-Take the stemmer from the start: plain word BM25, then apply a Porter stemmer and a stopword list (`word_en`). It moves mean NDCG@10 by **+1.9**. Half the queries don't move, and 22% get worse.
+Take the stemmer from the start: plain word BM25, then apply a Porter stemmer and a stopword list (`word_en`). It moves mean NDCG@10 by **+3.9**, and that gain is real (a paired t-test gives t = 5.4). The mean is right, but it misses that a quarter of the queries don't move and 29% get worse.
 
-(Setup: BM25 with k1=1.5, b=0.75 and Lucene IDF. `word` lowercases and splits on word characters. `word_en` also drops NLTK's English stopword list and applies NLTK's Porter stemmer.)
+(Setup: BM25 with k1=1.5, b=0.75 and Lucene IDF, over each page's title and abstract. `word` lowercases and splits on word characters. `word_en` also drops NLTK's English stopword list and applies NLTK's Porter stemmer.)
 
 ### What the percentiles show
 
-The first thing I've started reading is **p25 and p50 along with mean**. It comes out of the per-query scores I already have with a 1 line change. Toggle the statistic:
+The first thing I've started reading is **p25 and p50 along with mean**. It comes out of the per-query scores I already have with a 1 line change (`np.percentile(scores, [25, 50])`). Toggle the statistic (the chart also shows #[recall@10 and recall@100](the share of a query's relevant pages that show up in the top 10, or the top 100)):
 
 export const tailCats = ['NDCG@10', 'recall@10', 'recall@100']
-export const tailFmt = (v) => v.map((x) => x.toFixed(1))
+export const tailFmt = (v) => v.map((x) => x.toFixed(2))
 export const tailView = (label, w, en) => ({
   label,
   title: `${label} before and after the stemmer and stopword list`,
@@ -75,21 +73,21 @@ export const tailView = (label, w, en) => ({
 
 <BarChart
   orientation="horizontal"
-  subtitle="plain word BM25 vs word + Porter stemmer + stopword list, 599 queries"
+  subtitle="plain word BM25 vs word + Porter stemmer + stopword list, DBPedia, 400 queries"
   valueLabel="score (higher is better)"
-  valueMax={112}
-  valueTicks={[0, 25, 50, 75, 100]}
+  valueMax={56}
+  valueTicks={[0, 10, 20, 30, 40, 50]}
   views={[
-    tailView('p25', [21.9, 13.7, 50.0], [26.4, 17.3, 62.6]),
-    tailView('p50', [55.4, 50.0, 100.0], [59.2, 60.0, 100.0]),
-    tailView('mean', [52.5, 56.3, 76.5], [54.5, 58.5, 79.3]),
+    tailView('p25', [0.0, 0.0, 14.14], [6.94, 2.55, 20.0]),
+    tailView('p50', [21.13, 10.27, 33.33], [27.5, 11.76, 42.14]),
+    tailView('mean', [27.06, 18.96, 40.27], [30.94, 19.46, 46.24]),
   ]}
 />
 
 Observations:
 
-- On every metric, p25 or p50 moves further than the mean. On NDCG@10, p25 moves **+4.5** while the mean moves **+1.9**.
-- Which one moves depends on where the queries have room. recall@100's median is already stuck at 100, so its p25 moves instead. Neither wins every time, which is why I report both.
+- In this run, on every metric, p25 or p50 moves further than the mean. On NDCG@10, p50 moves **+6.4** and p25 **+6.9** while the mean moves **+3.9**.
+- p25 on NDCG@10 goes from 0.00 to 6.94 because the stemmer pushes the zero-rate from 25.5% to 19.0%, so read the two together.
 
 ### Which queries moved
 
@@ -97,124 +95,51 @@ Observations:
 
 That's why I like to bucket the exact deltas per query for my metrics and use that to find queries to focus on:
 
-<ScoreHistogram compare />
+<ScoreHistogram compare src="/static/data/relevance-tail-dbpedia.json" />
 
 Observations:
 
-- 49% of queries don't move at all.
-- Of the ones that moved, 56% got better and 44% got worse (**172 wins, 133 losses**). That's why the mean goes up, but only by 1.9. Winners also moved a bit further than losers.
-- The stemmer and stopword list rescued **25 queries from 0** (`Which colors can one use to fill out a check in the US?` goes 0 to 100) and sent 9 to 0 (`who sang here i go again` goes 100 to 0). That moves the zero-rate, the share of queries with nothing relevant in the top 10, from 19.9% to 17.2%.
+- 47% of queries got better, 29% got worse and the rest didn't move (**186 wins, 115 losses, 99 ties**). That's why the mean goes up, but only by 3.9.
+- Most of the ties score 0 both before and after (59 of the 99).
+- The stemmer and stopword list rescued **43 queries from 0**, like `Which airports are located in California, USA?` (0 to 89.1), and sent 17 to 0, like `mason ohio`. That moves the zero-rate from 25.5% to 19.0%.
 
-I like to ask an LLM to build a UI for me to explore the dataset. It just needs basic sorting by metrics, filtering, and search (yeah. use search to improve search :D). Below is a cut-down version with three queries from this run, click one to see what each analyzer sent to the index and what came back:
+I like to ask an LLM to build a UI for me to explore the dataset. It just needs basic sorting by metrics, filtering, and search (yeah. use search to improve search :D). Below is a cut-down version with three queries from this run, click one to see what each #[analyzer](the step that turns text into index terms, here `word` or `word_en`) sent to the index and what came back:
 
-<QueryExplorer />
+<QueryExplorer src="/static/data/relevance-tail-dbpedia-docs.json" />
 
 Some of the queries it broke:
 
-- `who sang here i go again` went from a perfect **100 to 0** on NDCG@10. "Here I Go Again" is a song title made of stopwords, so the stopword list deletes most of it and we only ever query the index for `sang go`.
-- `who appoints the members of the given branch in the united states` also went **100 to 0**. The query becomes `appoint member given branch unit state`. The relevant doc ("...appointed by the President of the United States...") was rank 1 before and falls out of the top 10 after.
-- Even recall@100, the most #[forgiving](it only asks whether a relevant doc landed anywhere in the top 100, so a doc can slip 90 places and still count) metric here, falls to 0 on 4 queries. One is the ClimateFEVER claim `No state generates as much solar power as California`, and the stemmer cuts "generates" down to #[gener](Porter gives that same stem to general, generally, generic, generous and generation), so lots of unrelated documents pop up.
-
-The same thing happens one level up. Split the +1.9 by dataset:
-
-<BarChart
-  orientation="horizontal"
-  stacked
-  title="NDCG@10 gained and lost per dataset, word → word_en"
-  subtitle="green: points won by queries that got better. red: points lost by queries that got worse"
-  valueLabel="change in mean NDCG@10 (Δ)"
-  valueTicks={[-10, -5, 0, 5, 10, 15]}
-  categories={[
-    'Touche2020 (net −6.6)',
-    'SCIDOCS (net +0.0)',
-    'FEVER (net +0.3)',
-    'MSMARCO (net +0.5)',
-    'SciFact (net +0.9)',
-    'HotpotQA (net +0.9)',
-    'ArguAna (net +1.7)',
-    'ClimateFEVER (net +1.8)',
-    'NFCorpus (net +2.0)',
-    'FiQA2018 (net +6.7)',
-    'NQ (net +6.9)',
-    'DBPedia (net +7.6)',
-  ]}
-  series={[
-    {
-      name: 'gained',
-      role: 'good',
-      group: 'd',
-      values: [2.5, 3.4, 0.4, 7.5, 4.7, 2.8, 3.5, 4.8, 3.4, 12.6, 12.6, 9.0],
-      text: [
-        '+2.5',
-        '+3.4',
-        '+0.4',
-        '+7.5',
-        '+4.7',
-        '+2.8',
-        '+3.5',
-        '+4.8',
-        '+3.4',
-        '+12.6',
-        '+12.6',
-        '+9.0',
-      ],
-      textPosition: 'outside',
-    },
-    {
-      name: 'lost',
-      role: 'bad',
-      group: 'd',
-      values: [-9.0, -3.4, -0.1, -7.0, -3.9, -1.9, -1.8, -3.0, -1.4, -5.9, -5.7, -1.4],
-      text: [
-        '−9.0',
-        '−3.4',
-        '−0.1',
-        '−7.0',
-        '−3.9',
-        '−1.9',
-        '−1.8',
-        '−3.0',
-        '−1.4',
-        '−5.9',
-        '−5.7',
-        '−1.4',
-      ],
-      textPosition: 'outside',
-    },
-  ]}
-/>
-
-Observations:
-
-- The net hides how much moved. SCIDOCS nets **+0.0**, yet 58% (29/50) of its queries changed and cancelled out. MSMARCO and FEVER both net under +0.5. MSMARCO got there by gaining 7.5 and losing 7.0. FEVER got there because 96% of its queries didn't move.
-- Touche2020, a set of debate posts, loses **−6.6**. 67% of its queries got worse and 29% got better. `Should the voting age be lowered?` drops 68 → 30.
-- Most of Touche's loss is missing labels. Its judges only read some of the docs for each query. For the voting-age query, 7 of `word`'s top 10 had been judged and 4 of `word_en`'s. Every doc nobody judged counts as wrong.
+- `imdb batman returns` went from **64.3 to 22.9** on NDCG@10. The stemmer turns `returns` into `return`, so three _Return of the Joker_ pages now take the top 3. _Batman Returns_ falls from rank 1 to 4, and _Batman: The Dark Knight Returns (film)_, the page the judges rated most relevant, falls from rank 2 to 8.
+- `mason ohio` went from **38.5 to 0**. The query doesn't change at all, since neither word gets stemmed. The index does: Porter turns "Masonic" into `mason`, so Masonic temples across Ohio crowd the top 10 and push out the town.
+- `organic food advantages disadvantages` went from **39.4 to 6.9**. `organic` becomes #[organ](Porter gives organic, organism, organization and organ the same stem), and the top results turn into pages like _Revealed comparative advantage_.
 
 ## So what should we actually track?
 
-The goal is to see the distribution. A few numbers give you most of it, and they come from the per-query scores you already have:
+The goal is to see the distribution. A few numbers give you most of it, and they come from the per-query scores you already have. (No labels yet? Hand-label 50 to 100 real queries, or use an LLM judge.)
 
 - **p50** shows how the typical query does, and it often catches a difference the mean hides. In a recent experiment, two approaches landed within 0.5 on the mean but 3 points apart on the median. That helped me decide which one to go ahead with.
 - **p25 and the zero-rate** show how the worst queries do, and that's often where you might wanna spend effort. A query going from 0 to 40 means someone now finds an answer. A query going from 70 to 80 means a good result got a little better.
 - **The mean** stays, so you can compare with papers and other runs.
+
+Percentiles need queries that can score many different values. DBPedia has about 16 relevant pages per query, so its scores spread out. On sets where most queries have one relevant doc, like #[NQ](Natural Questions: real Google search questions, each with one Wikipedia answer page), about half the queries score exactly 0. Their median rarely moves, and only in jumps. There, the zero-rate and the better / same / worse split do the job.
 
 This is the table I print after every run while iterating. For this post's change it looks like this:
 
 ```md
 | analyzer | NDCG@10 p25 | p50   | mean  | zero-rate | better / same / worse |
 | -------- | ----------- | ----- | ----- | --------- | --------------------- |
-| word     | 21.92       | 55.43 | 52.55 | 19.9%     |                       |
-| word_en  | 26.41       | 59.15 | 54.46 | 17.2%     | 29% / 49% / 22%       |
+| word     | 0.00        | 21.13 | 27.06 | 25.5%     |                       |
+| word_en  | 6.94        | 27.50 | 30.94 | 19.0%     | 46.5% / 24.8% / 28.8% |
 ```
 
-When something in it moves, I ask an LLM to surface the worst queries and look into them. That's how this run turned up song titles made of stopwords and words stemmed into common ones.
+When something in it moves, I ask an LLM to surface the worst queries and look into them. That's how this run turned up Masonic temples for `mason ohio` and the Joker for _Batman Returns_.
 
-> **Beyond search:** any eval with graded per-item scores (an LLM judge's rubric, a similarity score, a per-query metric) hides its tail in the mean the same way.#[\*](Binary pass/fail evals are the exception: there the mean already tells you everything.)
+> **Beyond search:** any eval with graded per-item scores (an LLM judge's rubric, a similarity score, a per-query metric) hides its tail in the mean the same way.#[\*](Binary pass/fail evals hide less in the mean, but you still want the flip counts: how many items went from pass to fail and from fail to pass.)
 
 Mean alone can't capture a distribution. We realised this for latency decades ago, and search relevance deserves the same. So please look into your distribution and your queries.
 
 ## Key Takeaways
 
-- **A good average can hide queries that are hurting real users.** Plain BM25 averages 52.5 NDCG@10, yet ~20% of queries find nothing relevant in the top 10.
-- **Even standard advice isn't a free lunch.** A stemmer and stopword list move mean NDCG@10 by +1.9, yet 22% of queries get worse. `who sang here i go again` goes from 100 to 0.
+- **A good average can hide queries that are hurting real users.** Plain BM25 averages 27.1 NDCG@10 on DBPedia, yet 25.5% of queries find nothing relevant in the top 10.
+- **Even standard advice isn't a free lunch.** A stemmer and stopword list move mean NDCG@10 by +3.9, yet 29% of queries get worse. `imdb batman returns` drops from 64.3 to 22.9 because `returns` now matches _Return of the Joker_.
 - **Report p50, p25 and the zero-rate next to the mean, then look into the queries that moved.** p25 and the zero-rate show how the worst queries do, which is often where the effort should go.

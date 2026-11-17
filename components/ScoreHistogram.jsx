@@ -256,7 +256,7 @@ function buildCompareView(rows, stats, mdef, C) {
   }
 }
 
-export default function ScoreHistogram({ compare = false }) {
+export default function ScoreHistogram({ compare = false, src = DATA_URL }) {
   const [data, setData] = useState(null)
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
@@ -265,14 +265,14 @@ export default function ScoreHistogram({ compare = false }) {
 
   useEffect(() => {
     let live = true
-    fetch(DATA_URL)
+    fetch(src)
       .then((r) => r.json())
       .then((j) => live && setData(j))
       .catch(() => {})
     return () => {
       live = false
     }
-  }, [])
+  }, [src])
 
   if (!data) return <div style={{ minHeight: 420, margin: '1.5rem 0' }} />
 

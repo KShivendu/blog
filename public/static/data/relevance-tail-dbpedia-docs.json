@@ -1,0 +1,288 @@
+{
+  "queries": [
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_ES-36",
+      "q": "imdb batman returns",
+      "note": "returns becomes return, so three Return of the Joker pages take the top 3",
+      "runs": {
+        "word": {
+          "terms": ["imdb", "batman", "returns"],
+          "docs": [
+            {
+              "id": "<dbpedia:Batman_Returns>",
+              "title": "Batman Returns",
+              "score": 26.62,
+              "relevant": true,
+              "grade": 1,
+              "text": "Batman Returns is a 1992 American superhero film, directed and produced by Tim Burton, based upon the Batman character appearing in comics published by DC Comics. It is the second installment of Warner Bros.' initial Batman film series, wit"
+            },
+            {
+              "id": "<dbpedia:Batman:_The_Dark_Knight_Returns_(film)>",
+              "title": "Batman: The Dark Knight Returns (film)",
+              "score": 25.01,
+              "relevant": true,
+              "grade": 2,
+              "text": "Batman: The Dark Knight Returns is a two-part direct-to-video animated superhero film, an adaptation of the 1986 comic book The Dark Knight Returns by Frank Miller. It was directed by Jay Oliva, who worked as a storyboard artist on Man of S"
+            },
+            {
+              "id": "<dbpedia:Batman_(Dark_Knight_Universe)>",
+              "title": "Batman (Dark Knight Universe)",
+              "score": 23.15,
+              "relevant": false,
+              "grade": 0
+            },
+            {
+              "id": "<dbpedia:Batman_Returns_(soundtrack)>",
+              "title": "Batman Returns (soundtrack)",
+              "score": 22.34,
+              "relevant": true,
+              "grade": 1,
+              "text": "Batman Returns: Original Motion Picture Score is the score album for the 1992 film Batman Returns by Danny Elfman. The soundtrack also includes \"Face to Face\", written by Siouxsie and the Banshees and Elfman, used to promote the movie prior"
+            },
+            {
+              "id": "<dbpedia:Batman_(1989_film_series)>",
+              "title": "Batman (1989 film series)",
+              "score": 21.35,
+              "relevant": false,
+              "grade": 0
+            }
+          ]
+        },
+        "word_en": {
+          "terms": ["imdb", "batman", "return"],
+          "docs": [
+            {
+              "id": "<dbpedia:Batman_Beyond:_Return_of_the_Joker>",
+              "title": "Batman Beyond: Return of the Joker",
+              "score": 24.04,
+              "relevant": false,
+              "grade": 0
+            },
+            {
+              "id": "<dbpedia:Batman:_Return_of_the_Joker>",
+              "title": "Batman: Return of the Joker",
+              "score": 23.05,
+              "relevant": false,
+              "grade": 0
+            },
+            {
+              "id": "<dbpedia:The_Return_of_the_Joker>",
+              "title": "The Return of the Joker",
+              "score": 22.87,
+              "relevant": false,
+              "grade": 0
+            },
+            {
+              "id": "<dbpedia:Batman_Returns>",
+              "title": "Batman Returns",
+              "score": 22.28,
+              "relevant": true,
+              "grade": 1,
+              "text": "Batman Returns is a 1992 American superhero film, directed and produced by Tim Burton, based upon the Batman character appearing in comics published by DC Comics. It is the second installment of Warner Bros.' initial Batman film series, wit"
+            },
+            {
+              "id": "<dbpedia:Batman_Beyond:_Return_of_the_Joker_(video_game)>",
+              "title": "Batman Beyond: Return of the Joker (video game)",
+              "score": 21.85,
+              "relevant": false,
+              "grade": 0
+            }
+          ]
+        }
+      },
+      "relevantTotal": 7,
+      "ndcg10": 64.3,
+      "ndcg10_en": 22.9
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "SemSearch_ES-58",
+      "q": "mason ohio",
+      "note": "the query doesn't change, but the index stems Masonic to mason",
+      "runs": {
+        "word": {
+          "terms": ["mason", "ohio"],
+          "docs": [
+            {
+              "id": "<dbpedia:Jim_Mason_(Ohio_politician)>",
+              "title": "Jim Mason (Ohio politician)",
+              "score": 22.4,
+              "relevant": false,
+              "grade": 0
+            },
+            {
+              "id": "<dbpedia:William_Mason_High_School_(Mason,_Ohio)>",
+              "title": "William Mason High School (Mason, Ohio)",
+              "score": 21.71,
+              "relevant": false,
+              "grade": 0
+            },
+            {
+              "id": "<dbpedia:William_D._Mason>",
+              "title": "William D. Mason",
+              "score": 20.34,
+              "relevant": false,
+              "grade": 0
+            },
+            {
+              "id": "<dbpedia:Mason_Township,_Lawrence_County,_Ohio>",
+              "title": "Mason Township, Lawrence County, Ohio",
+              "score": 20.28,
+              "relevant": true,
+              "grade": 1,
+              "text": "Mason Township is one of the fourteen townships of Lawrence County, Ohio, United States.  The 2000 census found 1,095 people in the township."
+            },
+            {
+              "id": "<dbpedia:Mason,_Ohio>",
+              "title": "Mason, Ohio",
+              "score": 19.23,
+              "relevant": true,
+              "grade": 2,
+              "text": "Mason is a city in southwestern Warren County, Ohio, United States, approximately 22 miles (35 km) from downtown Cincinnati. As of the 2010 census, Mason's population was 30,712.Mason was transformed into a large, bustling community, and on"
+            }
+          ]
+        },
+        "word_en": {
+          "terms": ["mason", "ohio"],
+          "docs": [
+            {
+              "id": "<dbpedia:Jim_Mason_(Ohio_politician)>",
+              "title": "Jim Mason (Ohio politician)",
+              "score": 21.82,
+              "relevant": false,
+              "grade": 0
+            },
+            {
+              "id": "<dbpedia:Masonic_Temple_(Mechanicsburg,_Ohio)>",
+              "title": "Masonic Temple (Mechanicsburg, Ohio)",
+              "score": 21.11,
+              "relevant": false,
+              "grade": 0
+            },
+            {
+              "id": "<dbpedia:William_Mason_High_School_(Mason,_Ohio)>",
+              "title": "William Mason High School (Mason, Ohio)",
+              "score": 20.73,
+              "relevant": false,
+              "grade": 0
+            },
+            {
+              "id": "<dbpedia:Masonic_Temple_(Youngstown,_Ohio)>",
+              "title": "Masonic Temple (Youngstown, Ohio)",
+              "score": 20.56,
+              "relevant": false,
+              "grade": 0
+            },
+            {
+              "id": "<dbpedia:Masonic_Temple_(Sandusky,_Ohio)>",
+              "title": "Masonic Temple (Sandusky, Ohio)",
+              "score": 20.56,
+              "relevant": false,
+              "grade": 0
+            }
+          ]
+        }
+      },
+      "relevantTotal": 3,
+      "ndcg10": 38.5,
+      "ndcg10_en": 0.0
+    },
+    {
+      "ds": "DBPedia",
+      "qid": "QALD2_tr-79",
+      "q": "Which airports are located in California, USA?",
+      "note": "the analyzer drops which, are and in, and turns airports into airport, so single airport pages match, not only lists of airports",
+      "runs": {
+        "word": {
+          "terms": ["which", "airports", "are", "located", "in", "california", "usa"],
+          "docs": [
+            {
+              "id": "<dbpedia:List_of_airports_of_Santa_Cruz_County,_California>",
+              "title": "List of airports of Santa Cruz County, California",
+              "score": 23.33,
+              "relevant": false,
+              "grade": 0
+            },
+            {
+              "id": "<dbpedia:List_of_the_busiest_airports_in_California>",
+              "title": "List of the busiest airports in California",
+              "score": 22.1,
+              "relevant": false,
+              "grade": 0
+            },
+            {
+              "id": "<dbpedia:List_of_airports_in_Russia>",
+              "title": "List of airports in Russia",
+              "score": 21.98,
+              "relevant": false,
+              "grade": 0
+            },
+            {
+              "id": "<dbpedia:List_of_airports_in_Kern_County,_California>",
+              "title": "List of airports in Kern County, California",
+              "score": 21.64,
+              "relevant": false,
+              "grade": 0
+            },
+            {
+              "id": "<dbpedia:List_of_airports_in_Nigeria>",
+              "title": "List of airports in Nigeria",
+              "score": 21.28,
+              "relevant": false,
+              "grade": 0
+            }
+          ]
+        },
+        "word_en": {
+          "terms": ["airport", "locat", "california", "usa"],
+          "docs": [
+            {
+              "id": "<dbpedia:Lompoc_Airport>",
+              "title": "Lompoc Airport",
+              "score": 23.8,
+              "relevant": true,
+              "grade": 2,
+              "text": "Lompoc Airport (IATA: LPC, ICAO: KLPC) is a public airport located just north of the city of Lompoc in Santa Barbara County, California, USA."
+            },
+            {
+              "id": "<dbpedia:Dinsmore_Airport_(California)>",
+              "title": "Dinsmore Airport (California)",
+              "score": 23.3,
+              "relevant": true,
+              "grade": 2,
+              "text": "Dinsmore Airport (FAA LID: D63), formerly Q25, is a public airport located 1 mile (1.6 km) east of Dinsmore, serving Humboldt County, California, USA. The airport is mostly used for general aviation."
+            },
+            {
+              "id": "<dbpedia:Tehachapi_Municipal_Airport>",
+              "title": "Tehachapi Municipal Airport",
+              "score": 22.89,
+              "relevant": true,
+              "grade": 2,
+              "text": "Tehachapi Municipal Airport (IATA: TSP, ICAO: KTSP, FAA LID: TSP) is a public airport located in Tehachapi, serving Kern County, California, USA."
+            },
+            {
+              "id": "<dbpedia:Oroville_Municipal_Airport>",
+              "title": "Oroville Municipal Airport",
+              "score": 22.32,
+              "relevant": true,
+              "grade": 2,
+              "text": "Oroville Municipal Airport (IATA: OVE, ICAO: KOVE) is a public airport located 3 miles (5 km) southwest of the city of Oroville in Butte County, California, USA."
+            },
+            {
+              "id": "<dbpedia:Reedley_Municipal_Airport>",
+              "title": "Reedley Municipal Airport",
+              "score": 22.32,
+              "relevant": true,
+              "grade": 1,
+              "text": "Reedley Municipal Airport (FAA LID: O32) is a public airport located four miles (6.4 km) north of Reedley, serving Fresno County, California, USA."
+            }
+          ]
+        }
+      },
+      "relevantTotal": 129,
+      "ndcg10": 0.0,
+      "ndcg10_en": 89.1
+    }
+  ]
+}

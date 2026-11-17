@@ -51,7 +51,7 @@ const S = {
   doc: { display: 'flex', gap: '8px', alignItems: 'baseline', marginBottom: '3px' },
 }
 
-export default function QueryExplorer() {
+export default function QueryExplorer({ src = DATA_URL }) {
   const [data, setData] = useState(null)
   const [open, setOpen] = useState(0)
 
@@ -63,14 +63,14 @@ export default function QueryExplorer() {
 
   useEffect(() => {
     let alive = true
-    fetch(DATA_URL)
+    fetch(src)
       .then((r) => r.json())
       .then((d) => alive && setData(d.queries))
       .catch(() => alive && setData([]))
     return () => {
       alive = false
     }
-  }, [])
+  }, [src])
 
   if (!data) return <div style={{ ...S.body, color: C.muted }}>Loading…</div>
 
@@ -102,9 +102,12 @@ export default function QueryExplorer() {
             >
               {i + 1}
             </span>
-            {/* only the judged-relevant doc earns its text; the rest are position */}
+            {/* a doc's title when the data has one (entity search, where the title is the
+                answer); otherwise only the judged-relevant doc earns its text */}
             <span style={{ ...S.body, color: d.relevant ? C.ink : C.muted }}>
-              {d.relevant
+              {d.title
+                ? d.title
+                : d.relevant
                 ? d.text.slice(0, SNIPPET) + (d.text.length > SNIPPET ? '…' : '')
                 : 'other result'}
             </span>
