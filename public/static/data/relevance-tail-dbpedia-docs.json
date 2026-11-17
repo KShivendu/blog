@@ -97,96 +97,96 @@
     },
     {
       "ds": "DBPedia",
-      "qid": "SemSearch_ES-58",
-      "q": "mason ohio",
-      "note": "the query doesn't change, but the index stems Masonic to mason",
+      "qid": "INEX_LD-2010106",
+      "q": "organic food advantages disadvantages",
+      "note": "organic becomes organ, the stem it shares with organism and organization, and the top 5 fill with pages about advantages",
       "runs": {
         "word": {
-          "terms": ["mason", "ohio"],
+          "terms": ["organic", "food", "advantages", "disadvantages"],
           "docs": [
             {
-              "id": "<dbpedia:Jim_Mason_(Ohio_politician)>",
-              "title": "Jim Mason (Ohio politician)",
-              "score": 22.4,
+              "id": "<dbpedia:Dogs_101>",
+              "title": "Dogs 101",
+              "score": 24.07,
               "relevant": false,
               "grade": 0
             },
             {
-              "id": "<dbpedia:William_Mason_High_School_(Mason,_Ohio)>",
-              "title": "William Mason High School (Mason, Ohio)",
-              "score": 21.71,
+              "id": "<dbpedia:Organic_Food_Federation>",
+              "title": "Organic Food Federation",
+              "score": 23.6,
               "relevant": false,
               "grade": 0
             },
             {
-              "id": "<dbpedia:William_D._Mason>",
-              "title": "William D. Mason",
-              "score": 20.34,
+              "id": "<dbpedia:Organic_product>",
+              "title": "Organic product",
+              "score": 22.81,
               "relevant": false,
               "grade": 0
             },
             {
-              "id": "<dbpedia:Mason_Township,_Lawrence_County,_Ohio>",
-              "title": "Mason Township, Lawrence County, Ohio",
-              "score": 20.28,
+              "id": "<dbpedia:Organic_beef>",
+              "title": "Organic beef",
+              "score": 22.65,
               "relevant": true,
               "grade": 1,
-              "text": "Mason Township is one of the fourteen townships of Lawrence County, Ohio, United States.  The 2000 census found 1,095 people in the township."
+              "text": "Organic beef is beef grown according to organic food principles."
             },
             {
-              "id": "<dbpedia:Mason,_Ohio>",
-              "title": "Mason, Ohio",
-              "score": 19.23,
+              "id": "<dbpedia:Index_of_organic_food_articles>",
+              "title": "Index of organic food articles",
+              "score": 22.36,
               "relevant": true,
-              "grade": 2,
-              "text": "Mason is a city in southwestern Warren County, Ohio, United States, approximately 22 miles (35 km) from downtown Cincinnati. As of the 2010 census, Mason's population was 30,712.Mason was transformed into a large, bustling community, and on"
+              "grade": 1,
+              "text": "This is a list of organic food topics. Organic foods are foods that are produced using methods of organic farming \u2013 that do not involve modern synthetic inputs such as synthetic pesticides and chemical fertilizers. Organic foods are also no"
             }
           ]
         },
         "word_en": {
-          "terms": ["mason", "ohio"],
+          "terms": ["organ", "food", "advantag", "disadvantag"],
           "docs": [
             {
-              "id": "<dbpedia:Jim_Mason_(Ohio_politician)>",
-              "title": "Jim Mason (Ohio politician)",
-              "score": 21.82,
+              "id": "<dbpedia:Revealed_comparative_advantage>",
+              "title": "Revealed comparative advantage",
+              "score": 23.63,
               "relevant": false,
               "grade": 0
             },
             {
-              "id": "<dbpedia:Masonic_Temple_(Mechanicsburg,_Ohio)>",
-              "title": "Masonic Temple (Mechanicsburg, Ohio)",
-              "score": 21.11,
+              "id": "<dbpedia:Structural_inequality_in_education>",
+              "title": "Structural inequality in education",
+              "score": 22.23,
               "relevant": false,
               "grade": 0
             },
             {
-              "id": "<dbpedia:William_Mason_High_School_(Mason,_Ohio)>",
-              "title": "William Mason High School (Mason, Ohio)",
-              "score": 20.73,
+              "id": "<dbpedia:Love_in_the_Mirror>",
+              "title": "Love in the Mirror",
+              "score": 21.57,
               "relevant": false,
               "grade": 0
             },
             {
-              "id": "<dbpedia:Masonic_Temple_(Youngstown,_Ohio)>",
-              "title": "Masonic Temple (Youngstown, Ohio)",
-              "score": 20.56,
+              "id": "<dbpedia:Evolutionary_baggage>",
+              "title": "Evolutionary baggage",
+              "score": 21.38,
               "relevant": false,
               "grade": 0
             },
             {
-              "id": "<dbpedia:Masonic_Temple_(Sandusky,_Ohio)>",
-              "title": "Masonic Temple (Sandusky, Ohio)",
-              "score": 20.56,
+              "id": "<dbpedia:Compensation_(chess)>",
+              "title": "Compensation (chess)",
+              "score": 20.52,
               "relevant": false,
               "grade": 0
             }
           ]
         }
       },
-      "relevantTotal": 3,
-      "ndcg10": 38.5,
-      "ndcg10_en": 0.0
+      "relevantTotal": 16,
+      "ndcg10": 39.4,
+      "ndcg10_en": 6.9
     },
     {
       "ds": "DBPedia",
