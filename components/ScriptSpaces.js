@@ -43,14 +43,48 @@ export default function ScriptSpaces() {
 
   const [script, setScript] = useState('chinese')
   const [pick, setPick] = useState(0)
-  const [zhScheme, setZhScheme] = useState('isbpe')
-  const [hiScheme, setHiScheme] = useState('gpt2')
 
   const zh = DATA.scripts.chinese[pick]
   const zt = DATA.scripts.chinese_totals
   const hi = DATA.scripts.hindi
-  const zhPieces = zh[zhScheme]
-  const hiPieces = hi[hiScheme]
+
+  // Every scheme in its own row, all at once, so the reader compares without
+  // clicking. BPE is red and ISBPE green, as everywhere else in the post.
+  const Rows = ({ rows }) =>
+    rows.map(([label, pieces, tint]) => (
+      <div
+        key={label}
+        style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}
+      >
+        <span
+          style={{
+            ...LABEL,
+            color: tint,
+            width: 120,
+            flexShrink: 0,
+            paddingTop: 8,
+            lineHeight: 1.3,
+          }}
+        >
+          {label}
+        </span>
+        <div style={{ flex: 1 }}>
+          <Chips pieces={pieces} c={c} showDoubled={false} />
+        </div>
+        <span
+          style={{
+            fontFamily: MONO,
+            fontSize: 12.5,
+            color: c.muted,
+            flexShrink: 0,
+            paddingTop: 8,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {pieces.length} tokens
+        </span>
+      </div>
+    ))
 
   const footer = {
     marginTop: 12,
@@ -96,20 +130,13 @@ export default function ScriptSpaces() {
             {zh.text}
           </div>
           <div style={{ fontSize: 12, color: c.muted, marginBottom: 12 }}>“{zh.gloss}”</div>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
-            {[
-              ['bpe', 'BPE'],
-              ['isbpe', 'ISBPE'],
-            ].map(([k, label]) => (
-              <button key={k} onClick={() => setZhScheme(k)} style={segButton(c, zhScheme === k)}>
-                {label}
-              </button>
-            ))}
-          </div>
-          <Chips pieces={zhPieces} c={c} showDoubled={false} />
+          <Rows
+            rows={[
+              ['BPE', zh.bpe, c.bad],
+              ['ISBPE', zh.isbpe, c.channel[0]],
+            ]}
+          />
           <div style={footer}>
-            <span style={{ color: c.ink }}>{zhPieces.length} tokens</span>
-            <br />
             whole Chinese test file: BPE {fmt(zt.bpe)} · ISBPE {fmt(zt.isbpe)} tokens
           </div>
         </>
@@ -119,21 +146,14 @@ export default function ScriptSpaces() {
             {hi.text}
           </div>
           <div style={{ fontSize: 12, color: c.muted, marginBottom: 12 }}>“{hi.gloss}”</div>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
-            {[
-              ['gpt2', "BPE, GPT-2's pretokenizer"],
-              ['bpe', 'BPE, our pretokenizer'],
-              ['isbpe', 'ISBPE'],
-            ].map(([k, label]) => (
-              <button key={k} onClick={() => setHiScheme(k)} style={segButton(c, hiScheme === k)}>
-                {label}
-              </button>
-            ))}
-          </div>
-          <Chips pieces={hiPieces} c={c} showDoubled={false} />
+          <Rows
+            rows={[
+              ["BPE, GPT-2's pretokenizer", hi.gpt2, c.muted],
+              ['BPE, my pretokenizer', hi.bpe, c.bad],
+              ['ISBPE', hi.isbpe, c.channel[0]],
+            ]}
+          />
           <div style={footer}>
-            <span style={{ color: c.ink }}>{hiPieces.length} tokens</span>
-            <br />
             whole Hindi test file: GPT-2&apos;s pretokenizer {fmt(hi.totals.gpt2)} · ours{' '}
             {fmt(hi.totals.bpe)} · ISBPE {fmt(hi.totals.isbpe)} tokens
           </div>
@@ -142,8 +162,8 @@ export default function ScriptSpaces() {
 
       <div style={{ ...LABEL, color: c.muted, marginTop: 10, lineHeight: 1.6 }}>
         {script === 'chinese'
-          ? 'between two chinese characters ISBPE implies no space, so chinese text needs no # marks.'
-          : "GPT-2's pretokenizer cuts at every vowel sign. counting those signs as letters keeps each word in one chunk."}
+          ? 'Between two Chinese characters ISBPE implies no space, so Chinese text needs no # marks.'
+          : "GPT-2's pretokenizer cuts at every vowel sign. Counting those signs as letters keeps each word in one chunk."}
       </div>
     </div>
   )

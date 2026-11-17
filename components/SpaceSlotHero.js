@@ -271,7 +271,7 @@ export default function SpaceSlotHero() {
       ? hasMarks
         ? 'BPE swallows the space. ISBPE drops it and marks where one is missing'
         : 'BPE swallows the space. ISBPE just drops it'
-      : 'and here is what each scheme has to store'
+      : 'the distinct slots each scheme has to store'
 
   return (
     <div

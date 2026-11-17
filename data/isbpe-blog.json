@@ -51,20 +51,20 @@
     "slots_used": 31012,
     "share": 47.3,
     "examples": [
-      "theore",
-      "Delete",
-      "Inside",
-      "stderr",
-      "flavor",
-      "Extent",
-      "Number",
-      "ladder",
-      "georel",
-      "Zhuyin",
-      "graphe",
-      "MATLAB",
-      "winner",
-      "colons"
+      "lrange",
+      "chisqs",
+      "Params",
+      "tester",
+      "unique",
+      "vertex",
+      "pixels",
+      "recent",
+      "Passes",
+      "routes",
+      "dimred",
+      "format",
+      "differ",
+      "chaddr"
     ]
   },
   "flagside": [
@@ -161,34 +161,34 @@
   ],
   "sweep": {
     "code": [
-      { "v": 2048, "bpe_tokens": 435647, "isbpe_tokens": 430866 },
-      { "v": 4096, "bpe_tokens": 392065, "isbpe_tokens": 362409 },
-      { "v": 8192, "bpe_tokens": 365699, "isbpe_tokens": 331922 },
-      { "v": 16384, "bpe_tokens": 350306, "isbpe_tokens": 316251 },
-      { "v": 32768, "bpe_tokens": 341139, "isbpe_tokens": 308331 },
-      { "v": 49152, "bpe_tokens": 338150, "isbpe_tokens": 305626 },
-      { "v": 65536, "bpe_tokens": 336466, "isbpe_tokens": 304228 }
+      { "v": 2048, "bpe_tokens": 435647, "isbpe_tokens": 402587 },
+      { "v": 4096, "bpe_tokens": 392065, "isbpe_tokens": 355700 },
+      { "v": 8192, "bpe_tokens": 365699, "isbpe_tokens": 330188 },
+      { "v": 16384, "bpe_tokens": 350306, "isbpe_tokens": 315790 },
+      { "v": 32768, "bpe_tokens": 341139, "isbpe_tokens": 308264 },
+      { "v": 49152, "bpe_tokens": 338150, "isbpe_tokens": 305613 },
+      { "v": 65536, "bpe_tokens": 336466, "isbpe_tokens": 304217 }
     ],
     "english": [
-      { "v": 2048, "bpe_tokens": 434604, "isbpe_tokens": 474047 },
-      { "v": 4096, "bpe_tokens": 376452, "isbpe_tokens": 386268 },
-      { "v": 8192, "bpe_tokens": 334177, "isbpe_tokens": 334386 },
-      { "v": 16384, "bpe_tokens": 305239, "isbpe_tokens": 302767 },
-      { "v": 32768, "bpe_tokens": 286898, "isbpe_tokens": 284545 },
-      { "v": 49152, "bpe_tokens": 280203, "isbpe_tokens": 277891 },
-      { "v": 65536, "bpe_tokens": 276524, "isbpe_tokens": 274531 }
+      { "v": 2048, "bpe_tokens": 434604, "isbpe_tokens": 443475 },
+      { "v": 4096, "bpe_tokens": 376452, "isbpe_tokens": 376855 },
+      { "v": 8192, "bpe_tokens": 334177, "isbpe_tokens": 331540 },
+      { "v": 16384, "bpe_tokens": 305239, "isbpe_tokens": 301894 },
+      { "v": 32768, "bpe_tokens": 286898, "isbpe_tokens": 284268 },
+      { "v": 49152, "bpe_tokens": 280203, "isbpe_tokens": 277750 },
+      { "v": 65536, "bpe_tokens": 276524, "isbpe_tokens": 274470 }
     ],
-    "crossing": 7388,
+    "crossing": 6907,
     "ref": 65536
   },
   "glue": {
     "steps": [
-      { "k": 0, "tokens": 304228, "xz": 1.3187, "ratio": 2.668 },
-      { "k": 250, "tokens": 287295, "xz": 1.3224, "ratio": 2.731 },
-      { "k": 500, "tokens": 283078, "xz": 1.3245, "ratio": 2.754 },
-      { "k": 1000, "tokens": 278617, "xz": 1.3271, "ratio": 2.778 },
-      { "k": 2000, "tokens": 274601, "xz": 1.3309, "ratio": 2.803 },
-      { "k": 4000, "tokens": 270816, "xz": 1.3342, "ratio": 2.83 }
+      { "k": 0, "tokens": 304217, "xz": 1.3198, "ratio": 2.668 },
+      { "k": 250, "tokens": 287289, "xz": 1.3221, "ratio": 2.731 },
+      { "k": 500, "tokens": 283075, "xz": 1.3245, "ratio": 2.754 },
+      { "k": 1000, "tokens": 278583, "xz": 1.3269, "ratio": 2.779 },
+      { "k": 2000, "tokens": 274597, "xz": 1.331, "ratio": 2.804 },
+      { "k": 4000, "tokens": 270782, "xz": 1.3343, "ratio": 2.83 }
     ],
     "baselines": [
       { "name": "BPE", "tokens": 336466, "xz": 1.386 },
@@ -388,13 +388,13 @@
     ],
     "chinese_totals": {
       "bpe": 298947,
-      "isbpe": 299398,
-      "norule": 309380,
+      "isbpe": 299246,
+      "norule": 309222,
       "o200k": 285281,
-      "doubled_isbpe": 1875,
-      "distinct_isbpe": 62545,
-      "doubled_norule": 12431,
-      "distinct_norule": 51958
+      "doubled_isbpe": 1830,
+      "distinct_isbpe": 62968,
+      "doubled_norule": 12441,
+      "distinct_norule": 52320
     },
     "hindi": {
       "text": "हिन्दी भाषा में लिखा गया लेख",
@@ -438,7 +438,7 @@
         { "s": "गया", "l": false, "r": false },
         { "s": "लेख", "l": false, "r": false }
       ],
-      "totals": { "gpt2": 336376, "bpe": 123133, "isbpe": 122000 }
+      "totals": { "gpt2": 336376, "bpe": 123133, "isbpe": 122002 }
     }
   }
 }
