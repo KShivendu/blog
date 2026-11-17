@@ -119,20 +119,20 @@ The goal is to see the distribution. A few numbers give you most of it, and they
 
 - **p50** shows how the typical query does, and it often catches a difference the mean hides. In a recent experiment, two approaches landed within 0.5 on the mean but 3 points apart on the median. That helped me decide which one to go ahead with.
 - **p25 and the zero-rate** show how the worst queries do, and that's often where you might wanna spend effort. A query going from 0 to 40 means someone now finds an answer. A query going from 70 to 80 means a good result got a little better.
-- **The mean** stays, so you can compare with papers and other runs.
+- **The mean** stays, so you can compare with papers and other runs. Split its change into gained and lost too. The stemmer's +3.9 is +6.3 won by the queries that got better and −2.5 lost by the ones that got worse.
 
-Percentiles need queries that can score many different values. DBPedia has about 16 relevant pages per query, so its scores spread out. On sets where most queries have one relevant doc, like #[NQ](Natural Questions: real Google search questions, each with one Wikipedia answer page), about half the queries score exactly 0. Their median rarely moves, and only in jumps. There, the zero-rate and the better / same / worse split do the job.
+Percentiles work best when queries have many relevant docs, as on DBPedia. On sets with one relevant doc per query, like #[NQ](Natural Questions: real Google search questions, each with one Wikipedia answer page), about half the queries score 0 and the median barely moves, so lean on the zero-rate and better / same / worse.
 
 This is the table I print after every run while iterating. For this post's change it looks like this:
 
 ```md
-| analyzer | NDCG@10 p25 | p50   | mean  | zero-rate | better / same / worse |
-| -------- | ----------- | ----- | ----- | --------- | --------------------- |
-| word     | 0.00        | 21.13 | 27.06 | 25.5%     |                       |
-| word_en  | 6.94        | 27.50 | 30.94 | 19.0%     | 46.5% / 24.8% / 28.8% |
+| analyzer | NDCG@10 p25 | p50   | mean  | zero-rate | better / same / worse | gained / lost |
+| -------- | ----------- | ----- | ----- | --------- | --------------------- | ------------- |
+| word     | 0.00        | 21.13 | 27.06 | 25.5%     |                       |               |
+| word_en  | 6.94        | 27.50 | 30.94 | 19.0%     | 46.5% / 24.8% / 28.8% | +6.33 / -2.46 |
 ```
 
-When something in it moves, I ask an LLM to surface the worst queries and look into them. That's how this run turned up `organic` turning into `organ` and the Joker taking over _Batman Returns_.
+Every now and then I ask agents to surface the worst queries and build a UI for me to explore them interactively. That's how this run turned up `organic` turning into `organ` and the Joker taking over _Batman Returns_.
 
 > **Beyond search:** any eval with graded per-item scores (an LLM judge's rubric, a similarity score, a per-query metric) hides its tail in the mean the same way.#[\*](Binary pass/fail evals hide less in the mean, but you still want the flip counts: how many items went from pass to fail and from fail to pass.)
 
