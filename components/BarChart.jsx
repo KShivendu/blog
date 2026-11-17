@@ -683,10 +683,15 @@ function ChartImpl({
     groupKeys.forEach((gk, gi) => {
       const off = groupOffset(ci, gi)
       const barC = catCenter(ci) + off
-      let cum = 0
+      // Positive and negative values stack on separate running totals, so a
+      // diverging stacked chart (gained right, lost left) grows both ways from 0.
+      // Without negatives only `posCum` is used, which is the old single total.
+      let posCum = 0
+      let negCum = 0
       srs.forEach((s, si) => {
         if (groupOf(s, si) !== gk) return
         const v = diverging ? s.values?.[ci] || 0 : Math.max(0, s.values?.[ci] || 0)
+        let cum = v < 0 ? negCum : posCum
         // Zeros normally collapse to an invisible zero-width bar. Show a small
         // labeled nub instead when the zero is meaningful: any grouped chart, or
         // a single-series bar the author gave an explicit text label (e.g. a
@@ -705,6 +710,8 @@ function ChartImpl({
         const drawEnd = clipped ? vMax : rawEnd
         const p0 = valPx(cum)
         const p1 = valPx(drawEnd)
+        if (v < 0) negCum = rawEnd
+        else posCum = rawEnd
         cum = rawEnd
         const c = colorOf(s, ci)
         const op = opacityOf(s, ci)
@@ -818,12 +825,15 @@ function ChartImpl({
         const pos = s.textPosition || (horizontal ? 'outside' : 'inside')
         if (txt && pos !== 'none' && !dim && !clipped && !mobile) {
           if (horizontal && pos === 'outside') {
+            // In a stacked diverging chart a negative segment's label goes on its
+            // own (left) side, so it doesn't land on the positive bar.
+            const leftLabel = stacked && v < 0
             textLayer.push(
               <text
                 key={`t${ci}-${si}`}
-                x={Math.max(p0, p1) + 5}
+                x={leftLabel ? Math.min(p0, p1) - 5 : Math.max(p0, p1) + 5}
                 y={barC + 3.4}
-                textAnchor="start"
+                textAnchor={leftLabel ? 'end' : 'start'}
                 fontSize={fBarTxt}
                 fill={C.ink}
                 fontFamily="var(--font-mono, ui-monospace, monospace)"
