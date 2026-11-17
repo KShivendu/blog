@@ -17,7 +17,7 @@ I'll use search as the example, but this applies to any eval with graded scores,
 
 ## Average can't represent the distribution
 
-I ran a plain word-BM25 baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir) datasets (599 queries). Instead of averaging each metric, I calculated percentiles over the per-query scores. The mean NDCG@10 is **52.5**, which _feels_ respectable, as if every query comes back roughly half-right. In reality, they range from perfect to nothing: one in five queries retrieves nothing relevant in the top 10, and the average buries every one.
+I ran a plain word-#[BM25](the standard ranking function for keyword search) baseline over 12 [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai-nanobeir)#[\*](a downsampled version of the BEIR retrieval benchmark, about 50 queries per dataset) datasets (599 queries). Instead of averaging each metric, I calculated percentiles over the per-query scores. The mean NDCG@10 is **52.5**, which _feels_ respectable, as if every query comes back roughly half-right. In reality, they range from perfect to nothing: one in five queries retrieves nothing relevant in the top 10, and the average buries every one.
 
 (Note: Every score here is ×100, the way IR papers report NDCG. A mean of 52.5 reads better than 0.525, and a +2.2 gain reads as a real change where +0.022 reads as rounding.)
 
@@ -27,10 +27,9 @@ Let's look at the distribution.
 
 Observations:
 
-- 119/599 queries score exactly 0 and 129/599 score exactly 100 on NDCG@10. That's **41% of all queries** sitting at the two extreme ends.
-- Only **43 of 599** queries land within 5 of the mean (52.5), so it describes a query that barely exists.
-- Switch to #[recall@10](the share of a query's relevant docs that show up in the top 10) and it gets worse: **63%** of queries at the two ends, 13 near the mean.
-- The mean's error flips sign between metrics. It overstates recall@10's median (56.3 vs 50.0) and understates NDCG@10's (52.5 vs 55.4), so you can't correct for it in your head.
+- 19.9% of queries score exactly 0 and 21.5% score a perfect 100. That's **41% of queries sitting at the two extreme ends.**
+- Almost none land near the mean. Picture a class where half the students score 0 and half score 100. The average is 50, and no student got 50. Here only 7% of queries score within 5 points of 52.5.
+- #[recall@10](the share of a query's relevant docs that show up in the top 10) is even more split, with **63%** of queries at the two ends.
 
 ## Understanding impact of your changes
 
@@ -79,12 +78,11 @@ export const tailView = (label, w, en) => ({
 
 Observations:
 
-- The mean never moves most. On every metric, p25 or p50 moves further (NDCG@10 p25 **+4.5**, recall@10 p50 **+10.0**, recall@100 p25 **+12.6**) while the mean moves **+1.9**, **+2.2** and **+2.8**.
-- recall@100's median is pinned at 100 before and after, so it reads **+0.0** while p25 moves **+12.6**.
-- recall@10 is the other way round, the median jumps **+10.0** while p25 moves **+3.6**. Neither percentile wins every time, which is why I report both.
+- On every metric, p25 or p50 moves further than the mean. On NDCG@10, p25 moves **+4.5** while the mean moves **+1.9**.
+- Which one moves depends on where the queries have room. recall@100's median is already stuck at 100, so its p25 moves instead. On recall@10 it's the median. Neither wins every time, which is why I report both.
 - recall@10 takes only a few values per query, so its percentiles move in steps. The median's +10.0 is one step, from 50 to 60. A big jump tells you where to look, and the queries behind it tell you whether it's real.
 
-**p50/p25/mean are great for communicating**. But if you wanna drill down and properly compare two methods, you should look into exact queries that are improved/degraded.
+**p50/p25/mean give you a quick read**. But if you wanna drill down and properly compare two methods, you should look into exact queries that are improved/degraded.
 
 That's why I like to bucket the exact deltas per query for my metrics and use that to find queries to focus on:
 
@@ -92,11 +90,9 @@ That's why I like to bucket the exact deltas per query for my metrics and use th
 
 Observations:
 
-- 294/599 (49%) queries don't move. About half the set sits in the no-change bar, so nearly half the deltas behind +1.9 are zeros.
-- **Win/tie/loss is 172/294/133.** Of the 305 queries that actually moved, 56% got better and 44% got worse. That's why the mean goes up, but only by 1.9.
-- **Weight each query by how far it moved and it's 3359 points gained against 2217 lost.** 60% of the movement was upward, better than the 56% the raw count suggests, because winners move further than losers do (+19.5 each against −16.7).
+- 49% of queries don't move at all.
+- Of the ones that moved, 56% got better and 44% got worse (**172 wins, 133 losses**). That's why the mean goes up, but only by 1.9. Winners also moved a bit further than losers.
 - The stemmer and stopword list rescued **25 queries from 0** (`Which colors can one use to fill out a check in the US?` goes 0 to 100) and sent 9 to 0 (`who sang here i go again` goes 100 to 0). That moves the zero-rate, the share of queries with nothing relevant in the top 10, from 19.9% to 17.2%.
-- Both ends hit the full 100. `Which colors can one use to fill out a check in the US?` gains 100, `who sang here i go again` loses 100, and 5 queries lost more than 50 points against 11 that gained more than 50.
 
 I like to ask an LLM to build a UI for me to explore the dataset. It just needs basic sorting by metrics, filtering, and search (yeah. use search to improve search :D). Below is a cut-down version with three queries from this run, click one to see what each analyzer sent to the index and what came back:
 
@@ -107,7 +103,6 @@ Some interesting examples:
 - `who sang here i go again` went from a perfect **100 to 0** on NDCG@10. "Here I Go Again" is a song title made of stopwords, so the stopword list deletes most of it and we only ever query the index for `sang go`.
 - `who appoints the members of the given branch in the united states` also went **100 to 0**. The query becomes `appoint member given branch unit state`. The relevant doc ("...appointed by the President of the United States...") was rank 1 before and falls out of the top 10 after.
 - Even recall@100, the most #[forgiving](it only asks whether a relevant doc landed anywhere in the top 100, so a doc can slip 90 places and still count) metric here, falls to 0 on 4 queries. One is the ClimateFEVER claim `No state generates as much solar power as California`, and the stemmer cuts "generates" down to #[gener](Porter gives that same stem to general, generally, generic, generous and generation), so lots of unrelated documents pop up.
-- **9/599 queries** fell from a real NDCG@10 score to exactly 0 like this.
 - What's most surprising is that **stemmer and stopwords are considered standard but it's clear even they hurt some queries**. There's no free lunch. You must look into your data/distribution.
 
 The same thing happens one level up. Split the +1.9 by dataset:
@@ -181,8 +176,8 @@ The same thing happens one level up. Split the +1.9 by dataset:
 
 Observations:
 
-- The net hides how much moved. SCIDOCS nets **+0.0**, yet 29 of its 50 queries changed (16 better, 13 worse) and cancelled out. MSMARCO and FEVER both net about +0.3 to +0.5, but MSMARCO gained 7.5 and lost 7.0, while 48 of FEVER's 50 queries didn't move at all.
-- Touche2020, a set of debate posts, loses **−6.6** (14 queries better, 33 worse). `Should the voting age be lowered?` drops 68 → 30.
+- The net hides how much moved. SCIDOCS nets **+0.0**, yet 58% (29/50) of its queries changed and cancelled out. MSMARCO and FEVER both net under +0.5. MSMARCO got there by gaining 7.5 and losing 7.0. FEVER got there because 96% of its queries didn't move.
+- Touche2020, a set of debate posts, loses **−6.6**. 67% of its queries got worse and 29% got better. `Should the voting age be lowered?` drops 68 → 30.
 - Most of Touche's loss is missing labels. Its judges only read some of the docs for each query. For the voting-age query, 7 of `word`'s top 10 had been judged and 4 of `word_en`'s. Every doc nobody judged counts as wrong.
 
 <details>
@@ -280,16 +275,16 @@ A search engineer should be able to tell you what kinds of queries their system 
 
 Your golden set is probably small. Mine is 599 queries and most teams have fewer. That's small enough to treat like a test suite. A query that used to work and now returns nothing is a regression, and you want to see it by name.
 
-> **Beyond search:** any eval with graded per-item scores, an LLM judge's rubric, a similarity score, a per-query metric, hides its tail in the mean the same way.#[\*](Binary pass/fail evals are the exception: there the mean already tells you everything.)
+> **Beyond search:** any eval with graded per-item scores (an LLM judge's rubric, a similarity score, a per-query metric) hides its tail in the mean the same way.#[\*](Binary pass/fail evals are the exception: there the mean already tells you everything.)
 
 Mean alone can't capture a distribution. We realised this for latency decades ago, and search relevance deserves the same. Then look into your queries.
 
 ## Key Takeaways
 
-- **A good average can hide queries that are hurting real users.** Plain BM25 averages 52.5 NDCG@10, yet 119 of 599 queries find nothing relevant in the top 10.
-- **It hides what changed.** Adding a stemmer and stopwords moves mean NDCG@10 by a forgettable +1.9, while 172 queries get better, 133 get worse and one dataset (Touche2020) drops 6.6, mostly from docs nobody judged.
-- **Report p50 and p25 next to the mean.** Higher is better for relevance, so the tail that hurts is the low end. Watch the lowest percentile that isn't stuck at 0. Here 19.9% of queries score 0, so p10 is stuck and p25 is the one that moves.
-- **Win/tie/loss says what the mean can't.** That +1.9 was 172 queries up, 133 down and 294 unmoved. Weighted by how far each one moved, 60% of the movement was upward.
+- **A good average can hide queries that are hurting real users.** Plain BM25 averages 52.5 NDCG@10, yet 20% of queries find nothing relevant in the top 10.
+- **It hides what changed.** Adding a stemmer and stopwords moves mean NDCG@10 by a forgettable +1.9, while one dataset (Touche2020) drops 6.6, mostly from docs nobody judged.
+- **Report p50 and p25 next to the mean.** Higher is better for relevance, so the tail that hurts is the low end. Watch the lowest percentile that isn't stuck at 0. Here 20% of queries score 0, so p10 is stuck and p25 is the one that moves.
+- **Win/tie/loss says what the mean can't.** That +1.9 was 29% of queries up, 22% down and 49% unmoved.
 - **Track your golden queries like test cases.** Mine is 599 queries and most sets are smaller. A query that used to work and now returns nothing is a regression you should see by name, not as a mean that moved by 1.9.
 
 I now report p50, p25 and the zero-rate next to the mean, then look into the queries that moved.
