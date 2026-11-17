@@ -117,9 +117,10 @@ Some of the queries it broke:
 
 The goal is to see the distribution. A few numbers give you most of it, and they come from the per-query scores you already have. (No labels yet? Hand-label 50 to 100 real queries, or use an LLM judge.)
 
-- **p50** shows how the typical query does, and it often catches a difference the mean hides. In a recent experiment, two approaches landed within 0.5 on the mean but 3 points apart on the median. That helped me decide which one to go ahead with.
 - **p25 and the zero-rate** show how the worst queries do, and that's often where you might wanna spend effort. A query going from 0 to 40 means someone now finds an answer. A query going from 70 to 80 means a good result got a little better.
+- **p50** shows how the typical query does, and it often catches a difference the mean hides. In a recent experiment, two approaches landed within 0.5 on the mean but 3 points apart on the median. That helped me decide which one to go ahead with.
 - **The mean** stays, so you can compare with papers and other runs. Split its change into gained and lost too. The stemmer's +3.9 is +6.3 won by the queries that got better and −2.5 lost by the ones that got worse.
+- **A significance test** tells you whether a gain is real or noise. If the stemmer did nothing, each query that moved would go up or down like a coin flip. 186 up and 115 down is very unlikely by chance (p = 0.00005). [StatQuest explains p-values well](https://www.youtube.com/watch?v=vemZtEM63GY).
 
 Percentiles work best when queries have many relevant docs, as on DBPedia. On sets with one relevant doc per query, like #[NQ](Natural Questions: real Google search questions, each with one Wikipedia answer page), about half the queries score 0 and the median barely moves, so lean on the zero-rate and better / same / worse.
 
