@@ -31,11 +31,21 @@ Observations:
 - Almost none land near the mean. Picture a class where half the students score 0 and half score 100. The average is 50, and no student got 50. Here only 7% of queries score within 5 points of 52.5.
 - #[recall@10](the share of a query's relevant docs that show up in the top 10) is even more split, with **63%** of queries at the two ends.
 
+## The relevance tail
+
+Latency and relevance are the same problem pointed at opposite tails. For latency, higher is worse, so you watch the high end: p90, p99. For relevance, higher is better, so the tail that hurts is the low end. That's the **relevance tail**, the weaker half of your queries. p25 is the middle of that half, so it's the number I watch.
+
+Report p25, not p10. p10 pins at 0 once more than 10% of queries fail, and 20% do here, so it can't show the tail moving. p25 is 21.9 on NDCG@10 and still moves when the method changes.
+
+I timed this BM25 baseline at **3.2ms p50, 7.2ms p90**. Nobody would report only the 4.4ms mean, because the p90 is the request a real user is waiting on. A p25 relevance score is the score a quarter of your queries get or worse. We just forget to report it.
+
 ## Understanding impact of your changes
 
 Take a real improvement: plain word BM25, then apply a Porter stemmer and a stopword list (`word_en`). It moves mean NDCG@10 by **+1.9**, a bump you'd squint at.
 
 (Setup: BM25 with k1=1.5, b=0.75 and Lucene IDF. `word` lowercases and splits on word characters. `word_en` also drops NLTK's English stopword list and applies NLTK's Porter stemmer.)
+
+### What the percentiles show
 
 The first thing I've started reading is **p25 and p50 along with mean**. It comes out of the per-query scores I already have with a 1 line change. Toggle the statistic:
 
@@ -81,6 +91,8 @@ Observations:
 - On every metric, p25 or p50 moves further than the mean. On NDCG@10, p25 moves **+4.5** while the mean moves **+1.9**.
 - Which one moves depends on where the queries have room. recall@100's median is already stuck at 100, so its p25 moves instead. On recall@10 it's the median. Neither wins every time, which is why I report both.
 - recall@10 takes only a few values per query, so its percentiles move in steps. The median's +10.0 is one step, from 50 to 60. A big jump tells you where to look, and the queries behind it tell you whether it's real.
+
+### Which queries moved
 
 **p50/p25/mean give you a quick read**. But if you wanna drill down and properly compare two methods, you should look into exact queries that are improved/degraded.
 
@@ -252,14 +264,6 @@ The pattern holds across metrics:
 The gain lands wherever the queries still have room to move.
 
 </details>
-
-## The relevance tail
-
-Latency and relevance are the same problem pointed at opposite tails. For latency, higher is worse, so you watch the high end: p90, p99. For relevance, higher is better, so the tail that hurts is the low end. That's the **relevance tail**, the weaker half of your queries. p25 is the middle of that half, so it's the number I watch.
-
-Report p25, not p10. p10 pins at 0 once more than 10% of queries fail, and 20% do here, so it can't show the tail moving. p25 is 21.9 on NDCG@10 and still moves when the method changes.
-
-I timed this BM25 baseline at **3.2ms p50, 7.2ms p90**. Nobody would report only the 4.4ms mean, because the p90 is the request a real user is waiting on. A p25 relevance score is the score a quarter of your queries get or worse. We just forget to report it.
 
 ## So what should we actually track?
 
