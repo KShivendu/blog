@@ -198,7 +198,16 @@ The goal is to see the distribution. A few numbers give you most of it, and they
 - **p25 and the zero-rate** show how the worst queries do, and that's often where you might wanna spend effort. A query going from 0 to 40 means someone now finds an answer. A query going from 70 to 80 means a good result got a little better.
 - **The mean** stays, so you can compare with papers and other runs.
 
-When one of them moves, look into the queries that moved. That's how this run turned up song titles made of stopwords and words stemmed into common ones.
+This is the table I print after every run while iterating. For this post's change it looks like this:
+
+```md
+| analyzer | NDCG@10 p25 | p50   | mean  | zero-rate | better / same / worse |
+| -------- | ----------- | ----- | ----- | --------- | --------------------- |
+| word     | 21.92       | 55.43 | 52.55 | 19.9%     |                       |
+| word_en  | 26.41       | 59.15 | 54.46 | 17.2%     | 29% / 49% / 22%       |
+```
+
+When something in it moves, I ask an LLM to surface the worst queries and look into them. That's how this run turned up song titles made of stopwords and words stemmed into common ones.
 
 > **Beyond search:** any eval with graded per-item scores (an LLM judge's rubric, a similarity score, a per-query metric) hides its tail in the mean the same way.#[\*](Binary pass/fail evals are the exception: there the mean already tells you everything.)
 
