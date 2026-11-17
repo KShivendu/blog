@@ -33,7 +33,7 @@ Observations:
 
 ## The relevance tail
 
-Latency and relevance are the same problem pointed at opposite tails. For latency, higher is worse, so you watch the high end: p90, p99. For relevance, higher is better, so the tail that hurts is the low end. That's the **relevance tail**, the weaker half of your queries. p25 is the score a quarter of your queries get or worse, so it's the number I watch.
+For latency, higher is worse, so you watch the high end: p90, p99. For relevance, higher is better, so the tail that hurts is the low end. That's the **relevance tail**, the weaker half of your queries. p25 is the score a quarter of your queries get or worse, so it's the number I watch.
 
 Report p25, not p10. p10 pins at 0 once more than 10% of queries fail, and 25.5% do here, so it can't show the tail moving. For plain BM25 even p25 sits at 0 here. It moves once a change pushes the zero-rate (the share of queries with nothing relevant in the top 10) under 25%, and the stemmer below does exactly that.
 
