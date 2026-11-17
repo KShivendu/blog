@@ -2,7 +2,7 @@ import { useTheme } from 'next-themes'
 import { useEffect, useState } from 'react'
 
 import DATA from '../data/isbpe-blog.json'
-import { LABEL, MONO, labChrome } from '../lib/wordpiece-lab'
+import { LABEL, MONO, hexFade, labChrome } from '../lib/wordpiece-lab'
 
 // Widget 3 for improving-bpe.mdx: the same win read as vocabulary size.
 // Drag the slider and the two bars move. The point lands when the ISBPE bar at
@@ -29,7 +29,7 @@ export default function VocabSweep() {
   const green = c.channel[0]
 
   const max = Math.max(...rows.map((r) => r.bpe_tokens))
-  const bar = (n, tint, label) => (
+  const bar = (n, tint, label, fixed) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '7px 0' }}>
       <span style={{ ...LABEL, color: c.muted, width: 96, flexShrink: 0 }}>{label}</span>
       <div style={{ flex: 1, height: 20, background: c.fill, borderRadius: 2 }}>
@@ -37,7 +37,17 @@ export default function VocabSweep() {
           style={{
             width: `${(n / max) * 100}%`,
             height: '100%',
-            background: tint,
+            // The fixed reference keeps BPE's red but as a dashed outline over
+            // a hatch, so it reads as a marker that does not move, not as a
+            // disabled bar.
+            background: fixed
+              ? `repeating-linear-gradient(135deg, ${hexFade(
+                  tint,
+                  0.35
+                )} 0 4px, transparent 4px 8px)`
+              : tint,
+            border: fixed ? `1.5px dashed ${tint}` : 'none',
+            boxSizing: 'border-box',
             borderRadius: 2,
             transition: 'width 260ms ease',
           }}
@@ -69,8 +79,9 @@ export default function VocabSweep() {
 
       {bar(row.bpe_tokens, c.bad, `BPE @ ${row.v.toLocaleString('en-US')}`)}
       {bar(row.isbpe_tokens, green, `ISBPE @ ${row.v.toLocaleString('en-US')}`)}
-      <div style={{ opacity: 0.55 }}>
-        {bar(ref.bpe_tokens, c.bad, `BPE @ ${ref.v.toLocaleString('en-US')}`)}
+      {bar(ref.bpe_tokens, c.bad, `BPE @ ${ref.v.toLocaleString('en-US')}`, true)}
+      <div style={{ ...LABEL, color: c.muted, textAlign: 'right', marginTop: -2 }}>
+        dashed bar: fixed BPE reference, does not move with the slider
       </div>
 
       <input
@@ -114,8 +125,8 @@ export default function VocabSweep() {
           </>
         )}{' '}
         <span style={{ color: c.muted }}>
-          The crossing is at V={DATA.sweep.crossing.toLocaleString('en-US')}, a vocabulary{' '}
-          {(100 * (1 - DATA.sweep.crossing / DATA.sweep.ref)).toFixed(1)}% smaller.
+          The crossing is at vocabulary size {DATA.sweep.crossing.toLocaleString('en-US')}, a
+          vocabulary {(100 * (1 - DATA.sweep.crossing / DATA.sweep.ref)).toFixed(1)}% smaller.
         </span>
       </div>
     </div>

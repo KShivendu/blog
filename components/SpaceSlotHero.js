@@ -56,6 +56,7 @@ export default function SpaceSlotHero() {
   const [playing, setPlaying] = useState(true)
   const [inView, setInView] = useState(false)
   const [narrow, setNarrow] = useState(false)
+  const [boxW, setBoxW] = useState(0)
 
   const boxRef = useRef(null)
   const rafRef = useRef(null)
@@ -73,7 +74,10 @@ export default function SpaceSlotHero() {
       threshold: 0.2,
     })
     io.observe(el)
-    const ro = new ResizeObserver(([e]) => setNarrow(e.contentRect.width < 520))
+    const ro = new ResizeObserver(([e]) => {
+      setNarrow(e.contentRect.width < 520)
+      setBoxW(e.contentRect.width)
+    })
     ro.observe(el)
     return () => {
       io.disconnect()
@@ -117,21 +121,32 @@ export default function SpaceSlotHero() {
         .filter((w) => h.bpe_slots.some((y) => y.s === w))
   )
 
-  const FS = narrow ? 11 : 13
+  // On a phone the viewBox matches the real width (one unit, one pixel), so 13
+  // is 13px on screen, and the chips wrap onto a second line instead of the
+  // whole drawing shrinking until the text is 5px tall.
+  const FS = 13
   const CH = FS * 0.62
   const PAD = narrow ? 5 : 7
   const GAP = 5
   const ROW = narrow ? 30 : 34
+  const LINE = ROW - 4 // vertical step between wrapped chip lines
+  const NARROW_W = Math.max(240, Math.floor(boxW) || 300)
 
   const chipW = (txt) => txt.length * CH + PAD * 2
   const layout = (pieces, render) => {
+    const maxW = narrow ? NARROW_W - 8 : Infinity // slack for glyphs wider than CH
     let x = 0
+    let line = 0
     return pieces.map((pc) => {
       const txt = render(pc)
       const w = chipW(txt)
+      if (x > 0 && x + w > maxW) {
+        x = 0
+        line += 1
+      }
       const at = x
       x += w + GAP
-      return { ...pc, txt, x: at, w }
+      return { ...pc, txt, x: at, w, line }
     })
   }
 
@@ -155,10 +170,22 @@ export default function SpaceSlotHero() {
     )
   )
   const LANE_X = narrow ? 0 : 62
-  const VB_W = W + LANE_X + 96 // room for the "7 slots" count
-  const VB_H = ROW * 2 + (narrow ? 32 : 26)
+  const lines = (r) => (r.length ? r[r.length - 1].line + 1 : 1)
 
-  const Chip = ({ d, y, tint, o = 1, dim }) => {
+  // Two rows, not four. For this example BPE's token row and slot row are
+  // identical (6 and 6), so showing both read as an accidental duplicate. The
+  // distinct-slot count goes inline at the end of each row instead. On a phone
+  // each lane gets its label on its own line above the chips.
+  const LABEL_H = 22
+  const yBPE = narrow ? 18 + LABEL_H : 26
+  const yISB = narrow
+    ? yBPE + (lines(bpeRow) - 1) * LINE + (ROW - 10) + 8 + LABEL_H
+    : yBPE + ROW + 8
+  const isbLines = Math.max(lines(bpeRow), lines(isbRow))
+  const VB_W = narrow ? NARROW_W : W + LANE_X + 96 // room for the "7 slots" count
+  const VB_H = narrow ? yISB + (isbLines - 1) * LINE + (ROW - 10) + 4 : ROW * 2 + 26
+
+  const Chip = ({ d, y, tint, wash, stub = red, o = 1, dim }) => {
     // The leading space is drawn as a filled slab rather than a glyph, so it
     // reads as width the token took rather than as punctuation.
     const lead = d.txt.startsWith('\u00b7')
@@ -172,7 +199,7 @@ export default function SpaceSlotHero() {
           width={d.w}
           height={ROW - 10}
           rx={2}
-          fill={tint ? (dark ? `${tint}28` : `${tint}18`) : c.fill}
+          fill={tint ? (dark ? `${tint}28` : `${tint}18`) : wash ? `${wash}14` : c.fill}
           stroke={tint || c.border}
           strokeWidth={1}
           opacity={dim ? 0.55 : 1}
@@ -185,7 +212,7 @@ export default function SpaceSlotHero() {
               width={slabW}
               height={ROW - 12}
               rx={1}
-              fill={red}
+              fill={stub}
               opacity={dim ? 0.3 : 0.55}
             />
             <line
@@ -193,7 +220,7 @@ export default function SpaceSlotHero() {
               y1={y + 1}
               x2={d.x + 1 + slabW}
               y2={y + ROW - 11}
-              stroke={red}
+              stroke={stub}
               strokeWidth={1}
               opacity={0.75}
             />
@@ -240,7 +267,11 @@ export default function SpaceSlotHero() {
   )
 
   const laneLabel = (y, text, tint) =>
-    narrow ? null : (
+    narrow ? (
+      <text x={0} y={y - 7} fontFamily={MONO} fontSize={11} fontWeight="700" fill={tint}>
+        {text}
+      </text>
+    ) : (
       <text
         x={LANE_X - 10}
         y={y + (ROW - 10) / 2 + 3}
@@ -253,11 +284,12 @@ export default function SpaceSlotHero() {
       </text>
     )
 
-  // Two rows, not four. For this example BPE's token row and slot row are
-  // identical (6 and 6), so showing both read as an accidental duplicate. The
-  // distinct-slot count goes inline at the end of each row instead.
-  const yBPE = narrow ? 30 : 26
-  const yISB = yBPE + ROW + (narrow ? 10 : 8)
+  // Where the "7 slots" count goes: after the last chip on a wide screen, next
+  // to the lane label on a phone.
+  const countAt = (row, y) =>
+    narrow
+      ? { x: 52, y: y - 7 - ((ROW - 10) / 2 + FS * 0.36) }
+      : { x: (row.at(-1)?.x ?? 0) + (row.at(-1)?.w ?? 0) + 12, y }
 
   // A space-separated example never produces a mark, so the phase text must
   // not promise one.
@@ -319,6 +351,10 @@ export default function SpaceSlotHero() {
       </div>
 
       <div style={{ ...LABEL, color: c.muted, minHeight: 15, marginBottom: 4 }}>{phaseText}</div>
+      <div style={{ fontFamily: MONO, fontSize: 11, color: c.muted, marginBottom: 4 }}>
+        <span style={{ color: red }}>red</span> = BPE, <span style={{ color: green }}>green</span> =
+        ISBPE
+      </div>
 
       <svg viewBox={`0 0 ${VB_W} ${VB_H}`} width="100%" role="img" aria-label={phaseText}>
         {/* Labels live outside the chip group so they can never be covered. */}
@@ -343,36 +379,29 @@ export default function SpaceSlotHero() {
             <Chip
               key={`b${i}`}
               d={d}
-              y={yBPE}
+              y={yBPE + d.line * LINE}
               o={tCut}
               tint={dups.has(core(d.s)) ? red : undefined}
             />
           ))}
-          <Count
-            x={(bpeRow.at(-1)?.x ?? 0) + (bpeRow.at(-1)?.w ?? 0) + 12}
-            y={yBPE}
-            n={h.bpe_slots.length}
-            tint={red}
-            o={tSlots}
-          />
+          <Count {...countAt(bpeRow, yBPE)} n={h.bpe_slots.length} tint={red} o={tSlots} />
 
-          {/* ISBPE: identical to BPE until P1, then the spaces leave */}
+          {/* ISBPE: identical to BPE until P1, then the spaces leave. Its space
+              stubs are grey, never red: red means BPE in this post. After the
+              split every chip takes a green wash, and the words BPE doubled
+              take full green. */}
           {(tSplit > 0 ? isbRow : bpeRow).map((d, i) => (
             <Chip
               key={`i${i}`}
               d={d}
-              y={yISB}
+              y={yISB + d.line * LINE}
               o={tCut}
+              stub={c.off}
+              wash={tSplit > 0 ? green : undefined}
               tint={tSplit > 0.4 && dups.has(core(d.s)) ? green : undefined}
             />
           ))}
-          <Count
-            x={(isbRow.at(-1)?.x ?? 0) + (isbRow.at(-1)?.w ?? 0) + 12}
-            y={yISB}
-            n={h.isbpe_slots.length}
-            tint={green}
-            o={tSlots}
-          />
+          <Count {...countAt(isbRow, yISB)} n={h.isbpe_slots.length} tint={green} o={tSlots} />
         </g>
       </svg>
 

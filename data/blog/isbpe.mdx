@@ -16,7 +16,8 @@ Open OpenAI's o200k vocabulary and you find `the` **nine** times:
 ```
 o200k entries that spell the word 'the'
 
-'the'   ' the'   '.the'   '(the'   ',the'   '-the'   '/the'   '_the'   '\tthe'
+'the'   ' the'   '.the'   '(the'   ',the'
+'-the'  '/the'   '_the'   '\tthe'
 ```
 
 `get` is in there seventeen times, `value` sixteen. Before BPE (byte-pair encoding) learns its tokens, a regex called the pretokenizer cuts the text into chunks, and BPE never merges across a chunk edge. o200k's regex lets the character before a word join its chunk, so a common word gets a slot (one vocabulary entry) for every character that can come before it.
@@ -27,18 +28,15 @@ The root of it is the space. Even a pretokenizer that attaches nothing but the s
 
 Every shipped vocabulary I checked does this, and the paired forms are what they write most. **Four out of five tokens** they emit on 20 MB of English web text (C4) are one half of such a pair, like `' the'`, whose partner `the` is also stored:
 
-```
-share of tokens that are a word the vocabulary also stores in another form
-(20 MB of English web text, C4)
-
-r50k          GPT-2, GPT-3                 78.4%
-cl100k        GPT-3.5, GPT-4               79.7%
-o200k         GPT-4o onwards               80.8%
-Qwen3         Qwen                         78.4%
-DeepSeek V2   DeepSeek                     81.1%
-SmolLM2       HuggingFace                  78.0%
-Gemma 2       Google                       87.1%
-```
+| vocabulary  | used by        | tokens that are half of a pair |
+| ----------- | -------------- | ------------------------------ |
+| r50k        | GPT-2, GPT-3   | 78.4%                          |
+| cl100k      | GPT-3.5, GPT-4 | 79.7%                          |
+| o200k       | GPT-4o onwards | 80.8%                          |
+| Qwen3       | Qwen           | 78.4%                          |
+| DeepSeek V2 | DeepSeek       | 81.1%                          |
+| SmolLM2     | HuggingFace    | 78.0%                          |
+| Gemma 2     | Google         | 87.1%                          |
 
 That doesn't make four in five tokens wasted. The cost is in slots. Each second form takes an entry that could hold a new word, and how much the freed entries buy depends on the text.
 
@@ -49,10 +47,14 @@ So why store the space at all? ISBPE (implied-space BPE) doesn't. It marks only 
 The decoder puts a space between two tokens unless a `#` says there isn't one. (It also adds none after a newline or indent token, and none between two Chinese characters.) One line of Python, split by both tokenizers:
 
 ```
-'self.items = items or self.items'   (65,536-slot models, trained on the same 20 MB of Python)
+'self.items = items or self.items'
+(65,536-slot models, trained on the same 20 MB of Python)
 
-  BPE     self | . | items | ' =' | ' items' | ' or' | ' self' | . | items     9 tokens, 7 distinct slots
-  ISBPE   self | #.# | items | = | items | or | self | #.# | items            9 tokens, 5 distinct slots
+  BPE     self | . | items | ' =' | ' items' | ' or' | ' self' | . | items
+          9 tokens, 7 distinct slots
+
+  ISBPE   self | #.# | items | = | items | or | self | #.# | items
+          9 tokens, 5 distinct slots
 ```
 
 - **BPE** stores the space inside the token, so it needs two slots for each word here: `items` and `' items'`, `self` and `' self'`.
@@ -113,8 +115,10 @@ Observations:
   ```
   'self.accountemail:'   (Python test file)
 
-    BPE    self | . | ac | coun | te | mail | :     7 tokens
-    ISBPE  self | #.# | account | #email | #:      5 tokens
+    BPE    self | . | ac | coun | te | mail | :
+           7 tokens
+    ISBPE  self | #.# | account | #email | #:
+           5 tokens
   ```
 
   ISBPE keeps `account` whole. BPE's merges break the name into four pieces.
@@ -180,15 +184,13 @@ As often as BPE does. Four out of five of its token ends land on a word boundary
 
 **Glue entries close that gap.** On Chinese the gain over o200k comes from them. Their top picks on Chinese are the pairs o200k learns: `，在`, `，但`, `，而`, `。在`.
 
-```
-Chinese test file, 65,536 slots      tokens     xz bits/byte
-
-BPE                                  298,947    2.3710
-ISBPE                                299,246    2.3952
-ISBPE + 4,000 glue entries           284,746    2.4003
-ISBPE + 8,000 glue entries           283,466    2.4049
-BPE, o200k pretokenizer              285,281    2.3917
-```
+| Chinese test file, 65,536 slots | tokens      | xz bits/byte |
+| ------------------------------- | ----------- | ------------ |
+| BPE                             | 298,947     | **2.3710**   |
+| ISBPE                           | 299,246     | 2.3952       |
+| ISBPE + 4,000 glue entries      | 284,746     | 2.4003       |
+| ISBPE + 8,000 glue entries      | **283,466** | 2.4049       |
+| BPE, o200k pretokenizer         | 285,281     | 2.3917       |
 
 With 4,000 glue entries ISBPE needs 0.2% fewer tokens than o200k, and 0.6% fewer with 8,000. Unlike on code, the `xz` size doesn't follow. Plain BPE has the smallest one (2.3710), and ISBPE with 4,000 glue entries is 1.2% larger.
 
@@ -199,9 +201,8 @@ Train on Python, then read English it has never seen:
 ```
 'This is a lot of what I do with the college students I see.'
 
-           whole sentence    the word 'students'
-  BPE      19 tokens         ' st' | udent | s
-  ISBPE    16 tokens         students
+  BPE      19 tokens    students -> ' st' | udent | s
+  ISBPE    16 tokens    students -> students
 ```
 
 A code corpus has `students` mostly glued to something, so BPE never learns `' students'`. ISBPE needs only one form.
@@ -216,14 +217,20 @@ WikiText gains least. It writes punctuation with spaces around it, so `' , '` sh
 
 ## What it costs
 
+- **A token's text depends on its neighbours.** Whether a space goes before a token depends on the marks around it, so stop strings, logit bias and streaming output have to look at the next token.
+- **Small vocabularies lose** on English, from 4,096 slots down.
+- **Identifiers take slightly more pieces.** They average 2.42 tokens against BPE's 2.37, although more are kept whole. `accountemail` drops from 4 pieces to 2, while `Segments` goes from 1 to 3 (`S | #eg | #ments`).
+- **Everything is one 20 MB corpus per language** and one test file.
+
+<details>
+<summary>Four smaller costs</summary>
+
 - **WikiText's stored ids take 2.0% more space**, even with 0.6% fewer tokens, because more of ISBPE's ids there are rare ones that need two bytes.
 - **Chinese needs glue entries to beat o200k**, and its `xz` size stays larger than plain BPE's.
-- **Identifiers take slightly more pieces.** They average 2.42 tokens against BPE's 2.37, although more are kept whole. `accountemail` drops from 4 pieces to 2, while `Segments` goes from 1 to 3 (`S | #eg | #ments`).
-- **Small vocabularies lose** on English, from 4,096 slots down.
 - **Glue entries are fixed pairs.** `.get` exists, but it never grows into `.getattr`.
-- **A token's text depends on its neighbours.** Whether a space goes before a token depends on the marks around it, so stop strings, logit bias and streaming output have to look at the next token.
 - **Only Chinese was tested among scripts without spaces.** The rule also covers Japanese characters, but I didn't test Japanese. Thai, Lao, Khmer and Burmese aren't covered.
-- **Everything is one 20 MB corpus per language** and one test file.
+
+</details>
 
 ## Does it help an LLM?
 

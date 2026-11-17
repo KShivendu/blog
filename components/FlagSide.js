@@ -21,13 +21,16 @@ export default function FlagSide() {
   const dark = mounted && resolvedTheme === 'dark'
   const c = labChrome(dark)
 
-  const [pick, setPick] = useState(0)
+  // Open on get_attraction, where the rule visibly pays: BPE splits
+  // attraction into two pieces and ISBPE keeps it whole (4 tokens against 3).
+  const start = DATA.flagside.findIndex((r) => r.text === 'get_attraction')
+  const [pick, setPick] = useState(start < 0 ? 0 : start)
   const row = DATA.flagside[pick]
-  const green = c.channel[0]
 
   // A piece is "whole" when it is a letter run with no mark inside it. That is
-  // exactly what the dual-flag rule is supposed to protect, so it gets the
-  // colour and everything else stays neutral.
+  // exactly what the dual-flag rule is supposed to protect. It is marked in
+  // bold with an ink border, not in a colour, because red and green mean BPE
+  // and ISBPE in this post and a whole word can come out of either.
   const words = new Set(row.text.match(/[A-Za-z]+/g) || [])
   const isWord = (p) => words.has(p.s.trim())
 
@@ -57,7 +60,15 @@ export default function FlagSide() {
           key={k}
           style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}
         >
-          <span style={{ ...LABEL, color: c.muted, width: 48, flexShrink: 0, paddingTop: 8 }}>
+          <span
+            style={{
+              ...LABEL,
+              color: k === 'bpe' ? c.bad : c.channel[0],
+              width: 48,
+              flexShrink: 0,
+              paddingTop: 8,
+            }}
+          >
             {label}
           </span>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, flex: 1, minHeight: 32 }}>
@@ -65,8 +76,11 @@ export default function FlagSide() {
               <span
                 key={i}
                 style={{
-                  ...chipStyle(c, { tint: isWord(p) ? green : undefined }),
+                  ...chipStyle(c),
+                  // no flex gap, so a marked piece reads #.# as in the prose
+                  gap: 0,
                   whiteSpace: 'pre',
+                  ...(isWord(p) ? { fontWeight: 700, borderColor: c.ink } : null),
                 }}
               >
                 {p.l ? <span style={{ opacity: 0.55 }}>#</span> : null}
@@ -100,8 +114,8 @@ export default function FlagSide() {
           lineHeight: 1.6,
         }}
       >
-        {row.corpus === 'en' ? 'English vocabulary' : 'code vocabulary'}, 65,536 slots. green means
-        a whole word came out in one piece.
+        {row.corpus === 'en' ? 'English vocabulary' : 'code vocabulary'}, 65,536 slots. A bold,
+        outlined chip is a whole word that came out in one piece.
       </div>
     </div>
   )

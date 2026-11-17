@@ -1,5 +1,5 @@
 import { useTheme } from 'next-themes'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import DATA from '../data/isbpe-blog.json'
 import { LABEL, MONO, chipStyle, labChrome } from '../lib/wordpiece-lab'
@@ -24,6 +24,17 @@ export default function GlueSlider() {
   const c = labChrome(dark)
   const green = c.channel[0]
 
+  // Fewer chips on a phone, where 24 of them fill the screen.
+  const boxRef = useRef(null)
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    const el = boxRef.current
+    if (!el) return undefined
+    const ro = new ResizeObserver(([e]) => setNarrow(e.contentRect.width < 520))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   const steps = DATA.glue.steps
   const [i, setI] = useState(2) // 500 entries, where it first passes cl100k
   const s = steps[i]
@@ -31,13 +42,14 @@ export default function GlueSlider() {
     ...DATA.glue.baselines.map((b) => ({ ...b, ours: false })),
     { name: `ISBPE + ${fmt(s.k)} glue entries`, tokens: s.tokens, xz: s.xz, ours: true },
   ]
+  // Bars start at zero, so 336k against 283k looks like the 19% it is.
   const hi = Math.max(...rows.map((r) => r.tokens))
-  const lo = 260000
-  const width = (n) => `${(100 * (n - lo)) / (hi - lo)}%`
-  const shown = DATA.glue.top.slice(0, Math.min(s.k, 24))
+  const width = (n) => `${(100 * n) / hi}%`
+  const shown = DATA.glue.top.slice(0, Math.min(s.k, narrow ? 8 : 24))
 
   return (
     <div
+      ref={boxRef}
       style={{
         border: `1px solid ${c.border}`,
         borderRadius: 3,
@@ -64,6 +76,9 @@ export default function GlueSlider() {
         </span>
       </div>
 
+      <div style={{ ...LABEL, color: c.muted, marginBottom: 8 }}>
+        tokens and xz bits per byte, lower is better for both
+      </div>
       {rows.map((r) => (
         <div key={r.name} style={{ marginBottom: 8 }}>
           <div
@@ -74,12 +89,13 @@ export default function GlueSlider() {
               fontSize: 12,
               color: r.ours ? green : r.name === 'BPE' ? c.bad : c.muted,
               marginBottom: 3,
-              gap: 8,
+              gap: '0 8px',
+              flexWrap: 'wrap',
             }}
           >
             <span>{r.name}</span>
             <span style={{ whiteSpace: 'nowrap' }}>
-              {fmt(r.tokens)} tokens · xz {r.xz.toFixed(4)}
+              {fmt(r.tokens)} tokens · xz {r.xz.toFixed(4)} bits/byte
             </span>
           </div>
           <div style={{ height: 10, background: c.fill, borderRadius: 2 }}>

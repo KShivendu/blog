@@ -1,5 +1,5 @@
 import { useTheme } from 'next-themes'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import DATA from '../data/isbpe-blog.json'
 import { LABEL, MONO, chipStyle, labChrome, segButton } from '../lib/wordpiece-lab'
@@ -21,6 +21,8 @@ function Chips({ pieces, c, showDoubled }) {
           key={i}
           style={{
             ...chipStyle(c, { tint: showDoubled && p.d ? c.bad : undefined }),
+            // no flex gap, so a marked piece reads #.# as in the prose
+            gap: 0,
             whiteSpace: 'pre',
             transition: 'all 220ms ease',
           }}
@@ -44,6 +46,18 @@ export default function ScriptSpaces() {
   const [script, setScript] = useState('chinese')
   const [pick, setPick] = useState(0)
 
+  // Below 520px the label and count columns left the chips about 60px, one
+  // chip per line. There the label and count share a header line instead.
+  const boxRef = useRef(null)
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    const el = boxRef.current
+    if (!el) return undefined
+    const ro = new ResizeObserver(([e]) => setNarrow(e.contentRect.width < 520))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   const zh = DATA.scripts.chinese[pick]
   const zt = DATA.scripts.chinese_totals
   const hi = DATA.scripts.hindi
@@ -51,40 +65,49 @@ export default function ScriptSpaces() {
   // Every scheme in its own row, all at once, so the reader compares without
   // clicking. BPE is red and ISBPE green, as everywhere else in the post.
   const Rows = ({ rows }) =>
-    rows.map(([label, pieces, tint]) => (
-      <div
-        key={label}
-        style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}
-      >
-        <span
-          style={{
-            ...LABEL,
-            color: tint,
-            width: 120,
-            flexShrink: 0,
-            paddingTop: 8,
-            lineHeight: 1.3,
-          }}
-        >
-          {label}
-        </span>
-        <div style={{ flex: 1 }}>
+    rows.map(([label, pieces, tint]) =>
+      narrow ? (
+        <div key={label} style={{ marginBottom: 12 }}>
+          <div style={{ ...LABEL, color: tint, marginBottom: 6, lineHeight: 1.3 }}>
+            {label} <span style={{ color: c.muted }}>· {pieces.length} tokens</span>
+          </div>
           <Chips pieces={pieces} c={c} showDoubled={false} />
         </div>
-        <span
-          style={{
-            fontFamily: MONO,
-            fontSize: 12.5,
-            color: c.muted,
-            flexShrink: 0,
-            paddingTop: 8,
-            whiteSpace: 'nowrap',
-          }}
+      ) : (
+        <div
+          key={label}
+          style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}
         >
-          {pieces.length} tokens
-        </span>
-      </div>
-    ))
+          <span
+            style={{
+              ...LABEL,
+              color: tint,
+              width: 120,
+              flexShrink: 0,
+              paddingTop: 8,
+              lineHeight: 1.3,
+            }}
+          >
+            {label}
+          </span>
+          <div style={{ flex: 1 }}>
+            <Chips pieces={pieces} c={c} showDoubled={false} />
+          </div>
+          <span
+            style={{
+              fontFamily: MONO,
+              fontSize: 12.5,
+              color: c.muted,
+              flexShrink: 0,
+              paddingTop: 8,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {pieces.length} tokens
+          </span>
+        </div>
+      )
+    )
 
   const footer = {
     marginTop: 12,
@@ -98,6 +121,7 @@ export default function ScriptSpaces() {
 
   return (
     <div
+      ref={boxRef}
       style={{
         border: `1px solid ${c.border}`,
         borderRadius: 3,
@@ -119,9 +143,22 @@ export default function ScriptSpaces() {
 
       {script === 'chinese' ? (
         <>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 10 }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: 5,
+              flexWrap: narrow ? 'nowrap' : 'wrap',
+              overflowX: narrow ? 'auto' : 'visible',
+              paddingBottom: narrow ? 4 : 0,
+              marginBottom: 10,
+            }}
+          >
             {DATA.scripts.chinese.map((r, i) => (
-              <button key={r.text} onClick={() => setPick(i)} style={segButton(c, i === pick)}>
+              <button
+                key={r.text}
+                onClick={() => setPick(i)}
+                style={{ ...segButton(c, i === pick), flexShrink: 0 }}
+              >
                 {r.text.length > 12 ? r.text.slice(0, 11) + '…' : r.text}
               </button>
             ))}
