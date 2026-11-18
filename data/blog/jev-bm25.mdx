@@ -11,7 +11,7 @@ authors: ['kshivendu']
 
 Some words are more important than others in a search query. Keyword search with BM25 doesn't really understand language, so it has to guess which ones. It treats rarity as a proxy for importance, so rare words get more weight. It also drops common words like `the`, `to` and `not` using a fixed stopword list.
 
-Rarity can be wrong. Take `who sings she's like the wind lyrics` from [NQ](https://huggingface.co/datasets/BeIR/nq), a search over Wikipedia passages. `lyrics` is rare, so BM25 gives it the highest weight. `like` is common, so it gets the lowest. But the right passage is about the song "She's Like the Wind". It contains `like` and never says `lyrics`.
+Rarity is a useful guess, but it can be wrong. Take `who sings she's like the wind lyrics` from [NQ](https://huggingface.co/datasets/BeIR/nq), a search over 2.68 million Wikipedia passages. `lyrics` is rare, so BM25 gives it the highest weight, 5.14. `like` is common, so it gets the lowest, 2.97. But the right passage is about the song "She's Like the Wind". It contains `like` and never says `lyrics`.
 
 > Looking for TL;DR? Check [key takeaways](#key-takeaways)
 
