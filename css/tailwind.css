@@ -720,6 +720,12 @@ body {
 }
 
 /* ── Tables: bordered, uppercase muted header, tabular figures ───────────── */
+/* A glossary tooltip inside a table header keeps normal case and size. Uppercase tooltip text reads as shouting. */
+.prose-tty thead th .tty-term-pop {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
 .prose-tty table {
   /* Fill the shared content width; auto layout distributes columns (no gutter). */
   width: 100%;
