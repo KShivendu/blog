@@ -309,15 +309,10 @@ This edges Elasticsearch on the mean, but ES still holds the weak-query tail. An
 
 ## Where the weighting tops out
 
-Porter plus learned pairs already edges Elasticsearch, so I spent a while trying to push the weighting itself further. It works. The best design keeps a query word at its own sharp IDF, not the diluted family IDF, whenever a document actually contains that word. Then it gates that boost by how much of the rest of the query the document matches. So a stray "van" in an unrelated document never earns the van-Gogh boost. Stack that weighting on the Porter-plus-learned family and it clears the analyzer on the exact same queries: **0.589 vs 0.579** on the mean, **0.333 vs 0.307** on the weak-query tail, and a lower zero-rate.
+Porter plus learned pairs already edges Elasticsearch, so I spent a while trying to push the weighting itself further. It works. The best design keeps a query word at its own sharp IDF, not the diluted family IDF, whenever a document actually contains that word. I call this anchoring. On the Porter family it clears the analyzer on the exact same queries: **0.584 vs 0.579** on the mean and **0.333 vs 0.307** on the weak-query tail.
 
-export const winCats = [
-  'Elasticsearch english',
-  'Porter word index',
-  '+ anchoring + coordination',
-  '+ learned pairs (best)',
-]
-export const winColors = ['#64748b', '#94a3b8', '#6ee7b7', '#10b981']
+export const winCats = ['Elasticsearch english', 'Porter word index', '+ anchoring']
+export const winColors = ['#64748b', '#94a3b8', '#10b981']
 export const winFmt = (v, d) => v.map((x) => x.toFixed(d))
 export const winView = (values, text) => ({
   categories: winCats,
@@ -327,7 +322,7 @@ export const winView = (values, text) => ({
 <BarChart
   orientation="horizontal"
   title="A plain word index past Elasticsearch"
-  subtitle="same 645 queries · anchoring + coordination + learned pairs beats the analyzer · toggle the metric →"
+  subtitle="same 645 queries · anchoring beats the analyzer · toggle the metric →"
   categories={winCats}
   views={[
     {
@@ -336,50 +331,87 @@ export const winView = (values, text) => ({
       valueLabel: 'NDCG@10 mean (higher is better)',
       valueMax: 0.6,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
-      ...winView([0.5786, 0.5795, 0.5881, 0.5894], winFmt([0.5786, 0.5795, 0.5881, 0.5894], 3)),
+      ...winView([0.5786, 0.5795, 0.5842], winFmt([0.5786, 0.5795, 0.5842], 3)),
     },
     {
       label: 'p50',
       valueLabel: 'NDCG@10 p50, the median query (higher is better)',
       valueMax: 0.64,
       valueTicks: [0, 0.2, 0.4, 0.6],
-      ...winView([0.6309, 0.6309, 0.6309, 0.6309], winFmt([0.6309, 0.6309, 0.6309, 0.6309], 3)),
+      ...winView([0.6309, 0.6309, 0.6309], winFmt([0.6309, 0.6309, 0.6309], 3)),
     },
     {
       label: 'p25',
       valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
       valueMax: 0.36,
       valueTicks: [0, 0.1, 0.2, 0.3],
-      ...winView([0.3066, 0.3066, 0.3165, 0.3333], winFmt([0.3066, 0.3066, 0.3165, 0.3333], 3)),
+      ...winView([0.3066, 0.3066, 0.3333], winFmt([0.3066, 0.3066, 0.3333], 3)),
     },
   ]}
 />
 
-- **The stack beats Elasticsearch on the mean and the tail.** 0.5894 vs 0.5786 (**+0.011**), the weak-query tail 0.3333 vs 0.3066 (**+0.027**), and a lower zero-rate (14.1% vs 15.0%), all on the identical query set at k1=1.2.
-- **Each trick adds to the last.** Anchoring lifts the mean from 0.5795 to 0.5881 and the tail from 0.3066 to 0.3165; folding the learned pairs into the anchored family pushes both further, to 0.5894 and 0.3333.
+- **Anchoring beats Elasticsearch on the mean and the tail.** 0.5842 vs 0.5786 on the mean, and the weak-query tail moves from 0.3066 to 0.3333 (**+0.027**), on the identical query set at k1=1.2.
+- **The learned pairs don't stack on top.** Anchoring over Porter plus the learned pairs scores 0.5833, a hair below Porter alone.
 
-One catch. The gain is clean here, but the weighting is tuned on this 13-dataset panel, and the margin concentrates in corpora where queries and answers share inflected word forms, like FiQA and Touché. Drop those two and it stops separating from plain stemming, so this is a same-panel win, not a proven-general one.
+One catch. The weighting is tuned on this 13-dataset panel, and the margin concentrates in corpora where queries and answers share inflected word forms, like FiQA and Touché. Drop those two and it stops separating from plain stemming. So I ran the same scoring on data it was never tuned on: all 8.8M passages of [MS MARCO](https://microsoft.github.io/msmarco/) with 2,000 of its dev queries, in my own BM25 with the same words and the same k1=1.2. Anchoring scores a document at the exact query word's own IDF when it holds that word, and at the family IDF when it only holds another form.
+
+export const heldCats = ['Porter-stemmed index', '+ anchoring']
+export const heldRoles = ['muted', 'series0']
+export const heldFmt = (v, d) => v.map((x) => x.toFixed(d))
+export const heldView = (values, text) => ({
+  categories: heldCats,
+  series: [{ name: 'v', values, roles: heldRoles, text, textPosition: 'outside' }],
+})
+
+<BarChart
+  orientation="horizontal"
+  title="Held out: full MS MARCO"
+  subtitle="8.8M passages · 2,000 unseen queries · toggle the metric →"
+  categories={heldCats}
+  views={[
+    {
+      label: 'mean',
+      default: true,
+      valueLabel: 'NDCG@10 mean (higher is better)',
+      valueMax: 0.26,
+      valueTicks: [0, 0.05, 0.1, 0.15, 0.2, 0.25],
+      ...heldView([0.2275, 0.2384], heldFmt([0.2275, 0.2384], 4)),
+    },
+    {
+      label: 'zero-rate',
+      valueLabel: 'queries with nothing relevant in the top 10, % (lower is better)',
+      valueMax: 65,
+      valueTicks: [0, 20, 40, 60],
+      ...heldView([61.5, 60.0], heldFmt([61.5, 60.0], 1)),
+    },
+    {
+      label: 'recall@10',
+      valueLabel: 'recall@10 (higher is better)',
+      valueMax: 0.45,
+      valueTicks: [0, 0.1, 0.2, 0.3, 0.4],
+      ...heldView([0.3781, 0.3917], heldFmt([0.3781, 0.3917], 4)),
+    },
+  ]}
+/>
+
+The p50 and p25 are 0 for both. On MS MARCO most queries have exactly one relevant passage, and 60% of them miss it in the top 10, so the zero-rate carries the tail here.
+
+Observations:
+
+- **`why do plant roots use active transport` goes from 0 to 0.631 with anchoring**, and `what iowa law determines inheritance exceptions?` from 0.289 to 1.0. Over all 2,000 queries anchoring beats the stemmed index on 245 queries and loses on 129, **+0.011** on the mean (0.2384 vs 0.2275).
+- **Its losses are answers that use other forms.** `when did congress pass us immigration and nationality act` drops from 1.0 to 0, because the relevant passage says "Congress passed" and "national immigration quotas", never `pass` or `nationality`. Anchoring rewards the passages that use the exact words, and stemming treats every form the same.
+- **The learned pairs don't add on MS MARCO.** Anchoring with them against anchoring on Porter alone is 23 queries better, 35 worse and 1,942 tied (0.2387 vs 0.2384).
 
 Here's why it can't go further. On entity queries, the ones where the weighting can't help, a learned sparse model like [SPLADE](/blog/splade-bm25) pulls far ahead. Reranking the same candidate pool, it beat this BM25 by **+0.22** NDCG on NanoMSMARCO and **+0.23** on NanoNQ, single-dataset gaps that dwarf the hundredths we've been trading over the whole panel. It wins by expanding `gogh` to `vincent` and `belle` to `beauty`, semantic links that tell van-Gogh-the-painter from a passing "van". My co-occurrence table holds none of those. It only has spelling neighbours like `belle` to `bell`, so no amount of lexical weighting reaches them.
 
-That's the ceiling of this whole line of work. Stemming and learned morphology carry a plain word index to a production analyzer, and careful weighting nudges a little past it on this panel. But a general leap beyond that is semantic, and semantics needs a trained model, not a longer word list.
+That's the ceiling of this whole line of work. Stemming and learned morphology carry a plain word index to a production analyzer, and careful weighting nudges past it, on this panel and on MS MARCO. But a general leap beyond that is semantic, and semantics needs a trained model, not a longer word list.
 
 <details>
-<summary>Anchoring, coordination, and the stack that edges Elasticsearch</summary>
+<summary>How anchoring works</summary>
 
 Here's the failure a stemmer hides. Search `deductible` and Porter merges the whole family (`deductible`, `deduction`, `deducted`) into one term. Its document frequency is now the union, so its IDF drops. `deductible` alone is worth IDF **3.90**, the merged family only **2.53**. A document that literally says "deductible" gets scored as if the word were common.
 
 **Anchoring** fixes that: score a document at the exact query word's own IDF (3.90) if it contains that word, and at the family IDF (2.53) if it only has a variant. Same insight as the tail earlier, the exact word deserves its own sharpness, applied to every document instead of just the weak-query tail.
-
-Anchoring helps morphological queries but hurts entity queries, because it also boosts a rare token like `van` in documents that have nothing else to do with the query. So gate it by **coordination**, how much of the rest of the query the document matches:
-
-```
-Query: "van gogh paintings"
-  relevant:    "van gogh's paintings ..."   matches van + gogh + paintings  -> boost ON
-  distractor:  "... a delivery van ..."       matches only "van"              -> boost OFF
-```
-
-The best version, the winning bar in the chart above, folds the learned pairs into the family too, so the same anchoring and coordination run over Porter's morphology plus the learned comparatives and spellings. It's a pooled-significant gain over plain stemming: the 95% bootstrap interval stays above zero, stable across seeds, the scoring audited clean. But it never clears a held-out test once you drop FiQA and Touché.
 
 </details>
 
@@ -387,23 +419,16 @@ The best version, the winning bar in the chart above, folds the learned pairs in
 
 Everything so far expands the query at search time. There is a mirror image: expand the document at index time and leave the query as plain words. That is what [Inference-free SPLADE](/blog/if-splade) does with a neural model, the encoder writes the expansions into each document and the query is just raw tokens, no model call. The same flip works for our lexical families, with no model at all.
 
-The question is how much of the weighting survives the move. Three of the four pieces do.
+The question is how much of the weighting survives the move. All three pieces do.
 
 - **Attestation weights** bake into the added term's impact.
 - **Learned pairs** are just more terms to write into the document.
 - **Anchoring comes for free.** A document keeps its own words at their sharp IDF, and the expanded forms go in at the reduced family IDF. Whether a document holds the exact query word is a fact about the document, known at index time, so the conditional anchoring we built on the query side is precomputable per document.
 
-The one piece that can't move is the **coordination gate**. It scales the anchor by how much of the rest of the query a document matches, and the rest of the query isn't known until search time. So it stays a query-side, rerank-stage step.
+I ran the document-side version (attestation and anchoring on the Porter family) against our query-side default across all 13 datasets. Adding the learned pairs gives 0.5833, a hair lower.
 
-I ran the document-side version (attestation, learned pairs, anchoring, no coordination) against our query-side default across all 13 datasets.
-
-export const docCats = [
-  'query-side, best match',
-  'index-side stemming',
-  'doc-side anchoring',
-  'coord-soft (query-side)',
-]
-export const docColors = ['#94a3b8', '#94a3b8', '#10b981', '#6ee7b7']
+export const docCats = ['query-side, best match', 'index-side stemming', 'doc-side anchoring']
+export const docColors = ['#94a3b8', '#94a3b8', '#10b981']
 export const docFmt = (v, d) => v.map((x) => x.toFixed(d))
 export const docView = (values, text) => ({
   categories: docCats,
@@ -422,32 +447,131 @@ export const docView = (values, text) => ({
       valueLabel: 'NDCG@10 mean (higher is better)',
       valueMax: 0.6,
       valueTicks: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
-      ...docView([0.5775, 0.5795, 0.5842, 0.5894], docFmt([0.5775, 0.5795, 0.5842, 0.5894], 3)),
+      ...docView([0.5775, 0.5795, 0.5842], docFmt([0.5775, 0.5795, 0.5842], 3)),
     },
     {
       label: 'p50',
       valueLabel: 'NDCG@10 p50, the median query (higher is better)',
       valueMax: 0.64,
       valueTicks: [0, 0.2, 0.4, 0.6],
-      ...docView([0.6282, 0.6309, 0.6309, 0.6309], docFmt([0.6282, 0.6309, 0.6309, 0.6309], 3)),
+      ...docView([0.6282, 0.6309, 0.6309], docFmt([0.6282, 0.6309, 0.6309], 3)),
     },
     {
       label: 'p25',
       valueLabel: 'NDCG@10 p25, the weak-query quartile (higher is better)',
       valueMax: 0.34,
       valueTicks: [0, 0.1, 0.2, 0.3],
-      ...docView([0.301, 0.3066, 0.3333, 0.3333], docFmt([0.301, 0.3066, 0.3333, 0.3333], 3)),
+      ...docView([0.301, 0.3066, 0.3333], docFmt([0.301, 0.3066, 0.3333], 3)),
     },
   ]}
 />
 
 - **Document-side anchoring beats our query-side `max`.** 0.5842 vs 0.5775 on the mean, and a big jump on the tail, 0.333 vs 0.301. A paired bootstrap puts the mean gap at **+0.007, 95% CI [+0.001, +0.013]**, above zero in 98.6% of resamples. It also clears index-side stemming, on the mean (0.5842 vs 0.5795) and the tail (0.333 vs 0.307).
 - **It gets both halves at once.** The summed term-frequency aggregates evidence like stemming, which is the mean, and anchoring keeps the exact word at its own sharp IDF, which is the tail. `max` had the sharp IDF but discarded evidence. Stemming aggregated evidence but diluted the IDF. Document-side anchoring keeps both.
-- **The query is a plain BM25 lookup again.** No family expansion and no posting-list merge at search time, and the scoring is additive, so WAND and BlockMax-WAND (the top-k shortcuts that let BM25 skip documents that can't crack the current top results) still work. Coordination was the thing that broke those additive bounds and forced a rerank stage. Moving anchoring to the document keeps fast top-k and recovers most of coordination's gain without it.
+- **The query is a plain BM25 lookup again.** No family expansion and no posting-list merge at search time, and the scoring is additive, so WAND and BlockMax-WAND (the top-k shortcuts that let BM25 skip documents that can't crack the current top results) still work.
 
-The coordination gate is the one piece left on the query side, and it earns its keep in a specific place. Adding it back (coord-soft, 0.5894) buys another 0.005 over document-side anchoring, but the bootstrap can't separate them (96% of resamples, the interval crosses zero). Its contribution lands on the entity corpora: document-side anchoring's per-dataset losses are MSMARCO, ArguAna, and SCIDOCS, where anchoring over-boosts a lone-token match, and coordination is exactly what gates that. Where the families actually help, FiQA (+0.049), NQ (+0.021), Touché (+0.011), the document side already has it.
+So the ES-level weighting is not stuck at query time. Bake it into the documents and the query stays a plain, WAND-friendly BM25 lookup, the same trade [Inference-free SPLADE](/blog/if-splade) makes, minus the GPU.
 
-So the ES-level weighting is not stuck at query time. Bake it into the documents and the query stays a plain, fast, WAND-friendly BM25 lookup, the same trade [Inference-free SPLADE](/blog/if-splade) makes, minus the GPU.
+Writing every form into every document has two costs this panel hides, though:
+
+- **The index grows.** It is 2.93x a plain index on NanoBEIR and **6.52x** on MS MARCO (3,866 MB against 593 MB), even with each score stored in one byte. Every form of a family gets its own copy of the family's whole list: `help`, `helps`, `helped` and `helping` each carry every document of the help family. MS MARCO families are bigger, about 7.4 forms per query word against 3.5 here.
+- **Words the corpus never uses find nothing.** The index can only hold a list for a word some document contains. `Which colors can one use to fill out a check in the US?` (FiQA) drops from 1.0 to 0, because the documents say `color` and `colored` and never `colors`. Query-side expansion still reaches them through the stem. The document-side bar in the chart above was computed at query time, so it is the ideal. An index actually built this way, with learned pairs, scores 0.5805 where the same scoring at query time scores 0.5836, which takes about half of its lead over our query-side `max`.
+
+The next section measures what the query side costs instead, and an index that gets its results without either problem.
+
+## What expansion costs
+
+Everything so far is about quality. Query-side expansion also costs time, and I hadn't measured it. So I loaded all 8.8M MS MARCO passages into Elasticsearch with two fields, the plain words and their Porter stems, and timed the same 2,000 dev queries on each setup.
+
+Take `age requirements for name change`. The stemmed field reads four posting lists, one per word. Query-side expansion reads every form the index holds for each word, 39 lists in all:
+
+```
+requirements -> requirements, required, require, requires, requirement,
+                requiring, requirments, requirment, requireing, ...
+change       -> change, changes, changed, changing, chang, changs, ...
+```
+
+That query takes 24 ms on the stemmed field and 51 ms expanded. Over all 2,000 queries, run one at a time:
+
+| setup                | lists per query | p50        | p99     | NDCG@10 |
+| -------------------- | --------------- | ---------- | ------- | ------- |
+| plain words          | 3.4             | 2.4 ms     | 14.0 ms | 0.2279  |
+| Porter-stemmed field | 3.4             | 2.6 ms     | 17.8 ms | 0.2286  |
+| query-side expansion | 23.4            | **4.8 ms** | 35.9 ms | 0.2356  |
+| + learned pairs      | 25.0            | 5.6 ms     | 40.2 ms | 0.2362  |
+
+- **Expansion takes 1.85x the stemmed field's time** at the median (4.8 vs 2.6 ms) and 2x at p99, for +0.007 NDCG.
+- **Most of the extra lists are typos, and dropping them doesn't help.** 57% of the variants weigh under 0.01, like `requirments` and `helpped`. Dropping every variant under 0.05 cuts the lists from 25.0 to 10.6 per query with the same top 10, and the median only moves from 5.6 to 4.9 ms. A typo's list is a handful of postings. The time goes to the long lists of real variants, like `helps` and `helpful` read alongside `help` (in 261k passages).
+
+### An index that keeps the forms
+
+A stemmed index throws away which form a document used. Keep it inside the posting, and one list per word is enough for every weighting in this post (doc 17 is made up to illustrate):
+
+```
+stemmed index   race -> ... doc 17: race x3 ...
+grouped index   race -> ... doc 17: race x1, racing x2 ...
+```
+
+A query reads one list per word, like stemming, and still sees `race 1, racing 2`. So it can apply the attestation weights, the `max` or the anchoring exactly as query-side expansion does. No engine I know of ships this layout, so I built it in Rust next to the other three, with one posting format and one BM25 for all four.
+
+export const costCats = [
+  'plain words',
+  'Porter-stemmed',
+  'query-side expansion',
+  'grouped (stem + forms)',
+  'document-side',
+]
+export const costRoles = ['muted', 'mutedAlt', 'series1', 'series0', 'series2']
+export const costFmt = (v, d, u) => v.map((x) => x.toFixed(d) + (u || ''))
+export const costView = (values, text) => ({
+  categories: costCats,
+  series: [{ name: 'v', values, roles: costRoles, text, textPosition: 'outside' }],
+})
+
+<BarChart
+  orientation="horizontal"
+  title="What each layout costs"
+  subtitle="full MS MARCO · same posting format and BM25 for all · toggle the metric →"
+  categories={costCats}
+  views={[
+    {
+      label: 'index size',
+      default: true,
+      valueLabel: 'posting lists, MB (lower is better)',
+      valueMax: 4200,
+      valueTicks: [0, 1000, 2000, 3000, 4000],
+      ...costView([593, 553, 593, 565, 3866], costFmt([593, 553, 593, 565, 3866], 0, ' MB')),
+    },
+    {
+      label: 'lists per query',
+      valueLabel: 'posting lists a query opens, mean (lower is better)',
+      valueMax: 26,
+      valueTicks: [0, 5, 10, 15, 20, 25],
+      ...costView([3.4, 3.4, 23.4, 3.4, 3.4], costFmt([3.4, 3.4, 23.4, 3.4, 3.4], 1)),
+    },
+    {
+      label: 'latency p50',
+      valueLabel: 'median query latency, ms, one run in my Rust engine (lower is better)',
+      valueMax: 4.2,
+      valueTicks: [0, 1, 2, 3, 4],
+      ...costView(
+        [1.16, 1.36, 3.66, 1.96, 0],
+        ['1.2 ms', '1.4 ms', '3.7 ms', '2.0 ms', 'not measured: needs more than 7 GB']
+      ),
+    },
+  ]}
+/>
+
+Observations:
+
+- **`race 1, racing 2` is all the scoring needs.** The grouped index returns the same top 10 as query-side expansion on all 2,000 queries, checked query by query, while opening 3.4 lists instead of 23.4.
+- **It costs 12 MB over the stemmed index.** 565 MB against 553, and 0.95x the plain index. A document that uses one form of a word pays about one byte more than in a stemmed list.
+- **It runs at about half the cost of expanding the query.** In my Rust engine, with the same scoring rule (the best form per word), the grouped index takes **2.0 ms** at the median where query-side expansion takes 3.7 ms, and 21.0 against 32.5 ms at p99. Every bar in that view comes from one run with the same skipping, MaxScore, which stops reading a list once it can't lift any document into the top 10.
+- **Anchoring on it costs little over stemming.** Grouped anchoring takes 1.7 ms against 1.4 ms for the stemmed index in the same run, for +0.011 NDCG (0.2384 vs 0.2275, Porter family, no learned pairs).
+- **Learned pairs cost extra lists.** A pair that crosses into another family, like `high` to `higher`, needs that family's list too, so a query opens 4.9 lists instead of 3.4.
+- **The document side buys the same short query with a 6.5x index.** It opens as few lists as the grouped index, but needs 3,866 MB to do it.
+
+Elasticsearch can't build the grouped layout. The closest it gets is to index the words twice, plain and stemmed, and query each word as a `dis_max` (best of the two fields). On the same queries that scores 0.2359, as good as query-side expansion, but at the same 4.8 ms and with both fields stored, so it saves none of the cost.
 
 ## It only works in English
 
@@ -462,4 +586,5 @@ That per-language pipeline is the real cost of the query-side trick, not the acc
 - A stemmer is one query expansion seen from the other side. Match its two choices, the shared stem IDF and the forms counted as one, and query-side reproduces it exactly, query for query. Keep each form's own IDF and take the best match instead, and you trade a little mean for a better weak-query tail.
 - At Lucene's default k1, query-side expansion and Elasticsearch land in the same place, so the analyzer's machinery beyond stemming is decoration. Snowball expansion is slightly worse than Porter, and the possessive stripping and exact tokenizer don't move the needle.
 - Once expansion makes the word family a swappable lookup, learned word pairs catch `high`/`higher`/`highest` and `behavioral`/`behaviour` that no suffix rule merges. All of it is English, so [Token Search](/blog/token-search) runs the same idea over BPE token IDs, config-free and multilingual.
-- The weighting even moves to the document side. Bake attestation, learned pairs, and anchoring into each document and query with plain tokens, and it beats the query-side default (**+0.007**, bootstrap clears zero) while keeping search a fast, WAND-friendly BM25 lookup, the lexical take on [Inference-free SPLADE](/blog/if-splade).
+- The weighting holds on data it was never tuned on. On all 8.8M MS MARCO passages, anchoring scores **0.2384** against 0.2275 for a Porter-stemmed index, better on 245 queries and worse on 129.
+- Expansion costs time on the query side (1.85x the stemmed field's median latency in Elasticsearch) or space on the document side (a 6.5x index on MS MARCO). A grouped index, a stemmed list that keeps each form's count, returns the same top 10 as query-side expansion from one list per word, at 0.95x the plain index's size and about half the time (2.0 against 3.7 ms in my engine).
