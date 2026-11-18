@@ -21,7 +21,7 @@ I asked [Jev](https://openrouter.ai/docs/guides/community/jev), TypeSafe's decis
 
 Take "In which city was the former Dutch queen Juliana buried?". It comes from [DBPedia-entity](https://huggingface.co/datasets/BeIR/dbpedia-entity), a search over 4.6 million Wikipedia abstracts, and the right answer is the abstract of Juliana of the Netherlands.
 
-[BM25](https://en.wikipedia.org/wiki/Okapi_BM25) weights each word by its rarity, called inverse document frequency or IDF. With `all` as the share of all documents that contain the word, IDF is about `ln(1 / all)`. `juliana` appears in about 420 abstracts and gets 9.30. `which` appears in about 448,000 and gets 2.34.
+[BM25](https://en.wikipedia.org/wiki/Okapi_BM25) weights each word by its rarity, called inverse document frequency or IDF. With `all` as the share of all documents that contain the word, IDF is `ln(1 / all)`. `juliana` appears in about 420 abstracts and gets 9.30. `which` appears in about 448,000 and gets 2.34.
 
 I send Jev the whole query as context, with one question per word. All the questions for a query go in a single API request. For `dutch`, the question is:
 
@@ -46,37 +46,22 @@ Jev returns a probability for each label, and the two add up to 1. I keep the pr
 
 ## Turn the answer into a word weight
 
-The two labels describe two extremes for how often the right documents contain the word:
-
-- **Essential**: every right document contains it.
-- **Irrelevant**: right documents contain it as often as any document does. Call that share `all`. About 32,700 of the 4.6 million abstracts contain `dutch`, so `all = 0.00706`.
-
-Jev doesn't pick one label. It is 88% sure `dutch` is Essential and 12% sure it is Irrelevant. We don't know which case is true, so we take the average of the two, with each case counted as much as Jev believes it. A weather forecast works the same way. Say there's a 70% chance of rain. If it rains, everyone takes an umbrella. If it doesn't, 1 in 10 people do. So you expect about 73% of people to carry one.
-
-Picture 1,000 right documents:
+IDF comes from the [relevance weight](https://doi.org/10.1002/asi.4630270302) of Robertson and Spärck Jones. It compares two odds: that a right document (one that answers the query) contains the word, and that any document does. BM25 doesn't know the first odds, so [Croft and Harper](https://doi.org/10.1108/eb026683) assumed a coin flip: half the right documents contain the word. A coin flip has odds of 1. Lucene adds 1 inside the log so the weight is never negative, and that gives BM25's IDF:
 
 ```
-# How many of 1,000 right documents contain "dutch"?
-if Essential  (88% sure):  all 1,000 contain it      →  0.88 × 1,000 = 880
-if Irrelevant (12% sure):  7 of 1,000, like any doc  →  0.12 × 7     ≈   1
-average                                                              ≈ 881
+# BM25's IDF, with the coin flip's odds written out
+IDF = ln(1 + 1 × (1 − all) / all)  =  ln(1 / all)
 ```
 
-So about 881 of 1,000 right documents contain `dutch`. Call that share `right`. In general, `right = jev × 1 + (1 − jev) × all`, and here `right = 0.881`.
-
-Now there are two chances for the same word: **0.881** in the right documents and 0.00706 in any document. The word weight compares them. A document either contains the word or not, and each case gives some evidence. BM25 only adds weight for the words a document has, so a document without the word is the zero point, and the weight is the gap between the two cases:
+Jev replaces that 1 with its own odds, `jev / (1 − jev)`. Here is the weight for `dutch`. About 32,700 of the 4.6 million abstracts contain it, and Jev is 88% sure it is Essential:
 
 ```
-# Word weight for "dutch": evidence when a document has it, minus evidence when it doesn't
-weight = ln(right / all)  −  ln((1 − right) / (1 − all))
-       = ln(0.881 / 0.00706) − ln(0.119 / 0.99294)
-       = 4.83 + 2.12
-       = 6.95
+# Word weight for "dutch" in DBPedia
+all        = 32,700 / 4.6 million                       = 0.00706
+(1 − all) / all                                         = 140.6
+coin flip:  odds 1                  → ln(1 + 1    × 140.6) = 4.95   (BM25's IDF)
+Jev:        odds 0.88 / 0.12 = 7.33 → ln(1 + 7.33 × 140.6) = 6.94
 ```
-
-The second part is simpler than it looks. Since `1 − right = (1 − jev) × (1 − all)`, it is just `ln(1 − jev)`, and for `dutch` that is ln(0.12) = −2.12. So the whole weight is one line, `weight = ln(1 + jev / ((1 − jev) × all))`.
-
-This is the [relevance weight](https://doi.org/10.1002/asi.4630270302) from Robertson and Spärck Jones. It is where the IDF in BM25 and TF-IDF comes from. It needs `right`, which BM25 doesn't know, so [Croft and Harper](https://doi.org/10.1108/eb026683) set `right = 0.5`, a coin flip. The weight then becomes `ln((1 − all) / all)`. When `all` is small, that is almost exactly `ln(1 / all)`, the IDF in the table below. Jev's answer fills in `right` for each word of each query.
 
 Here is the change in the formula. `df` counts documents containing the word, `N` is the total documents, and `jev` is Jev's probability of Essential:
 
@@ -84,9 +69,9 @@ Here is the change in the formula. `df` counts documents containing the word, `N
 
 $$
 \begin{aligned}
-\text{all} &= \frac{\mathrm{df}+0.5}{N+1} \qquad \text{right} = \text{jev} + (1-\text{jev})\,\text{all} \\
-\text{BM25 weight} &= \mathrm{IDF} = \ln\!\left(\frac{1}{\text{all}}\right) \\
-\text{With Jev} &= \ln\!\left(\frac{\text{right}}{\text{all}}\right) - \ln\!\left(\frac{1-\text{right}}{1-\text{all}}\right)
+\text{all} &= \frac{\mathrm{df}+0.5}{N+1} \\
+\text{BM25 weight} &= \mathrm{IDF} = \ln\!\left(1 + 1 \cdot \frac{1-\text{all}}{\text{all}}\right) \\
+\text{With Jev} &= \ln\!\left(1 + \frac{\text{jev}}{1-\text{jev}} \cdot \frac{1-\text{all}}{\text{all}}\right)
 \end{aligned}
 $$
 
@@ -99,25 +84,25 @@ Here is the whole query:
 | juliana |   93% |     9.30 |      11.89 |
 | buried  |   91% |     6.59 |       8.90 |
 | queen   |   90% |     5.19 |       7.39 |
-| dutch   |   88% |     4.95 |       6.95 |
-| city    |   69% |     2.91 |       3.73 |
-| former  |   48% |     2.91 |       2.89 |
-| which   |   18% |     2.34 |   **1.18** |
+| dutch   |   88% |     4.95 |       6.94 |
+| city    |   69% |     2.91 |       3.68 |
+| former  |   48% |     2.91 |       2.83 |
+| which   |   18% |     2.34 |   **1.11** |
 
-- At `jev = 50%` the weight is `ln(1 + 1 / all)`, almost the same as IDF. `former` gets 48% and barely moves, from 2.91 to 2.89.
+- At `jev = 50%` Jev's odds are 1, so the weight is exactly BM25's IDF. `former` gets 48% and barely moves, from 2.91 to 2.83.
 - Above 50% the weight rises, and below 50% it falls. `which` isn't on the stopword list, and Jev drops it to half its IDF.
 - At `jev = 0` the weight is 0, and it is never negative. Jev's answers stay between 1% and 99%, so there is nothing to clip or tune.
 
 Rarity and Jev's answer are two separate signals, so every word lands in one of four boxes. Each cell shows BM25's IDF → the weight with Jev:
 
-|                 | Jev says Irrelevant | Jev says Essential       |
-| --------------- | ------------------- | ------------------------ |
-| **Rare word**   | `give` 5.55 → 2.68  | `juliana` 9.30 → 11.89   |
-| **Common word** | `which` 2.34 → 1.18 | `credit` 2.51 → **5.10** |
+|                 | Jev says Irrelevant | Jev says Essential     |
+| --------------- | ------------------- | ---------------------- |
+| **Rare word**   | `give` 5.55 → 2.68  | `juliana` 9.30 → 11.89 |
+| **Common word** | `which` 2.34 → 1.11 | `high` 2.41 → **3.86** |
 
 - `juliana` is rare and Essential, so it was already heavy and gets heavier.
-- `credit` in "How to categorize credit card payments?" is common on a finance forum, so BM25 gives it little weight. Jev gives it 93%, and its weight **doubles**.
-- `give` in "Give me all presidents of the United States." is rare in Wikipedia, so BM25 trusts it. Jev gives it 5%, and its weight halves. `presidents` rises from 4.19 to 7.67.
+- `high` in "What is considered high or low when talking about volume?" is common on a finance forum, so BM25 gives it little weight. Jev gives it 82%, and its weight rises by **60%**.
+- `give` in "Give me all presidents of the United States." is rare in Wikipedia, so BM25 trusts it. Jev gives it 5%, and its weight halves. `presidents` rises from 4.19 to 7.65.
 - `which` is common and Irrelevant, so it falls to half its IDF.
 
 BM25 can only tell the two rows apart. Jev adds the two columns.
@@ -128,9 +113,9 @@ The weight only replaces IDF. BM25's term frequency and length normalization sta
 
 Observations:
 
-- On the Juliana query, the abstract of Juliana of the Netherlands moves from second to **first**. `juliana` rises from 9.30 to 11.89, while `which` falls from 2.34 to 1.18.
-- On "How to categorize credit card payments?", the answer moves from fourth to first. `credit` doubles from 2.51 to 5.10, while `how` falls from 1.66 to 1.18.
-- On "what is the female lion called in lion king", BM25 has no relevant result in its top 10. With Jev, the list of Lion King characters, which names Nala, comes first. `lion` rises from 5.82 to 8.77, and `what` falls from 3.42 to 1.48.
+- On the Juliana query, the abstract of Juliana of the Netherlands moves from second to **first**. `juliana` rises from 9.30 to 11.89, while `which` falls from 2.34 to 1.11.
+- On "What is considered high or low when talking about volume?", the answer moves from second to first. `volume` rises from 4.66 to 7.24, while `talking` falls from 3.00 to 1.06.
+- On "what is the female lion called in lion king", BM25 has no relevant result in its top 10. With Jev, the list of Lion King characters, which names Nala, comes first. `lion` rises from 5.82 to 8.76, and `what` falls from 3.42 to 1.46.
 - Each method uses its own tuned `k₁` and `b`, the same way as the results below.
 
 ## Does it improve search?
@@ -177,14 +162,14 @@ export const jevKlView = (label, values) => ({
   showLegend={false}
   views={[
     jevKlView('mean', [
-      [33.31, 30.54],
-      [28.07, 25.65],
-      [41.83, 40.17],
+      [33.37, 30.54],
+      [27.51, 25.65],
+      [41.8, 40.17],
     ]),
     jevKlView('median', [
-      [29.26, 20.44],
-      [13.82, 10.9],
-      [38.36, 37.31],
+      [28.91, 20.44],
+      [16.41, 10.9],
+      [38.52, 37.31],
     ]),
     jevKlView('p25', [
       [0, 0],
@@ -197,25 +182,25 @@ export const jevKlView = (label, values) => ({
 Observations:
 
 - "what is the female lion called in lion king" rises from 0 to 100 on NQ.
-- NQ's median rises from 20.44 to **29.26**, more than its mean, which goes from 30.54 to 33.31.
-- "How to categorize credit card payments?" rises from 43.07 to 100 on FiQA. The Juliana query rises from 63.09 to 100 on DBPedia.
-- Some queries get worse. "who painted the world famous painting the last supper" falls from 100 to 38.69 on NQ. On FiQA, "Why big clients want the contractor to be incorporated before giving them work" falls from 100 to 50. On DBPedia, "Seoul Korea river name ethnic group China" falls from 33.92 to 0.
+- NQ's median rises from 20.44 to **28.91**, more than its mean, which goes from 30.54 to 33.37.
+- "What is considered high or low when talking about volume?" rises from 38.69 to 80.66 on FiQA. The Juliana query rises from 63.09 to 100 on DBPedia.
+- Some queries get worse. "who painted the world famous painting the last supper" falls from 100 to 38.69 on NQ. On FiQA, "Why big clients want the contractor to be incorporated before giving them work" falls from 100 to 63.09. On DBPedia, "Seoul Korea river name ethnic group China" falls from 33.92 to 0.
 - p25 is 0 on NQ and FiQA for both methods, because more than a quarter of those queries find no relevant document in the top 10.
 
 There is [no free lunch in search evals](/blog/stop-averaging-evals#which-queries-moved). Any kind of change helps some queries and hurts others. Jev helps more queries than it hurts on every dataset:
 
 | Dataset | Better / worse / same | Mean gain, #[95% bootstrap interval](range of the mean gain over 5,000 resamples of the queries) |
 | ------- | --------------------: | -----------------------------------------------------------------------------------------------: |
-| NQ      |     327 / 110 / 1,289 |                                                                       **+2.77** (+2.24 to +3.31) |
-| FiQA    |         81 / 33 / 210 |                                                                           +2.42 (+1.18 to +3.70) |
-| DBPedia |          70 / 40 / 90 |                                                                           +1.66 (+0.63 to +2.68) |
+| NQ      |     332 / 113 / 1,281 |                                                                       **+2.83** (+2.28 to +3.38) |
+| FiQA    |         69 / 42 / 213 |                                                                           +1.86 (+0.71 to +3.10) |
+| DBPedia |          70 / 39 / 91 |                                                                           +1.63 (+0.63 to +2.66) |
 
-A #[sign test](how likely this many more wins than losses would be if each change were a coin flip) puts the chance of this being luck below 1 in 100 on every dataset.
+A #[sign test](how likely this many more wins than losses would be if each change were a coin flip) puts the chance of this being luck below 1 in 50 on every dataset.
 
 Jev costs about **\$0.05 per 1,000 queries**, one API request each. Fetching the answers for all 3,452 NQ queries cost \$0.16. The [saved results](/static/data/jev-keyword-search-kl.json) contain the per-dataset numbers, the prompt and the worked examples.
 
 ## Key Takeaways
 
-- With `k₁` and `b` tuned for both methods, mean nDCG@10 rises on all three datasets: NQ **30.54 → 33.31**, FiQA 25.65 → 28.07 and DBPedia 40.17 → 41.83.
-- Ask Jev one question per query word: does a document containing it become more likely to answer? Its probability `jev` goes into the relevance weight that IDF is derived from, `ln(1 + jev / ((1 − jev) × all))`, where `all` is the share of documents containing the word.
-- There is no new knob. At `jev = 50%` the weight is almost plain IDF, and Jev raises the words it is sure about and lowers the ones it isn't.
+- With `k₁` and `b` tuned for both methods, mean nDCG@10 rises on all three datasets: NQ **30.54 → 33.37**, FiQA 25.65 → 27.51 and DBPedia 40.17 → 41.80.
+- Ask Jev one question per query word: does a document containing it become more likely to answer? Its odds `jev / (1 − jev)` replace the coin flip inside IDF: `ln(1 + jev / (1 − jev) × (1 − all) / all)`, where `all` is the share of documents containing the word.
+- There is no new knob. At `jev = 50%` the weight is exactly BM25's IDF, and Jev raises the words it is sure about and lowers the ones it isn't.

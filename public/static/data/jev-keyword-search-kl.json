@@ -1,5 +1,5 @@
 {
-  "formula": "w = ln(1 + p/((1-p) q))",
+  "formula": "w = ln(1 + p/(1-p) * (1-q)/q)",
   "prompt": {
     "question": "Does a document containing the word \"{w}\" (or a form of it, like a plural) become more likely to answer this query?",
     "labels": [
@@ -20,15 +20,15 @@
       },
       "jev": {
         "p25": 13.89,
-        "median": 38.36,
-        "mean": 41.83
+        "median": 38.52,
+        "mean": 41.8
       },
       "better": 70,
-      "worse": 40,
-      "same": 90,
-      "meanGain": 1.66,
-      "ci95": [0.63, 2.68],
-      "signP": 0.005447429511444476,
+      "worse": 39,
+      "same": 91,
+      "meanGain": 1.63,
+      "ci95": [0.63, 2.66],
+      "signP": 0.003854108187381312,
       "wins": [
         {
           "text": "In which city was the former Dutch queen Juliana buried?",
@@ -38,7 +38,7 @@
         {
           "text": "Give me all cars that are produced in Germany.",
           "bm25": 0.0,
-          "jev": 33.01
+          "jev": 31.49
         },
         {
           "text": "Give me all books by William Goldman with more than 300 pages.",
@@ -74,42 +74,42 @@
       },
       "jev": {
         "p25": 0.0,
-        "median": 13.82,
-        "mean": 28.07
+        "median": 16.41,
+        "mean": 27.51
       },
-      "better": 81,
-      "worse": 33,
-      "same": 210,
-      "meanGain": 2.42,
-      "ci95": [1.18, 3.7],
-      "signP": 8.004321800801116e-6,
+      "better": 69,
+      "worse": 42,
+      "same": 213,
+      "meanGain": 1.86,
+      "ci95": [0.71, 3.1],
+      "signP": 0.01323360775882629,
       "wins": [
         {
-          "text": "How to account for money earned and spent prior to establishing business bank accounts?",
-          "bm25": 43.07,
+          "text": "Is is possible to take a mortgage using Bitcoin as collateral?",
+          "bm25": 50.0,
           "jev": 100.0
         },
         {
-          "text": "How to categorize credit card payments?",
-          "bm25": 43.07,
-          "jev": 100.0
+          "text": "Tax question about selling a car",
+          "bm25": 0.0,
+          "jev": 50.0
         },
         {
-          "text": "Can increasing my tax withholding from my full-time job cover FICA taxes for my freelance work?",
-          "bm25": 43.07,
+          "text": "Mortgage loan implications when tearing down existing house and building new one?",
+          "bm25": 50.0,
           "jev": 100.0
         }
       ],
       "losses": [
         {
-          "text": "Why big clients want the contractor to be incorporated before giving them work",
-          "bm25": 100.0,
-          "jev": 50.0
-        },
-        {
           "text": "Are there index tracking funds that avoid the \u201cbuy high - sell low\u201d problem?",
           "bm25": 38.69,
           "jev": 0.0
+        },
+        {
+          "text": "Why big clients want the contractor to be incorporated before giving them work",
+          "bm25": 100.0,
+          "jev": 63.09
         },
         {
           "text": "When can you adjust for (and re-allow) a disallowed year-end (December) wash-sale loss?",
@@ -128,15 +128,15 @@
       },
       "jev": {
         "p25": 0.0,
-        "median": 29.26,
-        "mean": 33.31
+        "median": 28.91,
+        "mean": 33.37
       },
-      "better": 327,
-      "worse": 110,
-      "same": 1289,
-      "meanGain": 2.77,
-      "ci95": [2.24, 3.31],
-      "signP": 4.466132940238136e-26,
+      "better": 332,
+      "worse": 113,
+      "same": 1281,
+      "meanGain": 2.83,
+      "ci95": [2.28, 3.38],
+      "signP": 4.607976280995003e-26,
       "wins": [
         {
           "text": "who sings i'm going to soak up the sun",
@@ -163,7 +163,7 @@
         {
           "text": "who has the best batting average in test cricket",
           "bm25": 100.0,
-          "jev": 63.09
+          "jev": 50.0
         },
         {
           "text": "how many championships did kobe win after shaq",
@@ -195,7 +195,7 @@
           "p": 0.18,
           "q": 0.09674179230328027,
           "idf": 2.335709784745482,
-          "jevWeight": 1.184500154184819,
+          "jevWeight": 1.1149908237592245,
           "stop": false,
           "stem": "which"
         },
@@ -204,7 +204,7 @@
           "p": 0.69,
           "q": 0.05450015023976887,
           "idf": 2.9095518206237316,
-          "jevWeight": 3.7338617290459823,
+          "jevWeight": 3.6791968868553893,
           "stop": false,
           "stem": "citi"
         },
@@ -213,7 +213,7 @@
           "p": 0.48,
           "q": 0.05446520574220064,
           "idf": 2.9101932079426875,
-          "jevWeight": 2.887479318427544,
+          "jevWeight": 2.8346789982718423,
           "stop": false,
           "stem": "former"
         },
@@ -222,7 +222,7 @@
           "p": 0.88,
           "q": 0.007061916257021525,
           "idf": 4.953038839798656,
-          "jevWeight": 6.946431529693322,
+          "jevWeight": 6.9393514023849034,
           "stop": false,
           "stem": "dutch"
         },
@@ -231,7 +231,7 @@
           "p": 0.9,
           "q": 0.005550027470257811,
           "idf": 5.193952401640042,
-          "jevWeight": 7.391793458632541,
+          "jevWeight": 7.38623141204418,
           "stop": false,
           "stem": "queen"
         },
@@ -240,7 +240,7 @@
           "p": 0.93,
           "q": 9.135181926015596e-5,
           "idf": 9.300792360065921,
-          "jevWeight": 11.88748858008361,
+          "jevWeight": 11.887397224719702,
           "stop": false,
           "stem": "juliana"
         },
@@ -249,7 +249,7 @@
           "p": 0.91,
           "q": 0.0013780427328063906,
           "idf": 6.5870910961266524,
-          "jevWeight": 8.900862305961262,
+          "jevWeight": 8.899483500901251,
           "stop": false,
           "stem": "buri"
         }
@@ -314,117 +314,144 @@
     {
       "dataset": "FiQA",
       "collection": "finance forum answers",
-      "text": "How to categorize credit card payments?",
+      "text": "What is considered high or low when talking about volume?",
       "ndcg": {
-        "bm25": 43.06765580733931,
-        "jev": 100.0
+        "bm25": 38.68528072345416,
+        "jev": 80.65735963827294
       },
-      "bm25": 43.06765580733931,
-      "jev": 100.0,
+      "bm25": 38.68528072345416,
+      "jev": 80.65735963827294,
       "documents": 57638,
       "settings": {
         "bm25": [1.2, 0.75],
-        "jev": [0.6, 0.75]
+        "jev": [1.2, 0.75]
       },
       "words": [
         {
-          "word": "how",
-          "p": 0.3,
-          "q": 0.1903311993615434,
-          "idf": 1.6589895698178063,
-          "jevWeight": 1.1791822457070034,
+          "word": "what",
+          "p": 0.19,
+          "q": 0.2727233296899669,
+          "idf": 1.2992974420382306,
+          "jevWeight": 0.4858319714670331,
           "stop": false,
-          "stem": "how"
+          "stem": "what"
         },
         {
-          "word": "categorize",
-          "p": 0.68,
-          "q": 0.001535418726903659,
-          "idf": 6.478952148885927,
-          "jevWeight": 7.23344624033787,
+          "word": "considered",
+          "p": 0.39,
+          "q": 0.07565190235777859,
+          "idf": 2.581612692232771,
+          "jevWeight": 2.1760904149135385,
           "stop": false,
-          "stem": "categor"
+          "stem": "consid"
         },
         {
-          "word": "credit",
+          "word": "high",
+          "p": 0.82,
+          "q": 0.08946199621783861,
+          "idf": 2.4139413671436873,
+          "jevWeight": 3.857907396257273,
+          "stop": false,
+          "stem": "high"
+        },
+        {
+          "word": "low",
+          "p": 0.72,
+          "q": 0.06054060618678325,
+          "idf": 2.8044409624426048,
+          "jevWeight": 3.7112037808193787,
+          "stop": false,
+          "stem": "low"
+        },
+        {
+          "word": "when",
+          "p": 0.24,
+          "q": 0.22784052464477178,
+          "idf": 1.4791093480716944,
+          "jevWeight": 0.7276556196904567,
+          "stop": false,
+          "stem": "when"
+        },
+        {
+          "word": "talking",
+          "p": 0.09,
+          "q": 0.0496278561390725,
+          "idf": 3.003202987191228,
+          "jevWeight": 1.0626235433698759,
+          "stop": false,
+          "stem": "talk"
+        },
+        {
+          "word": "about",
+          "p": 0.06,
+          "q": 0.22865594475962456,
+          "idf": 1.4755368298299825,
+          "jevWeight": 0.19500931988595954,
+          "stop": false,
+          "stem": "about"
+        },
+        {
+          "word": "volume",
           "p": 0.93,
-          "q": 0.08134249379760232,
-          "idf": 2.509086720040131,
-          "jevWeight": 5.1018799507583,
+          "q": 0.009446728777390308,
+          "idf": 4.6620867585267955,
+          "jevWeight": 7.240002038176292,
           "stop": false,
-          "stem": "credit"
-        },
-        {
-          "word": "card",
-          "p": 0.89,
-          "q": 0.05200471902704766,
-          "idf": 2.956420813998142,
-          "jevWeight": 5.053568891868129,
-          "stop": false,
-          "stem": "card"
-        },
-        {
-          "word": "payments",
-          "p": 0.81,
-          "q": 0.06935408317285172,
-          "idf": 2.6685302561917017,
-          "jevWeight": 4.134677763460177,
-          "stop": false,
-          "stem": "payment"
+          "stem": "volum"
         }
       ],
       "rankings": {
         "bm25": [
           {
-            "id": "122493",
-            "text": "Just use a credit card like AMEX Blue that categorizes your purchases, and reconcile at the end of the month. There is no good reason to use a debit card.",
+            "id": "42347",
+            "text": "Something to consider is that in the case of the company you chose, on the OTC market, that stock is thinly traded and with such low volume, it can be easy for it to fluctuate greatly to have trades occur.  This is why volume can matter for some people when it comes to buying shares. Some OTC stocks",
             "relevant": false
           },
           {
-            "id": "188072",
-            "text": "\"If you enter the transactions as you execute them (and categorize them then), Quicken will attempt to Match downloaded transactions with ones already in the register.  \"\"Memorized transactions\"\" with known parties can also help. My credit card downloads actually come with a rough categorization pro",
-            "relevant": false
-          },
-          {
-            "id": "183774",
-            "text": "At least in the US, many credit card companies offer statements that categorize your spending on that card and break it down by different categories depending on the merchant category code.   Having different cards for each budget category can be a good idea if different cards have different rewards",
-            "relevant": false
-          },
-          {
-            "id": "395912",
-            "text": "\"Using the Transfer category is the best place to put these categories, as that accurately reflects what the transaction is. If you have your credit card and bank account linked in Mint, the debit and credit to both accounts will net to $0 in the category.  I would not recommend using \"\"Hide from bu",
+            "id": "303325",
+            "text": "\"Volume is really only valuable when compared to some other volume, either from a historical value, or from some other stock.  The article you linked to doesn't provide specific numbers for you to evaluate whether volume is high or low. Many people simply look at the charts and use a gut feel for wh",
             "relevant": true
           },
           {
-            "id": "336518",
-            "text": "\"The trick to using a credit card responsibly is accounting. With your old system, you were paying for everything out of your savings account.  Everytime you had an expense, it was immediately withdrawn from your savings account, and you saw how much money you had left. Now, with a credit card, ther",
+            "id": "261802",
+            "text": "Open, high, low, close, volume. The hint is that volume on new years day is 0.  DC's comment is actually a better answer than mine - when given any data set, you should really know the meaning of each cell/number.",
+            "relevant": false
+          },
+          {
+            "id": "275297",
+            "text": "In the scenario you describe, the first thing I would look at would be liquidity.  In other words, how easy is it to buy and sell shares.  If the average daily volume of one share is low compared to the average daily volume of the other, then the more actively traded share would be the more attracti",
+            "relevant": false
+          },
+          {
+            "id": "377020",
+            "text": "\"This is only a concern if the payments can be realistically controlled by a central authority. What you're asking is only relevant when dealing with a centrally planned economy. I'm also not sure why you're talking about high payments surrounding basic living. What is \"\"basic living\"\"? What is cons",
             "relevant": false
           }
         ],
         "jev": [
           {
-            "id": "395912",
-            "text": "\"Using the Transfer category is the best place to put these categories, as that accurately reflects what the transaction is. If you have your credit card and bank account linked in Mint, the debit and credit to both accounts will net to $0 in the category.  I would not recommend using \"\"Hide from bu",
+            "id": "303325",
+            "text": "\"Volume is really only valuable when compared to some other volume, either from a historical value, or from some other stock.  The article you linked to doesn't provide specific numbers for you to evaluate whether volume is high or low. Many people simply look at the charts and use a gut feel for wh",
             "relevant": true
           },
           {
-            "id": "122493",
-            "text": "Just use a credit card like AMEX Blue that categorizes your purchases, and reconcile at the end of the month. There is no good reason to use a debit card.",
+            "id": "261802",
+            "text": "Open, high, low, close, volume. The hint is that volume on new years day is 0.  DC's comment is actually a better answer than mine - when given any data set, you should really know the meaning of each cell/number.",
             "relevant": false
           },
           {
-            "id": "188072",
-            "text": "\"If you enter the transactions as you execute them (and categorize them then), Quicken will attempt to Match downloaded transactions with ones already in the register.  \"\"Memorized transactions\"\" with known parties can also help. My credit card downloads actually come with a rough categorization pro",
+            "id": "275297",
+            "text": "In the scenario you describe, the first thing I would look at would be liquidity.  In other words, how easy is it to buy and sell shares.  If the average daily volume of one share is low compared to the average daily volume of the other, then the more actively traded share would be the more attracti",
             "relevant": false
           },
           {
-            "id": "336518",
-            "text": "\"The trick to using a credit card responsibly is accounting. With your old system, you were paying for everything out of your savings account.  Everytime you had an expense, it was immediately withdrawn from your savings account, and you saw how much money you had left. Now, with a credit card, ther",
+            "id": "42347",
+            "text": "Something to consider is that in the case of the company you chose, on the OTC market, that stock is thinly traded and with such low volume, it can be easy for it to fluctuate greatly to have trades occur.  This is why volume can matter for some people when it comes to buying shares. Some OTC stocks",
             "relevant": false
           },
           {
-            "id": "183774",
-            "text": "At least in the US, many credit card companies offer statements that categorize your spending on that card and break it down by different categories depending on the merchant category code.   Having different cards for each budget category can be a good idea if different cards have different rewards",
+            "id": "379392",
+            "text": "Kek.  &gt; Amazon is big enough to take full advantage of \u201cpostal injection,\u201d and that has tipped the scales in the internet giant\u2019s favor. **Select** high-volume shippers are able to drop off presorted packages at the local Postal Service depot for \u201clast mile\u201d delivery at cut-rate prices. With high",
             "relevant": false
           }
         ]
@@ -451,7 +478,7 @@
           "p": 0.1,
           "q": 0.03264274172104917,
           "idf": 3.4221327536072796,
-          "jevWeight": 1.4824799562541071,
+          "jevWeight": 1.4569257834371951,
           "stop": false,
           "stem": "what"
         },
@@ -460,7 +487,7 @@
           "p": 0.59,
           "q": 0.010520539301405311,
           "idf": 4.554425808594408,
-          "jevWeight": 4.925675474075389,
+          "jevWeight": 4.915176367743314,
           "stop": false,
           "stem": "femal"
         },
@@ -469,7 +496,7 @@
           "p": 0.95,
           "q": 0.002962741691214778,
           "idf": 5.821640192316228,
-          "jevWeight": 8.766235093099482,
+          "jevWeight": 8.763268417092942,
           "stop": false,
           "stem": "lion"
         },
@@ -478,7 +505,7 @@
           "p": 0.29,
           "q": 0.06239770066333043,
           "idf": 2.7742268526297353,
-          "jevWeight": 2.021007757870806,
+          "jevWeight": 1.9653590534176797,
           "stop": false,
           "stem": "call"
         },
@@ -487,7 +514,7 @@
           "p": 0.75,
           "q": 0.020345750780635538,
           "idf": 3.894883195745095,
-          "jevWeight": 5.0002545075921905,
+          "jevWeight": 4.979838821396416,
           "stop": false,
           "stem": "king"
         }
