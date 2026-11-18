@@ -1,0 +1,212 @@
+---
+title: 'Keyword Search with Jev'
+subtitle: 'Fixing word importance in BM25'
+date: '2026-10-14'
+lastmod: '2026-11-18'
+tags: ['search', 'bm25', 'sparse-retrieval', 'nlp']
+draft: true
+summary: 'BM25 uses rarity as a proxy for term importance. Jev answers one question per query word, and its probability fits into the derivation of IDF, with nothing new to tune.'
+authors: ['kshivendu']
+---
+
+Some words are more important than others in a search query. Keyword search with BM25 doesn't really understand language, so it has to guess which ones. It treats rarity as a proxy for importance, so rare words get more weight. It also drops common words like `the`, `to` and `not` using a fixed stopword list.
+
+Rarity can be wrong. Search Wikipedia for "who sings she's like the wind lyrics". `lyrics` is rare, so BM25 weighs it at 5.14, above `like` at 2.97. But the page you want is the song's page. It says "She's Like the Wind" and never says "lyrics".
+
+> Looking for TL;DR? Check [key takeaways](#key-takeaways)
+
+I asked [Jev](https://openrouter.ai/docs/guides/community/jev), TypeSafe's decision model, one question about each word of the query. Its answer is a probability. That probability fits into the derivation of IDF, the word weight in BM25 and TF-IDF, so the new word weight comes out of the math with no extra knob. On held-out queries from the full NQ, FiQA and DBPedia test sets, it beats tuned BM25 on all three.
+
+## Ask Jev about each word
+
+Take "In which city was the former Dutch queen Juliana buried?". It comes from [DBPedia-entity](https://huggingface.co/datasets/BeIR/dbpedia-entity), a search over 4.6 million Wikipedia abstracts, and the right answer is the abstract of Juliana of the Netherlands.
+
+[BM25](https://en.wikipedia.org/wiki/Okapi_BM25) weights each word by its rarity, called inverse document frequency or IDF. With `q` as the share of documents that contain the word, IDF is about `ln(1 / q)`. `juliana` appears in about 420 abstracts and gets 9.30. `which` appears in about 448,000 and gets 2.34.
+
+I send Jev the whole query as context, with one question per word. All the questions for a query go in a single API request. For `dutch`, the question is:
+
+```python
+# Jev decision request, shown for the word "dutch"
+state = {"search_query": "In which city was the former Dutch queen Juliana buried?"}
+
+question = {
+    "type": "score",
+    "instructions": (
+        'The state is a user search query. Does a document containing the word "dutch" '
+        "(or a form of it, like a plural) become more likely to answer this query?"
+    ),
+    "criteria": [
+        "Irrelevant: no, it is just as common in documents that don't answer",
+        "Essential: yes, every document that answers the query contains it",
+    ],
+}
+```
+
+Jev returns a probability for each label, and the two add up to 1. I keep `p`, the probability of Essential. Jev gives `juliana` 93% and `which` 18%.
+
+## Turn the answer into a word weight
+
+The two labels describe two extremes for how often the right documents contain the word:
+
+- **Essential**: every right document contains it.
+- **Irrelevant**: right documents contain it as often as any document does. Call that share `q`. About 32,700 of the 4.6 million abstracts contain `dutch`, so `q = 0.00706`.
+
+Jev's `p` says where the word sits between the two. So the share of right documents that contain `dutch`, call it `r`, is
+
+`r = p × 1 + (1 − p) × q = 0.88 + 0.12 × 0.00706 = 0.881`
+
+Now there are two chances for the same word: **0.881** in the right documents and 0.00706 in any document. The word weight compares them. A document either contains the word or not, and each case gives some evidence. BM25 only adds weight for the words a document has, so a document without the word is the zero point, and the weight is the gap between the two cases:
+
+```
+# Word weight for "dutch": evidence when a document has it, minus evidence when it doesn't
+weight = ln(r / q)  −  ln((1 − r) / (1 − q))
+       = ln(0.881 / 0.00706) − ln(0.119 / 0.99294)
+       = 4.83 + 2.12
+       = 6.95
+```
+
+The second part is simpler than it looks. Since `1 − r = (1 − p) × (1 − q)`, it is just `ln(1 − p)`, and for `dutch` that is ln(0.12) = −2.12. So the whole weight is one line, `weight = ln(1 + p / ((1 − p) × q))`.
+
+This is the [relevance weight](https://doi.org/10.1002/asi.4630270302) from Robertson and Spärck Jones. It is where the IDF in BM25 and TF-IDF comes from. It needs `r`, which BM25 doesn't know, so [Croft and Harper](https://doi.org/10.1108/eb026683) set `r = 0.5`, a coin flip. The weight then becomes `ln((1 − q) / q)`. When `q` is small, that is almost exactly `ln(1 / q)`, the IDF in the table below. Jev's answer fills in `r` for each word of each query.
+
+Here is the change in the formula. `df` counts documents containing the word, `N` is the total documents, and `p` is Jev's probability of Essential:
+
+<div className="jev-formula" tabIndex={0} aria-label="Word weight before and after adding Jev">
+
+$$
+\begin{aligned}
+q &= \frac{\mathrm{df}+0.5}{N+1} \\
+\text{BM25 weight} &= \mathrm{IDF} = \ln\!\left(\frac{1}{q}\right) \\
+\text{With Jev} &= \ln\!\left(1 + \frac{p}{(1-p)\,q}\right)
+\end{aligned}
+$$
+
+</div>
+
+Here is the whole query:
+
+| Word    | Jev `p` | BM25 IDF | BM25 + Jev |
+| ------- | ------: | -------: | ---------: |
+| juliana |     93% |     9.30 |      11.89 |
+| buried  |     91% |     6.59 |       8.90 |
+| queen   |     90% |     5.19 |       7.39 |
+| dutch   |     88% |     4.95 |       6.95 |
+| city    |     69% |     2.91 |       3.73 |
+| former  |     48% |     2.91 |       2.89 |
+| which   |     18% |     2.34 |   **1.18** |
+
+- At `p = 50%` the weight is `ln(1 + 1 / q)`, almost the same as IDF. `former` gets 48% and barely moves, from 2.91 to 2.89.
+- Above 50% the weight rises, and below 50% it falls. `which` isn't on the stopword list, and Jev drops it to half its IDF.
+- At `p = 0` the weight is 0, and it is never negative. Jev's answers stay between 1% and 99%, so there is nothing to clip or tune.
+
+Rarity and Jev's answer are two separate signals, so every word lands in one of four boxes. Each cell shows BM25's IDF → the weight with Jev:
+
+|                 | Jev says Irrelevant | Jev says Essential       |
+| --------------- | ------------------- | ------------------------ |
+| **Rare word**   | `give` 5.55 → 2.68  | `juliana` 9.30 → 11.89   |
+| **Common word** | `which` 2.34 → 1.18 | `credit` 2.51 → **5.10** |
+
+- `juliana` is rare and Essential, so it was already heavy and gets heavier.
+- `credit` in "How to categorize credit card payments?" is common on a finance forum, so BM25 gives it little weight. Jev gives it 93%, and its weight **doubles**.
+- `give` in "Give me all presidents of the United States." is rare in Wikipedia, so BM25 trusts it. Jev gives it 5%, and its weight halves. `presidents` rises from 4.19 to 7.67.
+- `which` is common and Irrelevant, so it falls to half its IDF.
+
+BM25 can only tell the two rows apart. Jev adds the two columns.
+
+The weight only replaces IDF. BM25's term frequency and length normalization stay the same, with its usual #[k₁ and b](BM25 settings for how fast repeated words stop adding score and how much long documents are penalised).
+
+<JevSearchExplorer />
+
+Observations:
+
+- On the Juliana query, the abstract of Juliana of the Netherlands moves from second to **first**. `juliana` rises from 9.30 to 11.89, while `which` falls from 2.34 to 1.18.
+- On "How to categorize credit card payments?", the answer moves from fourth to first. `credit` doubles from 2.51 to 5.10, while `how` falls from 1.66 to 1.18.
+- On "what is the female lion called in lion king", BM25 has no relevant result in its top 10. With Jev, the list of Lion King characters, which names Nala, comes first. `lion` rises from 5.82 to 8.77, and `what` falls from 3.42 to 1.48.
+- Each method uses its own tuned `k₁` and `b`, the same way as the results below.
+
+## Does it improve search?
+
+I ran the full test sets of three datasets from [BEIR](https://github.com/beir-cellar/beir):
+
+- [NQ](https://ai.google.com/research/NaturalQuestions): 3,452 Google questions against 2.68 million Wikipedia passages.
+- [FiQA](https://sites.google.com/view/fiqa/): 648 questions from a personal finance forum against 57,638 posts.
+- [DBPedia-entity](https://huggingface.co/datasets/BeIR/dbpedia-entity): 400 entity queries against 4.6 million Wikipedia abstracts.
+
+Both methods use the same stemming and stopwords. I tuned `k₁` and `b` for each method on a random half of each dataset's queries, trying 25 settings. The other half is what I score: 1,726 NQ, 324 FiQA and 200 DBPedia queries. Jev adds no setting of its own, so both methods get the same 25 tries.
+
+The chart shows #[nDCG@10](top-10 ranking quality from 0 to 100, higher when relevant documents sit nearer the top). You can switch between [p25, median and mean](/blog/stop-averaging-evals).
+
+export const jevKlView = (label, values) => ({
+  label,
+  default: label === 'mean',
+  datasets: [
+    ['NQ', values[0]],
+    ['FiQA', values[1]],
+    ['DBPedia', values[2]],
+  ].map(([dataset, v]) => ({
+    label: dataset,
+    categories: ['Tuned BM25 + Jev', 'Tuned BM25'],
+    series: [
+      {
+        name: 'nDCG@10',
+        values: v,
+        roles: ['series0', 'muted'],
+        text: v.map((x) => x.toFixed(2)),
+        textPosition: 'outside',
+      },
+    ],
+  })),
+})
+
+<BarChart
+  orientation="horizontal"
+  title="Top-10 search quality on held-out queries"
+  subtitle="Switch datasets. Mean is the default view."
+  valueLabel="nDCG@10 (higher is better)"
+  valueMax={60}
+  valueTicks={[0, 10, 20, 30, 40, 50]}
+  showLegend={false}
+  views={[
+    jevKlView('mean', [
+      [33.31, 30.54],
+      [28.07, 25.65],
+      [41.83, 40.17],
+    ]),
+    jevKlView('median', [
+      [29.26, 20.44],
+      [13.82, 10.9],
+      [38.36, 37.31],
+    ]),
+    jevKlView('p25', [
+      [0, 0],
+      [0, 0],
+      [13.89, 10.74],
+    ]),
+  ]}
+/>
+
+Observations:
+
+- "what is the female lion called in lion king" rises from 0 to 100 on NQ.
+- NQ's median rises from 20.44 to **29.26**, more than its mean, which goes from 30.54 to 33.31.
+- "How to categorize credit card payments?" rises from 43.07 to 100 on FiQA. The Juliana query rises from 63.09 to 100 on DBPedia.
+- Some queries get worse. "who painted the world famous painting the last supper" falls from 100 to 38.69 on NQ. On FiQA, "Why big clients want the contractor to be incorporated before giving them work" falls from 100 to 50. On DBPedia, "Seoul Korea river name ethnic group China" falls from 33.92 to 0.
+- p25 is 0 on NQ and FiQA for both methods, because more than a quarter of those queries find no relevant document in the top 10.
+
+Jev improves more queries than it hurts on every dataset:
+
+| Dataset | Better / worse / same | Mean gain, #[95% bootstrap interval](range of the mean gain over 5,000 resamples of the queries) |
+| ------- | --------------------: | -----------------------------------------------------------------------------------------------: |
+| NQ      |     327 / 110 / 1,289 |                                                                       **+2.77** (+2.24 to +3.31) |
+| FiQA    |         81 / 33 / 210 |                                                                           +2.42 (+1.18 to +3.70) |
+| DBPedia |          70 / 40 / 90 |                                                                           +1.66 (+0.63 to +2.68) |
+
+A #[sign test](how likely this many more wins than losses would be if each change were a coin flip) puts the chance of this being luck below 1 in 100 on every dataset.
+
+Jev costs about **\$0.05 per 1,000 queries**, one API request each. Fetching the answers for all 3,452 NQ queries cost \$0.16. The [saved results](/static/data/jev-keyword-search-kl.json) contain the per-dataset numbers, the prompt and the worked examples.
+
+## Key Takeaways
+
+- With `k₁` and `b` tuned for both methods, mean nDCG@10 rises on all three datasets: NQ **30.54 → 33.31**, FiQA 25.65 → 28.07 and DBPedia 40.17 → 41.83.
+- Ask Jev one question per query word: does a document containing it become more likely to answer? Its probability `p` goes into the relevance weight that IDF is derived from, `ln(1 + p / ((1 − p) × q))`, where `q` is the share of documents containing the word.
+- There is no new knob. At `p = 50%` the weight is almost plain IDF, and Jev raises the words it is sure about and lowers the ones it isn't.

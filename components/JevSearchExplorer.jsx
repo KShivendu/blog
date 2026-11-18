@@ -2,8 +2,12 @@ import { useEffect, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { chartChrome, vizPalette } from '../lib/viz-palette'
 
-const URL = '/static/data/jev-keyword-search.json'
-const COLLECTIONS = { DBPedia: 'Wikipedia abstracts', QuoraRetrieval: 'Quora questions' }
+const URL = '/static/data/jev-keyword-search-kl.json'
+const COLLECTIONS = {
+  DBPedia: 'Wikipedia abstracts',
+  NQ: 'Wikipedia passages',
+  FiQA: 'finance forum posts',
+}
 
 export default function JevSearchExplorer() {
   const { resolvedTheme } = useTheme()
@@ -125,8 +129,9 @@ export default function JevSearchExplorer() {
             BM25, {example.jev.toFixed(2)} with BM25 + Jev.
           </p>
           <p className="jev-caption">
-            Retrieval uses the words shown at default BM25 settings across{' '}
-            {example.documents.toLocaleString()} {COLLECTIONS[example.dataset]}.
+            Searches {example.documents.toLocaleString()} {COLLECTIONS[example.dataset]}.
+            {example.settings &&
+              ` Each method uses its own tuned settings: k₁ = ${example.settings.bm25[0]}, b = ${example.settings.bm25[1]} for BM25 and k₁ = ${example.settings.jev[0]}, b = ${example.settings.jev[1]} for BM25 + Jev.`}
           </p>
         </>
       )}

@@ -1,0 +1,553 @@
+{
+  "formula": "w = ln(1 + p/((1-p) q))",
+  "prompt": {
+    "question": "Does a document containing the word \"{w}\" (or a form of it, like a plural) become more likely to answer this query?",
+    "labels": [
+      "Irrelevant: no, it is just as common in documents that don't answer",
+      "Essential: yes, every document that answers the query contains it"
+    ]
+  },
+  "weightSource": "Jev H3 two-label prompt, cached in runs/jev_2label_cache.jsonl",
+  "tuning": "k1/b tuned per method on a random half of each dataset's test queries (25 settings), reported on the other half",
+  "results": {
+    "DBPedia": {
+      "collection": "Wikipedia entity abstracts",
+      "queries": 200,
+      "bm25": {
+        "p25": 10.74,
+        "median": 37.31,
+        "mean": 40.17
+      },
+      "jev": {
+        "p25": 13.89,
+        "median": 38.36,
+        "mean": 41.83
+      },
+      "better": 70,
+      "worse": 40,
+      "same": 90,
+      "meanGain": 1.66,
+      "ci95": [0.63, 2.68],
+      "signP": 0.005447429511444476,
+      "wins": [
+        {
+          "text": "In which city was the former Dutch queen Juliana buried?",
+          "bm25": 63.09,
+          "jev": 100.0
+        },
+        {
+          "text": "Give me all cars that are produced in Germany.",
+          "bm25": 0.0,
+          "jev": 33.01
+        },
+        {
+          "text": "Give me all books by William Goldman with more than 300 pages.",
+          "bm25": 33.41,
+          "jev": 64.31
+        }
+      ],
+      "losses": [
+        {
+          "text": "Seoul Korea river name ethnic group China",
+          "bm25": 33.92,
+          "jev": 0.0
+        },
+        {
+          "text": "Science fiction book written in the 1980",
+          "bm25": 57.67,
+          "jev": 40.03
+        },
+        {
+          "text": "Who is the mayor of New York City?",
+          "bm25": 30.31,
+          "jev": 13.89
+        }
+      ]
+    },
+    "FiQA": {
+      "collection": "finance forum answers",
+      "queries": 324,
+      "bm25": {
+        "p25": 0.0,
+        "median": 10.9,
+        "mean": 25.65
+      },
+      "jev": {
+        "p25": 0.0,
+        "median": 13.82,
+        "mean": 28.07
+      },
+      "better": 81,
+      "worse": 33,
+      "same": 210,
+      "meanGain": 2.42,
+      "ci95": [1.18, 3.7],
+      "signP": 8.004321800801116e-6,
+      "wins": [
+        {
+          "text": "How to account for money earned and spent prior to establishing business bank accounts?",
+          "bm25": 43.07,
+          "jev": 100.0
+        },
+        {
+          "text": "How to categorize credit card payments?",
+          "bm25": 43.07,
+          "jev": 100.0
+        },
+        {
+          "text": "Can increasing my tax withholding from my full-time job cover FICA taxes for my freelance work?",
+          "bm25": 43.07,
+          "jev": 100.0
+        }
+      ],
+      "losses": [
+        {
+          "text": "Why big clients want the contractor to be incorporated before giving them work",
+          "bm25": 100.0,
+          "jev": 50.0
+        },
+        {
+          "text": "Are there index tracking funds that avoid the \u201cbuy high - sell low\u201d problem?",
+          "bm25": 38.69,
+          "jev": 0.0
+        },
+        {
+          "text": "When can you adjust for (and re-allow) a disallowed year-end (December) wash-sale loss?",
+          "bm25": 33.33,
+          "jev": 0.0
+        }
+      ]
+    },
+    "NQ": {
+      "collection": "Wikipedia passages",
+      "queries": 1726,
+      "bm25": {
+        "p25": 0.0,
+        "median": 20.44,
+        "mean": 30.54
+      },
+      "jev": {
+        "p25": 0.0,
+        "median": 29.26,
+        "mean": 33.31
+      },
+      "better": 327,
+      "worse": 110,
+      "same": 1289,
+      "meanGain": 2.77,
+      "ci95": [2.24, 3.31],
+      "signP": 4.466132940238136e-26,
+      "wins": [
+        {
+          "text": "who sings i'm going to soak up the sun",
+          "bm25": 0.0,
+          "jev": 100.0
+        },
+        {
+          "text": "what is the female lion called in lion king",
+          "bm25": 0.0,
+          "jev": 100.0
+        },
+        {
+          "text": "how to write time and date in military",
+          "bm25": 0.0,
+          "jev": 87.72
+        }
+      ],
+      "losses": [
+        {
+          "text": "who painted the world famous painting the last supper",
+          "bm25": 100.0,
+          "jev": 38.69
+        },
+        {
+          "text": "who has the best batting average in test cricket",
+          "bm25": 100.0,
+          "jev": 63.09
+        },
+        {
+          "text": "how many championships did kobe win after shaq",
+          "bm25": 100.0,
+          "jev": 63.09
+        }
+      ]
+    }
+  },
+  "examples": [
+    {
+      "dataset": "DBPedia",
+      "collection": "Wikipedia entity abstracts",
+      "text": "In which city was the former Dutch queen Juliana buried?",
+      "ndcg": {
+        "bm25": 63.092975357145754,
+        "jev": 100.0
+      },
+      "bm25": 63.092975357145754,
+      "jev": 100.0,
+      "documents": 4635922,
+      "settings": {
+        "bm25": [1.2, 0.5],
+        "jev": [1.2, 0.5]
+      },
+      "words": [
+        {
+          "word": "which",
+          "p": 0.18,
+          "q": 0.09674179230328027,
+          "idf": 2.335709784745482,
+          "jevWeight": 1.184500154184819,
+          "stop": false,
+          "stem": "which"
+        },
+        {
+          "word": "city",
+          "p": 0.69,
+          "q": 0.05450015023976887,
+          "idf": 2.9095518206237316,
+          "jevWeight": 3.7338617290459823,
+          "stop": false,
+          "stem": "citi"
+        },
+        {
+          "word": "former",
+          "p": 0.48,
+          "q": 0.05446520574220064,
+          "idf": 2.9101932079426875,
+          "jevWeight": 2.887479318427544,
+          "stop": false,
+          "stem": "former"
+        },
+        {
+          "word": "dutch",
+          "p": 0.88,
+          "q": 0.007061916257021525,
+          "idf": 4.953038839798656,
+          "jevWeight": 6.946431529693322,
+          "stop": false,
+          "stem": "dutch"
+        },
+        {
+          "word": "queen",
+          "p": 0.9,
+          "q": 0.005550027470257811,
+          "idf": 5.193952401640042,
+          "jevWeight": 7.391793458632541,
+          "stop": false,
+          "stem": "queen"
+        },
+        {
+          "word": "juliana",
+          "p": 0.93,
+          "q": 9.135181926015596e-5,
+          "idf": 9.300792360065921,
+          "jevWeight": 11.88748858008361,
+          "stop": false,
+          "stem": "juliana"
+        },
+        {
+          "word": "buried",
+          "p": 0.91,
+          "q": 0.0013780427328063906,
+          "idf": 6.5870910961266524,
+          "jevWeight": 8.900862305961262,
+          "stop": false,
+          "stem": "buri"
+        }
+      ],
+      "rankings": {
+        "bm25": [
+          {
+            "id": "<dbpedia:Koningin_Juliana_Toren>",
+            "text": "Koningin Juliana Toren: Koningin Juliana Toren (English: Queen Juliana Tower) is an amusement park which is located in the municipality of Apeldoorn. The park is built around the Queen Juliana Tower, which was built in 1910, and is currently a rijksmonument. The tower was built next to Het Loo Palac",
+            "relevant": false
+          },
+          {
+            "id": "<dbpedia:Juliana_of_the_Netherlands>",
+            "text": "Juliana of the Netherlands: Juliana (Dutch pronunciation: [\u02ccjyli\u02c8ja\u02d0na\u02d0]; Juliana Louise Emma Marie Wilhelmina; 30 April 1909 \u2013 20 March 2004) was Queen of the Kingdom of the Netherlands from 1948 until 1980. She reigned for nearly 32 years. Her reign saw the decolonization of both Indonesia (Dutch ",
+            "relevant": true
+          },
+          {
+            "id": "<dbpedia:Queen_Juliana_Bridge>",
+            "text": "Queen Juliana Bridge: Queen Juliana Bridge is a four lane road bridge across St. Anna Bay in Willemstad, the capital of Cura\u00e7ao and formerly, the Netherlands Antilles.  The bridge is named after Queen Juliana of the Netherlands. The original bridge collapsed in 1967 killing four workers, and got rep",
+            "relevant": false
+          },
+          {
+            "id": "<dbpedia:Soestdijk>",
+            "text": "Soestdijk: Soestdijk (Dutch pronunciation: [suz\u02c8d\u025bik]) was a village in the  municipality of Soest, Utrecht, Netherlands and gives its name to Paleis Soestdijk, which from 1937 to 2004 was the residence of Princess and later Queen Juliana and Prince Bernhard (who both died in 2004).Most of Soestdijk",
+            "relevant": false
+          },
+          {
+            "id": "<dbpedia:Royal_Dutch_State_Limousine>",
+            "text": "Royal Dutch State Limousine: The Rolls Royce Silver Wraith Limousine State Landaulette was the former official state car of the head of state Queen Juliana of the Netherlands until 1979.",
+            "relevant": false
+          }
+        ],
+        "jev": [
+          {
+            "id": "<dbpedia:Juliana_of_the_Netherlands>",
+            "text": "Juliana of the Netherlands: Juliana (Dutch pronunciation: [\u02ccjyli\u02c8ja\u02d0na\u02d0]; Juliana Louise Emma Marie Wilhelmina; 30 April 1909 \u2013 20 March 2004) was Queen of the Kingdom of the Netherlands from 1948 until 1980. She reigned for nearly 32 years. Her reign saw the decolonization of both Indonesia (Dutch ",
+            "relevant": true
+          },
+          {
+            "id": "<dbpedia:Koningin_Juliana_Toren>",
+            "text": "Koningin Juliana Toren: Koningin Juliana Toren (English: Queen Juliana Tower) is an amusement park which is located in the municipality of Apeldoorn. The park is built around the Queen Juliana Tower, which was built in 1910, and is currently a rijksmonument. The tower was built next to Het Loo Palac",
+            "relevant": false
+          },
+          {
+            "id": "<dbpedia:Queen_Juliana_Bridge>",
+            "text": "Queen Juliana Bridge: Queen Juliana Bridge is a four lane road bridge across St. Anna Bay in Willemstad, the capital of Cura\u00e7ao and formerly, the Netherlands Antilles.  The bridge is named after Queen Juliana of the Netherlands. The original bridge collapsed in 1967 killing four workers, and got rep",
+            "relevant": false
+          },
+          {
+            "id": "<dbpedia:Juliana_Canal>",
+            "text": "Juliana Canal: The Juliana Canal (Dutch: Julianakanaal), named after Queen Juliana of the Netherlands, is a 36 km long canal in the southern Netherlands, providing a bypass of an unnavigable section of the river Meuse between Maastricht and Maasbracht. It is an important transport connection between",
+            "relevant": false
+          },
+          {
+            "id": "<dbpedia:Royal_Dutch_State_Limousine>",
+            "text": "Royal Dutch State Limousine: The Rolls Royce Silver Wraith Limousine State Landaulette was the former official state car of the head of state Queen Juliana of the Netherlands until 1979.",
+            "relevant": false
+          }
+        ]
+      }
+    },
+    {
+      "dataset": "FiQA",
+      "collection": "finance forum answers",
+      "text": "How to categorize credit card payments?",
+      "ndcg": {
+        "bm25": 43.06765580733931,
+        "jev": 100.0
+      },
+      "bm25": 43.06765580733931,
+      "jev": 100.0,
+      "documents": 57638,
+      "settings": {
+        "bm25": [1.2, 0.75],
+        "jev": [0.6, 0.75]
+      },
+      "words": [
+        {
+          "word": "how",
+          "p": 0.3,
+          "q": 0.1903311993615434,
+          "idf": 1.6589895698178063,
+          "jevWeight": 1.1791822457070034,
+          "stop": false,
+          "stem": "how"
+        },
+        {
+          "word": "categorize",
+          "p": 0.68,
+          "q": 0.001535418726903659,
+          "idf": 6.478952148885927,
+          "jevWeight": 7.23344624033787,
+          "stop": false,
+          "stem": "categor"
+        },
+        {
+          "word": "credit",
+          "p": 0.93,
+          "q": 0.08134249379760232,
+          "idf": 2.509086720040131,
+          "jevWeight": 5.1018799507583,
+          "stop": false,
+          "stem": "credit"
+        },
+        {
+          "word": "card",
+          "p": 0.89,
+          "q": 0.05200471902704766,
+          "idf": 2.956420813998142,
+          "jevWeight": 5.053568891868129,
+          "stop": false,
+          "stem": "card"
+        },
+        {
+          "word": "payments",
+          "p": 0.81,
+          "q": 0.06935408317285172,
+          "idf": 2.6685302561917017,
+          "jevWeight": 4.134677763460177,
+          "stop": false,
+          "stem": "payment"
+        }
+      ],
+      "rankings": {
+        "bm25": [
+          {
+            "id": "122493",
+            "text": "Just use a credit card like AMEX Blue that categorizes your purchases, and reconcile at the end of the month. There is no good reason to use a debit card.",
+            "relevant": false
+          },
+          {
+            "id": "188072",
+            "text": "\"If you enter the transactions as you execute them (and categorize them then), Quicken will attempt to Match downloaded transactions with ones already in the register.  \"\"Memorized transactions\"\" with known parties can also help. My credit card downloads actually come with a rough categorization pro",
+            "relevant": false
+          },
+          {
+            "id": "183774",
+            "text": "At least in the US, many credit card companies offer statements that categorize your spending on that card and break it down by different categories depending on the merchant category code.   Having different cards for each budget category can be a good idea if different cards have different rewards",
+            "relevant": false
+          },
+          {
+            "id": "395912",
+            "text": "\"Using the Transfer category is the best place to put these categories, as that accurately reflects what the transaction is. If you have your credit card and bank account linked in Mint, the debit and credit to both accounts will net to $0 in the category.  I would not recommend using \"\"Hide from bu",
+            "relevant": true
+          },
+          {
+            "id": "336518",
+            "text": "\"The trick to using a credit card responsibly is accounting. With your old system, you were paying for everything out of your savings account.  Everytime you had an expense, it was immediately withdrawn from your savings account, and you saw how much money you had left. Now, with a credit card, ther",
+            "relevant": false
+          }
+        ],
+        "jev": [
+          {
+            "id": "395912",
+            "text": "\"Using the Transfer category is the best place to put these categories, as that accurately reflects what the transaction is. If you have your credit card and bank account linked in Mint, the debit and credit to both accounts will net to $0 in the category.  I would not recommend using \"\"Hide from bu",
+            "relevant": true
+          },
+          {
+            "id": "122493",
+            "text": "Just use a credit card like AMEX Blue that categorizes your purchases, and reconcile at the end of the month. There is no good reason to use a debit card.",
+            "relevant": false
+          },
+          {
+            "id": "188072",
+            "text": "\"If you enter the transactions as you execute them (and categorize them then), Quicken will attempt to Match downloaded transactions with ones already in the register.  \"\"Memorized transactions\"\" with known parties can also help. My credit card downloads actually come with a rough categorization pro",
+            "relevant": false
+          },
+          {
+            "id": "336518",
+            "text": "\"The trick to using a credit card responsibly is accounting. With your old system, you were paying for everything out of your savings account.  Everytime you had an expense, it was immediately withdrawn from your savings account, and you saw how much money you had left. Now, with a credit card, ther",
+            "relevant": false
+          },
+          {
+            "id": "183774",
+            "text": "At least in the US, many credit card companies offer statements that categorize your spending on that card and break it down by different categories depending on the merchant category code.   Having different cards for each budget category can be a good idea if different cards have different rewards",
+            "relevant": false
+          }
+        ]
+      }
+    },
+    {
+      "dataset": "NQ",
+      "collection": "Wikipedia passages",
+      "text": "what is the female lion called in lion king",
+      "ndcg": {
+        "bm25": 0.0,
+        "jev": 100.0
+      },
+      "bm25": 0.0,
+      "jev": 100.0,
+      "documents": 2681468,
+      "settings": {
+        "bm25": [1.2, 0.5],
+        "jev": [1.2, 0.5]
+      },
+      "words": [
+        {
+          "word": "what",
+          "p": 0.1,
+          "q": 0.03264274172104917,
+          "idf": 3.4221327536072796,
+          "jevWeight": 1.4824799562541071,
+          "stop": false,
+          "stem": "what"
+        },
+        {
+          "word": "female",
+          "p": 0.59,
+          "q": 0.010520539301405311,
+          "idf": 4.554425808594408,
+          "jevWeight": 4.925675474075389,
+          "stop": false,
+          "stem": "femal"
+        },
+        {
+          "word": "lion",
+          "p": 0.95,
+          "q": 0.002962741691214778,
+          "idf": 5.821640192316228,
+          "jevWeight": 8.766235093099482,
+          "stop": false,
+          "stem": "lion"
+        },
+        {
+          "word": "called",
+          "p": 0.29,
+          "q": 0.06239770066333043,
+          "idf": 2.7742268526297353,
+          "jevWeight": 2.021007757870806,
+          "stop": false,
+          "stem": "call"
+        },
+        {
+          "word": "king",
+          "p": 0.75,
+          "q": 0.020345750780635538,
+          "idf": 3.894883195745095,
+          "jevWeight": 5.0002545075921905,
+          "stop": false,
+          "stem": "king"
+        }
+      ],
+      "rankings": {
+        "bm25": [
+          {
+            "id": "doc50255",
+            "text": "Nala (The Lion King): A straight woman character, Kelly described Nala as a sensible and nurturing yet authoritative character,[13] while Amber Leab of Bitch Flicks described her as strong, independent and intelligent.[25] According to Oh My Disney, Nala serves as \"the proverbial glue that keeps The",
+            "relevant": false
+          },
+          {
+            "id": "doc162355",
+            "text": "The Lion King: Disney released two direct-to-video films related to The Lion King. The first was sequel The Lion King II: Simba's Pride, released in 1998 on VHS. The film centers around Simba and Nala's daughter, Kiara, who falls in love with Kovu, a male lion who was raised in a pride of Scar's fol",
+            "relevant": false
+          },
+          {
+            "id": "doc953939",
+            "text": "Lion: The lion is the most social of all wild cat species, living in groups of related individuals with their offspring. Such a group is called a \"pride\". Groups of male lions are called \"coalitions\".[76] Females form the stable social unit in a pride and do not tolerate outside females.[77] Members",
+            "relevant": false
+          },
+          {
+            "id": "doc1517074",
+            "text": "Nala (Disney): A straight woman character, Kelly described Nala as a sensible and nurturing yet authoritative character,[13] while Amber Leab of Bitch Flicks described her as strong, independent and intelligent.[25] According to Oh My Disney, Nala serves as \"the proverbial glue that keeps The Lion K",
+            "relevant": false
+          },
+          {
+            "id": "doc50256",
+            "text": "Nala (The Lion King): Including Nala, The Lion King has only three major female characters in comparison to the film's total of nine male ones.[27] Shepherd University's Emmylou Allen observed that Nala is introduced \"as a dominating young girl\" who ultimately matures into \"a strong woman\" by the fi",
+            "relevant": false
+          }
+        ],
+        "jev": [
+          {
+            "id": "doc37055",
+            "text": "List of The Lion King characters: Nala (voiced by Moira Kelly in The Lion King, The Lion King ll: Simba's Pride, and The Lion King 1\u00bd, and Gabrielle Union in The Lion Guard) is the daughter of Sarafina, the best friend and later wife of Simba and Kiara and Kion's mother. Although she is a prominent ",
+            "relevant": true
+          },
+          {
+            "id": "doc1578730",
+            "text": "White lion: The first White Lions introduced into Malaysia was in March 2013 when the Safari Park in Bukit Gambang Resort City (Pahang) opened its door to the public. With 2 males and 3 females, the first White Lion was born in May 2014 and was named King.[14]",
+            "relevant": false
+          },
+          {
+            "id": "doc50256",
+            "text": "Nala (The Lion King): Including Nala, The Lion King has only three major female characters in comparison to the film's total of nine male ones.[27] Shepherd University's Emmylou Allen observed that Nala is introduced \"as a dominating young girl\" who ultimately matures into \"a strong woman\" by the fi",
+            "relevant": false
+          },
+          {
+            "id": "doc50255",
+            "text": "Nala (The Lion King): A straight woman character, Kelly described Nala as a sensible and nurturing yet authoritative character,[13] while Amber Leab of Bitch Flicks described her as strong, independent and intelligent.[25] According to Oh My Disney, Nala serves as \"the proverbial glue that keeps The",
+            "relevant": false
+          },
+          {
+            "id": "doc162356",
+            "text": "The Lion King: In June 2014, it was announced that a new TV series based on the film would be released called The Lion Guard, featuring Kion, the second-born cub of Simba and Nala. The Lion Guard is a sequel to The Lion King and takes place during the time-gap within The Lion King II: Simba's Pride.",
+            "relevant": false
+          }
+        ]
+      }
+    }
+  ]
+}
