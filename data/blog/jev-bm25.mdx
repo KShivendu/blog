@@ -212,7 +212,7 @@ Simpler mixes also beat tuned BM25. Mean nDCG@10 on the same scored queries:
 | `IDF × jev`                                            | 33.78 | 28.18 |   42.45 |
 | `IDF + c × ln(jev / (1 − jev))`, `c` tuned per dataset | 34.59 | 27.58 |   42.62 |
 
-Every form beats BM25 on all three datasets, so the gain comes from Jev's answers rather than from one formula. The other two score a little higher, but the gaps are within noise. On NQ, `IDF × jev` improves 215 queries and worsens 229. Also, `IDF × jev` has no derivation behind it, and `c` is one more setting to tune for each dataset. The weight in this post follows from the relevance weight and has nothing to tune.
+Every form beats BM25 on all three datasets. The other two score a little higher, but the gaps are within noise. On NQ, `IDF × jev` improves 215 queries and worsens 229. The weight in this post follows from the relevance weight and has nothing to tune, so it is my starting point.
 
 </details>
 
@@ -232,6 +232,7 @@ The [saved results](/static/data/jev-keyword-search-kl.json) contain the per-dat
 
 ## What's next
 
+- **Find the best formula.** How Jev's answer turns into a weight matters, and the variants above suggest there is more to gain. I'll keep testing forms that stay as clean as this one.
 - **Distill Jev.** Train a tiny model on Jev's answers for millions of queries. That removes the API call, its 763 ms and its price.
 - **Ask Jev about documents too.** The same idea works at index time: ask once per document and word, 'Does it discuss "langchain"?', and store the answer in the index. It adds no query-time cost. In an early test on the LangChain questions of [FreshStack](https://fresh-stack.github.io/), a benchmark of technical questions answered from code docs, it lifted BM25 + Jev from 17.16 to 19.97 nDCG@10. That test only re-scored each query's top 20 results, so a full index run is still to come.
 
