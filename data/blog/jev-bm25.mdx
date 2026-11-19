@@ -212,7 +212,15 @@ Simpler mixes also beat tuned BM25. Mean nDCG@10 on the same scored queries:
 | `IDF × jev`                                            | 33.78 | 28.18 |   42.45 |
 | `IDF + c × ln(jev / (1 − jev))`, `c` tuned per dataset | 34.59 | 27.58 |   42.62 |
 
-Every form beats BM25 on all three datasets. The other two score a little higher, but the gaps are within noise. On NQ, `IDF × jev` improves 215 queries and worsens 229. The weight in this post follows from the relevance weight and has nothing to tune, so it is my starting point.
+The mean hides how each form gets there. Here is how many queries each one makes worse than tuned BM25, with the ones that drop by 50 points or more in brackets:
+
+| Queries made worse              |       NQ |   FiQA | DBPedia |
+| ------------------------------- | -------: | -----: | ------: |
+| This post                       |  113 (2) | 42 (0) |  39 (0) |
+| `IDF × jev`                     |  149 (4) | 36 (2) |  50 (0) |
+| `IDF + c × ln(jev / (1 − jev))` | 183 (11) | 35 (0) |  57 (0) |
+
+Every form beats BM25 on all three datasets, and the gaps between them are within noise. The weight in this post is the most careful one. On NQ it makes 113 queries worse, against 149 and 183, and only 2 of them drop by 50 points. The other two gain their extra mean by moving more queries in both directions. FiQA is the exception, where all three hurt about the same number. The weight in this post also follows from the relevance weight and has nothing to tune, so it is my starting point.
 
 </details>
 
