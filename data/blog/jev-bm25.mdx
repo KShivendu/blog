@@ -220,7 +220,9 @@ The mean hides how each form gets there. Here is how many queries each one makes
 | `IDF × jev`                     |  149 (4) | 36 (2) |  50 (0) |
 | `IDF + c × ln(jev / (1 − jev))` | 183 (11) | 35 (0) |  57 (0) |
 
-Every form beats BM25 on all three datasets, and the gaps between them are within noise. The weight in this post is the most careful one. On NQ it makes 113 queries worse, against 149 and 183, and only 2 of them drop by 50 points. The other two gain their extra mean by moving more queries in both directions. FiQA is the exception, where all three hurt about the same number. The weight in this post also follows from the relevance weight and has nothing to tune, so it is my starting point.
+Every form beats BM25 on all three datasets. `IDF × jev` is within noise of this post's weight everywhere. The tuned form really is better on NQ. It scores 1.22 higher, and the 95% range of that gap (+0.58 to +1.83) stays above 0.
+
+For a rare word, this post's weight is close to `IDF + 1 × ln(jev / (1 − jev))`, so it is the tuned form with `c = 1`. NQ picks `c = 3`, which trusts Jev three times as much. It also takes more risk. On NQ the tuned form makes 183 queries worse, against 113, and 11 of them drop by 50 points, against 2. The best `c` also needs labelled queries to find, and it changes a lot between datasets: 3 on NQ, 0.5 on FiQA and 2 on DBPedia. So this post keeps the weight with nothing to tune, and finding how much to trust Jev without labels is the next step.
 
 </details>
 
@@ -240,7 +242,7 @@ The [saved results](/static/data/jev-keyword-search-kl.json) contain the per-dat
 
 ## What's next
 
-- **Find the best formula.** How Jev's answer turns into a weight matters, and the variants above suggest there is more to gain. I'll keep testing forms that stay as clean as this one.
+- **Find the best formula.** How Jev's answer turns into a weight matters. Trusting Jev three times as much adds 1.22 nDCG@10 on NQ, but that strength took labelled queries to find. I'll keep testing forms that get there and stay as clean as this one.
 - **Distill Jev.** Train a tiny model on Jev's answers for millions of queries. That removes the API call, its 763 ms and its price.
 - **Ask Jev about documents too.** The same idea works at index time: ask once per document and word, 'Does it discuss "langchain"?', and store the answer in the index. It adds no query-time cost. In an early test on the LangChain questions of [FreshStack](https://fresh-stack.github.io/), a benchmark of technical questions answered from code docs, it lifted BM25 + Jev from 17.16 to 19.97 nDCG@10. That test only re-scored each query's top 20 results, so a full index run is still to come.
 
