@@ -21,7 +21,7 @@ I asked [Jev](https://openrouter.ai/docs/guides/community/jev), TypeSafe's decis
 
 Take "In which city was the former Dutch queen Juliana buried?". It comes from [DBPedia-entity](https://huggingface.co/datasets/BeIR/dbpedia-entity), a search over 4.6 million Wikipedia abstracts, and the right answer is the abstract of Juliana of the Netherlands.
 
-[BM25](https://en.wikipedia.org/wiki/Okapi_BM25) weights each word by its rarity, called inverse document frequency or IDF. IDF is the log of how many abstracts you go through, on average, to find one with the word. `juliana` shows up in 1 of every 10,950 abstracts, so it gets ln 10,950 = 9.30. `which` shows up in 1 of every 10, so it gets only 2.34.
+[BM25](https://en.wikipedia.org/wiki/Okapi_BM25) weights each word by its rarity, called inverse document frequency or IDF. A rare word picks out a few documents from the rest, so matching it counts for more. IDF is the log of the word's rarity: `juliana` shows up in 1 of every 10,950 abstracts, so it gets ln 10,950 = 9.30. `which` shows up in 1 of every 10, so it gets only 2.34.
 
 I send Jev the whole query as context, with one question per word. All the questions for a query go in a single API request. For `dutch`, the question is:
 
