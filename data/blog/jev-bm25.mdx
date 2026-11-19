@@ -60,7 +60,25 @@ Jev says   bonus
 
 `yes` is Jev's answer and `no` is the rest. `dutch` has an IDF of 4.95. Jev says 88% yes and 12% no, so its weight becomes 4.95 + 2.0 = 6.94.
 
-The bonus comes from the same place as IDF, the [relevance weight](https://doi.org/10.1002/asi.4630270302) of Robertson and Spärck Jones. It scores a word by comparing how often the right documents (the ones that answer the query) contain it with how often random documents do. BM25 can't see the right documents, so it assumes half of them contain each word, as [Croft and Harper](https://doi.org/10.1108/eb026683) did. With that guess, only rarity is left, and the result is IDF. Jev gives its own share instead of half, and that swap adds exactly `ln(yes / no)`.
+The bonus comes from the same place as IDF, the [relevance weight](https://doi.org/10.1002/asi.4630270302) of Robertson and Spärck Jones. It compares the right documents (the ones that answer the query) with random documents, using odds of "with the word" to "without it":
+
+```
+weight = ln( odds that a right document contains the word
+             ÷ odds that a random document contains it )
+```
+
+Here it is for `dutch`:
+
+```
+# "dutch" in DBPedia's 4.6 million abstracts
+random abstracts:  1 with it for every 140 without   → odds 1 / 140
+right abstracts:   BM25 can't see them, so it guesses half of them have it
+                   1 with it for every 1 without      → odds 1
+BM25:  ln(1     ÷ 1/140) = ln(1 × 140)     ≈ 4.95   (IDF)
+Jev:   ln(88/12 ÷ 1/140) = ln(88/12 × 140) ≈ 6.94   (Jev says 88% have it)
+```
+
+The half guess is from [Croft and Harper](https://doi.org/10.1108/eb026683). With it, only rarity is left, and the weight is IDF. Jev replaces the guess with its answer. The log of a product is a sum, so `ln(88/12 × 140)` is IDF plus `ln(88/12)`, which is the bonus.
 
 One detail keeps weights from going negative. Lucene writes IDF as `ln(1 + rarity)`, where rarity counts the documents without the word for each one with it (`dutch`: 140). I put the bonus inside the same form:
 
