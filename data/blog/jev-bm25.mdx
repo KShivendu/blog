@@ -116,6 +116,7 @@ Observations:
 - On the Juliana query, the abstract of Juliana of the Netherlands moves from second to **first**. `juliana` rises from 9.30 to 11.89, while `which` falls from 2.34 to 1.11.
 - On "What is considered high or low when talking about volume?", the answer moves from second to first. `volume` rises from 4.66 to 7.24, while `talking` falls from 3.00 to 1.06.
 - On "what is the female lion called in lion king", BM25 has no relevant result in its top 10. With Jev, the list of Lion King characters, which names Nala, comes first. `lion` rises from 5.82 to 8.76, and `what` falls from 3.42 to 1.46.
+- The opening query, "who sings she's like the wind lyrics", is from NQ. The passage about the song moves from rank 106 to **7**. `like` rises from 2.97 to 4.44, `wind` from 5.09 to 7.67, and `lyrics` falls from 5.14 to 4.44.
 - Each method uses its own tuned `k₁` and `b`, the same way as the results below.
 
 ## Does it improve search?
@@ -197,7 +198,19 @@ There is [no free lunch in search evals](/blog/stop-averaging-evals#which-querie
 
 A #[sign test](how likely this many more wins than losses would be if each change were a coin flip) puts the chance of this being luck below 1 in 50 on every dataset.
 
-Jev costs about **\$0.05 per 1,000 queries**, one API request each. Fetching the answers for all 3,452 NQ queries cost \$0.16. The [saved results](/static/data/jev-keyword-search-kl.json) contain the per-dataset numbers, the prompt and the worked examples.
+## Cost and latency
+
+Jev answers all the questions for a query in one API request. Fetching the answers for all 3,452 NQ queries cost \$0.16, about **\$0.05 per 1,000 queries**. The price grows with query length. 200 HotpotQA queries, 16 words each on average, cost \$0.07 per 1,000.
+
+Latency matters more than price. I timed those 200 HotpotQA queries, one request at a time:
+
+| Jev request |    p50 |      p95 |      p99 |
+| ----------- | -----: | -------: | -------: |
+| Time        | 763 ms | 1,179 ms | 1,338 ms |
+
+BM25 itself answers in a few milliseconds, so the Jev call sets the query time. Caching the answers by query text removes it for queries that repeat. A query nobody has asked before still pays the full call.
+
+The [saved results](/static/data/jev-keyword-search-kl.json) contain the per-dataset numbers, the prompt and the worked examples.
 
 ## Key Takeaways
 
