@@ -21,7 +21,7 @@ I asked [Jev](https://openrouter.ai/docs/guides/community/jev), TypeSafe's decis
 
 Take "In which city was the former Dutch queen Juliana buried?". It comes from [DBPedia-entity](https://huggingface.co/datasets/BeIR/dbpedia-entity), a search over 4.6 million Wikipedia abstracts, and the right answer is the abstract of Juliana of the Netherlands.
 
-[BM25](https://en.wikipedia.org/wiki/Okapi_BM25) weights each word by its rarity, called inverse document frequency or IDF. With `all` as the share of all documents that contain the word, IDF is `ln(1 / all)`. `juliana` appears in about 420 abstracts and gets 9.30. `which` appears in about 448,000 and gets 2.34.
+[BM25](https://en.wikipedia.org/wiki/Okapi_BM25) weights each word by its rarity, called inverse document frequency or IDF. Pick abstracts at random and check whether they mention the word. `juliana` shows up in 1 of every 10,950 abstracts. Finding it is a surprise, so it gets a high weight: ln 10,950 = 9.30. `which` shows up in 1 of every 10. Finding it says little, so it gets only 2.34.
 
 I send Jev the whole query as context, with one question per word. All the questions for a query go in a single API request. For `dutch`, the question is:
 
@@ -46,32 +46,34 @@ Jev returns a probability for each label, and the two add up to 1. I keep the pr
 
 ## Turn the answer into a word weight
 
-IDF comes from the [relevance weight](https://doi.org/10.1002/asi.4630270302) of Robertson and Spärck Jones. It compares two odds: that a right document (one that answers the query) contains the word, and that any document does. BM25 doesn't know the first odds, so [Croft and Harper](https://doi.org/10.1108/eb026683) assumed a coin flip: half the right documents contain the word. A coin flip has odds of 1. Lucene adds 1 inside the log so the weight is never negative, and that gives BM25's IDF:
+Rarity only tells half the story. A match helps a document only if the right documents (the ones that answer the query) contain the word more often than random ones do. So picture two piles of abstracts, and count how many in each pile contain `dutch`:
 
 ```
-# BM25's IDF, with the coin flip's odds written out
-IDF = ln(1 + 1 × (1 − all) / all)  =  ln(1 / all)
+# Abstracts that contain "dutch", written as  with : without
+random abstracts                   1 : 140   (1 in every 141)
+right abstracts, BM25's guess      1 : 1     (half of them)
+right abstracts, Jev's answer    7.3 : 1     (88% of them)
 ```
 
-Jev replaces that 1 with its own odds, `jev / (1 − jev)`. Here is the weight for `dutch`. About 32,700 of the 4.6 million abstracts contain it, and Jev is 88% sure it is Essential:
+The word weight asks how many times more common the word is in the right pile than in the random pile. That comparison is the [relevance weight](https://doi.org/10.1002/asi.4630270302) of Robertson and Spärck Jones. BM25 never sees the right pile, so it guesses half, as [Croft and Harper](https://doi.org/10.1108/eb026683) did. With that guess, `dutch` is 140 times more common in the right pile, and the log of 140 is IDF. Jev replaces the guess with its answer:
 
 ```
-# Word weight for "dutch" in DBPedia
-all        = 32,700 / 4.6 million                       = 0.00706
-(1 − all) / all                                         = 140.6
-coin flip:  odds 1                  → ln(1 + 1    × 140.6) = 4.95   (BM25's IDF)
-Jev:        odds 0.88 / 0.12 = 7.33 → ln(1 + 7.33 × 140.6) = 6.94
+# Word weight for "dutch": ln(1 + right pile × 140)
+BM25 guesses 1 : 1     → ln(1 + 1   × 140) = 4.95   (BM25's IDF)
+Jev answers  7.3 : 1   → ln(1 + 7.3 × 140) = 6.94
 ```
 
-Here is the change in the formula. `df` counts documents containing the word, `N` is the total documents, and `jev` is Jev's probability of Essential:
+Lucene adds the 1 inside the log so a weight never drops below 0. For a rare word like `dutch` it changes almost nothing, and Jev simply adds the log of its answer to IDF: ln 7.3 = 2.0, and 4.95 + 2.0 ≈ 6.94.
+
+Here is the change in the formula. `df` counts the documents that contain the word and `N` is the total. Rarity is the random pile, documents without the word for each one with it, and Lucene adds 0.5 to both counts. Jev's 88% becomes 88 : 12, which is 7.3 : 1:
 
 <div className="jev-formula" tabIndex={0} aria-label="Word weight before and after adding Jev">
 
 $$
 \begin{aligned}
-\text{all} &= \frac{\mathrm{df}+0.5}{N+1} \\
-\text{BM25 weight} &= \mathrm{IDF} = \ln\!\left(1 + 1 \cdot \frac{1-\text{all}}{\text{all}}\right) \\
-\text{With Jev} &= \ln\!\left(1 + \frac{\text{jev}}{1-\text{jev}} \cdot \frac{1-\text{all}}{\text{all}}\right)
+\text{rarity} &= \frac{N-\mathrm{df}+0.5}{\mathrm{df}+0.5} \\
+\text{BM25 weight} &= \mathrm{IDF} = \ln\!\left(1 + 1 \cdot \text{rarity}\right) \\
+\text{With Jev} &= \ln\!\left(1 + \frac{\text{jev}}{1-\text{jev}} \cdot \text{rarity}\right)
 \end{aligned}
 $$
 
@@ -208,7 +210,7 @@ Simpler mixes also beat tuned BM25. Mean nDCG@10 on the same scored queries:
 | Word weight                                            |    NQ |  FiQA | DBPedia |
 | ------------------------------------------------------ | ----: | ----: | ------: |
 | Tuned BM25: `IDF`                                      | 30.54 | 25.65 |   40.17 |
-| This post: `ln(1 + jev / (1 − jev) × (1 − all) / all)` | 33.37 | 27.51 |   41.80 |
+| This post: `ln(1 + jev / (1 − jev) × rarity)`          | 33.37 | 27.51 |   41.80 |
 | `IDF × jev`                                            | 33.78 | 28.18 |   42.45 |
 | `IDF + c × ln(jev / (1 − jev))`, `c` tuned per dataset | 34.59 | 27.58 |   42.62 |
 
@@ -249,5 +251,5 @@ The [saved results](/static/data/jev-keyword-search-kl.json) contain the per-dat
 ## Key Takeaways
 
 - With `k₁` and `b` tuned for both methods, mean nDCG@10 rises on all three datasets: NQ **30.54 → 33.37**, FiQA 25.65 → 27.51 and DBPedia 40.17 → 41.80.
-- Ask Jev one question per query word: does a document containing it become more likely to answer? Its odds `jev / (1 − jev)` replace the coin flip inside IDF: `ln(1 + jev / (1 − jev) × (1 − all) / all)`, where `all` is the share of documents containing the word.
+- Ask Jev one question per query word: does a document containing it become more likely to answer? BM25 guesses that half the right documents contain each word. Jev's answer replaces that guess: `ln(1 + jev / (1 − jev) × rarity)`, where rarity is documents without the word for each one with it.
 - There is no new knob. At `jev = 50%` the weight is exactly BM25's IDF, and Jev raises the words it is sure about and lowers the ones it isn't.
