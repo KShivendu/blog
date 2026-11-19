@@ -62,14 +62,14 @@ Where does the bonus come from? IDF comes from the [relevance weight](https://do
 
 BM25 can't see the right documents, so it assumes a coin flip: half of them contain each word, as [Croft and Harper](https://doi.org/10.1108/eb026683) did. A coin flip says yes as often as no, so it adds nothing, and the weight is rarity alone, which is IDF. Jev replaces the coin flip with its answer, and the bonus is how far that answer moves the weight away from the coin flip.
 
-Here is the full formula. `N` is the number of documents and `df` is how many of them contain the word. Rarity is how many documents lack the word for each one that has it. Lucene adds 0.5 to both counts, and the 1 inside the log keeps a weight from dropping below 0:
+Here is the full formula. `N` is the number of documents and `df` is how many of them contain the word. Rarity is how many documents lack the word for each one that has it. Lucene adds 0.5 to both counts, and the 1 inside the log keeps a weight from dropping below 0. Adding 1 to rarity gives back the usual IDF, because `1 + (N − df + 0.5) / (df + 0.5) = (N + 1) / (df + 0.5)`:
 
 <div className="jev-formula" tabIndex={0} aria-label="Word weight before and after adding Jev">
 
 $$
 \begin{aligned}
 \text{rarity} &= \frac{N-\mathrm{df}+0.5}{\mathrm{df}+0.5} \\
-\text{BM25 weight} &= \mathrm{IDF} = \ln\!\left(1 + \text{rarity}\right) \\
+\text{BM25 weight} &= \ln\!\left(1 + \text{rarity}\right) = \ln\frac{N+1}{\mathrm{df}+0.5} = \mathrm{IDF} \\
 \text{With Jev} &= \ln\!\left(1 + \frac{\text{jev}}{1-\text{jev}} \cdot \text{rarity}\right)
 \end{aligned}
 $$
@@ -80,9 +80,9 @@ Here it is for `dutch`:
 
 ```
 # "dutch" in DBPedia: N = 4.6 million abstracts, df = 32,700, jev = 88%
-rarity        = (4,600,000 − 32,700) / 32,700   ≈ 140
-BM25 weight   = ln(1 + 140)                     = 4.95
-With Jev      = ln(1 + 0.88 / 0.12 × 140)       = 6.94
+rarity        = (4,600,000 − 32,700) / 32,700        ≈ 140
+BM25 weight   = ln(1 + 140) = ln(4,600,001 / 32,700.5) = 4.95
+With Jev      = ln(1 + 0.88 / 0.12 × 140)            = 6.94
 ```
 
 For a rare word like `dutch`, this comes out as IDF plus the bonus from the table. For a common word like `which`, the drop is softer: 2.34 → 1.11 instead of 0.82.
