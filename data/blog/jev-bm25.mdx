@@ -129,6 +129,8 @@ I ran the full test sets of three datasets from [BEIR](https://github.com/beir-c
 
 Both methods use the same stemming and stopwords. I tuned `k₁` and `b` for each method on a random half of each dataset's queries, trying 25 settings. The other half is what I score: 1,726 NQ, 324 FiQA and 200 DBPedia queries. Jev adds no setting of its own, so both methods get the same 25 tries.
 
+Jev only sees the query. It never sees the documents or the relevance labels. I picked the question's wording on 120 of the 2,250 scored queries, 40 from each dataset. Without those 120, Jev still gains on all three: NQ +2.74, FiQA +1.25 and DBPedia +1.08, each with its 95% interval above 0.
+
 The chart shows #[nDCG@10](top-10 ranking quality from 0 to 100, higher when relevant documents sit nearer the top). You can switch between [p25, median and mean](/blog/stop-averaging-evals).
 
 export const jevKlView = (label, values) => ({
@@ -198,6 +200,22 @@ There is [no free lunch in search evals](/blog/stop-averaging-evals#which-querie
 
 A #[sign test](how likely this many more wins than losses would be if each change were a coin flip) puts the chance of this being luck below 1 in 50 on every dataset.
 
+<details>
+<summary>Other ways to mix Jev into the weight</summary>
+
+Simpler mixes also beat tuned BM25. Mean nDCG@10 on the same scored queries:
+
+| Word weight                                            |    NQ |  FiQA | DBPedia |
+| ------------------------------------------------------ | ----: | ----: | ------: |
+| Tuned BM25: `IDF`                                      | 30.54 | 25.65 |   40.17 |
+| This post: `ln(1 + jev / (1 − jev) × (1 − all) / all)` | 33.37 | 27.51 |   41.80 |
+| `IDF × jev`                                            | 33.78 | 28.18 |   42.45 |
+| `IDF + c × ln(jev / (1 − jev))`, `c` tuned per dataset | 34.59 | 27.58 |   42.62 |
+
+Every form beats BM25 on all three datasets, so the gain comes from Jev's answers rather than from one formula. The other two score a little higher, but `IDF × jev` has no derivation behind it, and `c` is one more setting to tune for each dataset. The weight in this post follows from the relevance weight and has nothing to tune.
+
+</details>
+
 ## Cost and latency
 
 Jev answers all the questions for a query in one API request. Fetching the answers for all 3,452 NQ queries cost \$0.16, about **\$0.05 per 1,000 queries**. The price grows with query length. 200 HotpotQA queries, 16 words each on average, cost \$0.07 per 1,000.
@@ -208,9 +226,14 @@ Latency matters more than price. I timed those 200 HotpotQA queries, one request
 | ----------- | -----: | -------: | -------: |
 | Time        | 763 ms | 1,179 ms | 1,338 ms |
 
-BM25 itself answers in a few milliseconds, so the Jev call sets the query time. Caching the answers by query text removes it for queries that repeat. A query nobody has asked before still pays the full call.
+BM25 itself answers in a few milliseconds, so the Jev call sets the query time. Jev's job here is small: one probability per query word. A tiny model distilled from Jev's answers could run next to the index in a few milliseconds, at almost no cost per query.
 
 The [saved results](/static/data/jev-keyword-search-kl.json) contain the per-dataset numbers, the prompt and the worked examples.
+
+## What's next
+
+- **Distill Jev.** Train a tiny model on Jev's answers for millions of queries. That removes the API call, its 763 ms and its price.
+- **Ask Jev about documents too.** The same idea works at index time: ask once per document and word, 'Does it discuss "langchain"?', and store the answer in the index. It adds no query-time cost. In an early test on the LangChain questions of [FreshStack](https://fresh-stack.github.io/), a benchmark of technical questions answered from code docs, it lifted BM25 + Jev from 17.16 to 19.97 nDCG@10. That test only re-scored each query's top 20 results, so a full index run is still to come.
 
 ## Key Takeaways
 
