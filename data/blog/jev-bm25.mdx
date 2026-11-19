@@ -46,21 +46,27 @@ Jev returns a probability for each label, and the two add up to 1. I keep the pr
 
 ## Turn the answer into a word weight
 
-Jev's answer becomes a bonus that is added to the word's IDF:
+Jev's two answers add up to 1. Essential gets `jev` and Irrelevant gets `1 − jev`. I don't use `jev` as the importance directly. A word's importance is how many times more Jev leans to Essential than to Irrelevant:
 
-| Jev says      | Bonus to IDF |
-| ------------- | -----------: |
-| 95%           |         +2.9 |
-| 88% (`dutch`) |         +2.0 |
-| 50%           |            0 |
-| 18% (`which`) |         −1.5 |
-| 5%            |         −2.9 |
+```
+importance = P(Essential) / P(Irrelevant) = jev / (1 − jev)
+```
 
-At 50% Jev has no opinion and the weight stays at IDF. The surer Jev is, the bigger the bonus, and the same distance below 50% gives the same penalty. `dutch` has an IDF of 4.95, and Jev says 88%, so its weight becomes 4.95 + 2.0 = 6.94.
+Importance 1 means Jev can't tell. Above 1 the word matters, and below 1 it doesn't. Its log is a bonus added to the word's IDF:
+
+| Jev says Essential | Importance | Bonus to IDF |
+| ------------------ | ---------: | -----------: |
+| 95%                |         19 |         +2.9 |
+| 88% (`dutch`)      |        7.3 |         +2.0 |
+| 50%                |          1 |            0 |
+| 18% (`which`)      |       0.22 |         −1.5 |
+| 5%                 |       0.05 |         −2.9 |
+
+`dutch` has an IDF of 4.95. Jev says 88% Essential and 12% Irrelevant, so its importance is 7.3 and its weight becomes 4.95 + 2.0 = 6.94.
 
 Where does the bonus come from? IDF comes from the [relevance weight](https://doi.org/10.1002/asi.4630270302) of Robertson and Spärck Jones. It compares two groups: the right documents (the ones that answer the query) and all documents. A word matters when it shows up much more often in the first group than in the second.
 
-BM25 can't see the right documents, so it assumes a coin flip: half of them contain each word, as [Croft and Harper](https://doi.org/10.1108/eb026683) did. A coin flip says yes as often as no, so it adds nothing, and the weight is rarity alone, which is IDF. Jev replaces the coin flip with its answer, and the bonus is how far that answer moves the weight away from the coin flip.
+BM25 can't see the right documents, so it assumes a coin flip: half of them contain each word, as [Croft and Harper](https://doi.org/10.1108/eb026683) did. A coin flip is importance 1, so it adds nothing, and the weight is rarity alone, which is IDF. Jev replaces the coin flip with each word's own importance.
 
 Here is the full formula. `N` is the number of documents and `df` is how many of them contain the word. Rarity is how many documents lack the word for each one that has it. Lucene adds 0.5 to both counts, and the 1 inside the log keeps a weight from dropping below 0. Adding 1 to rarity gives back the usual IDF, because `1 + (N − df + 0.5) / (df + 0.5) = (N + 1) / (df + 0.5)`:
 
@@ -70,7 +76,8 @@ $$
 \begin{aligned}
 \text{rarity} &= \frac{N-\mathrm{df}+0.5}{\mathrm{df}+0.5} \\
 \text{BM25 weight} &= \ln\!\left(1 + \text{rarity}\right) = \ln\frac{N+1}{\mathrm{df}+0.5} = \mathrm{IDF} \\
-\text{With Jev} &= \ln\!\left(1 + \frac{\text{jev}}{1-\text{jev}} \cdot \text{rarity}\right)
+\text{importance} &= \frac{P(\text{Essential})}{P(\text{Irrelevant})} = \frac{\text{jev}}{1-\text{jev}} \\
+\text{With Jev} &= \ln\!\left(1 + \text{importance} \cdot \text{rarity}\right)
 \end{aligned}
 $$
 
@@ -82,10 +89,11 @@ Here it is for `dutch`:
 # "dutch" in DBPedia: N = 4.6 million abstracts, df = 32,700, jev = 88%
 rarity        = (4,600,000 − 32,700) / 32,700        ≈ 140
 BM25 weight   = ln(1 + 140) = ln(4,600,001 / 32,700.5) = 4.95
-With Jev      = ln(1 + 0.88 / 0.12 × 140)            = 6.94
+importance    = 0.88 / 0.12                          ≈ 7.3
+With Jev      = ln(1 + 7.3 × 140)                    = 6.94
 ```
 
-For a rare word like `dutch`, this comes out as IDF plus the bonus from the table. For a common word like `which`, the drop is softer: 2.34 → 1.11 instead of 0.82.
+For a rare word like `dutch`, this comes out as IDF plus the bonus from the table, the log of importance. For a common word like `which`, the drop is softer: 2.34 → 1.11 instead of 0.82.
 
 Here is the whole query:
 
@@ -99,7 +107,7 @@ Here is the whole query:
 | former  |   48% |     2.91 |       2.83 |
 | which   |   18% |     2.34 |   **1.11** |
 
-- At `jev = 50%` the bonus is 0, so the weight is exactly BM25's IDF. `former` gets 48% and barely moves, from 2.91 to 2.83.
+- At `jev = 50%` the importance is 1 and the bonus is 0, so the weight is exactly BM25's IDF. `former` gets 48% and barely moves, from 2.91 to 2.83.
 - Above 50% the weight rises, and below 50% it falls. `which` isn't on the stopword list, and Jev drops it to half its IDF.
 - At `jev = 0` the weight is 0, and it is never negative. Jev's answers stay between 1% and 99%, so there is nothing to clip or tune.
 
@@ -215,12 +223,12 @@ A #[sign test](how likely this many more wins than losses would be if each chang
 
 Simpler mixes also beat tuned BM25. Mean nDCG@10 on the same scored queries:
 
-| Word weight                                   |    NQ |  FiQA | DBPedia |
-| --------------------------------------------- | ----: | ----: | ------: |
-| Tuned BM25: `IDF`                             | 30.54 | 25.65 |   40.17 |
-| This post: `ln(1 + jev / (1 − jev) × rarity)` | 33.37 | 27.51 |   41.80 |
-| `IDF × jev`                                   | 33.78 | 28.18 |   42.45 |
-| `IDF + c × bonus`, `c` tuned per dataset      | 34.59 | 27.58 |   42.62 |
+| Word weight                              |    NQ |  FiQA | DBPedia |
+| ---------------------------------------- | ----: | ----: | ------: |
+| Tuned BM25: `IDF`                        | 30.54 | 25.65 |   40.17 |
+| This post: `ln(1 + importance × rarity)` | 33.37 | 27.51 |   41.80 |
+| `IDF × jev`                              | 33.78 | 28.18 |   42.45 |
+| `IDF + c × bonus`, `c` tuned per dataset | 34.59 | 27.58 |   42.62 |
 
 The mean hides how each form gets there. Here is how many queries each one makes worse than tuned BM25, with the ones that drop by 50 points or more in brackets:
 
@@ -259,5 +267,5 @@ The [saved results](/static/data/jev-keyword-search-kl.json) contain the per-dat
 ## Key Takeaways
 
 - With `k₁` and `b` tuned for both methods, mean nDCG@10 rises on all three datasets: NQ **30.54 → 33.37**, FiQA 25.65 → 27.51 and DBPedia 40.17 → 41.80.
-- Ask Jev one question per query word: does a document containing it become more likely to answer? Its answer adds a bonus to the word's IDF. At 50% the bonus is 0. Above 50% it raises the weight, and below 50% it lowers it. Written in Lucene's form, the weight is `ln(1 + jev / (1 − jev) × rarity)`.
+- Ask Jev one question per query word: does a document containing it become more likely to answer? A word's importance is P(Essential) / P(Irrelevant). The weight is `ln(1 + importance × rarity)`, and BM25's IDF is the same formula with every importance set to 1.
 - There is no new knob. At `jev = 50%` the weight is exactly BM25's IDF, and Jev raises the words it is sure about and lowers the ones it isn't.
