@@ -42,27 +42,27 @@ question = {
 }
 ```
 
-Jev returns a probability for each label, and the two add up to 1. I keep the probability of Essential and call it `jev`. Jev gives `juliana` 93% and `which` 18%.
+Each label starts with the answer, no or yes. Jev returns a probability for each, and the two add up to 1. I call the probability of yes `jev`. Jev gives `juliana` 93% and `which` 18%.
 
 ## Turn the answer into a word weight
 
-Jev's two answers add up to 1. Essential gets `jev` and Irrelevant gets `1 − jev`. I don't use `jev` as the importance directly. A word's importance is how many times more Jev leans to Essential than to Irrelevant:
+Yes gets `jev` and no gets `1 − jev`. I don't use `jev` as the importance directly. A word's importance is how many times more Jev leans to yes than to no:
 
 ```
-importance = P(Essential) / P(Irrelevant) = jev / (1 − jev)
+importance = P(yes) / P(no) = jev / (1 − jev)
 ```
 
 Importance 1 means Jev can't tell. Above 1 the word matters, and below 1 it doesn't. Its log is a bonus added to the word's IDF:
 
-| Jev says Essential | Importance | Bonus to IDF |
-| ------------------ | ---------: | -----------: |
-| 95%                |         19 |         +2.9 |
-| 88% (`dutch`)      |        7.3 |         +2.0 |
-| 50%                |          1 |            0 |
-| 18% (`which`)      |       0.22 |         −1.5 |
-| 5%                 |       0.05 |         −2.9 |
+| Jev says yes  | Importance | Bonus to IDF |
+| ------------- | ---------: | -----------: |
+| 95%           |         19 |         +2.9 |
+| 88% (`dutch`) |        7.3 |         +2.0 |
+| 50%           |          1 |            0 |
+| 18% (`which`) |       0.22 |         −1.5 |
+| 5%            |       0.05 |         −2.9 |
 
-`dutch` has an IDF of 4.95. Jev says 88% Essential and 12% Irrelevant, so its importance is 7.3 and its weight becomes 4.95 + 2.0 = 6.94.
+`dutch` has an IDF of 4.95. Jev says 88% yes and 12% no, so its importance is 7.3 and its weight becomes 4.95 + 2.0 = 6.94.
 
 Where does the bonus come from? IDF comes from the [relevance weight](https://doi.org/10.1002/asi.4630270302) of Robertson and Spärck Jones. It compares two groups: the right documents (the ones that answer the query) and all documents. A word matters when it shows up much more often in the first group than in the second.
 
@@ -76,7 +76,7 @@ $$
 \begin{aligned}
 \text{rarity} &= \frac{N-\mathrm{df}+0.5}{\mathrm{df}+0.5} \\
 \text{BM25 weight} &= \ln\!\left(1 + \text{rarity}\right) = \ln\frac{N+1}{\mathrm{df}+0.5} = \mathrm{IDF} \\[1.2em]
-\text{importance} &= \frac{P(\text{Essential})}{P(\text{Irrelevant})} = \frac{\text{jev}}{1-\text{jev}} \\
+\text{importance} &= \frac{P(\text{yes})}{P(\text{no})} = \frac{\text{jev}}{1-\text{jev}} \\
 \text{With Jev} &= \ln\!\left(1 + \text{importance} \cdot \text{rarity}\right)
 \end{aligned}
 $$
@@ -113,15 +113,15 @@ Here is the whole query:
 
 Rarity and Jev's answer are two separate signals, so every word lands in one of four boxes. Each cell shows BM25's IDF → the weight with Jev:
 
-|                 | Jev says Irrelevant | Jev says Essential     |
+|                 | Jev says no         | Jev says yes           |
 | --------------- | ------------------- | ---------------------- |
 | **Rare word**   | `give` 5.55 → 2.68  | `juliana` 9.30 → 11.89 |
 | **Common word** | `which` 2.34 → 1.11 | `high` 2.41 → **3.86** |
 
-- `juliana` is rare and Essential, so it was already heavy and gets heavier.
+- `juliana` is rare and Jev says yes, so it was already heavy and gets heavier.
 - `high` in "What is considered high or low when talking about volume?" is common on a finance forum, so BM25 gives it little weight. Jev gives it 82%, and its weight rises by **60%**.
 - `give` in "Give me all presidents of the United States." is rare in Wikipedia, so BM25 trusts it. Jev gives it 5%, and its weight halves. `presidents` rises from 4.19 to 7.65.
-- `which` is common and Irrelevant, so it falls to half its IDF.
+- `which` is common and Jev says no, so it falls to half its IDF.
 
 BM25 can only tell the two rows apart. Jev adds the two columns.
 
@@ -240,7 +240,7 @@ The mean hides how each form gets there. Here is how many queries each one makes
 
 Every form beats BM25 on all three datasets. `IDF × jev` is within noise of this post's weight everywhere. The tuned form really is better on NQ. It scores 1.22 higher, and the 95% range of that gap (+0.58 to +1.83) stays above 0.
 
-For a rare word, this post's weight is close to `IDF + 1 × bonus`. Both score within 0.06 of each other on every dataset, so it is the tuned form with `c = 1`. NQ picks `c = 3`, the largest value I tried. The tuned form also stops weights at 0, so a large `c` drops the words Jev calls Irrelevant. `which` (Jev 18%, IDF 2.34) falls to 0, while `juliana` rises from 9.30 to 17.1. That moves more queries both ways: 183 NQ queries get worse instead of 113, and 11 drop by 50 points instead of 2. The best `c` also took labelled queries to find, and it changes a lot between datasets: 3 on NQ, 0.5 on FiQA and 2 on DBPedia. So this post uses `c = 1` as a principled default with nothing to tune. It is not the best form, and finding how much to trust Jev without labels is the next step.
+For a rare word, this post's weight is close to `IDF + 1 × bonus`. Both score within 0.06 of each other on every dataset, so it is the tuned form with `c = 1`. NQ picks `c = 3`, the largest value I tried. The tuned form also stops weights at 0, so a large `c` drops the words Jev says no to. `which` (Jev 18%, IDF 2.34) falls to 0, while `juliana` rises from 9.30 to 17.1. That moves more queries both ways: 183 NQ queries get worse instead of 113, and 11 drop by 50 points instead of 2. The best `c` also took labelled queries to find, and it changes a lot between datasets: 3 on NQ, 0.5 on FiQA and 2 on DBPedia. So this post uses `c = 1` as a principled default with nothing to tune. It is not the best form, and finding how much to trust Jev without labels is the next step.
 
 </details>
 
@@ -267,5 +267,5 @@ The [saved results](/static/data/jev-keyword-search-kl.json) contain the per-dat
 ## Key Takeaways
 
 - With `k₁` and `b` tuned for both methods, mean nDCG@10 rises on all three datasets: NQ **30.54 → 33.37**, FiQA 25.65 → 27.51 and DBPedia 40.17 → 41.80.
-- Ask Jev one question per query word: does a document containing it become more likely to answer? A word's importance is P(Essential) / P(Irrelevant). The weight is `ln(1 + importance × rarity)`, and BM25's IDF is the same formula with every importance set to 1.
+- Ask Jev one question per query word: does a document containing it become more likely to answer? A word's importance is P(yes) / P(no). The weight is `ln(1 + importance × rarity)`, and BM25's IDF is the same formula with every importance set to 1.
 - There is no new knob. At `jev = 50%` the weight is exactly BM25's IDF, and Jev raises the words it is sure about and lowers the ones it isn't.
