@@ -75,7 +75,7 @@ Here is the full formula. `N` is the number of documents and `df` is how many of
 $$
 \begin{aligned}
 \text{rarity} &= \frac{N-\mathrm{df}+0.5}{\mathrm{df}+0.5} \\
-\text{BM25 weight} &= \ln\!\left(1 + \text{rarity}\right) = \ln\frac{N+1}{\mathrm{df}+0.5} = \mathrm{IDF} \\
+\text{BM25 weight} &= \ln\!\left(1 + \text{rarity}\right) = \ln\frac{N+1}{\mathrm{df}+0.5} = \mathrm{IDF} \\[1.2em]
 \text{importance} &= \frac{P(\text{Essential})}{P(\text{Irrelevant})} = \frac{\text{jev}}{1-\text{jev}} \\
 \text{With Jev} &= \ln\!\left(1 + \text{importance} \cdot \text{rarity}\right)
 \end{aligned}
