@@ -48,37 +48,19 @@ Jev returns a probability for each label, and the two add up to 1. I keep the pr
 
 Jev's answer becomes a bonus that is added to the word's IDF:
 
-```
-# Bonus from Jev's answer: ln(yes / no)
-Jev says   bonus
-  95%      ln(95 / 5)  = +2.9
-  88%      ln(88 / 12) = +2.0    ← dutch
-  50%      ln(50 / 50) =  0
-  18%      ln(18 / 82) = −1.5    ← which
-   5%      ln(5 / 95)  = −2.9
-```
+| Jev says      | Bonus to IDF |
+| ------------- | -----------: |
+| 95%           |         +2.9 |
+| 88% (`dutch`) |         +2.0 |
+| 50%           |            0 |
+| 18% (`which`) |         −1.5 |
+| 5%            |         −2.9 |
 
-`yes` is Jev's answer and `no` is the rest. `dutch` has an IDF of 4.95. Jev says 88% yes and 12% no, so its weight becomes 4.95 + 2.0 = 6.94.
+At 50% Jev has no opinion and the weight stays at IDF. The surer Jev is, the bigger the bonus, and the same distance below 50% gives the same penalty. `dutch` has an IDF of 4.95, and Jev says 88%, so its weight becomes 4.95 + 2.0 = 6.94.
 
-The bonus comes from the same place as IDF, the [relevance weight](https://doi.org/10.1002/asi.4630270302) of Robertson and Spärck Jones. It compares the right documents (the ones that answer the query) with random documents, using odds of "with the word" to "without it":
+Where does the bonus come from? IDF comes from the [relevance weight](https://doi.org/10.1002/asi.4630270302) of Robertson and Spärck Jones. It compares two groups: the right documents (the ones that answer the query) and all documents. A word matters when it shows up much more often in the first group than in the second.
 
-```
-weight = ln( odds that a right document contains the word
-             ÷ odds that a random document contains it )
-```
-
-Here it is for `dutch`:
-
-```
-# "dutch" in DBPedia's 4.6 million abstracts
-random abstracts:  1 with it for every 140 without   → odds 1 / 140
-right abstracts:   BM25 can't see them, so it guesses half of them have it
-                   1 with it for every 1 without      → odds 1
-BM25:  ln(1     ÷ 1/140) = ln(1 × 140)     ≈ 4.95   (IDF)
-Jev:   ln(88/12 ÷ 1/140) = ln(88/12 × 140) ≈ 6.94   (Jev says 88% have it)
-```
-
-The half guess is from [Croft and Harper](https://doi.org/10.1108/eb026683). With it, only rarity is left, and the weight is IDF. Jev replaces the guess with its answer. The log of a product is a sum, so `ln(88/12 × 140)` is IDF plus `ln(88/12)`, which is the bonus.
+BM25 can't see the right documents, so it assumes a coin flip: half of them contain each word, as [Croft and Harper](https://doi.org/10.1108/eb026683) did. A coin flip says yes as often as no, so it adds nothing, and the weight is rarity alone, which is IDF. Jev replaces the coin flip with its answer, and the bonus is how far that answer moves the weight away from the coin flip.
 
 One detail keeps weights from going negative. Lucene writes IDF as `ln(1 + rarity)`, where rarity counts the documents without the word for each one with it (`dutch`: 140). I put the bonus inside the same form:
 
@@ -87,7 +69,7 @@ One detail keeps weights from going negative. Lucene writes IDF as `ln(1 + rarit
 $$
 \begin{aligned}
 \text{BM25 weight} &= \ln\!\left(1 + \text{rarity}\right) \\
-\text{With Jev} &= \ln\!\left(1 + \frac{\text{yes}}{\text{no}} \cdot \text{rarity}\right)
+\text{With Jev} &= \ln\!\left(1 + \frac{\text{jev}}{1-\text{jev}} \cdot \text{rarity}\right)
 \end{aligned}
 $$
 
@@ -223,12 +205,12 @@ A #[sign test](how likely this many more wins than losses would be if each chang
 
 Simpler mixes also beat tuned BM25. Mean nDCG@10 on the same scored queries:
 
-| Word weight                              |    NQ |  FiQA | DBPedia |
-| ---------------------------------------- | ----: | ----: | ------: |
-| Tuned BM25: `IDF`                        | 30.54 | 25.65 |   40.17 |
-| This post: `ln(1 + yes / no × rarity)`   | 33.37 | 27.51 |   41.80 |
-| `IDF × jev`                              | 33.78 | 28.18 |   42.45 |
-| `IDF + c × bonus`, `c` tuned per dataset | 34.59 | 27.58 |   42.62 |
+| Word weight                                   |    NQ |  FiQA | DBPedia |
+| --------------------------------------------- | ----: | ----: | ------: |
+| Tuned BM25: `IDF`                             | 30.54 | 25.65 |   40.17 |
+| This post: `ln(1 + jev / (1 − jev) × rarity)` | 33.37 | 27.51 |   41.80 |
+| `IDF × jev`                                   | 33.78 | 28.18 |   42.45 |
+| `IDF + c × bonus`, `c` tuned per dataset      | 34.59 | 27.58 |   42.62 |
 
 The mean hides how each form gets there. Here is how many queries each one makes worse than tuned BM25, with the ones that drop by 50 points or more in brackets:
 
@@ -267,5 +249,5 @@ The [saved results](/static/data/jev-keyword-search-kl.json) contain the per-dat
 ## Key Takeaways
 
 - With `k₁` and `b` tuned for both methods, mean nDCG@10 rises on all three datasets: NQ **30.54 → 33.37**, FiQA 25.65 → 27.51 and DBPedia 40.17 → 41.80.
-- Ask Jev one question per query word: does a document containing it become more likely to answer? Its answer adds a bonus of `ln(yes / no)` to the word's IDF. At 88% the bonus is +2.0, and at 50% it is 0. Written in Lucene's form, the weight is `ln(1 + yes / no × rarity)`.
+- Ask Jev one question per query word: does a document containing it become more likely to answer? Its answer adds a bonus to the word's IDF. At 50% the bonus is 0. Above 50% it raises the weight, and below 50% it lowers it. Written in Lucene's form, the weight is `ln(1 + jev / (1 − jev) × rarity)`.
 - There is no new knob. At `jev = 50%` the weight is exactly BM25's IDF, and Jev raises the words it is sure about and lowers the ones it isn't.
