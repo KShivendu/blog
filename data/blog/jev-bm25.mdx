@@ -212,7 +212,7 @@ Simpler mixes also beat tuned BM25. Mean nDCG@10 on the same scored queries:
 | `IDF × jev`                                            | 33.78 | 28.18 |   42.45 |
 | `IDF + c × ln(jev / (1 − jev))`, `c` tuned per dataset | 34.59 | 27.58 |   42.62 |
 
-Every form beats BM25 on all three datasets, so the gain comes from Jev's answers rather than from one formula. The other two score a little higher, but `IDF × jev` has no derivation behind it, and `c` is one more setting to tune for each dataset. The weight in this post follows from the relevance weight and has nothing to tune.
+Every form beats BM25 on all three datasets, so the gain comes from Jev's answers rather than from one formula. The other two score a little higher, but the gaps are within noise. On NQ, `IDF × jev` improves 215 queries and worsens 229. Also, `IDF × jev` has no derivation behind it, and `c` is one more setting to tune for each dataset. The weight in this post follows from the relevance weight and has nothing to tune.
 
 </details>
 
