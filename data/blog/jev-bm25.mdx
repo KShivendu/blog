@@ -222,7 +222,7 @@ The mean hides how each form gets there. Here is how many queries each one makes
 
 Every form beats BM25 on all three datasets. `IDF × jev` is within noise of this post's weight everywhere. The tuned form really is better on NQ. It scores 1.22 higher, and the 95% range of that gap (+0.58 to +1.83) stays above 0.
 
-For a rare word, this post's weight is close to `IDF + 1 × ln(jev / (1 − jev))`, so it is the tuned form with `c = 1`. NQ picks `c = 3`, which trusts Jev three times as much. It also takes more risk. On NQ the tuned form makes 183 queries worse, against 113, and 11 of them drop by 50 points, against 2. The best `c` also needs labelled queries to find, and it changes a lot between datasets: 3 on NQ, 0.5 on FiQA and 2 on DBPedia. So this post keeps the weight with nothing to tune, and finding how much to trust Jev without labels is the next step.
+For a rare word, this post's weight is close to `IDF + 1 × ln(jev / (1 − jev))`. Both score within 0.06 of each other on every dataset, so it is the tuned form with `c = 1`. NQ picks `c = 3`, the largest value I tried. The tuned form also stops weights at 0, so a large `c` drops the words Jev calls Irrelevant. `which` (Jev 18%, IDF 2.34) falls to 0, while `juliana` rises from 9.30 to 17.1. That moves more queries both ways: 183 NQ queries get worse instead of 113, and 11 drop by 50 points instead of 2. The best `c` also took labelled queries to find, and it changes a lot between datasets: 3 on NQ, 0.5 on FiQA and 2 on DBPedia. So this post uses `c = 1` as a principled default with nothing to tune. It is not the best form, and finding how much to trust Jev without labels is the next step.
 
 </details>
 
