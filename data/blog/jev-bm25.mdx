@@ -49,7 +49,7 @@ Jev returns a probability for each label, and the two add up to 1. I call the pr
 
 Signal gets `jev` and noise gets `1 − jev`. I don't use `jev` as the importance directly. I use the odds of signal.
 
-Odds compare the chance something happens with the chance it doesn't. A horse with an 80% chance to win and a 20% chance to lose has odds of 80 / 20 = 4, usually said as "4 to 1". At 50% the odds are 1, called even odds. A word's importance is its odds of being a signal, which is also its signal-to-noise ratio:
+[Odds](https://en.wikipedia.org/wiki/Odds) compare the chance something happens with the chance it doesn't. A horse with an 80% chance to win and a 20% chance to lose has odds of 80 / 20 = 4, usually said as "4 to 1". At 50% the odds are 1, called even odds. A word's importance is its odds of being a signal, which is also its signal-to-noise ratio:
 
 ```
 importance = P(signal) / P(noise) = jev / (1 − jev)
@@ -257,7 +257,7 @@ The [saved results](/static/data/jev-keyword-search-kl.json) contain the per-dat
 ## What's next
 
 - **Find the best formula.** How Jev's answer turns into a weight matters. Simpler mixes, like `IDF × jev`, also beat tuned BM25, and some do better on one dataset and worse on another. I'll keep testing forms that stay as clean as this one.
-- **Distill Jev.** Train a tiny model on Jev's answers for millions of queries. That removes the API call, its 763 ms and its price.
+- **Distill Jev.** A tiny model trained on Jev's answers removes the API call and its price. A first 2-layer student, trained on Jev's answers for 22,000 MS MARCO queries, runs in 3.2 ms per query instead of about 500 ms. On [NanoBEIR](https://huggingface.co/collections/zeta-alpha-ai/nanobeir-66e1a0af21dfd93e620cd9f6) it lifts tuned BM25 from 59.79 to 60.40 nDCG@10, while Jev itself reaches 61.51. That test used an earlier prompt and formula, so the next step is to train on far more queries with this post's prompt.
 - **Ask Jev about documents too.** The same idea works at index time: ask once per document and word, 'Does it discuss "langchain"?', and store the answer in the index. It adds no query-time cost. In an early test on the LangChain questions of [FreshStack](https://fresh-stack.github.io/), a benchmark of technical questions answered from code docs, it lifted BM25 + Jev from 17.16 to 19.97 nDCG@10. That test only re-scored each query's top 20 results, so a full index run is still to come.
 
 ## Key Takeaways
