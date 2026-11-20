@@ -16,12 +16,12 @@ const postOgImage = (title, subtitle) => {
   return `${siteMetadata.siteUrl}/api/og?title=${encodeURIComponent(title)}${sub}&type=post`
 }
 
-const CommonSEO = ({ title, description, ogType, ogImage, twImage, canonicalUrl }) => {
+const CommonSEO = ({ title, description, ogType, ogImage, twImage, canonicalUrl, noindex }) => {
   const router = useRouter()
   return (
     <Head>
       <title>{title}</title>
-      <meta name="robots" content="follow, index" />
+      <meta name="robots" content={noindex ? 'noindex, nofollow' : 'follow, index'} />
       <meta name="description" content={description} />
       <meta property="og:url" content={`${siteMetadata.siteUrl}${router.asPath}`} />
       <meta property="og:type" content={ogType} />
@@ -96,6 +96,7 @@ export const BlogSEO = ({
   lastmod,
   url,
   canonicalUrl,
+  draft,
 }) => {
   const router = useRouter()
   // The COMPLETE "Head: Tail" title for <title>/og:title/twitter:title/headline.
@@ -154,6 +155,7 @@ export const BlogSEO = ({
         ogImage={socialImageUrl}
         twImage={socialImageUrl}
         canonicalUrl={canonicalUrl}
+        noindex={draft === true}
       />
       <Head>
         {date && <meta property="article:published_time" content={publishedAt} />}
