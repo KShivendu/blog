@@ -117,7 +117,7 @@ That's why I like to bucket the exact deltas per query for my metrics and use th
 
 Observations:
 
-- 47% of queries got better, 29% got worse and the rest didn't move (**186 wins, 115 losses, 99 ties**). That's why the mean goes up, but only by 3.9. Worse means any drop in NDCG@10, however small.
+- 47% of queries got better, 29% got worse and the rest didn't move (**186 wins, 115 losses, 99 ties**). That's why the mean goes up, but only by 3.9.
 - Most of the ties score 0 both before and after (59 of the 99).
 - The stemmer and stopword list rescued **43 queries from 0**, like `Which airports are located in California, USA?` (0 to 89.1), and sent 17 to 0, like `mason ohio`. That moves the zero-rate from 25.5% to 19.0%.
 
@@ -142,7 +142,16 @@ The goal is to see the distribution. A few numbers give you most of it, and they
 
 Percentiles work best when queries have many relevant docs, as on DBPedia. On sets with one relevant doc per query, like #[NQ](Natural Questions: real Google search questions, each with one Wikipedia answer page), about half the queries score 0 and the median barely moves, so lean on the zero-rate and win / tie / loss.
 
-This is the table I print after every run while iterating. For this post's change it looks like this:
+Most reports show one number:
+
+```md
+| analyzer | NDCG@10 |
+| -------- | ------- |
+| word     | 27.06   |
+| word_en  | 30.94   |
+```
+
+I print this instead as I iterate. It shows what's really happening underneath:
 
 ```md
 | analyzer | NDCG@10 p25 | p50   | mean  | zero-rate | win / tie / loss (of 400) | mean change, 95% range |
@@ -150,6 +159,8 @@ This is the table I print after every run while iterating. For this post's chang
 | word     | 0.00        | 21.13 | 27.06 | 25.5%     |                           |                        |
 | word_en  | 6.94        | 27.50 | 30.94 | 19.0%     | 186 / 99 / 115            | +3.88 [+2.48, +5.34]   |
 ```
+
+I print the same for recall@10 and recall@100. They can move very differently. Here recall@100 gains +6.0 and recall@10 only +0.5.
 
 Every now and then I ask agents to surface the worst queries and build a UI for me to explore them interactively. That's how this run turned up `organic` turning into `organ` and the Joker taking over _Batman Returns_.
 
