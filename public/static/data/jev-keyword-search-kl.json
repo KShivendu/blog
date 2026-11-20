@@ -1,13 +1,13 @@
 {
   "formula": "w = ln(1 + p/(1-p) * (1-q)/q)",
   "prompt": {
-    "question": "Does a document containing the word \"{w}\" (or a form of it, like a plural) become more likely to answer this query?",
+    "question": "For telling documents that answer this query apart from documents that do not, is the word \"{w}\" (or a form of it, like a plural) a signal or noise?",
     "labels": [
-      "Irrelevant: no, it is just as common in documents that don't answer",
-      "Essential: yes, every document that answers the query contains it"
+      "Noise: answering and non-answering documents contain it equally often",
+      "Signal: every answering document contains it"
     ]
   },
-  "weightSource": "Jev H3 two-label prompt, cached in runs/jev_2label_cache.jsonl",
+  "weightSource": "Jev E4 signal or noise two-label prompt, cached in runs/jev_2label_cache.jsonl",
   "tuning": "k1/b tuned per method on a random half of each dataset's test queries (25 settings), reported on the other half",
   "results": {
     "DBPedia": {
@@ -16,19 +16,19 @@
       "bm25": {
         "p25": 10.74,
         "median": 37.31,
-        "mean": 40.17
+        "mean": 40.31
       },
       "jev": {
         "p25": 13.89,
-        "median": 38.52,
-        "mean": 41.8
+        "median": 39.8,
+        "mean": 42.33
       },
-      "better": 70,
-      "worse": 39,
-      "same": 91,
-      "meanGain": 1.63,
-      "ci95": [0.63, 2.66],
-      "signP": 0.003854108187381312,
+      "better": 77,
+      "worse": 36,
+      "same": 87,
+      "meanGain": 2.02,
+      "ci95": [0.96, 3.1],
+      "signP": 0.00014401960112955247,
       "wins": [
         {
           "text": "In which city was the former Dutch queen Juliana buried?",
@@ -38,12 +38,12 @@
         {
           "text": "Give me all cars that are produced in Germany.",
           "bm25": 0.0,
-          "jev": 31.49
+          "jev": 33.01
         },
         {
-          "text": "Give me all books by William Goldman with more than 300 pages.",
-          "bm25": 33.41,
-          "jev": 64.31
+          "text": "Which telecommunications organizations are located in Belgium?",
+          "bm25": 13.89,
+          "jev": 40.0
         }
       ],
       "losses": [
@@ -53,14 +53,14 @@
           "jev": 0.0
         },
         {
-          "text": "Science fiction book written in the 1980",
-          "bm25": 57.67,
-          "jev": 40.03
-        },
-        {
           "text": "Who is the mayor of New York City?",
           "bm25": 30.31,
           "jev": 13.89
+        },
+        {
+          "text": "Science fiction book written in the 1980",
+          "bm25": 57.67,
+          "jev": 41.71
         }
       ]
     },
@@ -74,45 +74,45 @@
       },
       "jev": {
         "p25": 0.0,
-        "median": 16.41,
-        "mean": 27.51
+        "median": 14.95,
+        "mean": 28.54
       },
-      "better": 69,
-      "worse": 42,
-      "same": 213,
-      "meanGain": 1.86,
-      "ci95": [0.71, 3.1],
-      "signP": 0.01323360775882629,
+      "better": 88,
+      "worse": 35,
+      "same": 201,
+      "meanGain": 2.89,
+      "ci95": [1.55, 4.3],
+      "signP": 1.9351247809692454e-6,
       "wins": [
-        {
-          "text": "Is is possible to take a mortgage using Bitcoin as collateral?",
-          "bm25": 50.0,
-          "jev": 100.0
-        },
         {
           "text": "Tax question about selling a car",
           "bm25": 0.0,
-          "jev": 50.0
+          "jev": 63.09
         },
         {
-          "text": "Mortgage loan implications when tearing down existing house and building new one?",
-          "bm25": 50.0,
+          "text": "How to categorize credit card payments?",
+          "bm25": 43.07,
+          "jev": 100.0
+        },
+        {
+          "text": "Using credit card points to pay for tax deductible business expenses",
+          "bm25": 43.07,
           "jev": 100.0
         }
       ],
       "losses": [
+        {
+          "text": "Why big clients want the contractor to be incorporated before giving them work",
+          "bm25": 100.0,
+          "jev": 50.0
+        },
         {
           "text": "Are there index tracking funds that avoid the \u201cbuy high - sell low\u201d problem?",
           "bm25": 38.69,
           "jev": 0.0
         },
         {
-          "text": "Why big clients want the contractor to be incorporated before giving them work",
-          "bm25": 100.0,
-          "jev": 63.09
-        },
-        {
-          "text": "When can you adjust for (and re-allow) a disallowed year-end (December) wash-sale loss?",
+          "text": "Claiming mileage allowances, what are the rules/guidelines?",
           "bm25": 33.33,
           "jev": 0.0
         }
@@ -124,19 +124,19 @@
       "bm25": {
         "p25": 0.0,
         "median": 20.44,
-        "mean": 30.54
+        "mean": 30.55
       },
       "jev": {
         "p25": 0.0,
-        "median": 28.91,
-        "mean": 33.37
+        "median": 30.1,
+        "mean": 33.74
       },
-      "better": 332,
-      "worse": 113,
-      "same": 1281,
-      "meanGain": 2.83,
-      "ci95": [2.28, 3.38],
-      "signP": 4.607976280995003e-26,
+      "better": 358,
+      "worse": 153,
+      "same": 1215,
+      "meanGain": 3.19,
+      "ci95": [2.52, 3.84],
+      "signP": 5.682001286911553e-20,
       "wins": [
         {
           "text": "who sings i'm going to soak up the sun",
@@ -144,31 +144,31 @@
           "jev": 100.0
         },
         {
-          "text": "what is the female lion called in lion king",
-          "bm25": 0.0,
+          "text": "when is the second half of vikings season 5 coming out",
+          "bm25": 30.1,
           "jev": 100.0
         },
         {
-          "text": "how to write time and date in military",
-          "bm25": 0.0,
-          "jev": 87.72
+          "text": "what is the lead singers name of staind",
+          "bm25": 33.33,
+          "jev": 100.0
         }
       ],
       "losses": [
         {
-          "text": "who painted the world famous painting the last supper",
-          "bm25": 100.0,
-          "jev": 38.69
-        },
-        {
           "text": "who has the best batting average in test cricket",
           "bm25": 100.0,
-          "jev": 50.0
+          "jev": 33.33
         },
         {
           "text": "how many championships did kobe win after shaq",
           "bm25": 100.0,
-          "jev": 63.09
+          "jev": 43.07
+        },
+        {
+          "text": "who painted the world famous painting the last supper",
+          "bm25": 100.0,
+          "jev": 43.07
         }
       ]
     }
@@ -192,64 +192,64 @@
       "words": [
         {
           "word": "which",
-          "p": 0.18,
+          "p": 0.08,
           "q": 0.09674179230328027,
           "idf": 2.335709784745482,
-          "jevWeight": 1.1149908237592245,
+          "jevWeight": 0.5943733417098159,
           "stop": false,
           "stem": "which"
         },
         {
           "word": "city",
-          "p": 0.69,
+          "p": 0.51,
           "q": 0.05450015023976887,
           "idf": 2.9095518206237316,
-          "jevWeight": 3.6791968868553893,
+          "jevWeight": 2.947417607242386,
           "stop": false,
           "stem": "citi"
         },
         {
           "word": "former",
-          "p": 0.48,
+          "p": 0.25,
           "q": 0.05446520574220064,
           "idf": 2.9101932079426875,
-          "jevWeight": 2.8346789982718423,
+          "jevWeight": 1.91497687678709,
           "stop": false,
           "stem": "former"
         },
         {
           "word": "dutch",
-          "p": 0.88,
+          "p": 0.86,
           "q": 0.007061916257021525,
           "idf": 4.953038839798656,
-          "jevWeight": 6.9393514023849034,
+          "jevWeight": 6.762398957601202,
           "stop": false,
           "stem": "dutch"
         },
         {
           "word": "queen",
-          "p": 0.9,
+          "p": 0.82,
           "q": 0.005550027470257811,
           "idf": 5.193952401640042,
-          "jevWeight": 7.38623141204418,
+          "jevWeight": 6.705958753132177,
           "stop": false,
           "stem": "queen"
         },
         {
           "word": "juliana",
-          "p": 0.93,
+          "p": 0.97,
           "q": 9.135181926015596e-5,
           "idf": 9.300792360065921,
-          "jevWeight": 11.887397224719702,
+          "jevWeight": 12.77680251947723,
           "stop": false,
           "stem": "juliana"
         },
         {
           "word": "buried",
-          "p": 0.91,
+          "p": 0.89,
           "q": 0.0013780427328063906,
           "idf": 6.5870910961266524,
-          "jevWeight": 8.899483500901251,
+          "jevWeight": 8.67662374033098,
           "stop": false,
           "stem": "buri"
         }
@@ -294,13 +294,13 @@
             "relevant": false
           },
           {
-            "id": "<dbpedia:Queen_Juliana_Bridge>",
-            "text": "Queen Juliana Bridge: Queen Juliana Bridge is a four lane road bridge across St. Anna Bay in Willemstad, the capital of Cura\u00e7ao and formerly, the Netherlands Antilles.  The bridge is named after Queen Juliana of the Netherlands. The original bridge collapsed in 1967 killing four workers, and got rep",
+            "id": "<dbpedia:Juliana_Canal>",
+            "text": "Juliana Canal: The Juliana Canal (Dutch: Julianakanaal), named after Queen Juliana of the Netherlands, is a 36 km long canal in the southern Netherlands, providing a bypass of an unnavigable section of the river Meuse between Maastricht and Maasbracht. It is an important transport connection between",
             "relevant": false
           },
           {
-            "id": "<dbpedia:Juliana_Canal>",
-            "text": "Juliana Canal: The Juliana Canal (Dutch: Julianakanaal), named after Queen Juliana of the Netherlands, is a 36 km long canal in the southern Netherlands, providing a bypass of an unnavigable section of the river Meuse between Maastricht and Maasbracht. It is an important transport connection between",
+            "id": "<dbpedia:Queen_Juliana_Bridge>",
+            "text": "Queen Juliana Bridge: Queen Juliana Bridge is a four lane road bridge across St. Anna Bay in Willemstad, the capital of Cura\u00e7ao and formerly, the Netherlands Antilles.  The bridge is named after Queen Juliana of the Netherlands. The original bridge collapsed in 1967 killing four workers, and got rep",
             "relevant": false
           },
           {
@@ -317,76 +317,76 @@
       "text": "What is considered high or low when talking about volume?",
       "ndcg": {
         "bm25": 38.68528072345416,
-        "jev": 80.65735963827294
+        "jev": 61.31471927654584
       },
       "bm25": 38.68528072345416,
-      "jev": 80.65735963827294,
+      "jev": 61.31471927654584,
       "documents": 57638,
       "settings": {
         "bm25": [1.2, 0.75],
-        "jev": [1.2, 0.75]
+        "jev": [0.6, 0.75]
       },
       "words": [
         {
           "word": "what",
-          "p": 0.19,
+          "p": 0.06,
           "q": 0.2727233296899669,
           "idf": 1.2992974420382306,
-          "jevWeight": 0.4858319714670331,
+          "jevWeight": 0.1571884751207288,
           "stop": false,
           "stem": "what"
         },
         {
           "word": "considered",
-          "p": 0.39,
+          "p": 0.1,
           "q": 0.07565190235777859,
           "idf": 2.581612692232771,
-          "jevWeight": 2.1760904149135385,
+          "jevWeight": 0.8576459552379536,
           "stop": false,
           "stem": "consid"
         },
         {
           "word": "high",
-          "p": 0.82,
+          "p": 0.72,
           "q": 0.08946199621783861,
           "idf": 2.4139413671436873,
-          "jevWeight": 3.857907396257273,
+          "jevWeight": 3.302180479425802,
           "stop": false,
           "stem": "high"
         },
         {
           "word": "low",
-          "p": 0.72,
+          "p": 0.69,
           "q": 0.06054060618678325,
           "idf": 2.8044409624426048,
-          "jevWeight": 3.7112037808193787,
+          "jevWeight": 3.570650569390156,
           "stop": false,
           "stem": "low"
         },
         {
           "word": "when",
-          "p": 0.24,
+          "p": 0.09,
           "q": 0.22784052464477178,
           "idf": 1.4791093480716944,
-          "jevWeight": 0.7276556196904567,
+          "jevWeight": 0.2890655671939797,
           "stop": false,
           "stem": "when"
         },
         {
           "word": "talking",
-          "p": 0.09,
+          "p": 0.02,
           "q": 0.0496278561390725,
           "idf": 3.003202987191228,
-          "jevWeight": 1.0626235433698759,
+          "jevWeight": 0.32989047530414556,
           "stop": false,
           "stem": "talk"
         },
         {
           "word": "about",
-          "p": 0.06,
+          "p": 0.02,
           "q": 0.22865594475962456,
           "idf": 1.4755368298299825,
-          "jevWeight": 0.19500931988595954,
+          "jevWeight": 0.06657820433797357,
           "stop": false,
           "stem": "about"
         },
@@ -445,13 +445,13 @@
             "relevant": false
           },
           {
-            "id": "42347",
-            "text": "Something to consider is that in the case of the company you chose, on the OTC market, that stock is thinly traded and with such low volume, it can be easy for it to fluctuate greatly to have trades occur.  This is why volume can matter for some people when it comes to buying shares. Some OTC stocks",
+            "id": "379392",
+            "text": "Kek.  &gt; Amazon is big enough to take full advantage of \u201cpostal injection,\u201d and that has tipped the scales in the internet giant\u2019s favor. **Select** high-volume shippers are able to drop off presorted packages at the local Postal Service depot for \u201clast mile\u201d delivery at cut-rate prices. With high",
             "relevant": false
           },
           {
-            "id": "379392",
-            "text": "Kek.  &gt; Amazon is big enough to take full advantage of \u201cpostal injection,\u201d and that has tipped the scales in the internet giant\u2019s favor. **Select** high-volume shippers are able to drop off presorted packages at the local Postal Service depot for \u201clast mile\u201d delivery at cut-rate prices. With high",
+            "id": "393936",
+            "text": "Umm no.  2.14 B Shares outstanding...  First day had a peak to low of (41.68-38.27) of 3.41. Unless UBS got over 100M shares and roundtriped them 200m of volume. This number is not possible as FB had 580,587,742 of total volume.  It's highly unrealistic that UBS accounted for about 35% of volume in ",
             "relevant": false
           }
         ]
@@ -460,7 +460,7 @@
     {
       "dataset": "NQ",
       "collection": "Wikipedia passages",
-      "text": "what is the female lion called in lion king",
+      "text": "who sings i'm going to soak up the sun",
       "ndcg": {
         "bm25": 0.0,
         "jev": 100.0
@@ -470,107 +470,134 @@
       "documents": 2681468,
       "settings": {
         "bm25": [1.2, 0.5],
-        "jev": [1.2, 0.5]
+        "jev": [0.6, 0.5]
       },
       "words": [
         {
-          "word": "what",
-          "p": 0.1,
-          "q": 0.03264274172104917,
-          "idf": 3.4221327536072796,
-          "jevWeight": 1.4569257834371951,
+          "word": "who",
+          "p": 0.2,
+          "q": 0.11352639169052486,
+          "idf": 2.1757199431829304,
+          "jevWeight": 1.082527322848282,
           "stop": false,
-          "stem": "what"
+          "stem": "who"
         },
         {
-          "word": "female",
-          "p": 0.59,
-          "q": 0.010520539301405311,
-          "idf": 4.554425808594408,
-          "jevWeight": 4.915176367743314,
+          "word": "sings",
+          "p": 0.43,
+          "q": 0.006650272667705649,
+          "idf": 5.013097422492457,
+          "jevWeight": 4.7334091347276965,
           "stop": false,
-          "stem": "femal"
+          "stem": "sing"
         },
         {
-          "word": "lion",
-          "p": 0.95,
-          "q": 0.002962741691214778,
-          "idf": 5.821640192316228,
-          "jevWeight": 8.763268417092942,
+          "word": "i",
+          "p": 0.45,
+          "q": 0.05507522182803531,
+          "idf": 2.899055358557215,
+          "jevWeight": 2.7105493110168655,
           "stop": false,
-          "stem": "lion"
+          "stem": "i"
         },
         {
-          "word": "called",
-          "p": 0.29,
-          "q": 0.06239770066333043,
-          "idf": 2.7742268526297353,
-          "jevWeight": 1.9653590534176797,
+          "word": "m",
+          "p": 0.56,
+          "q": 0.025489945996019347,
+          "idf": 3.669471179230357,
+          "jevWeight": 3.9051561327791164,
           "stop": false,
-          "stem": "call"
+          "stem": "m"
         },
         {
-          "word": "king",
-          "p": 0.75,
-          "q": 0.020345750780635538,
-          "idf": 3.894883195745095,
-          "jevWeight": 4.979838821396416,
+          "word": "going",
+          "p": 0.68,
+          "q": 0.025559310959776153,
+          "idf": 3.6667536075914064,
+          "jevWeight": 4.406901626321998,
           "stop": false,
-          "stem": "king"
+          "stem": "go"
+        },
+        {
+          "word": "soak",
+          "p": 0.94,
+          "q": 0.00037050586823864085,
+          "idf": 7.900641274652778,
+          "jevWeight": 10.651829670968576,
+          "stop": false,
+          "stem": "soak"
+        },
+        {
+          "word": "up",
+          "p": 0.74,
+          "q": 0.07356732447773963,
+          "idf": 2.609554312727402,
+          "jevWeight": 3.6066273853073247,
+          "stop": false,
+          "stem": "up"
+        },
+        {
+          "word": "sun",
+          "p": 0.86,
+          "q": 0.006510423950454023,
+          "idf": 5.03435070192446,
+          "jevWeight": 6.844175172418679,
+          "stop": false,
+          "stem": "sun"
         }
       ],
       "rankings": {
         "bm25": [
           {
-            "id": "doc50255",
-            "text": "Nala (The Lion King): A straight woman character, Kelly described Nala as a sensible and nurturing yet authoritative character,[13] while Amber Leab of Bitch Flicks described her as strong, independent and intelligent.[25] According to Oh My Disney, Nala serves as \"the proverbial glue that keeps The",
+            "id": "doc2436740",
+            "text": "Bruce Dickinson: While fronting the band, Dickinson also came across Iron Maiden for the first time, who were supporting Samson at the Music Machine in 1980.[30] As Dickinson recalls; \"I was watching them, and they were good, really fucking good, and at that moment, I remember thinking, 'I wanna fuc",
             "relevant": false
           },
           {
-            "id": "doc162355",
-            "text": "The Lion King: Disney released two direct-to-video films related to The Lion King. The first was sequel The Lion King II: Simba's Pride, released in 1998 on VHS. The film centers around Simba and Nala's daughter, Kiara, who falls in love with Kovu, a male lion who was raised in a pride of Scar's fol",
+            "id": "doc1433011",
+            "text": "I Won't Let the Sun Go Down on Me: The original video for \"I Won't Let the Sun Go Down on Me\" shows Kershaw singing the song on a hillside and in a castle. He is accompanied by children, and by a minstrel, who plays the guitar parts on a lute. The video was filmed in Maidstone, Kent.[4]",
             "relevant": false
           },
           {
-            "id": "doc953939",
-            "text": "Lion: The lion is the most social of all wild cat species, living in groups of related individuals with their offspring. Such a group is called a \"pride\". Groups of male lions are called \"coalitions\".[76] Females form the stable social unit in a pride and do not tolerate outside females.[77] Members",
+            "id": "doc949496",
+            "text": "Grease 2: That was really weird for me. I'd been taking singing lessons and I had taken dance, because I loved to dance, but I had never considered myself a professional at all. I went on this audition as a fluke, and somehow, through the process of going back and dancing, and then going back and si",
             "relevant": false
           },
           {
-            "id": "doc1517074",
-            "text": "Nala (Disney): A straight woman character, Kelly described Nala as a sensible and nurturing yet authoritative character,[13] while Amber Leab of Bitch Flicks described her as strong, independent and intelligent.[25] According to Oh My Disney, Nala serves as \"the proverbial glue that keeps The Lion K",
+            "id": "doc2651864",
+            "text": "Queen's Royal Hussars: The lyrics of the song go:[5]\nI'm a soldier in the Queen's Army.\nI'm a galloping Queen's Hussar.\nI've sailed the ocean wide and blue.\nI'm a chap who knows a thing or two.\nBeen in many a tight corner.\nShown the enemy who we are.\nI can ride a horse.\nGo on a spree, or sing a comi",
             "relevant": false
           },
           {
-            "id": "doc50256",
-            "text": "Nala (The Lion King): Including Nala, The Lion King has only three major female characters in comparison to the film's total of nine male ones.[27] Shepherd University's Emmylou Allen observed that Nala is introduced \"as a dominating young girl\" who ultimately matures into \"a strong woman\" by the fi",
+            "id": "doc9148",
+            "text": "Lincoln Highway: In 1928, the song \"Golden Gate\" (Dreyer, Meyer, Rose, & Jolson), sung by Al Jolson, included the refrain: \"Oh, Golden Gate, I'm comin' to ya / Golden Gate, sing Hallelujah / I'll live in the sun, love in the moon / Where every month is June. / A little sun-kissed blonde is comin' my",
             "relevant": false
           }
         ],
         "jev": [
           {
-            "id": "doc37055",
-            "text": "List of The Lion King characters: Nala (voiced by Moira Kelly in The Lion King, The Lion King ll: Simba's Pride, and The Lion King 1\u00bd, and Gabrielle Union in The Lion Guard) is the daughter of Sarafina, the best friend and later wife of Simba and Kiara and Kion's mother. Although she is a prominent ",
+            "id": "doc31788",
+            "text": "Soak Up the Sun: \"Soak Up the Sun\" is the title of a song recorded by American artist Sheryl Crow. It was released in March 2002 as the lead single from her album C'mon C'mon. The song, which features backing vocals by Liz Phair, peaked at number-one on the Billboard Adult Top 40 chart and hit numbe",
             "relevant": true
           },
           {
-            "id": "doc1578730",
-            "text": "White lion: The first White Lions introduced into Malaysia was in March 2013 when the Safari Park in Bukit Gambang Resort City (Pahang) opened its door to the public. With 2 males and 3 females, the first White Lion was born in May 2014 and was named King.[14]",
+            "id": "doc2562452",
+            "text": "Mary Martin: She remembered having a photographic memory as a child, making it easy to memorize songs, as well as get her through school tests. She got her first taste of singing solo at a fire hall, where she soaked up the crowd's appreciation. \"Sometimes I think that I cheated my own family and my",
             "relevant": false
           },
           {
-            "id": "doc50256",
-            "text": "Nala (The Lion King): Including Nala, The Lion King has only three major female characters in comparison to the film's total of nine male ones.[27] Shepherd University's Emmylou Allen observed that Nala is introduced \"as a dominating young girl\" who ultimately matures into \"a strong woman\" by the fi",
+            "id": "doc9148",
+            "text": "Lincoln Highway: In 1928, the song \"Golden Gate\" (Dreyer, Meyer, Rose, & Jolson), sung by Al Jolson, included the refrain: \"Oh, Golden Gate, I'm comin' to ya / Golden Gate, sing Hallelujah / I'll live in the sun, love in the moon / Where every month is June. / A little sun-kissed blonde is comin' my",
             "relevant": false
           },
           {
-            "id": "doc50255",
-            "text": "Nala (The Lion King): A straight woman character, Kelly described Nala as a sensible and nurturing yet authoritative character,[13] while Amber Leab of Bitch Flicks described her as strong, independent and intelligent.[25] According to Oh My Disney, Nala serves as \"the proverbial glue that keeps The",
+            "id": "doc757370",
+            "text": "Phoenix Suns: Affectionately nicknamed \"Go\" and towering at a whopping five-foot \"ape\", the Gorilla is the Phoenix Suns favorite primate. Most notably, fans are familiar with the Gorilla for his on the court antics where he raises the Phoenix Suns flag in the name of team-pride, performs notorious s",
             "relevant": false
           },
           {
-            "id": "doc162356",
-            "text": "The Lion King: In June 2014, it was announced that a new TV series based on the film would be released called The Lion Guard, featuring Kion, the second-born cub of Simba and Nala. The Lion Guard is a sequel to The Lion King and takes place during the time-gap within The Lion King II: Simba's Pride.",
+            "id": "doc1433011",
+            "text": "I Won't Let the Sun Go Down on Me: The original video for \"I Won't Let the Sun Go Down on Me\" shows Kershaw singing the song on a hillside and in a castle. He is accompanied by children, and by a minstrel, who plays the guitar parts on a lute. The video was filmed in Maidstone, Kent.[4]",
             "relevant": false
           }
         ]

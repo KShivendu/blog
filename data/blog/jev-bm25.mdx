@@ -32,41 +32,49 @@ state = {"search_query": "In which city was the former Dutch queen Juliana burie
 question = {
     "type": "score",
     "instructions": (
-        'The state is a user search query. Does a document containing the word "dutch" '
-        "(or a form of it, like a plural) become more likely to answer this query?"
+        "The state is a user search query. For telling documents that answer this query apart "
+        'from documents that do not, is the word "dutch" (or a form of it, like a plural) '
+        "a signal or noise?"
     ),
     "criteria": [
-        "Irrelevant: no, it is just as common in documents that don't answer",
-        "Essential: yes, every document that answers the query contains it",
+        "Noise: answering and non-answering documents contain it equally often",
+        "Signal: every answering document contains it",
     ],
 }
 ```
 
-Each label starts with the answer, no or yes. Jev returns a probability for each, and the two add up to 1. I call the probability of yes `jev`. Jev gives `juliana` 93% and `which` 18%.
+Jev returns a probability for each label, and the two add up to 1. I call the probability of signal `jev`. Jev gives `juliana` 97% and `which` 8%.
 
 ## Turn the answer into a word weight
 
-Yes gets `jev` and no gets `1 − jev`. I don't use `jev` as the importance directly. A word's importance is how many times more Jev leans to yes than to no:
+Signal gets `jev` and noise gets `1 − jev`. I don't use `jev` as the importance directly. I use the odds of signal.
+
+Odds compare the chance something happens with the chance it doesn't. A horse with an 80% chance to win and a 20% chance to lose has odds of 80 / 20 = 4, usually said as "4 to 1". At 50% the odds are 1, called even odds. A word's importance is its odds of being a signal, which is also its signal-to-noise ratio:
 
 ```
-importance = P(yes) / P(no) = jev / (1 − jev)
+importance = P(signal) / P(noise) = jev / (1 − jev)
 ```
 
-Importance 1 means Jev can't tell. Above 1 the word matters, and below 1 it doesn't. Its log is a bonus added to the word's IDF:
+Importance 1 means even odds. Above 1 the word matters, and below 1 it doesn't. Its log is a bonus added to the word's IDF:
 
-| Jev says yes  | Importance | Bonus to IDF |
-| ------------- | ---------: | -----------: |
-| 95%           |         19 |         +2.9 |
-| 88% (`dutch`) |        7.3 |         +2.0 |
-| 50%           |          1 |            0 |
-| 18% (`which`) |       0.22 |         −1.5 |
-| 5%            |       0.05 |         −2.9 |
+| Jev says signal | Importance | Bonus to IDF |
+| --------------- | ---------: | -----------: |
+| 95%             |         19 |         +2.9 |
+| 86% (`dutch`)   |        6.1 |         +1.8 |
+| 50%             |          1 |            0 |
+| 8% (`which`)    |       0.09 |         −2.4 |
+| 2% (`talking`)  |       0.02 |         −3.9 |
 
-`dutch` has an IDF of 4.95. Jev says 88% yes and 12% no, so its importance is 7.3 and its weight becomes 4.95 + 2.0 = 6.94.
+`dutch` has an IDF of 4.95. Jev says 86% signal and 14% noise, so its importance is 6.1 and its weight becomes 4.95 + 1.8 = 6.76.
 
-Where does the bonus come from? IDF comes from the [relevance weight](https://doi.org/10.1002/asi.4630270302) of Robertson and Spärck Jones. It compares two groups: the right documents (the ones that answer the query) and all documents. A word matters when it shows up much more often in the first group than in the second.
+Where does the bonus come from? The formula takes its idea from the [relevance weight](https://doi.org/10.1002/asi.4630270302) that Robertson and Spärck Jones published in 1976, which is also the reasoning behind IDF. Their weight compares two groups, the right documents (the ones that answer the query) and all documents. A word matters when it shows up much more often in the first group than in the second.
 
-BM25 can't see the right documents, so it assumes a coin flip: half of them contain each word, as [Croft and Harper](https://doi.org/10.1108/eb026683) did. A coin flip is importance 1, so it adds nothing, and the weight is rarity alone, which is IDF. Jev replaces the coin flip with each word's own importance.
+Their weight needs the odds that a right document contains the word. They counted it from documents people had marked as relevant. Search engines have no such labels, so [Croft and Harper](https://doi.org/10.1108/eb026683) assumed a coin flip in 1979: half the right documents contain each word. Even odds add nothing, and the weight reduces to rarity alone, which is IDF.
+
+This post makes two different choices:
+
+- **Jev's odds replace the coin flip.** Nobody counts relevant documents. Jev judges from the query alone how much each word separates the right documents from the rest, and its odds of signal stand in for the counted odds.
+- **The 1 stays inside the log.** Lucene's IDF adds 1 to rarity so a weight never drops below 0, and I keep that. For a rare word the result matches Robertson and Spärck Jones's weight. For a common word it softens the drop, as `which` shows below.
 
 Here is the full formula. `N` is the number of documents and `df` is how many of them contain the word. Rarity is how many documents lack the word for each one that has it. Lucene adds 0.5 to both counts, and the 1 inside the log keeps a weight from dropping below 0. Adding 1 to rarity gives back the usual IDF, because `1 + (N − df + 0.5) / (df + 0.5) = (N + 1) / (df + 0.5)`:
 
@@ -76,7 +84,7 @@ $$
 \begin{aligned}
 \text{rarity} &= \frac{N-\mathrm{df}+0.5}{\mathrm{df}+0.5} \\
 \text{BM25 weight} &= \ln\!\left(1 + \text{rarity}\right) = \ln\frac{N+1}{\mathrm{df}+0.5} = \mathrm{IDF} \\[1.2em]
-\text{importance} &= \frac{P(\text{yes})}{P(\text{no})} = \frac{\text{jev}}{1-\text{jev}} \\
+\text{importance} &= \frac{P(\text{signal})}{P(\text{noise})} = \frac{\text{jev}}{1-\text{jev}} \\
 \text{With Jev} &= \ln\!\left(1 + \text{importance} \cdot \text{rarity}\right)
 \end{aligned}
 $$
@@ -86,42 +94,42 @@ $$
 Here it is for `dutch`:
 
 ```
-# "dutch" in DBPedia: N = 4.6 million abstracts, df = 32,700, jev = 88%
+# "dutch" in DBPedia: N = 4.6 million abstracts, df = 32,700, jev = 86%
 rarity        = (4,600,000 − 32,700) / 32,700        ≈ 140
 BM25 weight   = ln(1 + 140) = ln(4,600,001 / 32,700.5) = 4.95
-importance    = 0.88 / 0.12                          ≈ 7.3
-With Jev      = ln(1 + 7.3 × 140)                    = 6.94
+importance    = 0.86 / 0.14                          ≈ 6.1
+With Jev      = ln(1 + 6.1 × 140)                    = 6.76
 ```
 
-For a rare word like `dutch`, this comes out as IDF plus the bonus from the table, the log of importance. For a common word like `which`, the drop is softer: 2.34 → 1.11 instead of 0.82.
+For a rare word like `dutch`, this comes out as IDF plus the bonus from the table, the log of importance. For a common word like `which`, IDF plus the bonus would go below 0 (2.34 − 2.4). The 1 inside the log stops that, and the weight lands at 0.59.
 
 Here is the whole query:
 
 | Word    | `jev` | BM25 IDF | BM25 + Jev |
 | ------- | ----: | -------: | ---------: |
-| juliana |   93% |     9.30 |      11.89 |
-| buried  |   91% |     6.59 |       8.90 |
-| queen   |   90% |     5.19 |       7.39 |
-| dutch   |   88% |     4.95 |       6.94 |
-| city    |   69% |     2.91 |       3.68 |
-| former  |   48% |     2.91 |       2.83 |
-| which   |   18% |     2.34 |   **1.11** |
+| juliana |   97% |     9.30 |      12.78 |
+| buried  |   89% |     6.59 |       8.68 |
+| dutch   |   86% |     4.95 |       6.76 |
+| queen   |   82% |     5.19 |       6.71 |
+| city    |   51% |     2.91 |       2.95 |
+| former  |   25% |     2.91 |       1.91 |
+| which   |    8% |     2.34 |   **0.59** |
 
-- At `jev = 50%` the importance is 1 and the bonus is 0, so the weight is exactly BM25's IDF. `former` gets 48% and barely moves, from 2.91 to 2.83.
-- Above 50% the weight rises, and below 50% it falls. `which` isn't on the stopword list, and Jev drops it to half its IDF.
+- At `jev = 50%` the importance is 1 and the bonus is 0, so the weight is exactly BM25's IDF. `city` gets 51% and barely moves, from 2.91 to 2.95.
+- Above 50% the weight rises, and below 50% it falls. `which` isn't on the stopword list, and Jev drops it to a quarter of its IDF.
 - At `jev = 0` the weight is 0, and it is never negative. Jev's answers stay between 1% and 99%, so there is nothing to clip or tune.
 
 Rarity and Jev's answer are two separate signals, so every word lands in one of four boxes. Each cell shows BM25's IDF → the weight with Jev:
 
-|                 | Jev says no         | Jev says yes           |
+|                 | Jev says noise      | Jev says signal        |
 | --------------- | ------------------- | ---------------------- |
-| **Rare word**   | `give` 5.55 → 2.68  | `juliana` 9.30 → 11.89 |
-| **Common word** | `which` 2.34 → 1.11 | `high` 2.41 → **3.86** |
+| **Rare word**   | `give` 5.55 → 1.83  | `juliana` 9.30 → 12.78 |
+| **Common word** | `which` 2.34 → 0.59 | `high` 2.41 → **3.30** |
 
 - `juliana` is rare and Jev says yes, so it was already heavy and gets heavier.
-- `high` in "What is considered high or low when talking about volume?" is common on a finance forum, so BM25 gives it little weight. Jev gives it 82%, and its weight rises by **60%**.
-- `give` in "Give me all presidents of the United States." is rare in Wikipedia, so BM25 trusts it. Jev gives it 5%, and its weight halves. `presidents` rises from 4.19 to 7.65.
-- `which` is common and Jev says no, so it falls to half its IDF.
+- `high` in "What is considered high or low when talking about volume?" is common on a finance forum, so BM25 gives it little weight. Jev gives it 72%, and its weight rises by **37%**.
+- `give` in "Give me all presidents of the United States." is rare in Wikipedia, so BM25 trusts it. Jev gives it 2%, and its weight drops to a third. `presidents` rises from 4.19 to 7.35.
+- `which` is common and Jev says noise, so it falls to a quarter of its IDF.
 
 BM25 can only tell the two rows apart. Jev adds the two columns.
 
@@ -131,10 +139,10 @@ The weight only replaces IDF. BM25's term frequency and length normalization sta
 
 Observations:
 
-- On the Juliana query, the abstract of Juliana of the Netherlands moves from second to **first**. `juliana` rises from 9.30 to 11.89, while `which` falls from 2.34 to 1.11.
-- On "What is considered high or low when talking about volume?", the answer moves from second to first. `volume` rises from 4.66 to 7.24, while `talking` falls from 3.00 to 1.06.
-- On "what is the female lion called in lion king", BM25 has no relevant result in its top 10. With Jev, the list of Lion King characters, which names Nala, comes first. `lion` rises from 5.82 to 8.76, and `what` falls from 3.42 to 1.46.
-- The opening query, "who sings she's like the wind lyrics", is from NQ. The passage about the song moves from rank 106 to **7**. `like` rises from 2.97 to 4.44, `wind` from 5.09 to 7.67, and `lyrics` falls from 5.14 to 4.44.
+- On the Juliana query, the abstract of Juliana of the Netherlands moves from second to **first**. `juliana` rises from 9.30 to 12.78, while `which` falls from 2.34 to 0.59.
+- On "What is considered high or low when talking about volume?", the answer moves from second to first. `volume` rises from 4.66 to 7.24, while `talking` falls from 3.00 to 0.33.
+- On "who sings i'm going to soak up the sun", BM25 ranks the passage about the song 13th. With Jev it comes **first**. `soak` rises from 7.90 to 10.65, and `who` falls from 2.18 to 1.08.
+- In the opening query, "who sings she's like the wind lyrics", Jev turns the order around: `like` rises from 2.97 to 3.74 and `lyrics` falls from 5.14 to 3.51.
 - Each method uses its own tuned `k₁` and `b`, the same way as the results below.
 
 ## Does it improve search?
@@ -145,108 +153,96 @@ I ran the full test sets of three datasets from [BEIR](https://github.com/beir-c
 - [FiQA](https://sites.google.com/view/fiqa/): 648 questions from a personal finance forum against 57,638 posts.
 - [DBPedia-entity](https://huggingface.co/datasets/BeIR/dbpedia-entity): 400 entity queries against 4.6 million Wikipedia abstracts.
 
-Both methods use the same stemming and stopwords. I tuned `k₁` and `b` for each method on a random half of each dataset's queries, trying 25 settings. The other half is what I score: 1,726 NQ, 324 FiQA and 200 DBPedia queries. Jev adds no setting of its own, so both methods get the same 25 tries.
+All methods use the same stemming and stopwords. Default BM25 uses Elasticsearch's defaults, `k₁ = 1.2` and `b = 0.75`. For tuned BM25 and BM25 + Jev, I tuned `k₁` and `b` on a random half of each dataset's queries, trying 25 settings. The other half is what I score: 1,726 NQ, 324 FiQA and 200 DBPedia queries. Jev adds no setting of its own, so both tuned methods get the same 25 tries.
 
-Jev only sees the query. It never sees the documents or the relevance labels. I picked the question's wording on 120 of the 2,250 scored queries, 40 from each dataset. Without those 120, Jev still gains on all three: NQ +2.74, FiQA +1.25 and DBPedia +1.08, each with its 95% interval above 0.
+Jev only sees the query. It never sees the documents or the relevance labels. I chose the question's wording by comparing about a dozen wordings, partly on these scored queries. The exact words matter little. Swapping "signal or noise" for "useful or useless" changes the mean by at most 0.11 on every dataset. A different question, 'Does a document containing the word become more likely to answer this query?', also beats tuned BM25 on all three: NQ +2.83, FiQA +1.86 and DBPedia +1.63.
 
-The chart shows #[nDCG@10](top-10 ranking quality from 0 to 100, higher when relevant documents sit nearer the top). You can switch between [p25, median and mean](/blog/stop-averaging-evals).
+The chart shows #[nDCG@10](top-10 ranking quality from 0 to 100, higher when relevant documents sit nearer the top). You can switch between [p25, median and mean](/blog/stop-averaging-evals), and the zero rate: the share of queries with nothing relevant in the top 10.
 
-export const jevKlView = (label, values) => ({
+export const jevRows = {
+  // [default BM25, tuned BM25, BM25 + Jev] for NQ, FiQA, DBPedia
+  mean: [
+    [28.96, 25.65, 38.18],
+    [30.55, 25.65, 40.31],
+    [33.74, 28.54, 42.33],
+  ],
+  median: [
+    [0, 10.9, 36.74],
+    [20.44, 10.9, 37.31],
+    [30.1, 14.95, 39.8],
+  ],
+  p25: [
+    [0, 0, 8.96],
+    [0, 0, 10.74],
+    [0, 0, 13.89],
+  ],
+  zero: [
+    [50.5, 49.1, 21.5],
+    [48.6, 49.1, 18.0],
+    [45.0, 45.7, 15.5],
+  ],
+}
+
+export const jevView = (label, key, extra = {}) => ({
   label,
-  default: label === 'mean',
-  datasets: [
-    ['NQ', values[0]],
-    ['FiQA', values[1]],
-    ['DBPedia', values[2]],
-  ].map(([dataset, v]) => ({
-    label: dataset,
-    categories: ['Tuned BM25 + Jev', 'Tuned BM25'],
-    series: [
-      {
-        name: 'nDCG@10',
-        values: v,
-        roles: ['series0', 'muted'],
-        text: v.map((x) => x.toFixed(2)),
-        textPosition: 'outside',
-      },
-    ],
+  default: key === 'mean',
+  categories: ['NQ', 'FiQA', 'DBPedia'],
+  series: [
+    ['BM25 + Jev', 2, 'series0'],
+    ['Tuned BM25', 1, 'muted'],
+    ['Default BM25', 0, 'mutedAlt'],
+  ].map(([name, i, role]) => ({
+    name,
+    role,
+    values: jevRows[key][i],
+    text: jevRows[key][i].map((x) => (key === 'zero' ? `${x.toFixed(1)}%` : x.toFixed(2))),
+    textPosition: 'outside',
   })),
+  ...extra,
 })
 
 <BarChart
   orientation="horizontal"
   title="Top-10 search quality on held-out queries"
-  subtitle="Switch datasets. Mean is the default view."
+  subtitle="Switch the metric. Mean is the default view."
   valueLabel="nDCG@10 (higher is better)"
   valueMax={60}
   valueTicks={[0, 10, 20, 30, 40, 50]}
-  showLegend={false}
+  showLegend={true}
   views={[
-    jevKlView('mean', [
-      [33.37, 30.54],
-      [27.51, 25.65],
-      [41.8, 40.17],
-    ]),
-    jevKlView('median', [
-      [28.91, 20.44],
-      [16.41, 10.9],
-      [38.52, 37.31],
-    ]),
-    jevKlView('p25', [
-      [0, 0],
-      [0, 0],
-      [13.89, 10.74],
-    ]),
+    jevView('mean', 'mean'),
+    jevView('median', 'median'),
+    jevView('p25', 'p25'),
+    jevView('zero rate', 'zero', {
+      valueLabel: '% of queries with nothing relevant in the top 10 (lower is better)',
+      valueMax: 70,
+      valueTicks: [0, 10, 20, 30, 40, 50, 60],
+    }),
   ]}
 />
 
 Observations:
 
-- "what is the female lion called in lion king" rises from 0 to 100 on NQ.
-- NQ's median rises from 20.44 to **28.91**, more than its mean, which goes from 30.54 to 33.37.
-- "What is considered high or low when talking about volume?" rises from 38.69 to 80.66 on FiQA. The Juliana query rises from 63.09 to 100 on DBPedia.
-- Some queries get worse. "who painted the world famous painting the last supper" falls from 100 to 38.69 on NQ. On FiQA, "Why big clients want the contractor to be incorporated before giving them work" falls from 100 to 63.09. On DBPedia, "Seoul Korea river name ethnic group China" falls from 33.92 to 0.
-- p25 is 0 on NQ and FiQA for both methods, because more than a quarter of those queries find no relevant document in the top 10.
+- "who sings i'm going to soak up the sun" rises from 0 to 100 on NQ.
+- NQ's median rises from 20.44 to **30.10**, more than its mean, which goes from 30.55 to 33.74. With Elasticsearch's defaults, the NQ median is 0.
+- "Tax question about selling a car" rises from 0 to 63.09 on FiQA. The Juliana query rises from 63.09 to 100 on DBPedia.
+- Jev cuts the zero rate on every dataset. On NQ, it finds something relevant for 89 queries where tuned BM25 found nothing, and loses it on 26.
+- Some queries get worse. "who painted the world famous painting the last supper" falls from 100 to 43.07 on NQ. On FiQA, "Why big clients want the contractor to be incorporated before giving them work" falls from 100 to 50. On DBPedia, "Seoul Korea river name ethnic group China" falls from 33.92 to 0.
+- p25 is 0 on NQ and FiQA for every method, because almost half of those queries find no relevant document in the top 10.
 
 There is [no free lunch in search evals](/blog/stop-averaging-evals#which-queries-moved). Any kind of change helps some queries and hurts others. Jev helps more queries than it hurts on every dataset:
 
 | Dataset | Better / worse / same | Mean gain, #[95% bootstrap interval](range of the mean gain over 5,000 resamples of the queries) |
 | ------- | --------------------: | -----------------------------------------------------------------------------------------------: |
-| NQ      |     332 / 113 / 1,281 |                                                                       **+2.83** (+2.28 to +3.38) |
-| FiQA    |         69 / 42 / 213 |                                                                           +1.86 (+0.71 to +3.10) |
-| DBPedia |          70 / 39 / 91 |                                                                           +1.63 (+0.63 to +2.66) |
+| NQ      |     358 / 153 / 1,215 |                                                                       **+3.19** (+2.52 to +3.84) |
+| FiQA    |         88 / 35 / 201 |                                                                           +2.89 (+1.55 to +4.30) |
+| DBPedia |          77 / 36 / 87 |                                                                           +2.02 (+0.96 to +3.10) |
 
-A #[sign test](how likely this many more wins than losses would be if each change were a coin flip) puts the chance of this being luck below 1 in 50 on every dataset.
-
-<details>
-<summary>Other ways to mix Jev into the weight</summary>
-
-Simpler mixes also beat tuned BM25. Mean nDCG@10 on the same scored queries:
-
-| Word weight                              |    NQ |  FiQA | DBPedia |
-| ---------------------------------------- | ----: | ----: | ------: |
-| Tuned BM25: `IDF`                        | 30.54 | 25.65 |   40.17 |
-| This post: `ln(1 + importance × rarity)` | 33.37 | 27.51 |   41.80 |
-| `IDF × jev`                              | 33.78 | 28.18 |   42.45 |
-| `IDF + c × bonus`, `c` tuned per dataset | 34.59 | 27.58 |   42.62 |
-
-The mean hides how each form gets there. Here is how many queries each one makes worse than tuned BM25, with the ones that drop by 50 points or more in brackets:
-
-| Queries made worse |       NQ |   FiQA | DBPedia |
-| ------------------ | -------: | -----: | ------: |
-| This post          |  113 (2) | 42 (0) |  39 (0) |
-| `IDF × jev`        |  149 (4) | 36 (2) |  50 (0) |
-| `IDF + c × bonus`  | 183 (11) | 35 (0) |  57 (0) |
-
-Every form beats BM25 on all three datasets. `IDF × jev` is within noise of this post's weight everywhere. The tuned form really is better on NQ. It scores 1.22 higher, and the 95% range of that gap (+0.58 to +1.83) stays above 0.
-
-For a rare word, this post's weight is close to `IDF + 1 × bonus`. Both score within 0.06 of each other on every dataset, so it is the tuned form with `c = 1`. NQ picks `c = 3`, the largest value I tried. The tuned form also stops weights at 0, so a large `c` drops the words Jev says no to. `which` (Jev 18%, IDF 2.34) falls to 0, while `juliana` rises from 9.30 to 17.1. That moves more queries both ways: 183 NQ queries get worse instead of 113, and 11 drop by 50 points instead of 2. The best `c` also took labelled queries to find, and it changes a lot between datasets: 3 on NQ, 0.5 on FiQA and 2 on DBPedia. So this post uses `c = 1` as a principled default with nothing to tune. It is not the best form, and finding how much to trust Jev without labels is the next step.
-
-</details>
+A #[sign test](how likely this many more wins than losses would be if each change were a coin flip) puts the chance of this being luck below 1 in 5,000 on every dataset.
 
 ## Cost and latency
 
-Jev answers all the questions for a query in one API request. Fetching the answers for all 3,452 NQ queries cost \$0.16, about **\$0.05 per 1,000 queries**. The price grows with query length. 200 HotpotQA queries, 16 words each on average, cost \$0.07 per 1,000.
+Jev answers all the questions for a query in one API request. Fetching the answers for all 3,452 NQ queries cost \$0.15, about **\$0.05 per 1,000 queries**. The price grows with query length. 200 HotpotQA queries, 16 words each on average, cost \$0.07 per 1,000.
 
 Latency matters more than price. I timed those 200 HotpotQA queries, one request at a time:
 
@@ -260,12 +256,12 @@ The [saved results](/static/data/jev-keyword-search-kl.json) contain the per-dat
 
 ## What's next
 
-- **Find the best formula.** How Jev's answer turns into a weight matters. Trusting Jev three times as much adds 1.22 nDCG@10 on NQ, but that strength took labelled queries to find. I'll keep testing forms that get there and stay as clean as this one.
+- **Find the best formula.** How Jev's answer turns into a weight matters. Simpler mixes, like `IDF × jev`, also beat tuned BM25, and some do better on one dataset and worse on another. I'll keep testing forms that stay as clean as this one.
 - **Distill Jev.** Train a tiny model on Jev's answers for millions of queries. That removes the API call, its 763 ms and its price.
 - **Ask Jev about documents too.** The same idea works at index time: ask once per document and word, 'Does it discuss "langchain"?', and store the answer in the index. It adds no query-time cost. In an early test on the LangChain questions of [FreshStack](https://fresh-stack.github.io/), a benchmark of technical questions answered from code docs, it lifted BM25 + Jev from 17.16 to 19.97 nDCG@10. That test only re-scored each query's top 20 results, so a full index run is still to come.
 
 ## Key Takeaways
 
-- With `k₁` and `b` tuned for both methods, mean nDCG@10 rises on all three datasets: NQ **30.54 → 33.37**, FiQA 25.65 → 27.51 and DBPedia 40.17 → 41.80.
-- Ask Jev one question per query word: does a document containing it become more likely to answer? A word's importance is P(yes) / P(no). The weight is `ln(1 + importance × rarity)`, and BM25's IDF is the same formula with every importance set to 1.
+- With `k₁` and `b` tuned for both methods, mean nDCG@10 rises on all three datasets: NQ **30.55 → 33.74**, FiQA 25.65 → 28.54 and DBPedia 40.31 → 42.33. Elasticsearch's default BM25 scores 28.96, 25.65 and 38.18.
+- Ask Jev one question per query word: is it a signal or noise for telling answering documents apart? A word's importance is its signal-to-noise ratio, P(signal) / P(noise). The weight is `ln(1 + importance × rarity)`, and BM25's IDF is the same formula with every importance set to 1.
 - There is no new knob. At `jev = 50%` the weight is exactly BM25's IDF, and Jev raises the words it is sure about and lowers the ones it isn't.
