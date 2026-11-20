@@ -67,7 +67,7 @@ Importance 1 means even odds. Above 1 the word matters, and below 1 it doesn't. 
 
 `dutch` has an IDF of 4.95. Jev says 86% signal and 14% noise, so its importance is 6.1 and its weight becomes 4.95 + 1.8 = 6.76.
 
-Where does the bonus come from? The formula takes its idea from the [relevance weight](https://doi.org/10.1002/asi.4630270302) that Robertson and Spärck Jones published in 1976, which is also the reasoning behind IDF. Their weight compares two groups, the right documents (the ones that answer the query) and all documents. A word matters when it shows up much more often in the first group than in the second.
+Where does the bonus come from? The formula is based on the [relevance weight](https://doi.org/10.1002/asi.4630270302) that Robertson and Spärck Jones published in 1976, which is also the reasoning behind IDF. Their weight compares two groups, the right documents (the ones that answer the query) and all documents. A word matters when it shows up much more often in the first group than in the second.
 
 Their weight needs the odds that a right document contains the word. They counted it from documents people had marked as relevant. Search engines have no such labels, so [Croft and Harper](https://doi.org/10.1108/eb026683) assumed a coin flip in 1979: half the right documents contain each word. Even odds add nothing, and the weight reduces to rarity alone, which is IDF.
 
