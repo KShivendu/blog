@@ -37,7 +37,7 @@ For latency, higher is worse, so you watch the high end: p90, p99. For relevance
 
 Report p25, not p10. p10 pins at 0 once more than 10% of queries fail, and 25.5% do here, so it can't show the tail moving. For plain BM25 even p25 sits at 0 here. It moves once a change pushes the zero-rate (the share of queries with nothing relevant in the top 10) under 25%, and the stemmer below does exactly that.
 
-## Understanding impact of your changes
+## Understanding the impact of your changes
 
 Take the stemmer from the start: plain word BM25, then apply a Porter stemmer and a stopword list (`word_en`). It moves mean NDCG@10 by **+3.9**, and that gain is real (a paired t-test gives t = 5.4). The mean is right, but it misses that a quarter of the queries don't move and 29% get worse.
 
@@ -45,7 +45,7 @@ Take the stemmer from the start: plain word BM25, then apply a Porter stemmer an
 
 ### What the percentiles show
 
-The first thing I've started reading is **p25 and p50 along with mean**. It comes out of the per-query scores I already have with a 1 line change (`np.percentile(scores, [25, 50])`). Toggle the statistic (the chart also shows #[recall@10 and recall@100](the share of a query's relevant pages that show up in the top 10, or the top 100)):
+The first thing I've started reading is **p25 and p50 along with the mean**. It comes out of the per-query scores I already have with a one-line change (`np.percentile(scores, [25, 50])`). Toggle the statistic (the chart also shows #[recall@10 and recall@100](the share of a query's relevant pages that show up in the top 10, or the top 100)):
 
 export const tailCats = ['NDCG@10', 'recall@10', 'recall@100']
 export const tailFmt = (v) => v.map((x) => x.toFixed(2))
@@ -71,6 +71,23 @@ export const tailView = (label, w, en) => ({
   ],
 })
 
+export const zeroView = (w, en) => {
+  const v = tailView('zero-rate', w, en)
+  v.series.forEach((s) => (s.text = s.values.map((x) => `${x.toFixed(1)}%`)))
+  return {
+    ...v,
+    title: 'zero-rate before and after the stemmer and stopword list',
+    valueLabel: 'share of queries scoring 0 (lower is better)',
+    valueMax: 30,
+    valueTicks: [
+      [0, '0%'],
+      [10, '10%'],
+      [20, '20%'],
+      [30, '30%'],
+    ],
+  }
+}
+
 <BarChart
   orientation="horizontal"
   subtitle="plain word BM25 vs word + Porter stemmer + stopword list, DBPedia, 400 queries"
@@ -81,6 +98,7 @@ export const tailView = (label, w, en) => ({
     tailView('p25', [0.0, 0.0, 14.14], [6.94, 2.55, 20.0]),
     tailView('p50', [21.13, 10.27, 33.33], [27.5, 11.76, 42.14]),
     tailView('mean', [27.06, 18.96, 40.27], [30.94, 19.46, 46.24]),
+    zeroView([25.5, 25.5, 10.0], [19.0, 19.0, 6.0]),
   ]}
 />
 
@@ -91,7 +109,7 @@ Observations:
 
 ### Which queries moved
 
-**p50/p25/mean give you a quick read**. But if you wanna drill down and properly compare two methods, you should look into exact queries that are improved/degraded.
+**p50/p25/mean give you a quick read**. But if you wanna drill down and properly compare two methods, you should look into the exact queries that improved or degraded.
 
 That's why I like to bucket the exact deltas per query for my metrics and use that to find queries to focus on:
 
@@ -99,11 +117,11 @@ That's why I like to bucket the exact deltas per query for my metrics and use th
 
 Observations:
 
-- 47% of queries got better, 29% got worse and the rest didn't move (**186 wins, 115 losses, 99 ties**). That's why the mean goes up, but only by 3.9.
+- 47% of queries got better, 29% got worse and the rest didn't move (**186 wins, 115 losses, 99 ties**). That's why the mean goes up, but only by 3.9. Worse means any drop in NDCG@10, however small.
 - Most of the ties score 0 both before and after (59 of the 99).
 - The stemmer and stopword list rescued **43 queries from 0**, like `Which airports are located in California, USA?` (0 to 89.1), and sent 17 to 0, like `mason ohio`. That moves the zero-rate from 25.5% to 19.0%.
 
-I like to ask an LLM to build a UI for me to explore the dataset. It just needs basic sorting by metrics, filtering, and search (yeah. use search to improve search :D). Below is a cut-down version with three queries from this run, click one to see what each #[analyzer](the step that turns text into index terms, here `word` or `word_en`) sent to the index and what came back:
+I like to ask an LLM to build a UI for me to explore the dataset. It just needs basic sorting by metrics, filtering, and search (yeah. use search to improve search :D). Below is a cut-down version with three queries from this run, click one to see what each #[analyzer](the step that turns text into index terms, here word or word_en) sent to the index and what came back:
 
 <QueryExplorer src="/static/data/relevance-tail-dbpedia-docs.json" />
 
@@ -119,18 +137,18 @@ The goal is to see the distribution. A few numbers give you most of it, and they
 
 - **p25 and the zero-rate** show how the worst queries do, and that's often where you might wanna spend effort. A query going from 0 to 40 means someone now finds an answer. A query going from 70 to 80 means a good result got a little better.
 - **p50** shows how the typical query does, and it often catches a difference the mean hides. In a recent experiment, two approaches landed within 0.5 on the mean but 3 points apart on the median. That helped me decide which one to go ahead with.
-- **The mean** stays, so you can compare with papers and other runs. Split its change into gained and lost too. The stemmer's +3.9 is +6.3 won by the queries that got better and −2.5 lost by the ones that got worse.
+- **The mean** stays, so you can compare with papers and other runs. Split its change into gained and lost too. The stemmer's +3.9 is +6.33 won by the queries that got better and −2.46 lost by the ones that got worse.
 - **A significance test** tells you whether a gain is real or noise. If the stemmer did nothing, each query that moved would go up or down like a coin flip. 186 up and 115 down is very unlikely by chance (p = 0.00005). [StatQuest explains p-values well](https://www.youtube.com/watch?v=vemZtEM63GY).
 
-Percentiles work best when queries have many relevant docs, as on DBPedia. On sets with one relevant doc per query, like #[NQ](Natural Questions: real Google search questions, each with one Wikipedia answer page), about half the queries score 0 and the median barely moves, so lean on the zero-rate and better / same / worse.
+Percentiles work best when queries have many relevant docs, as on DBPedia. On sets with one relevant doc per query, like #[NQ](Natural Questions: real Google search questions, each with one Wikipedia answer page), about half the queries score 0 and the median barely moves, so lean on the zero-rate and win / tie / loss.
 
 This is the table I print after every run while iterating. For this post's change it looks like this:
 
 ```md
-| analyzer | NDCG@10 p25 | p50   | mean  | zero-rate | better / same / worse | gained / lost |
-| -------- | ----------- | ----- | ----- | --------- | --------------------- | ------------- |
-| word     | 0.00        | 21.13 | 27.06 | 25.5%     |                       |               |
-| word_en  | 6.94        | 27.50 | 30.94 | 19.0%     | 46.5% / 24.8% / 28.8% | +6.33 / -2.46 |
+| analyzer | NDCG@10 p25 | p50   | mean  | zero-rate | win / tie / loss (of 400) | mean change, 95% range |
+| -------- | ----------- | ----- | ----- | --------- | ------------------------- | ---------------------- |
+| word     | 0.00        | 21.13 | 27.06 | 25.5%     |                           |                        |
+| word_en  | 6.94        | 27.50 | 30.94 | 19.0%     | 186 / 99 / 115            | +3.88 [+2.48, +5.34]   |
 ```
 
 Every now and then I ask agents to surface the worst queries and build a UI for me to explore them interactively. That's how this run turned up `organic` turning into `organ` and the Joker taking over _Batman Returns_.
